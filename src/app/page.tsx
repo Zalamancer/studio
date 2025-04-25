@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -11,7 +12,8 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+// Use shadcn chart components for consistency
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaProps } from 'recharts';
 import {
   Sheet,
   SheetContent,
@@ -21,7 +23,7 @@ import {
 } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { FileText, Home, Network, LineChart } from "lucide-react"; // Updated imports
+import { FileText, Home, Network, LineChart } from "lucide-react";
 
 const sectors = [
   "Tech", "Retail", "Logistics", "Healthcare", "Finance",
@@ -29,9 +31,9 @@ const sectors = [
 
 const navItems = [
   { title: "Board", href: "/board", icon: Home },
-  { title: "Invest", href: "/invest", icon: LineChart }, // Corrected icon
+  { title: "Invest", href: "/invest", icon: LineChart },
   { title: "Connect", href: "/connect", icon: Network },
-  { title: "Contracts", href: "/contracts", icon: FileText }, // Corrected icon
+  { title: "Contracts", href: "/contracts", icon: FileText },
 ];
 
 const tagButtons = [
@@ -128,7 +130,13 @@ const PostCard = ({ post }: { post: typeof postData[0] }) => {
               <div className="space-y-4">
                 <p><strong>Sector:</strong> {post.sector}</p>
                 <p><strong>Business Type:</strong> {post.businessType}</p>
-                <p><strong>Safety Indicator:</strong> <Badge variant={post.safetyIndicator === 'High' ? 'default' : post.safetyIndicator === 'Medium' ? 'secondary' : 'destructive'}>{post.safetyIndicator}</Badge></p>
+                {/* Changed p to div to fix hydration error */}
+                <div className="flex items-center gap-2">
+                  <strong>Safety Indicator:</strong>
+                  <Badge variant={post.safetyIndicator === 'High' ? 'default' : post.safetyIndicator === 'Medium' ? 'secondary' : 'destructive'}>
+                    {post.safetyIndicator}
+                  </Badge>
+                </div>
                 <p><strong>Rating Score:</strong> {post.ratingScore} / 5</p>
                 <div className="mt-4">
                   <strong>Business Stock Graph:</strong>
@@ -171,7 +179,6 @@ export default function HomePage() {
             <NavigationMenuList>
               {navItems.map((item) => (
                 <NavigationMenuItem key={item.title}>
-                   {/* Pass icon prop correctly */}
                   <NavigationMenuLink href={item.href} title={item.title} icon={item.icon}>
                     {item.title}
                   </NavigationMenuLink>
@@ -191,6 +198,7 @@ export default function HomePage() {
         </div>
 
         {/* Post Feed - Masonry Layout */}
+        {/* Using columns for masonry layout */}
         <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4">
           {postData.map((post) => (
             <PostCard key={post.id} post={post} />
