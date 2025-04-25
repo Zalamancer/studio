@@ -1,7 +1,7 @@
 
 "use client";
 
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -25,12 +25,9 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { FileText, Home, Network, LineChart } from "lucide-react";
 
-const sectors = [
-  "Tech", "Retail", "Logistics", "Healthcare", "Finance",
-];
 
 const navItems = [
-  { title: "Board", href: "/board", icon: Home },
+  { title: "Board", href: "/", icon: Home }, // Updated href to root
   { title: "Invest", href: "/invest", icon: LineChart },
   { title: "Connect", href: "/connect", icon: Network },
   { title: "Contracts", href: "/contracts", icon: FileText },
@@ -170,6 +167,25 @@ const PostCard = ({ post }: { post: typeof postData[0] }) => {
 };
 
 export default function HomePage() {
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const handleTagClick = (tag: string) => {
+    setSelectedTags(prevTags =>
+      prevTags.includes(tag)
+        ? prevTags.filter(t => t !== tag) // Remove tag if already selected
+        : [...prevTags, tag] // Add tag if not selected
+    );
+  };
+
+  const filteredPosts = useMemo(() => {
+    if (selectedTags.length === 0) {
+      return postData; // Show all posts if no tags are selected
+    }
+    return postData.filter(post =>
+      selectedTags.some(tag => post.tags.includes(tag)) // Show posts that include at least one selected tag
+    );
+  }, [selectedTags]);
+
   return (
     <div className="flex flex-col min-h-screen">
       {/* Top Navigation Bar */}
@@ -192,15 +208,22 @@ export default function HomePage() {
       <main className="flex-1 container mx-auto p-4">
         {/* Sub-filters / Tag Buttons */}
         <div className="my-4 flex flex-wrap gap-2">
-          {tagButtons.map((tag, index) => (
-            <Button key={index} variant="outline" size="sm">{tag}</Button>
+          {tagButtons.map((tag) => (
+            <Button
+              key={tag}
+              variant={selectedTags.includes(tag) ? "default" : "outline"}
+              size="sm"
+              onClick={() => handleTagClick(tag)}
+            >
+              {tag}
+            </Button>
           ))}
         </div>
 
         {/* Post Feed - Masonry Layout */}
         {/* Using columns for masonry layout */}
         <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4">
-          {postData.map((post) => (
+          {filteredPosts.map((post) => (
             <PostCard key={post.id} post={post} />
           ))}
         </div>
