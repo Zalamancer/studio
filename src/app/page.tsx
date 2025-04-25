@@ -18,10 +18,9 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/sheet"
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { FileContract, Home, Connect, Invest } from "lucide-react";
+import { FileText, Home, Network } from "lucide-react";
 
 const sectors = [
   "Tech", "Retail", "Logistics", "Healthcare", "Finance",
@@ -29,9 +28,9 @@ const sectors = [
 
 const navItems = [
   { title: "Board", href: "/board", icon: Home },
-  { title: "Invest", href: "/invest", icon: Invest },
-  { title: "Connect", href: "/connect", icon: Connect },
-  { title: "Contracts", href: "/contracts", icon: FileContract },
+  { title: "Invest", href: "/invest", icon: FileText },
+  { title: "Connect", href: "/connect", icon: Network },
+  { title: "Contracts", href: "/contracts", icon: FileText },
 ];
 
 const tagButtons = [
@@ -151,3 +150,4 @@ export default function HomePage() {
     </div>
   );
 }
+
