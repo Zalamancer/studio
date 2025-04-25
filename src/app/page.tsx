@@ -1,5 +1,6 @@
+"use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -10,7 +11,6 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   Sheet,
   SheetContent,
@@ -21,6 +21,7 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { FileText, Home, Network } from "lucide-react";
+import dynamic from 'next/dynamic';
 
 const sectors = [
   "Tech", "Retail", "Logistics", "Healthcare", "Finance",
@@ -68,6 +69,34 @@ const postData = [
   },
 ];
 
+const AreaChartComponent = dynamic(() => import('recharts').then(mod => mod.AreaChart), {
+  ssr: false,
+});
+
+const AreaComponent = dynamic(() => import('recharts').then(mod => mod.Area), {
+  ssr: false,
+});
+
+const XAxisComponent = dynamic(() => import('recharts').then(mod => mod.XAxis), {
+  ssr: false,
+});
+
+const YAxisComponent = dynamic(() => import('recharts').then(mod => mod.YAxis), {
+  ssr: false,
+});
+
+const CartesianGridComponent = dynamic(() => import('recharts').then(mod => mod.CartesianGrid), {
+  ssr: false,
+});
+
+const TooltipComponent = dynamic(() => import('recharts').then(mod => mod.Tooltip), {
+  ssr: false,
+});
+
+const ResponsiveContainerComponent = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), {
+  ssr: false,
+});
+
 const PostCard = ({ post }: { post: typeof postData[0] }) => {
   const [open, setOpen] = React.useState(false);
 
@@ -100,15 +129,15 @@ const PostCard = ({ post }: { post: typeof postData[0] }) => {
               <p><strong>Rating Score:</strong> {post.ratingScore}</p>
               <div>
                 <strong>Business Stock Graph:</strong>
-                <ResponsiveContainer width="100%" height={200}>
-                  <AreaChart data={post.stockGraphData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" />
-                    <YAxis />
-                    <Tooltip />
-                    <Area type="monotone" dataKey="uv" stroke="#8884d8" fill="#8884d8" />
-                  </AreaChart>
-                </ResponsiveContainer>
+                <ResponsiveContainerComponent width="100%" height={200}>
+                  <AreaChartComponent data={post.stockGraphData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                    <CartesianGridComponent strokeDasharray="3 3" />
+                    <XAxisComponent dataKey="name" />
+                    <YAxisComponent />
+                    <TooltipComponent />
+                    <AreaComponent type="monotone" dataKey="uv" stroke="#8884d8" fill="#8884d8" />
+                  </AreaChartComponent>
+                </ResponsiveContainerComponent>
               </div>
             </div>
           </ScrollArea>
@@ -150,4 +179,3 @@ export default function HomePage() {
     </div>
   );
 }
-
