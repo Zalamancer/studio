@@ -9,6 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { signInWithGoogle } from '@/lib/firebase/auth'; // Import the Google Sign-In function
+import { useToast } from "@/hooks/use-toast"; // Import useToast
 
 const sectors = [
   "Tech", "Retail", "Logistics", "Healthcare", "Finance",
@@ -16,13 +18,40 @@ const sectors = [
 
 const SignUpPage = () => {
   const router = useRouter();
+  const { toast } = useToast(); // Initialize toast
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleEmailSignup = (event: React.FormEvent) => {
     event.preventDefault();
-    // Here, you would typically handle the form submission,
-    // e.g., send the data to your authentication service.
+    // Here, you would typically handle the email/password signup,
+    // e.g., send the data to your authentication service using Firebase createUserWithEmailAndPassword.
+    // Example: createUserWithEmailAndPassword(auth, email, password)
+    console.log("Email/Password signup attempt (simulation)");
     // After successful signup, redirect the user to the home dashboard.
+     toast({
+        title: "Sign Up Successful",
+        description: "Redirecting to dashboard...",
+      });
     router.push('/'); // Redirect to dashboard after sign up
+  };
+
+   const handleGoogleSignup = async () => {
+    const userCredential = await signInWithGoogle(); // Re-use the same function
+    if (userCredential) {
+      // User signed in (and potentially created an account) successfully
+       toast({
+        title: "Google Sign Up Successful",
+        description: "Redirecting to dashboard...",
+      });
+      router.push('/'); // Redirect to the home dashboard
+    } else {
+      // Handle sign-in failure
+       toast({
+        variant: "destructive",
+        title: "Google Sign Up Failed",
+        description: "Could not sign up with Google. Please try again.",
+      });
+      console.error("Google Sign-Up/Sign-In failed.");
+    }
   };
 
   return (
@@ -33,11 +62,11 @@ const SignUpPage = () => {
             Create an Account
           </CardTitle>
           <CardDescription>
-            Enter your details below to create your account
+            Enter your details below or use Google to create your account
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleEmailSignup} className="space-y-4">
              <div className="grid gap-2">
               <Label htmlFor="companyName">Company Name</Label>
               <Input type="text" id="companyName" placeholder="Your Company Inc." required className="mt-1" />
@@ -77,7 +106,10 @@ const SignUpPage = () => {
                 </div>
             </div>
             <div>
-              <Button variant="outline" className="w-full">Sign up with Google</Button>
+               {/* Updated Google Signup Button */}
+              <Button variant="outline" type="button" className="w-full" onClick={handleGoogleSignup}>
+                Sign up with Google
+              </Button>
             </div>
           </form>
            <div className="mt-4 text-center text-sm">

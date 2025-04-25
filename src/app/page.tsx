@@ -26,6 +26,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { FileText, Home, Network, LineChart, LogOut } from "lucide-react"; // Import LogOut
+import { signOut } from '@/lib/firebase/auth'; // Import Firebase sign out
+import { useToast } from "@/hooks/use-toast"; // Import useToast
 
 
 const navItems = [
@@ -126,7 +128,6 @@ const postData = [
   },
 ];
 
-
 const PostCard = ({ post, onOpen }: { post: typeof postData[0], onOpen: () => void }) => {
   return (
       <Card className="mb-4 rounded-lg shadow-md cursor-pointer break-inside-avoid" onClick={onOpen}>
@@ -142,10 +143,12 @@ const PostCard = ({ post, onOpen }: { post: typeof postData[0], onOpen: () => vo
   );
 };
 
+
 export default function HomePage() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<typeof postData[0] | null>(null);
   const router = useRouter(); // Initialize router
+  const { toast } = useToast(); // Initialize toast
 
   const handleTagClick = (tag: string) => {
     setSelectedTags(prevTags =>
@@ -155,18 +158,22 @@ export default function HomePage() {
     );
   };
 
-   const handleLogout = () => {
-    // Simulate logout process
-    // In a real app, clear auth tokens/session and redirect
-    router.push('/login');
+   const handleLogout = async () => {
+    await signOut(); // Use Firebase signOut
+     toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out.",
+      });
+    router.push('/login'); // Redirect to login page after logout
   };
 
   const filteredPosts = useMemo(() => {
     if (selectedTags.length === 0) {
       return postData;
     }
+    // Ensure filtering logic is correct: posts should contain ALL selected tags.
     return postData.filter(post =>
-      selectedTags.every(tag => post.tags.includes(tag)) // Filter posts that include ALL selected tags
+      selectedTags.every(tag => post.tags.includes(tag))
     );
   }, [selectedTags]);
 
@@ -174,12 +181,13 @@ export default function HomePage() {
     <div className="flex flex-col min-h-screen">
       {/* Top Navigation Bar */}
       <header className="sticky top-0 z-10 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 items-center justify-between"> {/* Changed justify-center to justify-between */}
-          <NavigationMenu className="flex-1"> {/* Use flex-1 to allow menu to take space */}
-            <NavigationMenuList className="justify-center"> {/* Center the main nav items */}
+        <div className="container mx-auto flex h-14 items-center justify-between">
+          <NavigationMenu className="flex-1">
+            <NavigationMenuList className="justify-center">
               {navItems.map((item) => (
                 <NavigationMenuItem key={item.title}>
-                  <NavigationMenuLink href={item.href} title={item.title} icon={item.icon} >
+                   {/* Ensure NavigationMenuLink receives icon prop */}
+                   <NavigationMenuLink href={item.href} title={item.title} icon={item.icon} >
                     {item.title}
                   </NavigationMenuLink>
                 </NavigationMenuItem>
@@ -210,9 +218,13 @@ export default function HomePage() {
 
         {/* Post Feed - Masonry Layout */}
         <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4">
-          {filteredPosts.map((post) => (
-             <PostCard key={post.id} post={post} onOpen={() => setSelectedPost(post)} />
-          ))}
+          {filteredPosts.length > 0 ? (
+              filteredPosts.map((post) => (
+                 <PostCard key={post.id} post={post} onOpen={() => setSelectedPost(post)} />
+              ))
+          ) : (
+              <p className="text-muted-foreground col-span-full text-center">No posts found matching the selected tags.</p>
+          )}
         </div>
 
         {/* Post Detail Side Panel */}
@@ -229,8 +241,8 @@ export default function HomePage() {
                     </SheetHeader>
                     <div className="space-y-4">
                          {/* Display Tags */}
-                         <div className="flex flex-wrap gap-2">
-                            <strong>Tags:</strong>
+                         <div className="flex flex-wrap items-center gap-2">
+                            <strong className="mr-1">Tags:</strong>
                             {selectedPost.tags.map((tag, index) => (
                             <Badge key={index} variant="secondary">{tag}</Badge>
                             ))}
@@ -240,10 +252,11 @@ export default function HomePage() {
                         <p><strong>Sector:</strong> {selectedPost.sector}</p>
                         <p><strong>Business Type:</strong> {selectedPost.businessType}</p>
                         <div className="flex items-center gap-2">
-                        <strong>Safety Indicator:</strong>
-                        <Badge variant={selectedPost.safetyIndicator === 'High' ? 'default' : selectedPost.safetyIndicator === 'Medium' ? 'secondary' : 'destructive'}>
-                            {selectedPost.safetyIndicator}
-                        </Badge>
+                            <strong>Safety Indicator:</strong>
+                            {/* Use span instead of div inside p */}
+                            <Badge variant={selectedPost.safetyIndicator === 'High' ? 'default' : selectedPost.safetyIndicator === 'Medium' ? 'secondary' : 'destructive'}>
+                                {selectedPost.safetyIndicator}
+                            </Badge>
                         </div>
                         <p><strong>Rating Score:</strong> {selectedPost.ratingScore} / 5</p>
                         <div className="mt-4">
