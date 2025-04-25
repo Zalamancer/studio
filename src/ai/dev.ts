@@ -1,1 +1,2 @@
-// Flows will be imported for their side effects in this file.
+import '@/ai/flows/ai-connection-matcher.ts';
+import '@/ai/flows/connection-suggestions.ts';
