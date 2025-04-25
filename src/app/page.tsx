@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import {
   NavigationMenu,
   NavigationMenuContent,
@@ -11,6 +11,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import {
   Sheet,
   SheetContent,
@@ -20,8 +21,7 @@ import {
 } from "@/components/ui/sheet"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { FileText, Home, Network } from "lucide-react";
-import dynamic from 'next/dynamic';
+import { FileText, Home, Network, LineChart } from "lucide-react"; // Updated imports
 
 const sectors = [
   "Tech", "Retail", "Logistics", "Healthcare", "Finance",
@@ -29,9 +29,9 @@ const sectors = [
 
 const navItems = [
   { title: "Board", href: "/board", icon: Home },
-  { title: "Invest", href: "/invest", icon: FileText },
+  { title: "Invest", href: "/invest", icon: LineChart }, // Corrected icon
   { title: "Connect", href: "/connect", icon: Network },
-  { title: "Contracts", href: "/contracts", icon: FileText },
+  { title: "Contracts", href: "/contracts", icon: FileText }, // Corrected icon
 ];
 
 const tagButtons = [
@@ -67,77 +67,91 @@ const postData = [
       { name: 'Jul', uv: 3200 },
     ],
   },
+  {
+    id: 3,
+    tags: ["Supplier"],
+    question: "Looking for reliable suppliers in the tech sector for electronic components.",
+    sector: "Tech",
+    businessType: "Established",
+    safetyIndicator: "High",
+    ratingScore: 4.8,
+    stockGraphData: [
+      { name: 'Jan', uv: 5000 }, { name: 'Feb', uv: 5200 }, { name: 'Mar', uv: 5500 },
+      { name: 'Apr', uv: 5300 }, { name: 'May', uv: 5600 }, { name: 'Jun', uv: 5800 },
+      { name: 'Jul', uv: 6000 },
+    ],
+  },
+  {
+    id: 4,
+    tags: ["Ads", "Audience"],
+    question: "Effective ways to reach a niche audience for SaaS products?",
+    sector: "Tech",
+    businessType: "Startup",
+    safetyIndicator: "Low",
+    ratingScore: 3.2,
+    stockGraphData: [
+      { name: 'Jan', uv: 1000 }, { name: 'Feb', uv: 1200 }, { name: 'Mar', uv: 900 },
+      { name: 'Apr', uv: 1500 }, { name: 'May', uv: 1300 }, { name: 'Jun', uv: 1600 },
+      { name: 'Jul', uv: 1400 },
+    ],
+  },
 ];
 
-const AreaChartComponent = dynamic(() => import('recharts').then(mod => mod.AreaChart), {
-  ssr: false,
-});
-
-const AreaComponent = dynamic(() => import('recharts').then(mod => mod.Area), {
-  ssr: false,
-});
-
-const XAxisComponent = dynamic(() => import('recharts').then(mod => mod.XAxis), {
-  ssr: false,
-});
-
-const YAxisComponent = dynamic(() => import('recharts').then(mod => mod.YAxis), {
-  ssr: false,
-});
-
-const CartesianGridComponent = dynamic(() => import('recharts').then(mod => mod.CartesianGrid), {
-  ssr: false,
-});
-
-const TooltipComponent = dynamic(() => import('recharts').then(mod => mod.Tooltip), {
-  ssr: false,
-});
-
-const ResponsiveContainerComponent = dynamic(() => import('recharts').then(mod => mod.ResponsiveContainer), {
-  ssr: false,
-});
 
 const PostCard = ({ post }: { post: typeof postData[0] }) => {
   const [open, setOpen] = React.useState(false);
 
   return (
     <>
-      <Card className="mb-4 rounded-lg shadow-md cursor-pointer" onClick={() => setOpen(true)}>
+      {/* Added break-inside-avoid for masonry layout */}
+      <Card className="mb-4 rounded-lg shadow-md cursor-pointer break-inside-avoid" onClick={() => setOpen(true)}>
         <CardHeader>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             {post.tags.map((tag, index) => (
               <Badge key={index} variant="secondary">{tag}</Badge>
             ))}
           </div>
-          <CardTitle>{post.question}</CardTitle>
+          <CardTitle className="mt-2 text-base font-semibold">{post.question}</CardTitle>
         </CardHeader>
       </Card>
 
       <Sheet open={open} onOpenChange={setOpen}>
-        <SheetContent className="sm:max-w-lg p-6" side="right">
-          <SheetHeader className="space-y-2.5">
-            <SheetTitle>Post Details</SheetTitle>
-            <SheetDescription>
-              Details about the selected post and business.
-            </SheetDescription>
-          </SheetHeader>
-          <ScrollArea className="h-[70vh] mt-4">
-            <div className="space-y-4">
-              <p><strong>Sector:</strong> {post.sector}</p>
-              <p><strong>Business Type:</strong> {post.businessType}</p>
-              <p><strong>Safety Indicator:</strong> {post.safetyIndicator}</p>
-              <p><strong>Rating Score:</strong> {post.ratingScore}</p>
-              <div>
-                <strong>Business Stock Graph:</strong>
-                <ResponsiveContainerComponent width="100%" height={200}>
-                  <AreaChartComponent data={post.stockGraphData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
-                    <CartesianGridComponent strokeDasharray="3 3" />
-                    <XAxisComponent dataKey="name" />
-                    <YAxisComponent />
-                    <TooltipComponent />
-                    <AreaComponent type="monotone" dataKey="uv" stroke="#8884d8" fill="#8884d8" />
-                  </AreaChartComponent>
-                </ResponsiveContainerComponent>
+        <SheetContent className="sm:max-w-lg w-full p-0" side="right">
+          <ScrollArea className="h-screen">
+            <div className="p-6">
+              <SheetHeader className="space-y-2.5 text-left mb-6">
+                <SheetTitle>Post Details</SheetTitle>
+                <SheetDescription>
+                  Details about the selected post and business.
+                </SheetDescription>
+              </SheetHeader>
+              <div className="space-y-4">
+                <p><strong>Sector:</strong> {post.sector}</p>
+                <p><strong>Business Type:</strong> {post.businessType}</p>
+                <p><strong>Safety Indicator:</strong> <Badge variant={post.safetyIndicator === 'High' ? 'default' : post.safetyIndicator === 'Medium' ? 'secondary' : 'destructive'}>{post.safetyIndicator}</Badge></p>
+                <p><strong>Rating Score:</strong> {post.ratingScore} / 5</p>
+                <div className="mt-4">
+                  <strong>Business Stock Graph:</strong>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <AreaChart data={post.stockGraphData} margin={{ top: 10, right: 30, left: 0, bottom: 0 }}>
+                      <defs>
+                        <linearGradient id="colorUv" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="hsl(var(--primary))" stopOpacity={0.8}/>
+                          <stop offset="95%" stopColor="hsl(var(--primary))" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="hsl(var(--border))" />
+                      <XAxis dataKey="name" tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={false} tickLine={false} />
+                      <YAxis tick={{ fill: 'hsl(var(--muted-foreground))', fontSize: 12 }} axisLine={false} tickLine={false} width={30} />
+                      <Tooltip
+                        contentStyle={{ backgroundColor: 'hsl(var(--background))', border: '1px solid hsl(var(--border))', borderRadius: 'var(--radius)' }}
+                        labelStyle={{ color: 'hsl(var(--foreground))' }}
+                        itemStyle={{ color: 'hsl(var(--primary))' }}
+                      />
+                      <Area type="monotone" dataKey="uv" stroke="hsl(var(--primary))" fillOpacity={1} fill="url(#colorUv)" />
+                    </AreaChart>
+                  </ResponsiveContainer>
+                </div>
               </div>
             </div>
           </ScrollArea>
@@ -149,33 +163,46 @@ const PostCard = ({ post }: { post: typeof postData[0] }) => {
 
 export default function HomePage() {
   return (
-    <div className="container mx-auto p-4">
+    <div className="flex flex-col min-h-screen">
       {/* Top Navigation Bar */}
-      <NavigationMenu>
-        <NavigationMenuList>
-          {navItems.map((item) => (
-            <NavigationMenuItem key={item.title}>
-              <NavigationMenuLink href={item.href} icon={item.icon}>
-                {item.title}
-              </NavigationMenuLink>
-            </NavigationMenuItem>
+      <header className="sticky top-0 z-10 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-14 items-center">
+          <NavigationMenu className="mx-auto">
+            <NavigationMenuList>
+              {navItems.map((item) => (
+                <NavigationMenuItem key={item.title}>
+                   {/* Pass icon prop correctly */}
+                  <NavigationMenuLink href={item.href} title={item.title} icon={item.icon}>
+                    {item.title}
+                  </NavigationMenuLink>
+                </NavigationMenuItem>
+              ))}
+            </NavigationMenuList>
+          </NavigationMenu>
+        </div>
+      </header>
+
+      <main className="flex-1 container mx-auto p-4">
+        {/* Sub-filters / Tag Buttons */}
+        <div className="my-4 flex flex-wrap gap-2">
+          {tagButtons.map((tag, index) => (
+            <Button key={index} variant="outline" size="sm">{tag}</Button>
           ))}
-        </NavigationMenuList>
-      </NavigationMenu>
+        </div>
 
-      {/* Sub-filters / Tag Buttons */}
-      <div className="mt-4 flex flex-wrap gap-2">
-        {tagButtons.map((tag, index) => (
-          <Button key={index} variant="outline">{tag}</Button>
-        ))}
-      </div>
+        {/* Post Feed - Masonry Layout */}
+        <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4">
+          {postData.map((post) => (
+            <PostCard key={post.id} post={post} />
+          ))}
+        </div>
+      </main>
 
-      {/* Post Feed */}
-      <div className="mt-6">
-        {postData.map((post) => (
-          <PostCard key={post.id} post={post} />
-        ))}
-      </div>
+      <footer className="py-4 border-t">
+          <div className="container mx-auto text-center text-sm text-muted-foreground">
+              © {new Date().getFullYear()} AnonyCollab. All rights reserved.
+          </div>
+      </footer>
     </div>
   );
 }
