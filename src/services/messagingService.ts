@@ -20,9 +20,11 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { Conversation, Message, NewMessageData } from '@/types/messaging';
+import { auth } from '@/lib/firebase/config'; // Import auth if needed for debugging
 
 const conversationsCollectionRef = collection(db, 'conversations');
-// Messages are now a subcollection, so we don't need a top-level ref here
+const messagesSubcollectionRef = (conversationId: string) => collection(db, 'conversations', conversationId, 'messages');
+
 
 // Function to fetch conversations for a specific user
 export const getConversationsForUser = async (userId: string): Promise<Conversation[]> => {
@@ -75,63 +77,65 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
 // Function to find an existing conversation or create a new one
 // Returns the conversation ID
 export const findOrCreateConversation = async (userId1: string, userId2: string): Promise<string> => {
-    console.log(`Attempting to find/create conversation between ${userId1} and ${userId2}`); // Added log
+  if (userId1 === userId2) {
+    throw new Error("Cannot create a conversation with oneself.");
+  }
+  // Ensure participants are always in the same order to avoid duplicates
+  const participants = [userId1, userId2].sort();
+  const conversationId = participants.join('_'); // Create a predictable ID
 
-    if (userId1 === userId2) {
-        console.error("Attempted to create conversation with oneself."); // Added log
-        throw new Error("Cannot create a conversation with oneself.");
+  console.log(`Attempting to find or create conversation: ID=${conversationId}, Participants=${participants.join(', ')}`); // Log attempt details
+
+  try {
+    const conversationDocRef = doc(db, 'conversations', conversationId);
+    const conversationSnap = await getDoc(conversationDocRef); // Check if exists (needs 'get' permission)
+
+    if (conversationSnap.exists()) {
+        console.log(`Conversation found: ${conversationId}`);
+        return conversationId; // Conversation already exists
+    } else {
+        console.log(`Conversation ${conversationId} not found. Attempting to create...`);
+        // Data to be written for the new conversation
+        const newConversationData = {
+            participants: participants,
+            createdAt: serverTimestamp(),
+            lastMessage: null,
+            lastMessageTimestamp: null,
+        };
+        console.log('Data for new conversation:', newConversationData); // Log data being written
+
+        // Create a new conversation document using a batch write for atomicity
+        const batch = writeBatch(db);
+        batch.set(conversationDocRef, newConversationData); // This is the 'create' operation
+        await batch.commit();
+        console.log(`Conversation created successfully: ${conversationId}`);
+        return conversationId;
     }
+  } catch (error: any) {
+    console.error(`Error finding or creating conversation between ${userId1} and ${userId2}:`, error);
+    // Log current auth state for debugging
+    const currentUser = auth.currentUser; // Get current user from auth instance
+    console.error('Current auth state:', currentUser ? `UID: ${currentUser.uid}` : 'No user authenticated');
+    console.error('Participants being used:', participants); // Log participants again in case of error
 
-    const participants = [userId1, userId2].sort();
-    const conversationId = participants.join('_'); // Create a predictable ID
-    console.log(`Generated conversation ID: ${conversationId}, Participants: ${participants.join(', ')}`); // Added log
-
-    try {
-        const conversationDocRef = doc(db, 'conversations', conversationId);
-        console.log("Checking if conversation exists..."); // Added log
-        const conversationSnap = await getDoc(conversationDocRef); // Requires 'get' permission
-
-        if (conversationSnap.exists()) {
-            console.log(`Conversation ${conversationId} found.`); // Added log
-            return conversationId; // Conversation already exists
-        } else {
-            console.log(`Conversation ${conversationId} not found. Attempting to create...`); // Added log
-            // Create a new conversation document using a batch write for atomicity
-            const batch = writeBatch(db);
-            const newConversationData = {
-                participants: participants,
-                createdAt: serverTimestamp(),
-                lastMessage: null,
-                lastMessageTimestamp: null, // Initialize as null
-                // participantDetails: { [userId1]: { name: 'User 1 Name' }, [userId2]: { name: 'User 2 Name' } }, // Example
-            };
-            console.log("Conversation data to be written:", newConversationData); // Added log
-            batch.set(conversationDocRef, newConversationData); // Requires 'create' permission
-            await batch.commit();
-            console.log(`Conversation ${conversationId} created successfully.`); // Added log
-            return conversationId;
-        }
-    } catch (error: any) {
-        console.error(`Error in findOrCreateConversation for ${conversationId}:`, error); // More specific error log
-        console.error("Firestore Error Code:", error.code); // Log code
-        console.error("Firestore Error Message:", error.message); // Log message
-
-        if (error.code === 'permission-denied') {
-            // Provide a more specific error message pointing towards create permissions
-            console.error("Firestore permission denied for creating/accessing conversation. Check security rules for 'conversations' collection, specifically the 'create' operation allowance.");
-            throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
-        }
-        throw new Error(`Failed to find or create conversation: ${error.message}`);
+    if (error.code === 'permission-denied') {
+        // Provide a more specific error message pointing towards create permissions
+        console.error("Firestore permission denied for creating/accessing conversation. Check security rules for 'conversations' collection, specifically the 'create' operation allowance.");
+        // Log the details of the rule being violated if possible (not directly available, but context helps)
+        console.error("Ensure rule 'allow create: if request.auth != null && request.resource.data.participants.size() == 2 && request.resource.data.participants.hasAll([request.auth.uid]);' is met.");
+        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
     }
+    throw new Error(`Failed to find or create conversation: ${error.message}`);
+  }
 };
 
 
 // Function to fetch messages for a specific conversation
 export const getMessagesForConversation = async (conversationId: string): Promise<Message[]> => {
   try {
-    const messagesSubcollectionRef = collection(db, 'conversations', conversationId, 'messages');
+    const messagesRef = messagesSubcollectionRef(conversationId);
     const q = query(
-      messagesSubcollectionRef,
+      messagesRef,
       orderBy('timestamp', 'asc'), // Order messages chronologically
       limit(100) // Limit the number of messages fetched initially
     );
@@ -165,13 +169,13 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
   }
   try {
     const conversationDocRef = doc(db, 'conversations', messageData.conversationId);
-    const messagesSubcollectionRef = collection(conversationDocRef, 'messages');
+    const messagesRef = messagesSubcollectionRef(messageData.conversationId);
 
     // Use a batch write to add the message and update the conversation metadata atomically
     const batch = writeBatch(db);
 
     // 1. Add the new message document to the subcollection
-    const newMessageRef = doc(messagesSubcollectionRef); // Auto-generate ID
+    const newMessageRef = doc(messagesRef); // Auto-generate ID
     batch.set(newMessageRef, {
         senderId: messageData.senderId,
         text: messageData.text,
