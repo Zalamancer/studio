@@ -494,9 +494,14 @@ function HomePageContent() {
                          </div>
                          {/* --- Buttons including Delete --- */}
                          <div className="mt-6 pt-4 border-t flex justify-end gap-2">
-                             <Button variant="outline" size="sm">Offer Help</Button>
-                             <Button variant="default" size="sm">Connect</Button>
-                             {/* Show Delete Button only if the post belongs to the current user */}
+                             {/* Render "Offer Help" and "Connect" buttons only if user is logged in AND is NOT the owner of the post */}
+                              {user && selectedPost.userId !== user.uid && (
+                                 <>
+                                     <Button variant="outline" size="sm">Offer Help</Button>
+                                     <Button variant="default" size="sm">Connect</Button>
+                                 </>
+                              )}
+                             {/* Render Delete Button only if the user is logged in AND IS the owner of the post */}
                              {user && selectedPost.userId === user.uid && (
                                  <AlertDialog>
                                      <AlertDialogTrigger asChild>
@@ -569,3 +574,4 @@ export default function HomePage() {
         </QueryClientProvider>
     );
 }
+
