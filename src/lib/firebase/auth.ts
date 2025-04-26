@@ -5,22 +5,24 @@ import {
   GoogleAuthProvider,
   signInWithPopup,
   signOut as firebaseSignOut,
-  createUserWithEmailAndPassword, // Import for signup
-  signInWithEmailAndPassword,    // Import for email login
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  sendPasswordResetEmail, // Import for password reset
   UserCredential,
   AuthError
 } from "firebase/auth";
 
 const googleProvider = new GoogleAuthProvider();
 
-// Google Sign-In
+// Google Sign-In / Sign-Up
 export const signInWithGoogle = async (): Promise<UserCredential | null> => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
+    // Could add logic here to check if user is new and add to Firestore if needed
     return result;
   } catch (error) {
     const authError = error as AuthError;
-    // Re-throw the error so the calling component can handle specific cases like popup closed
+    // Re-throw the error so the calling component can handle specific cases
     throw authError;
   }
 };
@@ -29,15 +31,11 @@ export const signInWithGoogle = async (): Promise<UserCredential | null> => {
 export const signUpWithEmailPassword = async (email: string, password: string): Promise<UserCredential | null> => {
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        // Could add logic here to store additional user info (like companyName) in Firestore
         return userCredential;
     } catch (error) {
         const authError = error as AuthError;
-        // Log unexpected errors, but re-throw all for component handling
-        if (authError.code !== 'auth/email-already-in-use' && authError.code !== 'auth/weak-password' && authError.code !== 'auth/invalid-email') {
-            console.error("Error signing up with email/password:", authError.code, authError.message);
-        }
-        // Re-throw the error so the calling component can handle it specifically (e.g., show specific toast messages)
-        throw authError;
+        throw authError; // Re-throw for component handling
     }
 };
 
@@ -48,10 +46,18 @@ export const signInWithEmailPassword = async (email: string, password: string): 
         return userCredential;
     } catch (error) {
         const authError = error as AuthError;
-        // Don't log expected errors like 'auth/invalid-credential' to console here.
-        // The calling component (login page) will handle the user feedback (toast)
-        // and can decide whether to log based on the specific code.
-        // Re-throw the error so the calling component can handle it specifically.
+        throw authError; // Re-throw for component handling
+    }
+};
+
+// Password Reset
+export const sendPasswordReset = async (email: string): Promise<void> => {
+    try {
+        await sendPasswordResetEmail(auth, email);
+        // Email sent successfully (or user not found, Firebase doesn't reveal this)
+    } catch (error) {
+        const authError = error as AuthError;
+        // Re-throw specific errors for the component to handle
         throw authError;
     }
 };
@@ -63,7 +69,6 @@ export const signOut = async (): Promise<void> => {
     await firebaseSignOut(auth);
   } catch (error) {
     console.error("Error signing out:", error);
-     // Optionally re-throw or handle differently if needed
-     throw error;
+     throw error; // Re-throw for component handling if needed
   }
 };
