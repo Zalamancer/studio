@@ -1,4 +1,3 @@
-
 // src/components/messaging/MessagingInterface.tsx
 "use client";
 
@@ -10,7 +9,7 @@ import {
   sendMessage,
   findOrCreateConversation, // Added this import
 } from '@/services/messagingService';
-import type { Conversation, Message, NewMessageData } from '@/types/messaging';
+import type { Conversation, SerializableMessage, NewMessageData } from '@/types/messaging'; // Use SerializableMessage
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,7 +18,7 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send, User, Users, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore'; // Still needed for Conversation type potentially
 import { cn } from '@/lib/utils';
 
 interface MessagingInterfaceProps {
@@ -94,13 +93,14 @@ ConversationListItem.displayName = 'ConversationListItem';
 
 // --- Message Bubble ---
 interface MessageBubbleProps {
-  message: Message;
+  message: SerializableMessage; // Use SerializableMessage
   isOwnMessage: boolean;
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwnMessage }) => {
-  const timestamp = message.timestamp instanceof Timestamp
-    ? message.timestamp.toDate().toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+  // Format the timestamp (which is now a number)
+  const timestamp = message.timestamp
+    ? new Date(message.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : 'Sending...'; // Or handle invalid timestamp
 
   return (
@@ -168,9 +168,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
       data: messages = [],
       isLoading: isLoadingMessages,
       error: messagesError
-   } = useQuery<Message[]>({
+   } = useQuery<SerializableMessage[]>({ // Expect SerializableMessage[]
        queryKey: ['messages', selectedConversationId],
-       queryFn: () => getMessagesForConversation(selectedConversationId!), // Add non-null assertion
+       queryFn: () => getMessagesForConversation(selectedConversationId!), // Service fn now returns SerializableMessage[]
        enabled: !!selectedConversationId, // Only fetch if a conversation is selected
        staleTime: 1000 * 15, // 15 seconds (messages might update more often)
        refetchInterval: 1000 * 30, // Refetch every 30 seconds
@@ -211,6 +211,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
         conversationId: selectedConversationId,
         senderId: currentUserId,
         text: newMessage.trim(),
+        // No timestamp needed here, service layer adds serverTimestamp
     };
     sendMessageMutation.mutate(messageData);
   };

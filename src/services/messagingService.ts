@@ -19,7 +19,7 @@ import {
   documentId,
   writeBatch,
 } from 'firebase/firestore';
-import type { Conversation, Message, NewMessageData } from '@/types/messaging';
+import type { Conversation, Message, NewMessageData, SerializableMessage } from '@/types/messaging'; // Import SerializableMessage
 import { auth } from '@/lib/firebase/config'; // Import auth if needed for debugging
 
 const conversationsCollectionRef = collection(db, 'conversations');
@@ -36,11 +36,10 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
 
   try {
     // Query conversations where the participants array contains the user's ID
-    // Temporarily REMOVED orderBy for debugging permission/data issues
     const q = query(
         conversationsCollectionRef,
         where('participants', 'array-contains', userId),
-        // orderBy('lastMessageTimestamp', 'desc'), // Temporarily removed for debugging
+        orderBy('lastMessageTimestamp', 'desc'), // Re-enable orderBy
         limit(50) // Limit the number of conversations fetched
     );
     console.log("Executing Firestore query for conversations...");
@@ -53,8 +52,7 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
       // Basic validation
       if (!data.participants || !Array.isArray(data.participants)) {
           console.warn(`Document ${docSnap.id} is missing or has invalid 'participants' field.`);
-          // Handle this case, maybe return null or a default structure
-          return null; // Or skip this document
+          return null; // Skip this document
       }
       // Ensure lastMessageTimestamp is handled correctly
       const lastTimestamp = data.lastMessageTimestamp instanceof Timestamp
@@ -70,8 +68,6 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
         lastMessage: data.lastMessage || null,
         lastMessageTimestamp: lastTimestamp,
         createdAt: createdAtTimestamp,
-        // Add other relevant fields like participant details if stored directly
-        // participantDetails: data.participantDetails || {}, // Example if you store names/avatars
       };
        console.log(`Mapped conversation ${conversation.id}:`, conversation);
       return conversation;
@@ -88,9 +84,9 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
       console.error("Firestore permission denied. Check your security rules for the 'conversations' collection. Ensure the rules allow the 'list' operation for queries filtering by 'participants' containing the authenticated user's ID.");
       throw new Error(`Failed to fetch conversations: Missing or insufficient permissions. Check Firestore Rules.`);
     }
-     // Check for missing index error (even though orderBy is removed, good to keep)
+     // Check for missing index error
      if (error.code === 'failed-precondition') {
-         console.error("Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index.");
+         console.error("Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index on 'participants' and 'lastMessageTimestamp'.");
          throw new Error("Firestore query requires an index. Please create it in the Firebase console.");
      }
     // Throw a generic error for other issues
@@ -151,8 +147,8 @@ export const findOrCreateConversation = async (userId1: string, userId2: string)
 };
 
 
-// Function to fetch messages for a specific conversation
-export const getMessagesForConversation = async (conversationId: string): Promise<Message[]> => {
+// Function to fetch messages for a specific conversation, converting Timestamps
+export const getMessagesForConversation = async (conversationId: string): Promise<SerializableMessage[]> => {
   try {
     const messagesRef = messagesSubcollectionRef(conversationId);
     const q = query(
@@ -163,14 +159,16 @@ export const getMessagesForConversation = async (conversationId: string): Promis
     const querySnapshot = await getDocs(q);
     const messages = querySnapshot.docs.map((doc) => {
       const data = doc.data();
+      const timestamp = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : Date.now(); // Convert to milliseconds or use current time as fallback
+
       return {
         id: doc.id,
-        conversationId: conversationId, // It's part of the path, but good to have
+        conversationId: conversationId,
         senderId: data.senderId,
         text: data.text,
-        timestamp: data.timestamp instanceof Timestamp ? data.timestamp : Timestamp.now(), // Ensure Timestamp
+        timestamp: timestamp, // Use the converted millisecond timestamp
         read: data.read || false,
-      } as Message;
+      } as SerializableMessage; // Assert the serializable type
     });
     return messages;
   } catch (error: any) {

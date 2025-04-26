@@ -13,17 +13,22 @@ export interface Conversation {
   // unreadCounts?: { [userId: string]: number };
 }
 
-// Represents a single message within a conversation
+// Represents a single message within a conversation (as stored in Firestore)
 export interface Message {
   id: string; // Firestore document ID (within the messages subcollection)
   conversationId: string; // ID of the parent conversation
   senderId: string; // ID of the user who sent the message
   text: string; // The content of the message
-  timestamp: Timestamp; // When the message was sent
+  timestamp: Timestamp; // When the message was sent (Firestore Timestamp)
   read: boolean; // Indicates if the message has been read (by the recipient)
   // Add other fields like reactions, attachments, etc., if needed
 }
 
+// Represents a message with a serializable timestamp (e.g., number) for client components
+export interface SerializableMessage extends Omit<Message, 'timestamp'> {
+  timestamp: number; // Timestamp as milliseconds since epoch
+}
+
+
 // Type for data needed to create a new message
 export type NewMessageData = Omit<Message, 'id' | 'timestamp' | 'read'>;
-
