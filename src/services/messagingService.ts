@@ -19,15 +19,15 @@ import {
   documentId,
   writeBatch,
 } from 'firebase/firestore';
-import type { Conversation, Message, NewMessageData, SerializableMessage } from '@/types/messaging'; // Import SerializableMessage
+import type { Conversation, Message, NewMessageData, SerializableMessage, ClientConversation } from '@/types/messaging'; // Import ClientConversation
 import { auth } from '@/lib/firebase/config'; // Import auth if needed for debugging
 
 const conversationsCollectionRef = collection(db, 'conversations');
 const messagesSubcollectionRef = (conversationId: string) => collection(db, 'conversations', conversationId, 'messages');
 
 
-// Function to fetch conversations for a specific user
-export const getConversationsForUser = async (userId: string): Promise<Conversation[]> => {
+// Function to fetch conversations for a specific user, returning serializable data
+export const getConversationsForUser = async (userId: string): Promise<ClientConversation[]> => {
   if (!userId) {
     console.error("User ID is required to fetch conversations.");
     return [];
@@ -39,7 +39,7 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
     const q = query(
         conversationsCollectionRef,
         where('participants', 'array-contains', userId),
-        orderBy('lastMessageTimestamp', 'desc'), // Re-enable orderBy
+        orderBy('lastMessageTimestamp', 'desc'), // Order by timestamp
         limit(50) // Limit the number of conversations fetched
     );
     console.log("Executing Firestore query for conversations...");
@@ -49,32 +49,36 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
     const conversations = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       console.log(`Mapping document ${docSnap.id}:`, data); // Log raw data
+
       // Basic validation
       if (!data.participants || !Array.isArray(data.participants)) {
           console.warn(`Document ${docSnap.id} is missing or has invalid 'participants' field.`);
           return null; // Skip this document
       }
-      // Ensure lastMessageTimestamp is handled correctly
-      const lastTimestamp = data.lastMessageTimestamp instanceof Timestamp
-            ? data.lastMessageTimestamp
-            : null; // Default to null if missing or wrong type
 
-       // Ensure createdAt exists
-       const createdAtTimestamp = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now();
+      // Convert Timestamps to milliseconds for client-side use
+      const lastTimestampMillis = data.lastMessageTimestamp instanceof Timestamp
+            ? data.lastMessageTimestamp.toMillis()
+            : null;
 
-      const conversation: Conversation = {
+       const createdAtTimestampMillis = data.createdAt instanceof Timestamp
+            ? data.createdAt.toMillis()
+            : Date.now(); // Use current time as fallback
+
+      // Create the client-safe conversation object
+      const clientConversation: ClientConversation = {
         id: docSnap.id,
         participants: data.participants,
         lastMessage: data.lastMessage || null,
-        lastMessageTimestamp: lastTimestamp,
-        createdAt: createdAtTimestamp,
+        lastMessageTimestamp: lastTimestampMillis, // Use milliseconds
+        createdAt: createdAtTimestampMillis, // Use milliseconds
       };
-       console.log(`Mapped conversation ${conversation.id}:`, conversation);
-      return conversation;
-    }).filter((conv): conv is Conversation => conv !== null); // Filter out any nulls from mapping invalid docs
+       console.log(`Mapped client conversation ${clientConversation.id}:`, clientConversation);
+      return clientConversation;
+    }).filter((conv): conv is ClientConversation => conv !== null); // Filter out any nulls
 
 
-    console.log(`Successfully mapped ${conversations.length} valid conversations for user ${userId}`);
+    console.log(`Successfully mapped ${conversations.length} valid client conversations for user ${userId}`);
     return conversations;
 
   } catch (error: any) {
@@ -117,11 +121,12 @@ export const findOrCreateConversation = async (userId1: string, userId2: string)
     } else {
         console.log(`Conversation ${conversationId} not found. Attempting to create...`);
         // Data to be written for the new conversation
-        const newConversationData = {
+        // Use serverTimestamp() for Firestore Timestamp objects
+        const newConversationData: Omit<Conversation, 'id'> = { // Use the Firestore Conversation type here
             participants: participants,
-            createdAt: serverTimestamp(),
+            createdAt: serverTimestamp() as Timestamp, // Use serverTimestamp for creation
             lastMessage: null,
-            lastMessageTimestamp: null, // Ensure this field exists on creation
+            lastMessageTimestamp: null,
         };
         console.log('Data for new conversation:', newConversationData); // Log data being written
 
@@ -159,14 +164,15 @@ export const getMessagesForConversation = async (conversationId: string): Promis
     const querySnapshot = await getDocs(q);
     const messages = querySnapshot.docs.map((doc) => {
       const data = doc.data();
-      const timestamp = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : Date.now(); // Convert to milliseconds or use current time as fallback
+      // Convert Timestamp to milliseconds for client-side use
+      const timestampMillis = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : Date.now();
 
       return {
         id: doc.id,
         conversationId: conversationId,
         senderId: data.senderId,
         text: data.text,
-        timestamp: timestamp, // Use the converted millisecond timestamp
+        timestamp: timestampMillis, // Use milliseconds
         read: data.read || false,
       } as SerializableMessage; // Assert the serializable type
     });
@@ -205,7 +211,7 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     // 2. Update the conversation's last message details
     batch.update(conversationDocRef, {
         lastMessage: messageData.text,
-        lastMessageTimestamp: serverTimestamp(),
+        lastMessageTimestamp: serverTimestamp(), // Use server timestamp
         // Optionally update unread counts here if needed
     });
 

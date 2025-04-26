@@ -7,9 +7,9 @@ import {
   getConversationsForUser,
   getMessagesForConversation,
   sendMessage,
-  findOrCreateConversation, // Added this import
+  // findOrCreateConversation, // Removed, handled by parent page now
 } from '@/services/messagingService';
-import type { Conversation, SerializableMessage, NewMessageData } from '@/types/messaging'; // Use SerializableMessage
+import type { ClientConversation, SerializableMessage, NewMessageData } from '@/types/messaging'; // Use ClientConversation & SerializableMessage
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,8 +18,9 @@ import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
 import { Loader2, Send, User, Users, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
-import { Timestamp } from 'firebase/firestore'; // Still needed for Conversation type potentially
+// Timestamp import no longer needed here as we work with numbers
 import { cn } from '@/lib/utils';
+import { useSearchParams } from 'next/navigation'; // Import useSearchParams
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -36,7 +37,7 @@ const getInitials = (id: string | undefined | null): string => {
 
 // --- Conversation List Item ---
 interface ConversationListItemProps {
-  conversation: Conversation;
+  conversation: ClientConversation; // Use ClientConversation
   isSelected: boolean;
   currentUserId: string;
   onSelect: (conversationId: string) => void;
@@ -54,12 +55,9 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
     const participantName = otherParticipantId ? `User ${otherParticipantId.substring(0, 4)}...` : 'Unknown User';
     const initials = getInitials(otherParticipantId);
 
-    const lastMessageTimestamp = conversation.lastMessageTimestamp instanceof Timestamp
-      ? conversation.lastMessageTimestamp.toDate()
-      : null;
-
-    const formattedTime = lastMessageTimestamp
-        ? lastMessageTimestamp.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+    // Format timestamp (now a number)
+    const formattedTime = conversation.lastMessageTimestamp
+        ? new Date(conversation.lastMessageTimestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         : '';
 
 
@@ -132,6 +130,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null); // Ref for scrolling to bottom
+  const searchParams = useSearchParams(); // Get query params
 
   // --- Query: Fetch Conversations ---
   const {
@@ -139,9 +138,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
       isLoading: isLoadingConversations,
       error: conversationsError, // Capture the error object
       isError: isConversationsError // Boolean flag for error state
-    } = useQuery<Conversation[], Error>({ // Specify Error type for error object
+    } = useQuery<ClientConversation[], Error>({ // Expect ClientConversation[] now
     queryKey: ['conversations', currentUserId],
-    queryFn: () => getConversationsForUser(currentUserId),
+    queryFn: () => getConversationsForUser(currentUserId), // Service returns ClientConversation[]
     enabled: !!currentUserId, // Only run if userId is available
     staleTime: 1000 * 60 * 5, // 5 minutes
     refetchOnWindowFocus: true,
@@ -152,7 +151,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
   useEffect(() => {
       if (isConversationsError && conversationsError) {
           console.error("Error fetching conversations in UI:", conversationsError);
-          // Optionally show a toast, but the UI will display the error message directly
            toast({
                variant: "destructive",
                title: "Error Loading Conversations",
@@ -170,7 +168,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
       error: messagesError
    } = useQuery<SerializableMessage[]>({ // Expect SerializableMessage[]
        queryKey: ['messages', selectedConversationId],
-       queryFn: () => getMessagesForConversation(selectedConversationId!), // Service fn now returns SerializableMessage[]
+       queryFn: () => getMessagesForConversation(selectedConversationId!), // Service fn returns SerializableMessage[]
        enabled: !!selectedConversationId, // Only fetch if a conversation is selected
        staleTime: 1000 * 15, // 15 seconds (messages might update more often)
        refetchInterval: 1000 * 30, // Refetch every 30 seconds
@@ -197,7 +195,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
 
   // --- Scroll to bottom when messages load or new message arrives ---
    useEffect(() => {
-       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+       // Use timeout to ensure DOM is updated before scrolling
+       const timer = setTimeout(() => {
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+       }, 100); // Adjust delay if needed
+       return () => clearTimeout(timer);
    }, [messages]);
 
   // --- Handle Sending Message ---
@@ -216,12 +218,26 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
     sendMessageMutation.mutate(messageData);
   };
 
-   // --- Select the first conversation by default if none is selected and no error ---
+   // --- Select conversation based on query param or default to first ---
    useEffect(() => {
-       if (!selectedConversationId && !isLoadingConversations && !isConversationsError && conversations && conversations.length > 0) {
-           setSelectedConversationId(conversations[0].id);
-       }
-   }, [conversations, selectedConversationId, isLoadingConversations, isConversationsError]);
+     const targetConversationId = searchParams?.get('conversationId'); // Use optional chaining
+
+     if (!isLoadingConversations && !isConversationsError && conversations && conversations.length > 0) {
+         if (targetConversationId && conversations.some(c => c.id === targetConversationId)) {
+             // If a valid target ID is provided and exists, select it
+             if (selectedConversationId !== targetConversationId) {
+                setSelectedConversationId(targetConversationId);
+             }
+         } else if (!selectedConversationId) {
+             // Otherwise, if no conversation is selected, select the first one
+             setSelectedConversationId(conversations[0].id);
+         }
+     } else if (!isLoadingConversations && !selectedConversationId) {
+         // Handle case with no conversations or still loading
+         setSelectedConversationId(null);
+     }
+   }, [conversations, selectedConversationId, isLoadingConversations, isConversationsError, searchParams]);
+
 
   // --- Derive Selected Conversation Details ---
    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
