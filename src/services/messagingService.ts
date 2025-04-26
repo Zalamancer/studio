@@ -106,8 +106,9 @@ export const findOrCreateConversation = async (userId1: string, userId2: string)
   } catch (error: any) {
     console.error(`Error finding or creating conversation between ${userId1} and ${userId2}:`, error);
     if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied for creating/accessing conversation. Check security rules.");
-        throw new Error(`Permission denied when trying to access or create conversation. Check Firestore Rules.`);
+        // Provide a more specific error message pointing towards create permissions
+        console.error("Firestore permission denied for creating/accessing conversation. Check security rules for 'conversations' collection, specifically the 'create' operation allowance.");
+        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
     }
     throw new Error(`Failed to find or create conversation: ${error.message}`);
   }
