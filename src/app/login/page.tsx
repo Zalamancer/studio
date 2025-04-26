@@ -30,22 +30,31 @@ const LoginPage = () => {
   };
 
   const handleGoogleLogin = async () => {
-    const userCredential = await signInWithGoogle();
-    if (userCredential) {
-      // User signed in successfully
+    try {
+      const userCredential = await signInWithGoogle();
+      if (userCredential) {
+        // User signed in successfully
+         toast({
+          title: "Google Login Successful",
+          description: "Redirecting to dashboard...",
+        });
+        router.push('/'); // Redirect to the home dashboard
+      } else {
+        // Handle sign-in failure (optional: show a toast message)
+        toast({
+          variant: "destructive",
+          title: "Google Login Failed",
+          description: "Could not log in with Google. Please try again.",
+        });
+         console.error("Google Sign-In failed.");
+      }
+    } catch (error) {
        toast({
-        title: "Google Login Successful",
-        description: "Redirecting to dashboard...",
-      });
-      router.push('/'); // Redirect to the home dashboard
-    } else {
-      // Handle sign-in failure (optional: show a toast message)
-      toast({
         variant: "destructive",
-        title: "Google Login Failed",
-        description: "Could not log in with Google. Please try again.",
+        title: "Google Login Error",
+        description: "An unexpected error occurred during Google Sign-In.",
       });
-       console.error("Google Sign-In failed.");
+      console.error("Unexpected error during Google Sign-In:", error);
     }
   };
 

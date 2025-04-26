@@ -35,22 +35,31 @@ const SignUpPage = () => {
   };
 
    const handleGoogleSignup = async () => {
-    const userCredential = await signInWithGoogle(); // Re-use the same function
-    if (userCredential) {
-      // User signed in (and potentially created an account) successfully
-       toast({
-        title: "Google Sign Up Successful",
-        description: "Redirecting to dashboard...",
-      });
-      router.push('/'); // Redirect to the home dashboard
-    } else {
-      // Handle sign-in failure
+    try {
+      const userCredential = await signInWithGoogle(); // Re-use the same function
+      if (userCredential) {
+        // User signed in (and potentially created an account) successfully
+         toast({
+          title: "Google Sign Up Successful",
+          description: "Redirecting to dashboard...",
+        });
+        router.push('/'); // Redirect to the home dashboard
+      } else {
+        // Handle sign-in failure
+         toast({
+          variant: "destructive",
+          title: "Google Sign Up Failed",
+          description: "Could not sign up with Google. Please try again.",
+        });
+        console.error("Google Sign-Up/Sign-In failed.");
+      }
+    } catch (error) {
        toast({
         variant: "destructive",
-        title: "Google Sign Up Failed",
-        description: "Could not sign up with Google. Please try again.",
+        title: "Google Sign Up Error",
+        description: "An unexpected error occurred during Google Sign-Up.",
       });
-      console.error("Google Sign-Up/Sign-In failed.");
+      console.error("Unexpected error during Google Sign-Up:", error);
     }
   };
 
