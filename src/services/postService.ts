@@ -8,7 +8,9 @@ import {
   orderBy,
   Timestamp,
   limit,
-  serverTimestamp // Use serverTimestamp for consistency
+  serverTimestamp, // Use serverTimestamp for consistency
+  deleteDoc, // Import deleteDoc
+  doc // Import doc to get a document reference
 } from 'firebase/firestore';
 import type { Post, NewPostData } from '@/types/post';
 
@@ -68,4 +70,23 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
     // Return empty array or throw error based on how you want to handle fetch failures
     return [];
   }
+};
+
+
+// Function to delete a post from Firestore
+export const deletePostFromFirestore = async (postId: string): Promise<void> => {
+    try {
+        const postDocRef = doc(db, 'posts', postId); // Get reference to the specific post document
+        await deleteDoc(postDocRef);
+        console.log(`Post with ID ${postId} deleted successfully.`);
+    } catch (error: any) {
+        console.error(`Error deleting post with ID ${postId}:`, error);
+        console.error("Firestore Error Code:", error.code);
+        console.error("Firestore Error Message:", error.message);
+        if (error.code === 'permission-denied') {
+            console.error("Firestore permission denied for deleting. Check your security rules.");
+            throw new Error('Permission denied. You might need to adjust Firestore security rules to allow deletion.');
+        }
+        throw new Error(`Failed to delete post: ${error.message}`);
+    }
 };

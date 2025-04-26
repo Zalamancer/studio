@@ -28,20 +28,28 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { FileText, Home, Network, LineChart, LogOut, PlusCircle, Loader2 } from "lucide-react"; // Correct icons
+import { FileText, Home, Network, LineChart, LogOut, PlusCircle, Loader2, Trash2 } from "lucide-react"; // Correct icons, added Trash2
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import type { Post, NewPostData } from '@/types/post';
 import { CreatePostForm } from '@/components/CreatePostForm';
 import { useAuth } from '@/contexts/AuthContext';
 import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
-import { getPostsFromFirestore, addPostToFirestore } from '@/services/postService';
+import { getPostsFromFirestore, addPostToFirestore, deletePostFromFirestore } from '@/services/postService'; // Import deletePostFromFirestore
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
-import { useForm } from 'react-hook-form'; // Import useForm for potential reset
-import { zodResolver } from '@hookform/resolvers/zod'; // Import resolver if needed for reset
-import * as z from 'zod'; // Import zod if needed for reset schema
 import { Timestamp } from 'firebase/firestore'; // Import Timestamp
 
 const navItems = [
@@ -56,15 +64,6 @@ export const availableTags = [
 ];
 
 const queryClient = new QueryClient();
-
-// Define Zod schema for validation (needed if using form.reset())
-const postFormSchema = z.object({
-  question: z.string().min(10, "Question must be at least 10 characters long.").max(200, "Question cannot exceed 200 characters."),
-  description: z.string().optional(), // Optional detailed description
-  tags: z.array(z.string()).min(1, "Please select at least one tag."),
-});
-
-type PostFormValues = z.infer<typeof postFormSchema>;
 
 // Component for Post Card
 const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
@@ -121,28 +120,25 @@ function HomePageContent() {
 
 
   // Fetch posts using react-query
-  const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
+  const { data: posts = [], isLoading: isLoadingPosts, error: postsError, refetch: refetchPosts } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 1, // 1 minute (reduce stale time for faster updates)
-    refetchOnWindowFocus: true, // Refetch when window gains focus
-    enabled: !!user, // Only fetch posts if the user is logged in
+    staleTime: 1000 * 60 * 1, // 1 minute
+    refetchOnWindowFocus: true,
+    enabled: !!user,
   });
 
    const addPostMutation = useMutation({
      mutationFn: addPostToFirestore,
-     onSuccess: (newPostId) => {
-       console.log("Mutation succeeded! New Post ID:", newPostId);
+     onSuccess: () => {
         // Invalidate queries first to refetch data in the background
         queryClient.invalidateQueries({ queryKey: ['posts'] }).then(() => {
-            console.log("Queries invalidated.");
             // Show success toast
             toast({
                 title: "Post Created",
                 description: "Your post has been added to the board.",
             });
-            // Close the dialog - this will unmount the form
-             console.log("Closing dialog...");
+            // Close the dialog
             setIsCreatePostOpen(false);
         }).catch(err => {
             console.error("Error during post-success operations (invalidate/toast/close):", err);
@@ -150,16 +146,57 @@ function HomePageContent() {
              setIsCreatePostOpen(false);
         });
      },
-     onError: (error: Error) => { // Ensure error is typed
-        console.error("Mutation failed:", error);
+     onError: (error: Error) => {
+        console.error("Add Post Mutation failed:", error);
         toast({
           variant: "destructive",
           title: "Post Failed",
           description: `Could not add your post: ${error.message}. Check console and Firestore rules.`,
         });
-        // Keep the dialog open on error so the user can try again or see the error.
       },
    });
+
+   // --- Delete Post Mutation ---
+   const deletePostMutation = useMutation({
+       mutationFn: deletePostFromFirestore, // Use the imported function
+       onSuccess: () => {
+           // Invalidate the posts query to refetch and update the list
+           queryClient.invalidateQueries({ queryKey: ['posts'] });
+           toast({
+               title: "Post Deleted",
+               description: "The post has been removed from the board.",
+           });
+           setSelectedPost(null); // Close the detail sheet
+       },
+       onError: (error: Error) => {
+           console.error("Delete Post Mutation failed:", error);
+           toast({
+               variant: "destructive",
+               title: "Deletion Failed",
+               description: `Could not delete the post: ${error.message}. Check console and Firestore rules.`,
+           });
+           // Optionally close the sheet even on error, or leave it open
+           // setSelectedPost(null);
+       },
+   });
+   // --- End Delete Post Mutation ---
+
+
+   // --- Delete Post Handler ---
+   const handleDeletePost = (postId: string | undefined) => {
+       if (!postId) {
+           toast({ variant: "destructive", title: "Error", description: "Post ID is missing." });
+           return;
+       }
+       if (!user) {
+           toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in to delete posts." });
+           return;
+       }
+       // Trigger the mutation
+       deletePostMutation.mutate(postId);
+   };
+   // --- End Delete Post Handler ---
+
 
   const handleTagClick = (tag: string) => {
     setSelectedTags(prevTags =>
@@ -196,36 +233,31 @@ function HomePageContent() {
         });
         return;
     }
-    console.log("Submitting post data:", formData);
 
     const newPostData: NewPostData = {
         question: formData.question,
         description: formData.description,
-        tags: formData.tags || [], // Ensure tags is an array
-        userId: user.uid,
-        createdAt: new Date(), // Use current Date, Firestore service will convert to serverTimestamp
-        // Placeholder values - these should ideally come from user profile or form
-        sector: "Tech", // Example placeholder
-        businessType: "Startup", // Example placeholder
-        safetyIndicator: "Medium", // Example placeholder
-        ratingScore: Math.floor(Math.random() * 5) + 1, // Random rating for now
-        stockGraphData: [], // Placeholder, ideally fetched or calculated
+        tags: formData.tags || [],
+        userId: user.uid, // Associate post with the logged-in user
+        createdAt: new Date(),
+        sector: "Tech", // Placeholder
+        businessType: "Startup", // Placeholder
+        safetyIndicator: "Medium", // Placeholder
+        ratingScore: Math.floor(Math.random() * 5) + 1, // Placeholder
+        stockGraphData: [], // Placeholder
     };
-    console.log("Calling addPostMutation.mutate with:", newPostData);
     addPostMutation.mutate(newPostData);
   };
 
  const filteredPosts = useMemo(() => {
-    // Ensure posts is an array before sorting and filtering
     if (!Array.isArray(posts)) {
         console.warn("Posts data is not an array:", posts);
         return [];
     }
 
     let sortedPosts = [...posts].sort((a, b) => {
-        // Handle cases where createdAt might not be a Timestamp yet (e.g., optimistic updates)
-        const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : (a.createdAt as any instanceof Date ? (a.createdAt as any).getTime() : 0);
-        const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : (b.createdAt as any instanceof Date ? (b.createdAt as any).getTime() : 0);
+        const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
+        const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
         return timeB - timeA; // Descending order (newest first)
     });
 
@@ -235,19 +267,19 @@ function HomePageContent() {
     }
 
     return sortedPosts.filter(post =>
-       Array.isArray(post.tags) && // Ensure post.tags is an array
+       Array.isArray(post.tags) &&
        selectedTags.every(tag => post.tags.includes(tag))
     );
   }, [posts, selectedTags]);
 
 
-  // Show loading skeleton or message while auth is loading or user is null (before redirect)
   if (authLoading || !user) {
       return (
          <div className="flex flex-col min-h-screen bg-background">
              <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                {/* Header Skeleton */}
                 <div className="container mx-auto flex h-14 items-center">
-                 <Skeleton className="h-6 w-32 mr-6" /> {/* Logo Placeholder */}
+                 <Skeleton className="h-6 w-32 mr-6" />
                  <div className="flex-1 flex justify-center gap-4">
                    <Skeleton className="h-6 w-16" />
                    <Skeleton className="h-6 w-16" />
@@ -255,8 +287,8 @@ function HomePageContent() {
                    <Skeleton className="h-6 w-16" />
                  </div>
                  <div className="flex items-center gap-2 ml-auto">
-                    <Skeleton className="h-9 w-28" /> {/* Create Post Placeholder */}
-                    <Skeleton className="h-9 w-9 rounded-full" /> {/* Logout Placeholder */}
+                    <Skeleton className="h-9 w-28" />
+                    <Skeleton className="h-9 w-9 rounded-full" />
                  </div>
                 </div>
             </header>
@@ -268,21 +300,19 @@ function HomePageContent() {
                          <p className="text-muted-foreground text-lg">Loading user data...</p>
                         </>
                     ) : (
-                       // Changed the message to indicate redirecting to login
                        <p className="text-muted-foreground text-lg">Redirecting to login...</p>
                     )}
                 </div>
             </main>
              <footer className="py-4 border-t mt-8">
                 <div className="container mx-auto text-center text-sm text-muted-foreground">
-                    <Skeleton className="h-4 w-64 mx-auto" /> {/* Footer Placeholder */}
+                    <Skeleton className="h-4 w-64 mx-auto" />
                 </div>
              </footer>
          </div>
      );
    }
 
-  // Render dashboard content if authenticated
   return (
     <div className="flex flex-col min-h-screen bg-background">
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
@@ -296,21 +326,18 @@ function HomePageContent() {
              <NavigationMenuList>
                {navItems.map((item) => (
                  <NavigationMenuItem key={item.title}>
-                   {/* Pass props directly to NavigationMenuLink */}
                    <NavigationMenuLink
-                      href={item.href ?? '#'} // Provide a fallback href
+                      href={item.href ?? '#'}
                       title={item.title}
-                      icon={item.icon} // Pass the icon component
-                      className="text-sm font-medium transition-colors hover:text-primary [&_svg]:mr-2 [&_svg]:h-4 [&_svg]:w-4"
+                      icon={item.icon}
                    >
-                      {item.title}
+                     {item.title}
                    </NavigationMenuLink>
                  </NavigationMenuItem>
                ))}
              </NavigationMenuList>
           </NavigationMenu>
            <div className="flex items-center gap-2 ml-auto">
-               {/* Manage Dialog open state */}
                <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
                   <DialogTrigger asChild>
                      <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -325,13 +352,11 @@ function HomePageContent() {
                          Share your question or need with the community. Keep it anonymous.
                        </DialogDescription>
                      </DialogHeader>
-                     {/* Render CreatePostForm only when the dialog is open */}
-                     {/* Pass the mutation's pending state to the form */}
                      {isCreatePostOpen && (
                         <CreatePostForm
                            onSubmit={handleAddPost}
                            availableTags={availableTags}
-                           isSubmitting={addPostMutation.isPending} // Use isPending from the mutation
+                           isSubmitting={addPostMutation.isPending}
                           />
                      )}
                   </DialogContent>
@@ -363,7 +388,7 @@ function HomePageContent() {
                   ? "bg-primary text-primary-foreground hover:bg-primary/90"
                   : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               )}
-              aria-pressed={selectedTags.includes(tag)} // Accessibility: Indicate button state
+              aria-pressed={selectedTags.includes(tag)}
             >
               {tag}
             </Button>
@@ -423,7 +448,7 @@ function HomePageContent() {
                     <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
                         <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
                          <div className="flex flex-wrap items-center gap-2 pt-1">
-                            {selectedPost.tags?.map((tag, index) => ( // Add optional chaining
+                            {selectedPost.tags?.map((tag, index) => (
                             <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs">{tag}</Badge>
                             ))}
                         </div>
@@ -467,10 +492,57 @@ function HomePageContent() {
                                     <span className="text-muted-foreground">{selectedPost.ratingScore} / 5</span>
                                 </div>
                          </div>
+                         {/* --- Buttons including Delete --- */}
                          <div className="mt-6 pt-4 border-t flex justify-end gap-2">
                              <Button variant="outline" size="sm">Offer Help</Button>
                              <Button variant="default" size="sm">Connect</Button>
+                             {/* Show Delete Button only if the post belongs to the current user */}
+                             {user && selectedPost.userId === user.uid && (
+                                 <AlertDialog>
+                                     <AlertDialogTrigger asChild>
+                                         <Button
+                                             variant="destructive"
+                                             size="sm"
+                                             disabled={deletePostMutation.isPending}
+                                         >
+                                             {deletePostMutation.isPending ? (
+                                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                             ) : (
+                                                 <Trash2 className="mr-2 h-4 w-4" />
+                                             )}
+                                             Delete
+                                         </Button>
+                                     </AlertDialogTrigger>
+                                     <AlertDialogContent>
+                                         <AlertDialogHeader>
+                                             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                             <AlertDialogDescription>
+                                                 This action cannot be undone. This will permanently delete your post
+                                                 and remove your data from our servers.
+                                             </AlertDialogDescription>
+                                         </AlertDialogHeader>
+                                         <AlertDialogFooter>
+                                             <AlertDialogCancel disabled={deletePostMutation.isPending}>Cancel</AlertDialogCancel>
+                                             <AlertDialogAction
+                                                 onClick={() => handleDeletePost(selectedPost.id)}
+                                                 disabled={deletePostMutation.isPending}
+                                                 className="bg-destructive hover:bg-destructive/90"
+                                             >
+                                                 {deletePostMutation.isPending ? (
+                                                     <>
+                                                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                                         Deleting...
+                                                     </>
+                                                 ) : (
+                                                     'Continue'
+                                                 )}
+                                             </AlertDialogAction>
+                                         </AlertDialogFooter>
+                                     </AlertDialogContent>
+                                 </AlertDialog>
+                             )}
                          </div>
+                         {/* --- End Buttons --- */}
                     </div>
                     </div>
                 )}
