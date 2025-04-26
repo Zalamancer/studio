@@ -18,7 +18,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, User, Users } from 'lucide-react';
+import { Loader2, Send, User, Users, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
 import { Timestamp } from 'firebase/firestore';
 import { cn } from '@/lib/utils';
 
@@ -137,14 +137,31 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
   const {
       data: conversations = [],
       isLoading: isLoadingConversations,
-      error: conversationsError
-    } = useQuery<Conversation[]>({
+      error: conversationsError, // Capture the error object
+      isError: isConversationsError // Boolean flag for error state
+    } = useQuery<Conversation[], Error>({ // Specify Error type for error object
     queryKey: ['conversations', currentUserId],
     queryFn: () => getConversationsForUser(currentUserId),
     enabled: !!currentUserId, // Only run if userId is available
     staleTime: 1000 * 60 * 5, // 5 minutes
     refetchOnWindowFocus: true,
+    retry: 1, // Retry only once on error
   });
+
+  // Log error if conversations fetch fails
+  useEffect(() => {
+      if (isConversationsError && conversationsError) {
+          console.error("Error fetching conversations in UI:", conversationsError);
+          // Optionally show a toast, but the UI will display the error message directly
+           toast({
+               variant: "destructive",
+               title: "Error Loading Conversations",
+               description: conversationsError.message || "Could not load conversations.",
+               duration: 7000,
+           });
+      }
+  }, [isConversationsError, conversationsError, toast]);
+
 
   // --- Query: Fetch Messages for Selected Conversation ---
    const {
@@ -198,12 +215,12 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
     sendMessageMutation.mutate(messageData);
   };
 
-   // --- Select the first conversation by default if none is selected ---
+   // --- Select the first conversation by default if none is selected and no error ---
    useEffect(() => {
-       if (!selectedConversationId && conversations && conversations.length > 0) {
+       if (!selectedConversationId && !isLoadingConversations && !isConversationsError && conversations && conversations.length > 0) {
            setSelectedConversationId(conversations[0].id);
        }
-   }, [conversations, selectedConversationId]);
+   }, [conversations, selectedConversationId, isLoadingConversations, isConversationsError]);
 
   // --- Derive Selected Conversation Details ---
    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
@@ -233,9 +250,18 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
                       </div>
                   </div>
               ))
-            ) : conversationsError ? (
-              <p className="p-4 text-sm text-destructive text-center">Error loading conversations.</p>
-            ) : conversations.length === 0 ? (
+             ) : isConversationsError ? ( // Check the isError flag
+                 <div className="p-4 text-center text-destructive">
+                     <AlertTriangle className="mx-auto h-8 w-8 mb-2" />
+                     <p className="text-sm font-medium">Error Loading Conversations</p>
+                     <p className="text-xs mt-1">
+                         {conversationsError?.message || "An unknown error occurred."}
+                     </p>
+                      <p className="text-xs mt-1">
+                         Please check console and Firestore Rules.
+                      </p>
+                 </div>
+             ) : conversations.length === 0 ? (
                 <p className="p-4 text-sm text-muted-foreground text-center">No conversations yet.</p>
             ) : (
               conversations.map((conv) => (
@@ -317,11 +343,28 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({ currentU
             </div>
           </>
         ) : (
-          // Placeholder when no conversation is selected
+           // Placeholder when no conversation is selected OR if there was an error loading convos
           <div className="flex-grow flex flex-col items-center justify-center text-center p-4 bg-background">
-            <Users className="h-12 w-12 text-muted-foreground mb-4" />
-            <h3 className="text-lg font-medium text-foreground">Select a Conversation</h3>
-            <p className="text-sm text-muted-foreground">Choose a conversation from the list to start chatting.</p>
+             {isConversationsError ? (
+                  <>
+                     <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
+                     <h3 className="text-lg font-medium text-destructive">Could Not Load Conversations</h3>
+                     <p className="text-sm text-muted-foreground mt-2">
+                         {conversationsError?.message || "Please try again later or check your connection/permissions."}
+                     </p>
+                  </>
+             ) : isLoadingConversations ? (
+                 <>
+                     <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
+                     <h3 className="text-lg font-medium text-muted-foreground">Loading Conversations...</h3>
+                 </>
+             ) : (
+                  <>
+                     <Users className="h-12 w-12 text-muted-foreground mb-4" />
+                     <h3 className="text-lg font-medium text-foreground">Select a Conversation</h3>
+                     <p className="text-sm text-muted-foreground">Choose a conversation from the list to start chatting.</p>
+                  </>
+              )}
           </div>
         )}
       </div>

@@ -32,33 +32,53 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
     console.error("User ID is required to fetch conversations.");
     return [];
   }
+  console.log(`Fetching conversations for user: ${userId}`); // Log start
+
   try {
     // Query conversations where the participants array contains the user's ID
-    // Order by last message timestamp descending to get recent conversations first
+    // Temporarily REMOVED orderBy for debugging permission/data issues
     const q = query(
         conversationsCollectionRef,
         where('participants', 'array-contains', userId),
-        orderBy('lastMessageTimestamp', 'desc'),
+        // orderBy('lastMessageTimestamp', 'desc'), // Temporarily removed for debugging
         limit(50) // Limit the number of conversations fetched
     );
+    console.log("Executing Firestore query for conversations...");
     const querySnapshot = await getDocs(q);
+    console.log(`Query snapshot received. Found ${querySnapshot.docs.length} documents.`);
 
-    const conversations = querySnapshot.docs.map((doc) => {
-      const data = doc.data();
-      return {
-        id: doc.id,
-        participants: data.participants || [],
-        lastMessage: data.lastMessage || null,
-        // Ensure lastMessageTimestamp is handled correctly (might be null initially)
-        lastMessageTimestamp: data.lastMessageTimestamp instanceof Timestamp
+    const conversations = querySnapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      console.log(`Mapping document ${docSnap.id}:`, data); // Log raw data
+      // Basic validation
+      if (!data.participants || !Array.isArray(data.participants)) {
+          console.warn(`Document ${docSnap.id} is missing or has invalid 'participants' field.`);
+          // Handle this case, maybe return null or a default structure
+          return null; // Or skip this document
+      }
+      // Ensure lastMessageTimestamp is handled correctly
+      const lastTimestamp = data.lastMessageTimestamp instanceof Timestamp
             ? data.lastMessageTimestamp
-            : null,
-        createdAt: data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now(), // Ensure createdAt exists
+            : null; // Default to null if missing or wrong type
+
+       // Ensure createdAt exists
+       const createdAtTimestamp = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now();
+
+      const conversation: Conversation = {
+        id: docSnap.id,
+        participants: data.participants,
+        lastMessage: data.lastMessage || null,
+        lastMessageTimestamp: lastTimestamp,
+        createdAt: createdAtTimestamp,
         // Add other relevant fields like participant details if stored directly
         // participantDetails: data.participantDetails || {}, // Example if you store names/avatars
-      } as Conversation;
-    });
-    console.log(`Fetched ${conversations.length} conversations for user ${userId}`);
+      };
+       console.log(`Mapped conversation ${conversation.id}:`, conversation);
+      return conversation;
+    }).filter((conv): conv is Conversation => conv !== null); // Filter out any nulls from mapping invalid docs
+
+
+    console.log(`Successfully mapped ${conversations.length} valid conversations for user ${userId}`);
     return conversations;
 
   } catch (error: any) {
@@ -68,6 +88,11 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
       console.error("Firestore permission denied. Check your security rules for the 'conversations' collection. Ensure the rules allow the 'list' operation for queries filtering by 'participants' containing the authenticated user's ID.");
       throw new Error(`Failed to fetch conversations: Missing or insufficient permissions. Check Firestore Rules.`);
     }
+     // Check for missing index error (even though orderBy is removed, good to keep)
+     if (error.code === 'failed-precondition') {
+         console.error("Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index.");
+         throw new Error("Firestore query requires an index. Please create it in the Firebase console.");
+     }
     // Throw a generic error for other issues
     throw new Error(`Failed to fetch conversations: ${error.message}`);
   }
@@ -100,30 +125,26 @@ export const findOrCreateConversation = async (userId1: string, userId2: string)
             participants: participants,
             createdAt: serverTimestamp(),
             lastMessage: null,
-            lastMessageTimestamp: null,
+            lastMessageTimestamp: null, // Ensure this field exists on creation
         };
         console.log('Data for new conversation:', newConversationData); // Log data being written
 
-        // Create a new conversation document using a batch write for atomicity
-        const batch = writeBatch(db);
-        batch.set(conversationDocRef, newConversationData); // This is the 'create' operation
-        await batch.commit();
+        // Create a new conversation document using set with the specific ID
+        await setDoc(conversationDocRef, newConversationData); // Use setDoc to create with specific ID
+
         console.log(`Conversation created successfully: ${conversationId}`);
         return conversationId;
     }
   } catch (error: any) {
     console.error(`Error finding or creating conversation between ${userId1} and ${userId2}:`, error);
-    // Log current auth state for debugging
-    const currentUser = auth.currentUser; // Get current user from auth instance
+    const currentUser = auth.currentUser;
     console.error('Current auth state:', currentUser ? `UID: ${currentUser.uid}` : 'No user authenticated');
-    console.error('Participants being used:', participants); // Log participants again in case of error
+    console.error('Participants being used:', participants);
 
     if (error.code === 'permission-denied') {
-        // Provide a more specific error message pointing towards create permissions
-        console.error("Firestore permission denied for creating/accessing conversation. Check security rules for 'conversations' collection, specifically the 'create' operation allowance.");
-        // Log the details of the rule being violated if possible (not directly available, but context helps)
-        console.error("Ensure rule 'allow create: if request.auth != null && request.resource.data.participants.size() == 2 && request.resource.data.participants.hasAll([request.auth.uid]);' is met.");
-        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
+        console.error("Firestore permission denied for creating/accessing conversation. Check security rules for 'conversations' collection.");
+        console.error("Ensure rule allows 'create' on '/conversations/{conversationId}' when authenticated, participants array is size 2, and contains the auth uid.");
+        throw new Error(`Permission denied when trying to access or create conversation. Check Firestore Rules.`);
     }
     throw new Error(`Failed to find or create conversation: ${error.message}`);
   }

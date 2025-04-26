@@ -4,7 +4,7 @@
 import React from 'react';
 import { MessagingInterface } from '@/components/messaging/MessagingInterface'; // Corrected import path
 import { useAuth } from '@/contexts/AuthContext'; // To get the current user
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 
 // This page will now be rendered within the MainLayout
 const ContractsPage = () => {
@@ -36,6 +36,7 @@ const ContractsPage = () => {
             </p>
             {/* Render the Messaging Interface */}
             <div className="flex-grow border rounded-lg overflow-hidden shadow-sm"> {/* Container for the messaging UI */}
+                {/* Pass user ID and handle potential errors during conversation load within MessagingInterface */}
                 <MessagingInterface currentUserId={user.uid} />
             </div>
         </div>
