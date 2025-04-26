@@ -42,6 +42,7 @@ import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 import { useForm } from 'react-hook-form'; // Import useForm for potential reset
 import { zodResolver } from '@hookform/resolvers/zod'; // Import resolver if needed for reset
 import * as z from 'zod'; // Import zod if needed for reset schema
+import { Timestamp } from 'firebase/firestore'; // Import Timestamp
 
 const navItems = [
   { title: "Board", href: "/", icon: Home },
@@ -67,7 +68,10 @@ type PostFormValues = z.infer<typeof postFormSchema>;
 
 // Component for Post Card
 const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
-  const postDate = post.createdAt?.toDate ? post.createdAt.toDate().toLocaleDateString() : 'Date unavailable';
+  // Handle potential Timestamp object for createdAt
+  const postDate = post.createdAt instanceof Timestamp
+    ? post.createdAt.toDate().toLocaleDateString()
+    : 'Date unavailable'; // Fallback if createdAt is not a Timestamp
 
   return (
       <Card
@@ -79,9 +83,9 @@ const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
       >
         <CardHeader className="p-4">
           <div className="flex flex-wrap gap-1 mb-2">
-            {post.tags.map((tag, index) => (
+            {post.tags?.map((tag, index) => ( // Add optional chaining for safety
               // Use span for Badge as it's inline and doesn't cause nesting issues
-              <Badge key={index} variant="secondary" className="text-xs" as="span">
+              <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs" as="span">
                 {tag}
               </Badge>
             ))}
@@ -121,30 +125,37 @@ function HomePageContent() {
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60 * 1, // 1 minute (reduce stale time for faster updates)
+    refetchOnWindowFocus: true, // Refetch when window gains focus
     enabled: !!user, // Only fetch posts if the user is logged in
   });
 
    const addPostMutation = useMutation({
      mutationFn: addPostToFirestore,
-     onSuccess: () => {
-       queryClient.invalidateQueries({ queryKey: ['posts'] });
+     onSuccess: (newPostId) => {
+       console.log("Mutation succeeded! New Post ID:", newPostId);
+       queryClient.invalidateQueries({ queryKey: ['posts'] }); // Invalidate cache to refetch
        setIsCreatePostOpen(false); // Close the dialog on successful post creation
        toast({
          title: "Post Created",
          description: "Your post has been added to the board.",
        });
-        // Resetting the form can be done here if the form instance is managed here
-        // or rely on the form unmounting when the dialog closes.
+        // Resetting the form is handled by unmounting when dialog closes
      },
-     onError: (error) => {
-        console.error("Failed to add post:", error);
+     onError: (error: Error) => { // Ensure error is typed
+        console.error("Mutation failed:", error);
         toast({
           variant: "destructive",
           title: "Post Failed",
-          description: "Could not add your post. Please try again.",
+          description: `Could not add your post: ${error.message}. Please check console and Firestore rules.`,
         });
+        // Keep the dialog open on error so the user can try again or see the error.
+        // setIsCreatePostOpen(false); // Do NOT close dialog on error
       },
+     // onSettled: () => {
+     //    // This runs after success or error, might be useful for stopping spinners
+     //    // But closing the dialog on success handles the form state reset naturally
+     // }
    });
 
   const handleTagClick = (tag: string) => {
@@ -182,11 +193,14 @@ function HomePageContent() {
         });
         return;
     }
+    console.log("Submitting post data:", formData);
 
     const newPostData: NewPostData = {
-        ...formData,
+        question: formData.question,
+        description: formData.description,
+        tags: formData.tags || [], // Ensure tags is an array
         userId: user.uid,
-        createdAt: new Date(),
+        createdAt: new Date(), // Use current Date, Firestore service will convert to serverTimestamp
         // Placeholder values - these should ideally come from user profile or form
         sector: "Tech", // Example placeholder
         businessType: "Startup", // Example placeholder
@@ -198,24 +212,30 @@ function HomePageContent() {
   };
 
  const filteredPosts = useMemo(() => {
-    let sortedPosts = posts;
-    // Ensure posts are sorted by date
-    if (posts && posts.length > 0) {
-        sortedPosts = [...posts].sort((a, b) => {
-            const timeA = a.createdAt?.toDate ? a.createdAt.toDate().getTime() : 0;
-            const timeB = b.createdAt?.toDate ? b.createdAt.toDate().getTime() : 0;
-            return timeB - timeA; // Descending order
-        });
+    // Ensure posts is an array before sorting and filtering
+    if (!Array.isArray(posts)) {
+        console.warn("Posts data is not an array:", posts);
+        return [];
     }
+
+    let sortedPosts = [...posts].sort((a, b) => {
+        // Handle cases where createdAt might not be a Timestamp yet (e.g., optimistic updates)
+        const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
+        const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
+        return timeB - timeA; // Descending order (newest first)
+    });
+
 
     if (selectedTags.length === 0) {
       return sortedPosts;
     }
 
     return sortedPosts.filter(post =>
-      selectedTags.every(tag => post.tags.includes(tag))
+       Array.isArray(post.tags) && // Ensure post.tags is an array
+       selectedTags.every(tag => post.tags.includes(tag))
     );
   }, [posts, selectedTags]);
+
 
   // Show loading skeleton or message while auth is loading or user is null (before redirect)
   if (authLoading || !user) {
@@ -274,7 +294,7 @@ function HomePageContent() {
                  <NavigationMenuItem key={item.title}>
                    {/* Pass props directly to NavigationMenuLink */}
                    <NavigationMenuLink
-                      href={item.href}
+                      href={item.href ?? '#'} // Provide a fallback href
                       title={item.title}
                       icon={item.icon}
                    >
@@ -301,12 +321,12 @@ function HomePageContent() {
                        </DialogDescription>
                      </DialogHeader>
                      {/* Render CreatePostForm only when the dialog is open */}
+                     {/* Pass the mutation's pending state to the form */}
                      {isCreatePostOpen && (
                         <CreatePostForm
                            onSubmit={handleAddPost}
                            availableTags={availableTags}
-                           isSubmitting={addPostMutation.isPending}
-                           // No onSubmitted needed, parent handles closure
+                           isSubmitting={addPostMutation.isPending} // Use isPending from the mutation
                           />
                      )}
                   </DialogContent>
@@ -365,7 +385,7 @@ function HomePageContent() {
           )}
           {postsError && (
               <div className="col-span-full text-center py-10 text-destructive">
-                 <p>Error loading posts. Please try again later.</p>
+                 <p>Error loading posts: {postsError instanceof Error ? postsError.message : 'Unknown error'}. Check console and Firestore rules.</p>
               </div>
            )}
           {!isLoadingPosts && !postsError && filteredPosts.length > 0 ? (
@@ -398,12 +418,12 @@ function HomePageContent() {
                     <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
                         <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
                          <div className="flex flex-wrap items-center gap-2 pt-1">
-                            {selectedPost.tags.map((tag, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs" as="span">{tag}</Badge>
+                            {selectedPost.tags?.map((tag, index) => ( // Add optional chaining
+                            <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs" as="span">{tag}</Badge>
                             ))}
                         </div>
                          <SheetDescription className="text-sm pt-1">
-                            Posted on: {selectedPost.createdAt?.toDate ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
+                            Posted on: {selectedPost.createdAt instanceof Timestamp ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
                         </SheetDescription>
                     </SheetHeader>
 
