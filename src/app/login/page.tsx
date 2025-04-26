@@ -8,25 +8,60 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { signInWithGoogle } from '@/lib/firebase/auth'; // Import the Google Sign-In function
+import { signInWithGoogle, signInWithEmailPassword } from '@/lib/firebase/auth'; // Import email sign-in function
 import { useToast } from "@/hooks/use-toast"; // Import useToast
+import type { AuthError } from 'firebase/auth';
 
 const LoginPage = () => {
   const router = useRouter();
   const { toast } = useToast(); // Initialize toast
 
-  const handleEmailLogin = (event: React.FormEvent) => {
+  const handleEmailLogin = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Simulate email/password login process
-    // In a real app, you would verify credentials here using Firebase or another auth provider.
-    // Example: signInWithEmailAndPassword(auth, email, password)
-    console.log("Email/Password login attempt (simulation)");
-    // For now, show a placeholder message and redirect.
-     toast({
-      title: "Login Successful",
-      description: "Redirecting to dashboard...",
-    });
-    router.push('/');
+    const formData = new FormData(event.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+
+    if (!email || !password) {
+       toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: "Please enter both email and password.",
+      });
+      return;
+    }
+
+    try {
+      const userCredential = await signInWithEmailPassword(email, password);
+      if (userCredential) {
+        toast({
+          title: "Login Successful",
+          description: "Redirecting to dashboard...",
+        });
+        router.push('/'); // Redirect on success
+      } else {
+        // This case might not be reached if signInWithEmailPassword throws errors directly
+        toast({
+          variant: "destructive",
+          title: "Login Failed",
+          description: "Invalid credentials or user not found.",
+        });
+      }
+    } catch (error) {
+       const authError = error as AuthError;
+       let description = "An unexpected error occurred during login.";
+       if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential' || authError.code === 'auth/wrong-password') {
+           description = "Incorrect email or password. Please try again or sign up.";
+       } else if (authError.code === 'auth/invalid-email') {
+            description = "Please enter a valid email address.";
+       }
+       console.error("Email Login Error:", authError.code, authError.message);
+       toast({
+        variant: "destructive",
+        title: "Login Failed",
+        description: description,
+      });
+    }
   };
 
   const handleGoogleLogin = async () => {
@@ -46,7 +81,7 @@ const LoginPage = () => {
           title: "Google Login Failed",
           description: "Could not log in with Google. Please try again.",
         });
-         console.error("Google Sign-In failed.");
+         console.error("Google Sign-In failed (returned null).");
       }
     } catch (error) {
        toast({
@@ -70,16 +105,17 @@ const LoginPage = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+          {/* Update form to use names for FormData */}
           <form onSubmit={handleEmailLogin} className="space-y-4">
             <div className="grid gap-2">
               <Label htmlFor="email">Email Address</Label>
-              <Input type="email" id="email" placeholder="m@example.com" required className="mt-1" />
+              <Input type="email" id="email" name="email" placeholder="m@example.com" required className="mt-1" />
             </div>
             <div className="grid gap-2">
              <div className="flex items-center">
                  <Label htmlFor="password">Password</Label>
               </div>
-              <Input type="password" id="password" placeholder="Enter password" required className="mt-1" />
+              <Input type="password" id="password" name="password" placeholder="Enter password" required className="mt-1" />
             </div>
             <div>
               <Button type="submit" className="w-full">Login</Button>
@@ -95,7 +131,7 @@ const LoginPage = () => {
                 </div>
             </div>
             <div className="text-center">
-               {/* Updated Google Login Button */}
+               {/* Google Login Button */}
                <Button variant="outline" type="button" className="w-full" onClick={handleGoogleLogin}>
                  Login with Google
                </Button>

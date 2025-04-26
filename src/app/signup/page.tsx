@@ -9,8 +9,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { signInWithGoogle } from '@/lib/firebase/auth'; // Import the Google Sign-In function
+import { signInWithGoogle, signUpWithEmailPassword } from '@/lib/firebase/auth'; // Import the signup function
 import { useToast } from "@/hooks/use-toast"; // Import useToast
+import type { AuthError } from 'firebase/auth';
+
 
 const sectors = [
   "Tech", "Retail", "Logistics", "Healthcare", "Finance",
@@ -20,18 +22,63 @@ const SignUpPage = () => {
   const router = useRouter();
   const { toast } = useToast(); // Initialize toast
 
-  const handleEmailSignup = (event: React.FormEvent) => {
+  const handleEmailSignup = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    // Here, you would typically handle the email/password signup,
-    // e.g., send the data to your authentication service using Firebase createUserWithEmailAndPassword.
-    // Example: createUserWithEmailAndPassword(auth, email, password)
-    console.log("Email/Password signup attempt (simulation)");
-    // After successful signup, redirect the user to the home dashboard.
-     toast({
-        title: "Sign Up Successful",
-        description: "Redirecting to dashboard...",
+    const formData = new FormData(event.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    const companyName = formData.get('companyName') as string; // Get other fields if needed
+    const industry = formData.get('industry') as string;
+
+     if (!email || !password || !companyName || !industry ) {
+       toast({
+        variant: "destructive",
+        title: "Sign Up Failed",
+        description: "Please fill in all required fields.",
       });
-    router.push('/'); // Redirect to dashboard after sign up
+      return;
+    }
+
+    // Basic password validation (example)
+    if (password.length < 6) {
+        toast({
+            variant: "destructive",
+            title: "Sign Up Failed",
+            description: "Password must be at least 6 characters long.",
+        });
+        return;
+    }
+
+
+    try {
+      const userCredential = await signUpWithEmailPassword(email, password);
+       if (userCredential) {
+        // You might want to store companyName and industry in Firestore here
+        // associated with the userCredential.user.uid
+         toast({
+            title: "Sign Up Successful",
+            description: "Redirecting to dashboard...",
+          });
+        router.push('/'); // Redirect to dashboard after sign up
+      }
+       // No 'else' needed, errors are caught below
+    } catch (error) {
+       const authError = error as AuthError;
+       let description = "An unexpected error occurred during sign up.";
+       if (authError.code === 'auth/email-already-in-use') {
+           description = "This email address is already registered. Please log in or use a different email.";
+       } else if (authError.code === 'auth/weak-password') {
+            description = "The password is too weak. Please choose a stronger password.";
+       } else if (authError.code === 'auth/invalid-email') {
+           description = "Please enter a valid email address.";
+       }
+       console.error("Email Signup Error:", authError.code, authError.message);
+       toast({
+        variant: "destructive",
+        title: "Sign Up Failed",
+        description: description,
+      });
+    }
   };
 
    const handleGoogleSignup = async () => {
@@ -51,7 +98,7 @@ const SignUpPage = () => {
           title: "Google Sign Up Failed",
           description: "Could not sign up with Google. Please try again.",
         });
-        console.error("Google Sign-Up/Sign-In failed.");
+        console.error("Google Sign-Up/Sign-In failed (returned null).");
       }
     } catch (error) {
        toast({
@@ -75,18 +122,19 @@ const SignUpPage = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4">
+           {/* Update form to use names for FormData */}
           <form onSubmit={handleEmailSignup} className="space-y-4">
              <div className="grid gap-2">
               <Label htmlFor="companyName">Company Name</Label>
-              <Input type="text" id="companyName" placeholder="Your Company Inc." required className="mt-1" />
+              <Input type="text" id="companyName" name="companyName" placeholder="Your Company Inc." required className="mt-1" />
             </div>
              <div className="grid gap-2">
               <Label htmlFor="email">Email Address</Label>
-              <Input type="email" id="email" placeholder="m@example.com" required className="mt-1" />
+              <Input type="email" id="email" name="email" placeholder="m@example.com" required className="mt-1" />
             </div>
              <div className="grid gap-2">
               <Label htmlFor="password">Password</Label>
-              <Input type="password" id="password" placeholder="••••••••" required className="mt-1" />
+              <Input type="password" id="password" name="password" placeholder="•••••••• (min. 6 characters)" required className="mt-1" />
             </div>
              <div className="grid gap-2">
               <Label htmlFor="industry">Select Industry</Label>
@@ -115,7 +163,7 @@ const SignUpPage = () => {
                 </div>
             </div>
             <div>
-               {/* Updated Google Signup Button */}
+               {/* Google Signup Button */}
               <Button variant="outline" type="button" className="w-full" onClick={handleGoogleSignup}>
                 Sign up with Google
               </Button>
