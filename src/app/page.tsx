@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { FileText, Home, Network, LineChart, LogOut, PlusCircle, Loader2 } from "lucide-react"; // Import correct icons
+import { FileText, Home, Network, LineChart, LogOut, PlusCircle, Loader2 } from "lucide-react"; // Correct icons
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import type { Post, NewPostData } from '@/types/post';
@@ -84,8 +84,7 @@ const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
         <CardHeader className="p-4">
           <div className="flex flex-wrap gap-1 mb-2">
             {post.tags?.map((tag, index) => ( // Add optional chaining for safety
-              // Use span for Badge as it's inline and doesn't cause nesting issues
-              <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs" as="span">
+              <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs">
                 {tag}
               </Badge>
             ))}
@@ -134,28 +133,32 @@ function HomePageContent() {
      mutationFn: addPostToFirestore,
      onSuccess: (newPostId) => {
        console.log("Mutation succeeded! New Post ID:", newPostId);
-       queryClient.invalidateQueries({ queryKey: ['posts'] }); // Invalidate cache to refetch
-       setIsCreatePostOpen(false); // Close the dialog on successful post creation
-       toast({
-         title: "Post Created",
-         description: "Your post has been added to the board.",
-       });
-        // Resetting the form is handled by unmounting when dialog closes
+        // Invalidate queries first to refetch data in the background
+        queryClient.invalidateQueries({ queryKey: ['posts'] }).then(() => {
+            console.log("Queries invalidated.");
+            // Show success toast
+            toast({
+                title: "Post Created",
+                description: "Your post has been added to the board.",
+            });
+            // Close the dialog - this will unmount the form
+             console.log("Closing dialog...");
+            setIsCreatePostOpen(false);
+        }).catch(err => {
+            console.error("Error during post-success operations (invalidate/toast/close):", err);
+             // Still attempt to close the dialog even if other steps failed
+             setIsCreatePostOpen(false);
+        });
      },
      onError: (error: Error) => { // Ensure error is typed
         console.error("Mutation failed:", error);
         toast({
           variant: "destructive",
           title: "Post Failed",
-          description: `Could not add your post: ${error.message}. Please check console and Firestore rules.`,
+          description: `Could not add your post: ${error.message}. Check console and Firestore rules.`,
         });
         // Keep the dialog open on error so the user can try again or see the error.
-        // setIsCreatePostOpen(false); // Do NOT close dialog on error
       },
-     // onSettled: () => {
-     //    // This runs after success or error, might be useful for stopping spinners
-     //    // But closing the dialog on success handles the form state reset naturally
-     // }
    });
 
   const handleTagClick = (tag: string) => {
@@ -208,6 +211,7 @@ function HomePageContent() {
         ratingScore: Math.floor(Math.random() * 5) + 1, // Random rating for now
         stockGraphData: [], // Placeholder, ideally fetched or calculated
     };
+    console.log("Calling addPostMutation.mutate with:", newPostData);
     addPostMutation.mutate(newPostData);
   };
 
@@ -220,8 +224,8 @@ function HomePageContent() {
 
     let sortedPosts = [...posts].sort((a, b) => {
         // Handle cases where createdAt might not be a Timestamp yet (e.g., optimistic updates)
-        const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
-        const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
+        const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : (a.createdAt as any instanceof Date ? (a.createdAt as any).getTime() : 0);
+        const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : (b.createdAt as any instanceof Date ? (b.createdAt as any).getTime() : 0);
         return timeB - timeA; // Descending order (newest first)
     });
 
@@ -296,7 +300,8 @@ function HomePageContent() {
                    <NavigationMenuLink
                       href={item.href ?? '#'} // Provide a fallback href
                       title={item.title}
-                      icon={item.icon}
+                      icon={item.icon} // Pass the icon component
+                      className="text-sm font-medium transition-colors hover:text-primary [&_svg]:mr-2 [&_svg]:h-4 [&_svg]:w-4"
                    >
                       {item.title}
                    </NavigationMenuLink>
@@ -419,7 +424,7 @@ function HomePageContent() {
                         <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
                          <div className="flex flex-wrap items-center gap-2 pt-1">
                             {selectedPost.tags?.map((tag, index) => ( // Add optional chaining
-                            <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs" as="span">{tag}</Badge>
+                            <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs">{tag}</Badge>
                             ))}
                         </div>
                          <SheetDescription className="text-sm pt-1">
@@ -446,9 +451,7 @@ function HomePageContent() {
                                 </div>
                                 <div className="flex items-center gap-2">
                                     <strong className="text-foreground">Safety Indicator:</strong>
-                                    {/* Use span for Badge */}
                                     <Badge
-                                        as="span"
                                         variant={
                                             selectedPost.safetyIndicator === 'High' ? 'default'
                                             : selectedPost.safetyIndicator === 'Medium' ? 'secondary'
@@ -494,4 +497,3 @@ export default function HomePage() {
         </QueryClientProvider>
     );
 }
-
