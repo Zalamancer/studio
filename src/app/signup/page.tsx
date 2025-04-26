@@ -15,7 +15,7 @@ import type { AuthError } from 'firebase/auth';
 
 
 const sectors = [
-  "Tech", "Retail", "Logistics", "Healthcare", "Finance",
+  "Tech", "Retail", "Logistics", "Healthcare", "Finance", "Manufacturing", "Education", "Other" // Added more options
 ];
 
 const SignUpPage = () => {
@@ -39,15 +39,16 @@ const SignUpPage = () => {
       return;
     }
 
-    // Basic password validation (example)
+    // --- Password Requirement Validation ---
     if (password.length < 6) {
         toast({
             variant: "destructive",
             title: "Sign Up Failed",
             description: "Password must be at least 6 characters long.",
         });
-        return;
+        return; // Stop execution if password is too short
     }
+    // --- End Password Validation ---
 
 
     try {
@@ -57,7 +58,7 @@ const SignUpPage = () => {
         // associated with the userCredential.user.uid
          toast({
             title: "Sign Up Successful",
-            description: "Redirecting to dashboard...",
+            description: "Welcome! Redirecting to your dashboard...",
           });
         router.push('/'); // Redirect to dashboard after sign up
       }
@@ -68,7 +69,8 @@ const SignUpPage = () => {
        if (authError.code === 'auth/email-already-in-use') {
            description = "This email address is already registered. Please log in or use a different email.";
        } else if (authError.code === 'auth/weak-password') {
-            description = "The password is too weak. Please choose a stronger password.";
+            // This backend check is still useful as a fallback
+            description = "The password is too weak. Please choose a stronger password (at least 6 characters).";
        } else if (authError.code === 'auth/invalid-email') {
            description = "Please enter a valid email address.";
        }
@@ -88,91 +90,103 @@ const SignUpPage = () => {
         // User signed in (and potentially created an account) successfully
          toast({
           title: "Google Sign Up Successful",
-          description: "Redirecting to dashboard...",
+          description: "Welcome! Redirecting to dashboard...",
         });
         router.push('/'); // Redirect to the home dashboard
-      } else {
-        // Handle sign-in failure
-         toast({
-          variant: "destructive",
-          title: "Google Sign Up Failed",
-          description: "Could not sign up with Google. Please try again.",
-        });
-        console.error("Google Sign-Up/Sign-In failed (returned null).");
       }
+       // Errors are handled in the catch block by signInWithGoogle re-throwing
     } catch (error) {
+        // Error handling is now primarily within signInWithGoogle, but catch here as a fallback
+        const authError = error as AuthError;
+        let description = "An unexpected error occurred during Google Sign-Up.";
+        if (authError.code === 'auth/popup-closed-by-user') {
+            description = "Google Sign-Up cancelled.";
+             console.log(description); // Log for debugging if needed
+             return; // Don't show toast for user cancellation
+        } else if (authError.code === 'auth/account-exists-with-different-credential') {
+            description = "An account already exists with this email. Please log in using the original method.";
+        } else if (authError.code === 'auth/api-key-not-valid') {
+             description = "Invalid Firebase API Key configuration.";
+        }
+
        toast({
         variant: "destructive",
         title: "Google Sign Up Error",
-        description: "An unexpected error occurred during Google Sign-Up.",
+        description: description,
       });
-      console.error("Unexpected error during Google Sign-Up:", error);
+       if (authError.code !== 'auth/popup-closed-by-user') {
+            console.error("Google Sign Up Error (Signup Page):", authError.code, authError.message);
+       }
     }
   };
 
   return (
-    <div className="flex justify-center items-center min-h-screen bg-background">
-      <Card className="w-full max-w-md mx-4">
-        <CardHeader className="space-y-1 text-center">
-          <CardTitle className="text-2xl">
-            Create an Account
+    <div className="flex justify-center items-center min-h-screen bg-gradient-to-br from-background to-secondary">
+       <Card className="w-full max-w-md mx-4 shadow-xl rounded-lg border-border">
+        <CardHeader className="space-y-1 text-center p-6">
+          <CardTitle className="text-3xl font-bold text-primary">
+            Create Your Account
           </CardTitle>
-          <CardDescription>
-            Enter your details below or use Google to create your account
+          <CardDescription className="text-muted-foreground">
+            Join AnonyCollab to collaborate anonymously.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-4">
+        <CardContent className="grid gap-6 p-6">
            {/* Update form to use names for FormData */}
           <form onSubmit={handleEmailSignup} className="space-y-4">
              <div className="grid gap-2">
-              <Label htmlFor="companyName">Company Name</Label>
-              <Input type="text" id="companyName" name="companyName" placeholder="Your Company Inc." required className="mt-1" />
+              <Label htmlFor="companyName" className="text-sm font-medium">Company Name</Label>
+              <Input type="text" id="companyName" name="companyName" placeholder="Your Awesome Company" required className="mt-1 rounded-md border-input focus:ring-primary focus:border-primary" />
             </div>
              <div className="grid gap-2">
-              <Label htmlFor="email">Email Address</Label>
-              <Input type="email" id="email" name="email" placeholder="m@example.com" required className="mt-1" />
+              <Label htmlFor="email" className="text-sm font-medium">Email Address</Label>
+              <Input type="email" id="email" name="email" placeholder="you@company.com" required className="mt-1 rounded-md border-input focus:ring-primary focus:border-primary" />
             </div>
              <div className="grid gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input type="password" id="password" name="password" placeholder="•••••••• (min. 6 characters)" required className="mt-1" />
+              <Label htmlFor="password" className="text-sm font-medium">Password</Label>
+              {/* Updated placeholder to show requirement */}
+              <Input type="password" id="password" name="password" placeholder="Create a password (min. 6 characters)" required className="mt-1 rounded-md border-input focus:ring-primary focus:border-primary" />
+              {/* Optional: Add password strength indicator later */}
             </div>
              <div className="grid gap-2">
-              <Label htmlFor="industry">Select Industry</Label>
+              <Label htmlFor="industry" className="text-sm font-medium">Select Industry</Label>
               <Select name="industry" required>
-                <SelectTrigger className="mt-1 w-full">
-                  <SelectValue placeholder="Select industry" />
+                <SelectTrigger className="mt-1 w-full rounded-md border-input focus:ring-primary focus:border-primary text-muted-foreground [&[data-state=open]>span]:text-foreground">
+                  <SelectValue placeholder="Select your industry" />
                 </SelectTrigger>
-                <SelectContent>
+                <SelectContent className="rounded-md border-border bg-popover text-popover-foreground">
                   {sectors.map(sector => (
-                    <SelectItem key={sector} value={sector}>{sector}</SelectItem>
+                    <SelectItem key={sector} value={sector} className="focus:bg-accent focus:text-accent-foreground rounded-sm">{sector}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
             </div>
             <div>
-              <Button type="submit" className="w-full">Sign Up</Button>
+               <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground rounded-md py-2.5 font-semibold shadow-md transition duration-200 ease-in-out transform hover:scale-105">Sign Up</Button>
             </div>
-            <div className="relative">
+            <div className="relative my-4">
                 <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t" />
+                    <span className="w-full border-t border-border" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-background px-2 text-muted-foreground">
+                    <span className="bg-card px-2 text-muted-foreground">
                     Or continue with
                     </span>
                 </div>
             </div>
             <div>
                {/* Google Signup Button */}
-              <Button variant="outline" type="button" className="w-full" onClick={handleGoogleSignup}>
+              <Button variant="outline" type="button" className="w-full border-border hover:bg-accent hover:text-accent-foreground rounded-md py-2.5 font-semibold shadow-sm transition duration-200 ease-in-out transform hover:scale-105" onClick={handleGoogleSignup}>
+                 {/* Add Google Icon (Optional) */}
+                 {/* <svg className="mr-2 h-4 w-4" ...>...</svg> */}
                 Sign up with Google
               </Button>
             </div>
           </form>
-           <div className="mt-4 text-center text-sm">
+           <div className="mt-4 text-center text-sm text-muted-foreground">
             Already have an account?{" "}
-            <Link href="/login" className="underline">
-              Log in
+            <Link href="/login" className="font-medium text-primary hover:underline">
+              Log in here
             </Link>
           </div>
         </CardContent>

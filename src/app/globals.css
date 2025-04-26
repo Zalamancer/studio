@@ -5,6 +5,8 @@
 
 body {
   font-family: Arial, Helvetica, sans-serif;
+  /* Optional: Add a very subtle gradient for enhanced visual appeal */
+  /* background: linear-gradient(to bottom right, hsl(var(--background)), hsl(var(--secondary) / 0.1)); */
 }
 
 @layer base {
@@ -80,6 +82,18 @@ body {
   }
   body {
     @apply bg-background text-foreground;
+     /* Apply subtle gradient for a nicer feel */
+     /* background: linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--secondary)/0.2) 100%); */
+     min-height: 100vh; /* Ensure gradient covers full height */
   }
 }
 
+/* Add styles for the spinner animation */
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.animate-spin {
+  animation: spin 1s linear infinite;
+}
