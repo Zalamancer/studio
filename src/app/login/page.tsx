@@ -33,29 +33,31 @@ const LoginPage = () => {
 
     try {
       const userCredential = await signInWithEmailPassword(email, password);
-      if (userCredential) {
-        toast({
-          title: "Login Successful",
-          description: "Redirecting to dashboard...",
-        });
-        router.push('/'); // Redirect on success
-      } else {
-        // This case might not be reached if signInWithEmailPassword throws errors directly
-        toast({
-          variant: "destructive",
-          title: "Login Failed",
-          description: "Invalid credentials or user not found.",
-        });
-      }
+      // If signInWithEmailPassword resolves without throwing, login was successful
+      toast({
+        title: "Login Successful",
+        description: "Redirecting to dashboard...",
+      });
+      router.push('/'); // Redirect on success
+
     } catch (error) {
        const authError = error as AuthError;
        let description = "An unexpected error occurred during login.";
-       if (authError.code === 'auth/user-not-found' || authError.code === 'auth/invalid-credential' || authError.code === 'auth/wrong-password') {
+
+       // Check for specific error codes to provide better user feedback
+       // 'auth/invalid-credential' is the common code for wrong email/password or user not found now.
+       if (authError.code === 'auth/invalid-credential') {
            description = "Incorrect email or password. Please try again or sign up.";
        } else if (authError.code === 'auth/invalid-email') {
             description = "Please enter a valid email address.";
+       } else if (authError.code === 'auth/too-many-requests') {
+           description = "Access to this account has been temporarily disabled due to many failed login attempts. You can immediately restore it by resetting your password or you can try again later.";
        }
-       console.error("Email Login Error:", authError.code, authError.message);
+        // Avoid logging expected invalid credential errors to the console, but log others.
+       if (authError.code !== 'auth/invalid-credential') {
+           console.error("Email Login Error:", authError.code, authError.message);
+       }
+
        toast({
         variant: "destructive",
         title: "Login Failed",
@@ -74,22 +76,30 @@ const LoginPage = () => {
           description: "Redirecting to dashboard...",
         });
         router.push('/'); // Redirect to the home dashboard
-      } else {
-        // Handle sign-in failure (optional: show a toast message)
-        toast({
-          variant: "destructive",
-          title: "Google Login Failed",
-          description: "Could not log in with Google. Please try again.",
-        });
-         console.error("Google Sign-In failed (returned null).");
       }
+      // No explicit 'else' needed here, as null return from signInWithGoogle is handled within the function or caught below.
+      // The toast for failure is handled in the catch block or if signInWithGoogle returns null without throwing specific catchable errors (less common).
     } catch (error) {
+        const authError = error as AuthError;
+        let description = "An unexpected error occurred during Google Sign-In.";
+        // Handle specific Google sign-in errors if necessary
+        if (authError.code === 'auth/popup-closed-by-user') {
+            description = "Google Sign-In cancelled.";
+            // Optionally, don't show a toast for this
+            return; // Exit without showing error toast
+        } else if (authError.code === 'auth/account-exists-with-different-credential') {
+            description = "An account already exists with the same email address but different sign-in credentials. Sign in using a provider associated with this email address.";
+        }
+
        toast({
         variant: "destructive",
         title: "Google Login Error",
-        description: "An unexpected error occurred during Google Sign-In.",
+        description: description,
       });
-      console.error("Unexpected error during Google Sign-In:", error);
+      // Avoid logging expected cancellation errors
+      if (authError.code !== 'auth/popup-closed-by-user') {
+        console.error("Google Login Error:", authError.code, authError.message);
+      }
     }
   };
 

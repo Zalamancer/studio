@@ -20,11 +20,8 @@ export const signInWithGoogle = async (): Promise<UserCredential | null> => {
     return result;
   } catch (error) {
     const authError = error as AuthError;
-    // Avoid console.error for expected errors like popup closed
-    if (authError.code !== 'auth/popup-closed-by-user') {
-      console.error("Error signing in with Google:", authError.code, authError.message);
-    }
-    return null;
+    // Re-throw the error so the calling component can handle specific cases like popup closed
+    throw authError;
   }
 };
 
@@ -35,24 +32,26 @@ export const signUpWithEmailPassword = async (email: string, password: string): 
         return userCredential;
     } catch (error) {
         const authError = error as AuthError;
-        console.error("Error signing up with email/password:", authError.code, authError.message);
+        // Log unexpected errors, but re-throw all for component handling
+        if (authError.code !== 'auth/email-already-in-use' && authError.code !== 'auth/weak-password' && authError.code !== 'auth/invalid-email') {
+            console.error("Error signing up with email/password:", authError.code, authError.message);
+        }
         // Re-throw the error so the calling component can handle it specifically (e.g., show specific toast messages)
         throw authError;
     }
 };
 
 // Email/Password Sign-In
-export const signInWithEmailPassword = async (email: string, password: string): Promise<UserCredential | null> => {
+export const signInWithEmailPassword = async (email: string, password: string): Promise<UserCredential> => {
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         return userCredential;
     } catch (error) {
         const authError = error as AuthError;
-        // Don't log expected errors like 'user-not-found' or 'wrong-password' to console by default
-        if (authError.code !== 'auth/user-not-found' && authError.code !== 'auth/invalid-credential' && authError.code !== 'auth/wrong-password') {
-             console.error("Error signing in with email/password:", authError.code, authError.message);
-        }
-        // Re-throw the error so the calling component can handle it specifically
+        // Don't log expected errors like 'auth/invalid-credential' to console here.
+        // The calling component (login page) will handle the user feedback (toast)
+        // and can decide whether to log based on the specific code.
+        // Re-throw the error so the calling component can handle it specifically.
         throw authError;
     }
 };
@@ -64,5 +63,7 @@ export const signOut = async (): Promise<void> => {
     await firebaseSignOut(auth);
   } catch (error) {
     console.error("Error signing out:", error);
+     // Optionally re-throw or handle differently if needed
+     throw error;
   }
 };
