@@ -2,14 +2,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation'; // Keep useRouter
-import {
-  NavigationMenu,
-  NavigationMenuItem,
-  NavigationMenuList,
-  NavigationMenuLink,
-} from "@/components/ui/navigation-menu"
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -21,56 +14,39 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+    AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { FileText, Home, Network, LineChart, LogOut, PlusCircle, Loader2, Trash2 } from "lucide-react"; // Correct icons, added Trash2
-import { signOut } from '@/lib/firebase/auth';
+import { Loader2, Trash2, HandHelping } from "lucide-react"; // Added HandHelping
 import { useToast } from "@/hooks/use-toast";
-import type { Post, NewPostData } from '@/types/post';
-import { CreatePostForm } from '@/components/CreatePostForm';
+import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
-import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
-import { getPostsFromFirestore, addPostToFirestore, deletePostFromFirestore } from '@/services/postService'; // Import deletePostFromFirestore
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
-import { Timestamp } from 'firebase/firestore'; // Import Timestamp
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postService';
+import { Skeleton } from '@/components/ui/skeleton';
+import { Timestamp } from 'firebase/firestore';
+import { findOrCreateConversation } from '@/services/messagingService.client'; // Import client-side service
 
-const navItems = [
-  { title: "Board", href: "/", icon: Home },
-  { title: "Invest", href: "/invest", icon: LineChart },
-  { title: "Connect", href: "/connect", icon: Network },
-  { title: "Contracts", href: "/contracts", icon: FileText },
-];
-
-export const availableTags = [
-  "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
-];
-
-const queryClient = new QueryClient();
+// Moved availableTags to MainLayout as it's used by CreatePostForm there
+import { availableTags } from '@/components/layout/MainLayout';
 
 // Component for Post Card
-const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
+const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void }) => {
   // Handle potential Timestamp object for createdAt
-  const postDate = post.createdAt instanceof Timestamp
+   const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
-    : 'Date unavailable'; // Fallback if createdAt is not a Timestamp
+    : post.createdAt // Handle case where it might already be a string/Date if mock data is used
+    ? new Date(post.createdAt as any).toLocaleDateString() // Try converting if not Timestamp
+    : 'Date unavailable';
 
   return (
       <Card
@@ -83,16 +59,16 @@ const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
         <CardHeader className="p-4">
           <div className="flex flex-wrap gap-1 mb-2">
             {post.tags?.map((tag, index) => ( // Add optional chaining for safety
-              <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs">
+              <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs cursor-default">
                 {tag}
               </Badge>
             ))}
           </div>
            <h3 className="text-base font-semibold leading-snug text-card-foreground">{post.question}</h3>
            {post.description && (
-            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+             <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
               {post.description}
-            </p>
+             </p>
           )}
            <p className="mt-2 text-xs text-muted-foreground/80">
               Posted: {postDate}
@@ -100,16 +76,17 @@ const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
         </CardHeader>
       </Card>
   );
-};
+});
+PostCard.displayName = 'PostCard'; // Add display name for React DevTools
 
-// Main Home Page Component Logic
-function HomePageContent() {
+// Main Board Page Content Component Logic (Renamed from HomePageContent)
+function BoardPageContent() {
   const { user, loading: authLoading } = useAuth(); // Get user and loading state
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   // Redirect unauthenticated users after loading is finished
   useEffect(() => {
@@ -120,48 +97,19 @@ function HomePageContent() {
 
 
   // Fetch posts using react-query
-  const { data: posts = [], isLoading: isLoadingPosts, error: postsError, refetch: refetchPosts } = useQuery<Post[]>({
+  const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: getPostsFromFirestore,
     staleTime: 1000 * 60 * 1, // 1 minute
     refetchOnWindowFocus: true,
-    enabled: !!user,
+    enabled: !!user, // Only fetch if user is logged in
   });
-
-   const addPostMutation = useMutation({
-     mutationFn: addPostToFirestore,
-     onSuccess: () => {
-        // Invalidate queries first to refetch data in the background
-        queryClient.invalidateQueries({ queryKey: ['posts'] }).then(() => {
-            // Show success toast
-            toast({
-                title: "Post Created",
-                description: "Your post has been added to the board.",
-            });
-            // Close the dialog
-            setIsCreatePostOpen(false);
-        }).catch(err => {
-            console.error("Error during post-success operations (invalidate/toast/close):", err);
-             // Still attempt to close the dialog even if other steps failed
-             setIsCreatePostOpen(false);
-        });
-     },
-     onError: (error: Error) => {
-        console.error("Add Post Mutation failed:", error);
-        toast({
-          variant: "destructive",
-          title: "Post Failed",
-          description: `Could not add your post: ${error.message}. Check console and Firestore rules.`,
-        });
-      },
-   });
 
    // --- Delete Post Mutation ---
    const deletePostMutation = useMutation({
        mutationFn: deletePostFromFirestore, // Use the imported function
        onSuccess: () => {
-           // Invalidate the posts query to refetch and update the list
-           queryClient.invalidateQueries({ queryKey: ['posts'] });
+           queryClient.invalidateQueries({ queryKey: ['posts'] }); // Refetch posts
            toast({
                title: "Post Deleted",
                description: "The post has been removed from the board.",
@@ -181,7 +129,6 @@ function HomePageContent() {
    });
    // --- End Delete Post Mutation ---
 
-
    // --- Delete Post Handler ---
    const handleDeletePost = (postId: string | undefined) => {
        if (!postId) {
@@ -197,6 +144,39 @@ function HomePageContent() {
    };
    // --- End Delete Post Handler ---
 
+    // --- Offer Help / Start Conversation Handler ---
+   const handleOfferHelp = async (postOwnerId: string) => {
+     if (!user) {
+       toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to offer help." });
+       return;
+     }
+     if (user.uid === postOwnerId) {
+         toast({ variant: "default", title: "Action Info", description: "You cannot start a conversation with yourself." });
+         return; // Prevent starting conversation with oneself
+     }
+
+     try {
+        // Find or create a conversation between the current user and the post owner
+        const conversationId = await findOrCreateConversation(user.uid, postOwnerId);
+        if (conversationId) {
+             toast({ title: "Conversation Started", description: "Redirecting to Contracts..." });
+             // Navigate to the contracts page, potentially highlighting the new conversation
+             router.push(`/contracts?conversationId=${conversationId}`);
+             setSelectedPost(null); // Close the sheet
+        } else {
+            throw new Error("Failed to get conversation ID.");
+        }
+     } catch (error: any) {
+        console.error("Error starting conversation:", error);
+        toast({
+            variant: "destructive",
+            title: "Failed to Start Conversation",
+            description: error.message || "Could not start the conversation. Please try again.",
+        });
+     }
+   };
+   // --- End Offer Help Handler ---
+
 
   const handleTagClick = (tag: string) => {
     setSelectedTags(prevTags =>
@@ -206,48 +186,6 @@ function HomePageContent() {
     );
   };
 
-   const handleLogout = async () => {
-    try {
-        await signOut();
-        toast({
-            title: "Logged Out",
-            description: "You have been successfully logged out.",
-          });
-        // Redirect is handled by the useEffect hook now
-    } catch (error) {
-        console.error("Logout Error:", error);
-        toast({
-            variant: "destructive",
-            title: "Logout Failed",
-            description: "An error occurred during logout. Please try again.",
-          });
-    }
-  };
-
-  const handleAddPost = (formData: Omit<Post, 'id' | 'createdAt' | 'userId' | 'sector' | 'businessType' | 'safetyIndicator' | 'ratingScore' | 'stockGraphData'>) => {
-    if (!user) {
-        toast({
-            variant: "destructive",
-            title: "Authentication Required",
-            description: "You must be logged in to create a post.",
-        });
-        return;
-    }
-
-    const newPostData: NewPostData = {
-        question: formData.question,
-        description: formData.description,
-        tags: formData.tags || [],
-        userId: user.uid, // Associate post with the logged-in user
-        createdAt: new Date(),
-        sector: "Tech", // Placeholder
-        businessType: "Startup", // Placeholder
-        safetyIndicator: "Medium", // Placeholder
-        ratingScore: Math.floor(Math.random() * 5) + 1, // Placeholder
-        stockGraphData: [], // Placeholder
-    };
-    addPostMutation.mutate(newPostData);
-  };
 
  const filteredPosts = useMemo(() => {
     if (!Array.isArray(posts)) {
@@ -255,125 +193,52 @@ function HomePageContent() {
         return [];
     }
 
-    let sortedPosts = [...posts].sort((a, b) => {
+    // Filter first
+     let filtered = selectedTags.length === 0
+        ? posts
+        : posts.filter(post =>
+             Array.isArray(post.tags) &&
+             selectedTags.every(tag => post.tags.includes(tag))
+          );
+
+    // Then sort the filtered results
+    return filtered.sort((a, b) => {
         const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
         const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
         return timeB - timeA; // Descending order (newest first)
     });
 
-
-    if (selectedTags.length === 0) {
-      return sortedPosts;
-    }
-
-    return sortedPosts.filter(post =>
-       Array.isArray(post.tags) &&
-       selectedTags.every(tag => post.tags.includes(tag))
-    );
   }, [posts, selectedTags]);
 
 
-  if (authLoading || !user) {
+  // Loading state for authentication check or initial data fetch
+  if (authLoading || (isLoadingPosts && !posts?.length)) {
       return (
-         <div className="flex flex-col min-h-screen bg-background">
-             <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                {/* Header Skeleton */}
-                <div className="container mx-auto flex h-14 items-center">
-                 <Skeleton className="h-6 w-32 mr-6" />
-                 <div className="flex-1 flex justify-center gap-4">
-                   <Skeleton className="h-6 w-16" />
-                   <Skeleton className="h-6 w-16" />
-                   <Skeleton className="h-6 w-16" />
-                   <Skeleton className="h-6 w-16" />
-                 </div>
-                 <div className="flex items-center gap-2 ml-auto">
-                    <Skeleton className="h-9 w-28" />
-                    <Skeleton className="h-9 w-9 rounded-full" />
-                 </div>
-                </div>
-            </header>
-            <main className="flex-1 container mx-auto p-4 pt-6 text-center">
-                <div className="flex justify-center items-center h-64">
-                    {authLoading ? (
-                        <>
-                         <Loader2 className="h-8 w-8 animate-spin mr-3 text-primary" />
-                         <p className="text-muted-foreground text-lg">Loading user data...</p>
-                        </>
-                    ) : (
-                       <p className="text-muted-foreground text-lg">Redirecting to login...</p>
-                    )}
-                </div>
-            </main>
-             <footer className="py-4 border-t mt-8">
-                <div className="container mx-auto text-center text-sm text-muted-foreground">
-                    <Skeleton className="h-4 w-64 mx-auto" />
-                </div>
-             </footer>
+         <div className="container mx-auto p-4 pt-6 text-center">
+            <div className="flex justify-center items-center h-64">
+               <Loader2 className="h-8 w-8 animate-spin mr-3 text-primary" />
+               <p className="text-muted-foreground text-lg">Loading posts...</p>
+            </div>
          </div>
      );
    }
 
-  return (
-    <div className="flex flex-col min-h-screen bg-background">
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 items-center">
-           <div className="mr-4 md:mr-6 flex items-center">
-             <Link href="/" className="font-bold text-lg text-primary hover:text-primary/90">
-               AnonyCollab
-             </Link>
+    // Handle case where user is logged in but there's an error fetching posts
+    if (postsError && user) {
+       return (
+         <div className="container mx-auto p-4 pt-6 text-center">
+           <div className="col-span-full text-center py-10 text-destructive">
+             <p>Error loading posts: {postsError instanceof Error ? postsError.message : 'Unknown error'}.</p>
+             <p>Please check your Firestore connection and security rules.</p>
            </div>
-          <NavigationMenu className="flex-1 justify-center hidden md:flex">
-             <NavigationMenuList>
-               {navItems.map((item) => (
-                 <NavigationMenuItem key={item.title}>
-                   <NavigationMenuLink
-                      href={item.href ?? '#'}
-                      title={item.title}
-                      icon={item.icon}
-                   >
-                     {item.title}
-                   </NavigationMenuLink>
-                 </NavigationMenuItem>
-               ))}
-             </NavigationMenuList>
-          </NavigationMenu>
-           <div className="flex items-center gap-2 ml-auto">
-               <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
-                  <DialogTrigger asChild>
-                     <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                       <PlusCircle className="mr-2 h-4 w-4" />
-                       Create Post
-                     </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-[500px]">
-                     <DialogHeader>
-                       <DialogTitle>Create a New Post</DialogTitle>
-                       <DialogDescription>
-                         Share your question or need with the community. Keep it anonymous.
-                       </DialogDescription>
-                     </DialogHeader>
-                     {isCreatePostOpen && (
-                        <CreatePostForm
-                           onSubmit={handleAddPost}
-                           availableTags={availableTags}
-                           isSubmitting={addPostMutation.isPending}
-                          />
-                     )}
-                  </DialogContent>
-                </Dialog>
-              {user && (
-                  <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Logout" className="text-muted-foreground hover:text-foreground">
-                    <LogOut className="h-5 w-5" />
-                  </Button>
-              )}
-           </div>
-             <div className="md:hidden ml-2">
-                {/* Hamburger menu placeholder */}
-             </div>
-        </div>
-      </header>
+         </div>
+       );
+     }
 
-      <main className="flex-1 container mx-auto p-4 pt-6">
+  // Main content render
+  return (
+    <div className="container mx-auto p-4 pt-6">
+        {/* Tag Filtering UI */}
         <div className="mb-6 flex flex-wrap items-center gap-2">
            <span className="text-sm font-medium text-muted-foreground mr-2">Filter by Tag:</span>
           {availableTags.map((tag) => (
@@ -407,15 +272,15 @@ function HomePageContent() {
 
         {/* Post Feed - Masonry Layout */}
         <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-         {isLoadingPosts && (
+         {isLoadingPosts && filteredPosts.length === 0 && ( // Show loading only if no posts are displayed yet
              <div className="col-span-full text-center py-10 flex justify-center items-center">
                 <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
                  <p className="text-muted-foreground">Loading posts...</p>
              </div>
           )}
-          {postsError && (
+          {!isLoadingPosts && postsError && ( // Error state handled above, but keep this as fallback
               <div className="col-span-full text-center py-10 text-destructive">
-                 <p>Error loading posts: {postsError instanceof Error ? postsError.message : 'Unknown error'}. Check console and Firestore rules.</p>
+                 <p>Error loading posts.</p>
               </div>
            )}
           {!isLoadingPosts && !postsError && filteredPosts.length > 0 ? (
@@ -428,12 +293,10 @@ function HomePageContent() {
                      <p className="text-muted-foreground">
                          {selectedTags.length > 0
                            ? "No posts found matching the selected tags."
-                           : "No posts available yet."
+                           : "No posts available yet. Be the first to create one!" // Adjusted message
                          }
                      </p>
-                      <Button variant="link" onClick={() => setIsCreatePostOpen(true)} className="mt-2">
-                         Create the first post?
-                      </Button>
+                     {/* Create post button is now in the header */}
                  </div>
              )
           )}
@@ -444,63 +307,77 @@ function HomePageContent() {
             <SheetContent className="sm:max-w-lg w-[90vw] p-0" side="right">
                 <ScrollArea className="h-screen">
                 {selectedPost && (
-                    <div className="p-6">
-                    <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
-                        <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
-                         <div className="flex flex-wrap items-center gap-2 pt-1">
-                            {selectedPost.tags?.map((tag, index) => (
-                            <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs">{tag}</Badge>
-                            ))}
-                        </div>
-                         <SheetDescription className="text-sm pt-1">
-                            Posted on: {selectedPost.createdAt instanceof Timestamp ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
-                        </SheetDescription>
-                    </SheetHeader>
+                    <div className="p-6 flex flex-col h-full"> {/* Make flex column */}
+                        <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
+                            <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
+                             <div className="flex flex-wrap items-center gap-2 pt-1">
+                                {selectedPost.tags?.map((tag, index) => (
+                                <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
+                                ))}
+                            </div>
+                             <SheetDescription className="text-sm pt-1">
+                                Posted on: {selectedPost.createdAt instanceof Timestamp ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
+                            </SheetDescription>
+                        </SheetHeader>
 
-                    <div className="space-y-4 text-sm">
-                         {selectedPost.description && (
-                             <div>
-                                 <strong className="text-foreground">Details:</strong>
-                                 <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{selectedPost.description}</p>
+                        <div className="space-y-4 text-sm flex-grow"> {/* Make content area grow */}
+                             {selectedPost.description && (
+                                 <div>
+                                     <strong className="text-foreground">Details:</strong>
+                                     <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{selectedPost.description}</p>
+                                 </div>
+                             )}
+
+                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4">
+                                  <div>
+                                      <strong className="block text-foreground">Sector:</strong>
+                                      <span className="text-muted-foreground">{selectedPost.sector || 'N/A'}</span>
+                                   </div>
+                                    <div>
+                                        <strong className="block text-foreground">Business Type:</strong>
+                                        <span className="text-muted-foreground">{selectedPost.businessType || 'N/A'}</span>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <strong className="text-foreground">Safety Indicator:</strong>
+                                        <Badge
+                                            variant={
+                                                selectedPost.safetyIndicator === 'High' ? 'default'
+                                                : selectedPost.safetyIndicator === 'Medium' ? 'secondary'
+                                                : 'destructive'
+                                            }
+                                            className="text-xs"
+                                        >
+                                            {selectedPost.safetyIndicator || 'N/A'}
+                                        </Badge>
+                                    </div>
+                                    <div>
+                                        <strong className="block text-foreground">Rating Score:</strong>
+                                        <span className="text-muted-foreground">{selectedPost.ratingScore ? `${selectedPost.ratingScore} / 5` : 'N/A'}</span>
+                                    </div>
                              </div>
-                         )}
-
-                         <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4">
-                              <div>
-                                  <strong className="block text-foreground">Sector:</strong>
-                                  <span className="text-muted-foreground">{selectedPost.sector}</span>
-                               </div>
-                                <div>
-                                    <strong className="block text-foreground">Business Type:</strong>
-                                    <span className="text-muted-foreground">{selectedPost.businessType}</span>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <strong className="text-foreground">Safety Indicator:</strong>
-                                    <Badge
-                                        variant={
-                                            selectedPost.safetyIndicator === 'High' ? 'default'
-                                            : selectedPost.safetyIndicator === 'Medium' ? 'secondary'
-                                            : 'destructive'
-                                        }
-                                        className="text-xs"
-                                    >
-                                        {selectedPost.safetyIndicator}
-                                    </Badge>
-                                </div>
-                                <div>
-                                    <strong className="block text-foreground">Rating Score:</strong>
-                                    <span className="text-muted-foreground">{selectedPost.ratingScore} / 5</span>
-                                </div>
-                         </div>
+                             {/* Placeholder for Stock Graph */}
+                              {/* <div>
+                                 <strong className="text-foreground">Business Stock Graph:</strong>
+                                  Placeholder content
+                                 <div className="mt-2 h-32 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">
+                                    Stock Graph Placeholder
+                                 </div>
+                              </div> */}
+                        </div>
                          {/* --- Buttons including Delete --- */}
                          <div className="mt-6 pt-4 border-t flex justify-end gap-2">
-                             {/* Render "Offer Help" and "Connect" buttons only if user is logged in AND is NOT the owner of the post */}
+                             {/* Render "Offer Help" button only if user is logged in AND is NOT the owner of the post */}
                               {user && selectedPost.userId !== user.uid && (
-                                 <>
-                                     <Button variant="outline" size="sm">Offer Help</Button>
-                                     <Button variant="default" size="sm">Connect</Button>
-                                 </>
+                                 <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => handleOfferHelp(selectedPost.userId)}
+                                    >
+                                     <HandHelping className="mr-2 h-4 w-4" /> Offer Help
+                                 </Button>
                               )}
+                              {/* Removed generic Connect button, Offer Help handles this */}
+
                              {/* Render Delete Button only if the user is logged in AND IS the owner of the post */}
                              {user && selectedPost.userId === user.uid && (
                                  <AlertDialog>
@@ -549,29 +426,14 @@ function HomePageContent() {
                          </div>
                          {/* --- End Buttons --- */}
                     </div>
-                    </div>
                 )}
                 </ScrollArea>
             </SheetContent>
         </Sheet>
-
-      </main>
-
-      <footer className="py-4 border-t mt-8">
-          <div className="container mx-auto text-center text-sm text-muted-foreground">
-              © {new Date().getFullYear()} AnonyCollab. All rights reserved.
-          </div>
-      </footer>
     </div>
   );
 }
 
-// Wrap the main content with QueryClientProvider
-export default function HomePage() {
-    return (
-        <QueryClientProvider client={queryClient}>
-            <HomePageContent />
-        </QueryClientProvider>
-    );
-}
-
+// Wrap the main content with QueryClientProvider (this is handled by Providers in layout now)
+// Export the BoardPageContent component as the default export for this page route
+export default BoardPageContent;

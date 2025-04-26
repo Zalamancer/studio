@@ -2,7 +2,8 @@
 import type { Metadata } from 'next';
 import { Inter } from 'next/font/google'; // Use Inter font as specified
 import './globals.css';
-import Providers from '@/components/Providers'; // Import the new Providers component
+import Providers from '@/components/Providers'; // Import the Providers component
+import MainLayout from '@/components/layout/MainLayout'; // Import the new MainLayout
 
 const inter = Inter({
   variable: '--font-inter', // Define CSS variable if needed
@@ -27,7 +28,10 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased`}>
         {/* Wrap children with the client-side Providers component */}
         <Providers>
-          {children}
+           {/* Wrap the main content with MainLayout */}
+           <MainLayout>
+             {children}
+           </MainLayout>
         </Providers>
       </body>
     </html>

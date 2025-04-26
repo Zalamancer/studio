@@ -1,0 +1,219 @@
+
+"use client"; // This layout uses client-side hooks and state
+
+import React, { useState } from 'react';
+import Link from 'next/link';
+import { usePathname, useRouter } from 'next/navigation';
+import {
+  NavigationMenu,
+  NavigationMenuItem,
+  NavigationMenuList,
+  NavigationMenuLink,
+} from "@/components/ui/navigation-menu";
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Home, LineChart, Network, FileText, LogOut, PlusCircle } from "lucide-react"; // Use correct icons
+import { signOut } from '@/lib/firebase/auth';
+import { useToast } from "@/hooks/use-toast";
+import { useAuth } from '@/contexts/AuthContext';
+import { CreatePostForm } from '@/components/CreatePostForm'; // Assuming CreatePostForm is adjusted if needed
+import type { NewPostData, Post } from '@/types/post'; // Import necessary types
+import { addPostToFirestore } from '@/services/postService'; // Import service
+import { useMutation, useQueryClient } from '@tanstack/react-query'; // Import mutation hooks
+
+// Navigation items definition (moved here for clarity)
+const navItems = [
+  { title: "Board", href: "/", icon: Home },
+  { title: "Invest", href: "/invest", icon: LineChart },
+  { title: "Connect", href: "/connect", icon: Network },
+  { title: "Contracts", href: "/contracts", icon: FileText },
+];
+
+// Available tags (can be fetched or defined globally if needed elsewhere)
+export const availableTags = [
+    "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
+];
+
+
+export default function MainLayout({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth(); // Get user state
+  const { toast } = useToast();
+  const router = useRouter();
+  const pathname = usePathname(); // Get current path for active link styling
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  const queryClient = useQueryClient(); // Get query client instance
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+      toast({
+        title: "Logged Out",
+        description: "You have been successfully logged out.",
+      });
+      router.push('/login'); // Redirect to login after logout
+    } catch (error) {
+      console.error("Logout Error:", error);
+      toast({
+        variant: "destructive",
+        title: "Logout Failed",
+        description: "An error occurred during logout. Please try again.",
+      });
+    }
+  };
+
+  // Add Post Mutation
+  const addPostMutation = useMutation({
+      mutationFn: addPostToFirestore,
+      onSuccess: () => {
+          // Invalidate queries first to refetch data in the background
+          queryClient.invalidateQueries({ queryKey: ['posts'] }).then(() => {
+              // Show success toast
+              toast({
+                  title: "Post Created",
+                  description: "Your post has been added to the board.",
+              });
+              // Close the dialog
+              setIsCreatePostOpen(false);
+          }).catch(err => {
+              console.error("Error during post-success operations (invalidate/toast/close):", err);
+               // Still attempt to close the dialog even if other steps failed
+               setIsCreatePostOpen(false);
+          });
+       },
+      onError: (error: Error) => {
+          console.error("Add Post Mutation failed:", error);
+          toast({
+            variant: "destructive",
+            title: "Post Failed",
+            description: `Could not add your post: ${error.message}. Check console and Firestore rules.`,
+          });
+          // Optionally keep the dialog open on error
+          // setIsCreatePostOpen(true);
+      },
+  });
+
+  // Handle adding a post (passed to CreatePostForm)
+  const handleAddPost = (formData: Omit<Post, 'id' | 'createdAt' | 'userId' | 'sector' | 'businessType' | 'safetyIndicator' | 'ratingScore' | 'stockGraphData'>) => {
+    if (!user) {
+        toast({
+            variant: "destructive",
+            title: "Authentication Required",
+            description: "You must be logged in to create a post.",
+        });
+        return;
+    }
+
+    const newPostData: NewPostData = {
+        question: formData.question,
+        description: formData.description,
+        tags: formData.tags || [],
+        userId: user.uid, // Associate post with the logged-in user
+        createdAt: new Date(), // Service layer will convert to serverTimestamp
+        sector: "Tech", // Placeholder - Should ideally come from user profile or form
+        businessType: "Startup", // Placeholder
+        safetyIndicator: "Medium", // Placeholder
+        ratingScore: Math.floor(Math.random() * 5) + 1, // Placeholder
+        stockGraphData: [], // Placeholder
+    };
+    addPostMutation.mutate(newPostData);
+  };
+
+
+  return (
+    <div className="flex flex-col min-h-screen bg-background">
+      {/* --- Header --- */}
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+          <div className="mr-4 hidden md:flex">
+            <Link href="/" className="mr-6 flex items-center space-x-2">
+              {/* Optional: Add Logo here */}
+              <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
+                AnonyCollab
+              </span>
+            </Link>
+            <nav className="flex items-center gap-4 text-sm lg:gap-6">
+              {navItems.map((item) => (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className={`transition-colors hover:text-foreground/80 ${
+                    pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
+                  }`}
+                >
+                   {/* Optional: Render Icon */}
+                   {/* {item.icon && <item.icon className="mr-1 h-4 w-4 inline-block" />} */}
+                  {item.title}
+                </Link>
+              ))}
+            </nav>
+          </div>
+           {/* Mobile Menu Trigger (Optional) */}
+           <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
+             {/* Create Post Button - only if user is logged in */}
+             {user && (
+                <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
+                  <DialogTrigger asChild>
+                     <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                       <PlusCircle className="mr-2 h-4 w-4" />
+                       Create Post
+                     </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[500px]">
+                     <DialogHeader>
+                       <DialogTitle>Create a New Post</DialogTitle>
+                       <DialogDescription>
+                         Share your question or need with the community. Keep it anonymous.
+                       </DialogDescription>
+                     </DialogHeader>
+                     {isCreatePostOpen && ( // Conditionally render form only when dialog is open
+                        <CreatePostForm
+                           onSubmit={handleAddPost}
+                           availableTags={availableTags}
+                           isSubmitting={addPostMutation.isPending}
+                        />
+                     )}
+                  </DialogContent>
+                </Dialog>
+             )}
+
+              {/* Logout Button - only if user is logged in */}
+              {user ? (
+                  <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Logout" className="text-muted-foreground hover:text-foreground">
+                    <LogOut className="h-5 w-5" />
+                  </Button>
+              ) : (
+                // Show Login/Signup buttons if not logged in
+                <div className="flex items-center gap-2">
+                   <Button variant="outline" size="sm" asChild>
+                     <Link href="/login">Login</Link>
+                   </Button>
+                   <Button variant="default" size="sm" asChild>
+                     <Link href="/signup">Sign Up</Link>
+                   </Button>
+                </div>
+              )}
+           </div>
+        </div>
+      </header>
+
+      {/* --- Main Content Area --- */}
+      <main className="flex-1">
+        {children} {/* The content of the specific page will be rendered here */}
+      </main>
+
+      {/* --- Footer --- */}
+      <footer className="py-4 border-t mt-auto"> {/* Use mt-auto to push footer down */}
+          <div className="container mx-auto text-center text-sm text-muted-foreground">
+              © {new Date().getFullYear()} AnonyCollab. All rights reserved.
+          </div>
+      </footer>
+    </div>
+  );
+}
