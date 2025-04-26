@@ -39,6 +39,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { QueryClient, QueryClientProvider, useQuery, useMutation } from '@tanstack/react-query';
 import { getPostsFromFirestore, addPostToFirestore } from '@/services/postService';
 import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { useForm } from 'react-hook-form'; // Import useForm for potential reset
+import { zodResolver } from '@hookform/resolvers/zod'; // Import resolver if needed for reset
+import * as z from 'zod'; // Import zod if needed for reset schema
 
 const navItems = [
   { title: "Board", href: "/", icon: Home },
@@ -52,6 +55,15 @@ export const availableTags = [
 ];
 
 const queryClient = new QueryClient();
+
+// Define Zod schema for validation (needed if using form.reset())
+const postFormSchema = z.object({
+  question: z.string().min(10, "Question must be at least 10 characters long.").max(200, "Question cannot exceed 200 characters."),
+  description: z.string().optional(), // Optional detailed description
+  tags: z.array(z.string()).min(1, "Please select at least one tag."),
+});
+
+type PostFormValues = z.infer<typeof postFormSchema>;
 
 // Component for Post Card
 const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
@@ -69,7 +81,7 @@ const PostCard = ({ post, onOpen }: { post: Post, onOpen: () => void }) => {
           <div className="flex flex-wrap gap-1 mb-2">
             {post.tags.map((tag, index) => (
               // Use span for Badge as it's inline and doesn't cause nesting issues
-              <Badge key={index} variant="secondary" className="text-xs">
+              <Badge key={index} variant="secondary" className="text-xs" as="span">
                 {tag}
               </Badge>
             ))}
@@ -122,6 +134,8 @@ function HomePageContent() {
          title: "Post Created",
          description: "Your post has been added to the board.",
        });
+        // Resetting the form can be done here if the form instance is managed here
+        // or rely on the form unmounting when the dialog closes.
      },
      onError: (error) => {
         console.error("Failed to add post:", error);
@@ -173,11 +187,12 @@ function HomePageContent() {
         ...formData,
         userId: user.uid,
         createdAt: new Date(),
-        sector: "Unknown", // Placeholder
-        businessType: "Startup", // Placeholder
-        safetyIndicator: "Medium", // Placeholder
-        ratingScore: 0, // Placeholder
-        stockGraphData: [], // Placeholder
+        // Placeholder values - these should ideally come from user profile or form
+        sector: "Tech", // Example placeholder
+        businessType: "Startup", // Example placeholder
+        safetyIndicator: "Medium", // Example placeholder
+        ratingScore: Math.floor(Math.random() * 5) + 1, // Random rating for now
+        stockGraphData: [], // Placeholder, ideally fetched or calculated
     };
     addPostMutation.mutate(newPostData);
   };
@@ -270,6 +285,7 @@ function HomePageContent() {
              </NavigationMenuList>
           </NavigationMenu>
            <div className="flex items-center gap-2 ml-auto">
+               {/* Manage Dialog open state */}
                <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
                   <DialogTrigger asChild>
                      <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
@@ -284,12 +300,15 @@ function HomePageContent() {
                          Share your question or need with the community. Keep it anonymous.
                        </DialogDescription>
                      </DialogHeader>
-                     <CreatePostForm
-                       onSubmit={handleAddPost}
-                       availableTags={availableTags}
-                       isSubmitting={addPostMutation.isPending}
-                       onSubmitted={() => setIsCreatePostOpen(false)} // Add this callback
-                      />
+                     {/* Render CreatePostForm only when the dialog is open */}
+                     {isCreatePostOpen && (
+                        <CreatePostForm
+                           onSubmit={handleAddPost}
+                           availableTags={availableTags}
+                           isSubmitting={addPostMutation.isPending}
+                           // No onSubmitted needed, parent handles closure
+                          />
+                     )}
                   </DialogContent>
                 </Dialog>
               {user && (
@@ -380,7 +399,7 @@ function HomePageContent() {
                         <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
                          <div className="flex flex-wrap items-center gap-2 pt-1">
                             {selectedPost.tags.map((tag, index) => (
-                            <Badge key={index} variant="secondary" className="text-xs">{tag}</Badge>
+                            <Badge key={index} variant="secondary" className="text-xs" as="span">{tag}</Badge>
                             ))}
                         </div>
                          <SheetDescription className="text-sm pt-1">
@@ -409,6 +428,7 @@ function HomePageContent() {
                                     <strong className="text-foreground">Safety Indicator:</strong>
                                     {/* Use span for Badge */}
                                     <Badge
+                                        as="span"
                                         variant={
                                             selectedPost.safetyIndicator === 'High' ? 'default'
                                             : selectedPost.safetyIndicator === 'Medium' ? 'secondary'
@@ -454,3 +474,4 @@ export default function HomePage() {
         </QueryClientProvider>
     );
 }
+

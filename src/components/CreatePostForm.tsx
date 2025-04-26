@@ -40,6 +40,7 @@ interface CreatePostFormProps {
   onSubmit: (data: FormSubmitData) => void;
   availableTags: string[];
   isSubmitting: boolean; // Add prop to indicate submission state
+  // Removed onSubmitted prop as it's handled by parent closing the dialog
 }
 
 export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availableTags, isSubmitting }) => {
@@ -52,6 +53,9 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     },
   });
 
+  // This function now only calls the onSubmit prop passed from the parent.
+  // The parent's onSubmit (handleAddPost) triggers the mutation.
+  // The parent's mutation's onSuccess callback handles closing the dialog and showing the toast.
   const handleSubmit = (values: PostFormValues) => {
     // Map form values to the expected submit data structure
     const submitData: FormSubmitData = {
@@ -60,7 +64,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         tags: values.tags,
     };
     onSubmit(submitData);
-    // Resetting the form is handled by the parent component/mutation lifecycle now
+    // No need to call onSubmitted here, parent handles dialog close via mutation state
+    // No need to reset form here, it unmounts when dialog closes
   };
 
   return (
@@ -130,9 +135,9 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                               checked={field.value?.includes(tag)}
                               onCheckedChange={(checked) => {
                                 return checked
-                                  ? field.onChange([...field.value, tag])
+                                  ? field.onChange([...(field.value || []), tag]) // Ensure field.value is an array
                                   : field.onChange(
-                                      field.value?.filter(
+                                      (field.value || []).filter( // Ensure field.value is an array
                                         (value) => value !== tag
                                       )
                                     )
@@ -155,8 +160,9 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         />
 
         <DialogFooter className="pt-4">
+            {/* DialogClose is handled by the parent component's open state */}
             <DialogClose asChild>
-               <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
+                 <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
             </DialogClose>
             <Button type="submit" disabled={isSubmitting}>
                 {isSubmitting ? (
