@@ -6,10 +6,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import {
   NavigationMenu,
-  NavigationMenuContent,
   NavigationMenuItem,
-  NavigationMenuLink,
   NavigationMenuList,
+  NavigationMenuLink,
 } from "@/components/ui/navigation-menu"
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -34,7 +33,7 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { FileText, Home, Network, LineChart, LogOut, PlusCircle } from "lucide-react"; // Import LogOut and PlusCircle
+import { FileText, Home, Network, LineChart, LogOut, PlusCircle } from "lucide-react"; // Import correct icons
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post'; // Import Post type
@@ -248,14 +247,12 @@ export default function HomePage() {
   };
 
   const filteredPosts = useMemo(() => {
-    let filtered = posts;
-    if (selectedTags.length > 0) {
-       // Filter posts: must include *all* selected tags
-       filtered = filtered.filter(post =>
-        selectedTags.every(tag => post.tags.includes(tag))
-      );
+    if (selectedTags.length === 0) {
+      return posts.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
     }
-    // Sort posts by creation date, newest first
+    const filtered = posts.filter(post =>
+      selectedTags.every(tag => post.tags.includes(tag))
+    );
     return filtered.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }, [posts, selectedTags]);
 
@@ -274,24 +271,20 @@ export default function HomePage() {
 
            {/* Navigation Menu - Occupies most space */}
           <NavigationMenu className="flex-1 justify-center hidden md:flex">
-            <NavigationMenuList>
-              {navItems.map((item) => (
-                <NavigationMenuItem key={item.title}>
+             <NavigationMenuList>
+               {navItems.map((item) => (
+                 <NavigationMenuItem key={item.title}>
+                   {/* Use NavigationMenuLink from ShadCN */}
                    <NavigationMenuLink
-                      href={item.href}
-                      title={item.title}
-                      icon={item.icon}
-                      className={cn(
-                        'flex items-center text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-3 py-2 rounded-md',
-                        router.pathname === item.href && 'text-foreground bg-accent' // Active link styling
-                      )}
-                    >
-                        <item.icon className="mr-2 h-4 w-4" aria-hidden="true" />
-                        {item.title}
-                    </NavigationMenuLink>
-                </NavigationMenuItem>
-              ))}
-            </NavigationMenuList>
+                     href={item.href}
+                     title={item.title} // Pass title for potential tooltip or aria-label
+                     icon={item.icon} // Pass icon component
+                   >
+                     {item.title} {/* Display the title text */}
+                   </NavigationMenuLink>
+                 </NavigationMenuItem>
+               ))}
+             </NavigationMenuList>
           </NavigationMenu>
 
            {/* Right Aligned Actions - Create Post and Logout */}

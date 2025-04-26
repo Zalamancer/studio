@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils"
 interface NavItemProps {
   title: string;
   href: string;
-  icon?: React.ComponentType<React.SVGProps<SVGSVGElement>>;
+  icon?: React.ComponentType<{ className?: string }>; // Accept icon component type
 }
 
 const NavigationMenu = React.forwardRef<
@@ -53,10 +53,11 @@ const NavigationMenuItem = React.forwardRef<
 ))
 NavigationMenuItem.displayName = "NavigationMenuItem"
 
+// Update NavigationMenuLink to render the icon passed via props
 const NavigationMenuLink = React.forwardRef<
   React.ElementRef<typeof Link>,
-  React.ComponentPropsWithoutRef<typeof Link> & NavItemProps
->(({ className, children, href, icon: Icon, ...props }, ref) => {
+  Omit<React.ComponentPropsWithoutRef<typeof Link>, 'href'> & NavItemProps
+>(({ className, children, href, title, icon: Icon, ...props }, ref) => {
   const pathname = usePathname()
   const isActive = pathname === href;
 
@@ -64,19 +65,23 @@ const NavigationMenuLink = React.forwardRef<
     <Link
       href={href}
       ref={ref}
+      title={title} // Use the title prop passed in
       className={cn(
         "group inline-flex h-9 w-max items-center justify-center rounded-md bg-background px-4 py-2 text-sm font-medium transition-colors hover:bg-accent hover:text-accent-foreground focus:bg-accent focus:text-accent-foreground focus:outline-none disabled:pointer-events-none data-[active=true]:bg-accent/50 data-[state=open]:bg-accent/50",
-        isActive ? "data-[active=true]" : "",
+        isActive ? "data-[active=true]" : "", // Apply active class based on pathname
         className
       )}
       {...props}
     >
-      {Icon && <Icon className="mr-2 h-4 w-4" />}
+      {/* Render the Icon if provided */}
+      {Icon && <Icon className="mr-2 h-4 w-4" aria-hidden="true" />}
+      {/* Render the children (text content) */}
       {children}
     </Link>
   )
 })
 NavigationMenuLink.displayName = "NavigationMenuLink"
+
 
 const NavigationMenuContent = React.forwardRef<
   HTMLDivElement,
