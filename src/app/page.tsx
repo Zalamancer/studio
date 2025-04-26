@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from "@/components/ui/card";
@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping } from "lucide-react"; // Added HandHelping
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home } from "lucide-react"; // Added missing icons
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
@@ -34,7 +34,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
-import { findOrCreateConversation } from '@/services/messagingService.client'; // Import client-side service
+import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
@@ -57,13 +57,13 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
         onKeyDown={(e) => e.key === 'Enter' && onOpen()}
       >
         <CardHeader className="p-4">
-          <div className="flex flex-wrap gap-1 mb-2">
-            {post.tags?.map((tag, index) => ( // Add optional chaining for safety
-              <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs cursor-default">
-                {tag}
-              </Badge>
-            ))}
-          </div>
+           <div className="flex flex-wrap gap-1 mb-2">
+                {post.tags?.map((tag, index) => ( // Add optional chaining for safety
+                 <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs cursor-default">
+                   {tag}
+                 </Badge>
+                ))}
+            </div>
            <h3 className="text-base font-semibold leading-snug text-card-foreground">{post.question}</h3>
            {post.description && (
              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
@@ -197,8 +197,8 @@ function BoardPageContent() {
      let filtered = selectedTags.length === 0
         ? posts
         : posts.filter(post =>
-             Array.isArray(post.tags) &&
-             selectedTags.every(tag => post.tags.includes(tag))
+             Array.isArray(post.tags) && // Check if post.tags exists and is an array
+             selectedTags.every(tag => post.tags.includes(tag)) // Check if all selected tags are in post.tags
           );
 
     // Then sort the filtered results

@@ -2,7 +2,7 @@
 "use client"; // Required because this page uses hooks and client-side logic
 
 import React from 'react';
-import { MessagingInterface } from '@/components/messaging/MessagingInterface';
+import { MessagingInterface } from '@/components/messaging/MessagingInterface'; // Corrected import path
 import { useAuth } from '@/contexts/AuthContext'; // To get the current user
 import { Loader2 } from 'lucide-react';
 
