@@ -1,16 +1,21 @@
-
 // src/types/post.ts
+import type { Timestamp } from 'firebase/firestore';
 
 export interface Post {
-  id: number | string; // Use string if using UUIDs later
+  id: string; // Firestore uses string IDs for documents
+  userId: string; // ID of the user who created the post
   tags: string[];
   question: string;
-  description?: string; // Make description optional or required as needed
+  description?: string;
   sector: string;
-  businessType: string; // e.g., Startup, Growing, Established
-  safetyIndicator: 'High' | 'Medium' | 'Low'; // Or use a numerical score
-  ratingScore: number; // e.g., 0-5
-  stockGraphData: { name: string; uv: number }[]; // Example structure
-  createdAt: Date; // Timestamp for sorting
-  // Add other fields like userId (anonymous identifier), replies, etc. later
+  businessType: string;
+  safetyIndicator: 'High' | 'Medium' | 'Low';
+  ratingScore: number;
+  stockGraphData: { name: string; uv: number }[]; // Keep as is for now, potentially store elsewhere later
+  createdAt: Timestamp; // Use Firestore Timestamp for sorting/querying
 }
+
+// Type for data being added (before Firestore assigns ID and converts Date to Timestamp)
+export type NewPostData = Omit<Post, 'id' | 'createdAt'> & {
+    createdAt: Date;
+};

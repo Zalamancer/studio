@@ -2,7 +2,7 @@
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 // Add other Firebase services like Firestore, Storage, etc., if needed
-// import { getFirestore } from "firebase/firestore";
+import { getFirestore } from "firebase/firestore"; // Import Firestore
 // import { getStorage } from "firebase/storage";
 
 // Your web app's Firebase configuration
@@ -27,7 +27,7 @@ if (!getApps().length) {
 }
 
 const auth = getAuth(app);
-// const db = getFirestore(app); // Uncomment if using Firestore
+const db = getFirestore(app); // Initialize Firestore
 // const storage = getStorage(app); // Uncomment if using Storage
 
-export { app, auth /*, db, storage */ }; // Export initialized services
+export { app, auth, db /*, storage */ }; // Export initialized services
