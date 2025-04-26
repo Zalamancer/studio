@@ -30,7 +30,7 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { FileText, Home, Network, LineChart, LogOut, PlusCircle, Loader2 } from "lucide-react";
+import { FileText, Home, Network, LineChart, LogOut, PlusCircle, Loader2 } from "lucide-react"; // Import correct icons
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import type { Post, NewPostData } from '@/types/post';
@@ -257,11 +257,13 @@ function HomePageContent() {
              <NavigationMenuList>
                {navItems.map((item) => (
                  <NavigationMenuItem key={item.title}>
-                   <NavigationMenuLink asChild>
-                     <Link href={item.href} className="flex items-center gap-2">
-                       {item.icon && <item.icon className="h-4 w-4" />}
-                       {item.title}
-                     </Link>
+                   {/* Pass props directly to NavigationMenuLink */}
+                   <NavigationMenuLink
+                      href={item.href}
+                      title={item.title}
+                      icon={item.icon}
+                   >
+                      {item.title}
                    </NavigationMenuLink>
                  </NavigationMenuItem>
                ))}
@@ -286,6 +288,7 @@ function HomePageContent() {
                        onSubmit={handleAddPost}
                        availableTags={availableTags}
                        isSubmitting={addPostMutation.isPending}
+                       onSubmitted={() => setIsCreatePostOpen(false)} // Add this callback
                       />
                   </DialogContent>
                 </Dialog>

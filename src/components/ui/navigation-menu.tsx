@@ -54,12 +54,20 @@ const NavigationMenuItem = React.forwardRef<
 NavigationMenuItem.displayName = "NavigationMenuItem"
 
 // Update NavigationMenuLink to render the icon passed via props
+// Remove asChild and directly use Link
 const NavigationMenuLink = React.forwardRef<
   React.ElementRef<typeof Link>,
-  Omit<React.ComponentPropsWithoutRef<typeof Link>, 'href'> & NavItemProps
+  React.ComponentPropsWithoutRef<typeof Link> & NavItemProps // Use ComponentPropsWithoutRef<typeof Link>
 >(({ className, children, href, title, icon: Icon, ...props }, ref) => {
   const pathname = usePathname()
   const isActive = pathname === href;
+
+  if (!href) {
+    // Optionally handle the case where href is undefined, e.g., render a placeholder or null
+    console.warn("NavigationMenuLink received undefined href for title:", title);
+    return null; // Or render a disabled state
+  }
+
 
   return (
     <Link
