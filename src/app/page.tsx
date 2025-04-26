@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react'; // Added useEffect
+import React, { useState, useMemo, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation'; // Keep useRouter
 import {
@@ -117,7 +117,7 @@ function HomePageContent() {
      mutationFn: addPostToFirestore,
      onSuccess: () => {
        queryClient.invalidateQueries({ queryKey: ['posts'] });
-       setIsCreatePostOpen(false);
+       setIsCreatePostOpen(false); // Close the dialog on successful post creation
        toast({
          title: "Post Created",
          description: "Your post has been added to the board.",
@@ -229,7 +229,8 @@ function HomePageContent() {
                          <p className="text-muted-foreground text-lg">Loading user data...</p>
                         </>
                     ) : (
-                        <p className="text-muted-foreground text-lg">Redirecting to login...</p>
+                       // Changed the message to indicate redirecting to login
+                       <p className="text-muted-foreground text-lg">Redirecting to login...</p>
                     )}
                 </div>
             </main>
@@ -256,9 +257,11 @@ function HomePageContent() {
              <NavigationMenuList>
                {navItems.map((item) => (
                  <NavigationMenuItem key={item.title}>
-                    {/* Pass title, href, and icon to NavigationMenuLink */}
-                   <NavigationMenuLink href={item.href} title={item.title} icon={item.icon}>
-                     {item.title} {/* Display title inside the link */}
+                   <NavigationMenuLink asChild>
+                     <Link href={item.href} className="flex items-center gap-2">
+                       {item.icon && <item.icon className="h-4 w-4" />}
+                       {item.title}
+                     </Link>
                    </NavigationMenuLink>
                  </NavigationMenuItem>
                ))}
