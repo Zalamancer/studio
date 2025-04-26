@@ -75,43 +75,54 @@ export const getConversationsForUser = async (userId: string): Promise<Conversat
 // Function to find an existing conversation or create a new one
 // Returns the conversation ID
 export const findOrCreateConversation = async (userId1: string, userId2: string): Promise<string> => {
-  if (userId1 === userId2) {
-    throw new Error("Cannot create a conversation with oneself.");
-  }
-  // Ensure participants are always in the same order to avoid duplicates
-  const participants = [userId1, userId2].sort();
-  const conversationId = participants.join('_'); // Create a predictable ID
+    console.log(`Attempting to find/create conversation between ${userId1} and ${userId2}`); // Added log
 
-  try {
-    const conversationDocRef = doc(db, 'conversations', conversationId);
-    const conversationSnap = await getDoc(conversationDocRef);
+    if (userId1 === userId2) {
+        console.error("Attempted to create conversation with oneself."); // Added log
+        throw new Error("Cannot create a conversation with oneself.");
+    }
 
-    if (conversationSnap.exists()) {
-        console.log(`Conversation found: ${conversationId}`);
-        return conversationId; // Conversation already exists
-    } else {
-        // Create a new conversation document using a batch write for atomicity
-        const batch = writeBatch(db);
-        batch.set(conversationDocRef, {
-            participants: participants,
-            createdAt: serverTimestamp(),
-            lastMessage: null,
-            lastMessageTimestamp: null, // Initialize as null
-            // participantDetails: { [userId1]: { name: 'User 1 Name' }, [userId2]: { name: 'User 2 Name' } }, // Example
-        });
-        await batch.commit();
-        console.log(`Conversation created: ${conversationId}`);
-        return conversationId;
+    const participants = [userId1, userId2].sort();
+    const conversationId = participants.join('_'); // Create a predictable ID
+    console.log(`Generated conversation ID: ${conversationId}, Participants: ${participants.join(', ')}`); // Added log
+
+    try {
+        const conversationDocRef = doc(db, 'conversations', conversationId);
+        console.log("Checking if conversation exists..."); // Added log
+        const conversationSnap = await getDoc(conversationDocRef); // Requires 'get' permission
+
+        if (conversationSnap.exists()) {
+            console.log(`Conversation ${conversationId} found.`); // Added log
+            return conversationId; // Conversation already exists
+        } else {
+            console.log(`Conversation ${conversationId} not found. Attempting to create...`); // Added log
+            // Create a new conversation document using a batch write for atomicity
+            const batch = writeBatch(db);
+            const newConversationData = {
+                participants: participants,
+                createdAt: serverTimestamp(),
+                lastMessage: null,
+                lastMessageTimestamp: null, // Initialize as null
+                // participantDetails: { [userId1]: { name: 'User 1 Name' }, [userId2]: { name: 'User 2 Name' } }, // Example
+            };
+            console.log("Conversation data to be written:", newConversationData); // Added log
+            batch.set(conversationDocRef, newConversationData); // Requires 'create' permission
+            await batch.commit();
+            console.log(`Conversation ${conversationId} created successfully.`); // Added log
+            return conversationId;
+        }
+    } catch (error: any) {
+        console.error(`Error in findOrCreateConversation for ${conversationId}:`, error); // More specific error log
+        console.error("Firestore Error Code:", error.code); // Log code
+        console.error("Firestore Error Message:", error.message); // Log message
+
+        if (error.code === 'permission-denied') {
+            // Provide a more specific error message pointing towards create permissions
+            console.error("Firestore permission denied for creating/accessing conversation. Check security rules for 'conversations' collection, specifically the 'create' operation allowance.");
+            throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
+        }
+        throw new Error(`Failed to find or create conversation: ${error.message}`);
     }
-  } catch (error: any) {
-    console.error(`Error finding or creating conversation between ${userId1} and ${userId2}:`, error);
-    if (error.code === 'permission-denied') {
-        // Provide a more specific error message pointing towards create permissions
-        console.error("Firestore permission denied for creating/accessing conversation. Check security rules for 'conversations' collection, specifically the 'create' operation allowance.");
-        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
-    }
-    throw new Error(`Failed to find or create conversation: ${error.message}`);
-  }
 };
 
 
