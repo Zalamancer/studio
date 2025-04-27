@@ -11,6 +11,7 @@ import {
   NavigationMenuLink,
 } from "@/components/ui/navigation-menu";
 import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Import Avatar
 import {
   Dialog,
   DialogContent,
@@ -19,14 +20,14 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Home, LineChart, Network, FileText, LogOut, PlusCircle } from "lucide-react"; // Use correct icons
+import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle } from "lucide-react"; // Added UserCircle
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import { CreatePostForm } from '@/components/CreatePostForm'; // Assuming CreatePostForm is adjusted if needed
-import type { NewPostData, Post } from '@/types/post'; // Import necessary types
-import { addPostToFirestore } from '@/services/postService'; // Import service
-import { useMutation, useQueryClient } from '@tanstack/react-query'; // Import mutation hooks
+import { CreatePostForm } from '@/components/CreatePostForm';
+import type { NewPostData, Post } from '@/types/post';
+import { addPostToFirestore } from '@/services/postService';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 
 // Navigation items definition (moved here for clarity)
 const navItems = [
@@ -40,6 +41,12 @@ const navItems = [
 export const availableTags = [
     "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
+
+// Helper to get initials for Avatar
+const getInitials = (email: string | null | undefined): string => {
+    if (!email) return 'U';
+    return email.substring(0, 1).toUpperCase();
+};
 
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
@@ -147,8 +154,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
                   }`}
                 >
-                   {/* Optional: Render Icon */}
-                   {/* {item.icon && <item.icon className="mr-1 h-4 w-4 inline-block" />} */}
                   {item.title}
                 </Link>
               ))}
@@ -183,22 +188,38 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </Dialog>
              )}
 
-              {/* Logout Button - only if user is logged in */}
-              {user ? (
-                  <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Logout" className="text-muted-foreground hover:text-foreground">
-                    <LogOut className="h-5 w-5" />
-                  </Button>
-              ) : (
-                // Show Login/Signup buttons if not logged in
-                <div className="flex items-center gap-2">
-                   <Button variant="outline" size="sm" asChild>
-                     <Link href="/login">Login</Link>
-                   </Button>
-                   <Button variant="default" size="sm" asChild>
-                     <Link href="/signup">Sign Up</Link>
+            {/* --- User Actions Area --- */}
+            {user ? (
+                <div className="flex items-center gap-3">
+                   {/* Profile Link/Avatar */}
+                   <Link href={`/profile/${user.uid}`} passHref legacyBehavior>
+                     <Button variant="ghost" size="icon" aria-label="View Profile" className="rounded-full h-8 w-8">
+                       <Avatar className="h-8 w-8">
+                         <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName ?? "User"} />
+                         <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                           {getInitials(user.email ?? user.displayName)}
+                         </AvatarFallback>
+                       </Avatar>
+                     </Button>
+                   </Link>
+                   {/* Logout Button */}
+                   <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Logout" className="text-muted-foreground hover:text-foreground">
+                     <LogOut className="h-5 w-5" />
                    </Button>
                 </div>
-              )}
+            ) : (
+              // Show Login/Signup buttons if not logged in
+              <div className="flex items-center gap-2">
+                 <Button variant="outline" size="sm" asChild>
+                   <Link href="/login">Login</Link>
+                 </Button>
+                 <Button variant="default" size="sm" asChild>
+                   <Link href="/signup">Sign Up</Link>
+                 </Button>
+              </div>
+            )}
+            {/* --- End User Actions Area --- */}
+
            </div>
         </div>
       </header>
