@@ -117,22 +117,22 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
     const q = query(
       conversationsCollectionRef,
       where('participants', '==', participants), // Check for exact match of sorted participants array
-      where('postId', '==', postId),
+      where('postId', '==', postId), // *** CRITICAL: Check for postId match ***
       limit(1)
     );
     const querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
-      // Conversation already exists
+      // Conversation already exists for this specific post
       const existingConversationId = querySnapshot.docs[0].id;
       console.log(`Conversation found for post ${postId}: ${existingConversationId}`);
       return existingConversationId;
     } else {
-      // Conversation doesn't exist, create a new one
+      // Conversation doesn't exist for this post, create a new one
       console.log(`Conversation for post ${postId} not found. Attempting to create...`);
       const newConversationData: NewConversationData = { // Use the Firestore Conversation type here
         participants: participants,
-        postId: postId, // Store the post ID
+        postId: postId, // *** CRITICAL: Store the post ID ***
         createdAt: serverTimestamp() as Timestamp, // Use serverTimestamp for creation
         lastMessage: null,
         lastMessageTimestamp: null,
@@ -155,7 +155,7 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
         console.error("Firestore permission denied for creating/accessing conversation. Check security rules.");
         console.error("Ensure rule allows 'create' on '/conversations/{conversationId}' when authenticated, participants array is size 2, and contains the auth uid, and includes the postId.");
         console.error("Ensure rule allows 'list' (or 'query') on '/conversations' with appropriate where clauses (participants, postId).");
-        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
+        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated and include postId.`);
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
          console.error("Firestore query requires an index. Please create a composite index on 'participants' (Equality) and 'postId' (Equality) in the Firebase console for the 'conversations' collection.");
@@ -258,8 +258,7 @@ export const getUserDetails = async (userId: string): Promise<{ name: string; av
     return { name: `User ${userId.substring(0, 4)}...` }; // Fallback
 };
 
-// --- Function to get post details (example placeholder) ---
-// In a real app, fetch from the 'posts' collection
+// --- Function to get post details (used for messaging context) ---
 export const getPostDetails = async (postId: string): Promise<{ question: string } | null> => {
     if (!postId) return null;
     try {
@@ -267,11 +266,16 @@ export const getPostDetails = async (postId: string): Promise<{ question: string
         const postSnap = await getDoc(postDocRef);
         if (postSnap.exists()) {
             const postData = postSnap.data();
+            // Return only the question for context, keep it minimal
             return { question: postData.question || 'Post details unavailable' };
         }
+        console.warn(`Post details not found for postId: ${postId}`);
         return null;
-    } catch (error) {
+    } catch (error: any) {
         console.error(`Error fetching post details for ${postId}:`, error);
+         if (error.code === 'permission-denied') {
+             console.error(`Permission denied fetching post ${postId}. Check rules.`);
+         }
         return null; // Return null on error
     }
 };

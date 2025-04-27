@@ -145,7 +145,7 @@ function BoardPageContent() {
    // --- End Delete Post Handler ---
 
     // --- Offer Help / Start Conversation Handler ---
-   const handleOfferHelp = async (postOwnerId: string, postId: string) => {
+   const handleOfferHelp = async (postOwnerId: string, postId: string | undefined) => { // postId can be undefined
      if (!user) {
        toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to offer help." });
        return;
@@ -154,7 +154,7 @@ function BoardPageContent() {
          toast({ variant: "default", title: "Action Info", description: "You cannot start a conversation with yourself." });
          return; // Prevent starting conversation with oneself
      }
-     if (!postId) {
+     if (!postId) { // Explicit check for postId
          toast({ variant: "destructive", title: "Error", description: "Post ID is missing for conversation." });
          return;
      }
@@ -165,6 +165,7 @@ function BoardPageContent() {
         if (conversationId) {
              toast({ title: "Conversation Started", description: "Redirecting to Contracts..." });
              // Navigate to the contracts page, highlighting the specific post and conversation
+             // Pass both postId and conversationId as query parameters
              router.push(`/contracts?postId=${postId}&conversationId=${conversationId}`);
              setSelectedPost(null); // Close the sheet
         } else {
@@ -371,11 +372,11 @@ function BoardPageContent() {
                          {/* --- Buttons including Delete --- */}
                          <div className="mt-6 pt-4 border-t flex justify-end gap-2">
                              {/* Render "Offer Help" button only if user is logged in AND is NOT the owner of the post */}
-                              {user && selectedPost.userId !== user.uid && selectedPost.id && ( // Ensure postId is available
+                              {user && selectedPost.userId !== user.uid && (
                                  <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id!)} // Pass postId
+                                    onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id)} // Pass owner ID and post ID
                                     >
                                      <HandHelping className="mr-2 h-4 w-4" /> Offer Help
                                  </Button>

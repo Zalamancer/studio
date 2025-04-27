@@ -334,7 +334,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 <p className="p-4 text-sm text-muted-foreground text-center">No conversations yet.</p>
             ) : (
               conversations.map((conv) => {
+                 // Get the post question from the map
                  const postQuestion = conv.postId ? postDetailsMap?.get(conv.postId)?.question : null;
+                 // Determine if this conversation should be highlighted based on URL params
                  const shouldHighlight = highlightPostId === conv.postId && initialConversationId === conv.id;
                  return (
                      <ConversationListItem
@@ -343,8 +345,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                          isSelected={selectedConversationId === conv.id}
                          currentUserId={currentUserId}
                          onSelect={setSelectedConversationId}
-                         postQuestion={postQuestion}
-                         highlight={shouldHighlight}
+                         postQuestion={postQuestion} // Pass the question
+                         highlight={shouldHighlight} // Pass highlight flag
                      />
                  );
              })
