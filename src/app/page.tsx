@@ -1,4 +1,4 @@
-
+// src/app/page.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -145,7 +145,7 @@ function BoardPageContent() {
    // --- End Delete Post Handler ---
 
     // --- Offer Help / Start Conversation Handler ---
-   const handleOfferHelp = async (postOwnerId: string) => {
+   const handleOfferHelp = async (postOwnerId: string, postId: string) => {
      if (!user) {
        toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to offer help." });
        return;
@@ -154,14 +154,18 @@ function BoardPageContent() {
          toast({ variant: "default", title: "Action Info", description: "You cannot start a conversation with yourself." });
          return; // Prevent starting conversation with oneself
      }
+     if (!postId) {
+         toast({ variant: "destructive", title: "Error", description: "Post ID is missing for conversation." });
+         return;
+     }
 
      try {
-        // Find or create a conversation between the current user and the post owner
-        const conversationId = await findOrCreateConversation(user.uid, postOwnerId);
+        // Find or create a conversation linked to the specific post
+        const conversationId = await findOrCreateConversation(user.uid, postOwnerId, postId);
         if (conversationId) {
              toast({ title: "Conversation Started", description: "Redirecting to Contracts..." });
-             // Navigate to the contracts page, potentially highlighting the new conversation
-             router.push(`/contracts?conversationId=${conversationId}`);
+             // Navigate to the contracts page, highlighting the specific post and conversation
+             router.push(`/contracts?postId=${postId}&conversationId=${conversationId}`);
              setSelectedPost(null); // Close the sheet
         } else {
             throw new Error("Failed to get conversation ID.");
@@ -367,11 +371,11 @@ function BoardPageContent() {
                          {/* --- Buttons including Delete --- */}
                          <div className="mt-6 pt-4 border-t flex justify-end gap-2">
                              {/* Render "Offer Help" button only if user is logged in AND is NOT the owner of the post */}
-                              {user && selectedPost.userId !== user.uid && (
+                              {user && selectedPost.userId !== user.uid && selectedPost.id && ( // Ensure postId is available
                                  <Button
                                     variant="outline"
                                     size="sm"
-                                    onClick={() => handleOfferHelp(selectedPost.userId)}
+                                    onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id!)} // Pass postId
                                     >
                                      <HandHelping className="mr-2 h-4 w-4" /> Offer Help
                                  </Button>

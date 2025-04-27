@@ -5,6 +5,7 @@ import type { Timestamp } from 'firebase/firestore';
 export interface Conversation {
   id: string; // Firestore document ID
   participants: string[]; // Array of user IDs participating in the conversation
+  postId?: string; // Optional ID of the post this conversation is about
   lastMessage: string | null; // Text of the last message sent
   lastMessageTimestamp: Timestamp | null; // Timestamp of the last message (Firestore Timestamp)
   createdAt: Timestamp; // When the conversation was created (Firestore Timestamp)
@@ -35,3 +36,6 @@ export interface SerializableMessage extends Omit<Message, 'timestamp'> {
 
 // Type for data needed to create a new message (uses client-side data, serverTimestamp used in service)
 export type NewMessageData = Omit<Message, 'id' | 'timestamp' | 'read'>;
+
+// Type for data needed to create a new conversation
+export type NewConversationData = Omit<Conversation, 'id'>;

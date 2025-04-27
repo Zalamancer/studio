@@ -18,8 +18,9 @@ import {
   arrayUnion,
   documentId,
   writeBatch,
+  QueryConstraint, // Import QueryConstraint
 } from 'firebase/firestore';
-import type { Conversation, Message, NewMessageData, SerializableMessage, ClientConversation } from '@/types/messaging'; // Import ClientConversation
+import type { Conversation, Message, NewMessageData, SerializableMessage, ClientConversation, NewConversationData } from '@/types/messaging'; // Import ClientConversation
 import { auth } from '@/lib/firebase/config'; // Import auth if needed for debugging
 
 const conversationsCollectionRef = collection(db, 'conversations');
@@ -69,6 +70,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
       const clientConversation: ClientConversation = {
         id: docSnap.id,
         participants: data.participants,
+        postId: data.postId || undefined, // Include postId if it exists
         lastMessage: data.lastMessage || null,
         lastMessageTimestamp: lastTimestampMillis, // Use milliseconds
         createdAt: createdAtTimestampMillis, // Use milliseconds
@@ -99,54 +101,66 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
 };
 
 
-// Function to find an existing conversation or create a new one
+// Function to find an existing conversation or create a new one based on participants and postId
 // Returns the conversation ID
-export const findOrCreateConversation = async (userId1: string, userId2: string): Promise<string> => {
+export const findOrCreateConversation = async (userId1: string, userId2: string, postId: string): Promise<string> => {
   if (userId1 === userId2) {
     throw new Error("Cannot create a conversation with oneself.");
   }
-  // Ensure participants are always in the same order to avoid duplicates
+  // Ensure participants are always in the same order for querying consistency
   const participants = [userId1, userId2].sort();
-  const conversationId = participants.join('_'); // Create a predictable ID
 
-  console.log(`Attempting to find or create conversation: ID=${conversationId}, Participants=${participants.join(', ')}`); // Log attempt details
+  console.log(`Attempting to find or create conversation for post ${postId} between ${userId1} and ${userId2}`);
 
   try {
-    const conversationDocRef = doc(db, 'conversations', conversationId);
-    const conversationSnap = await getDoc(conversationDocRef); // Check if exists (needs 'get' permission)
+    // Query for existing conversation with the same participants and postId
+    const q = query(
+      conversationsCollectionRef,
+      where('participants', '==', participants), // Check for exact match of sorted participants array
+      where('postId', '==', postId),
+      limit(1)
+    );
+    const querySnapshot = await getDocs(q);
 
-    if (conversationSnap.exists()) {
-        console.log(`Conversation found: ${conversationId}`);
-        return conversationId; // Conversation already exists
+    if (!querySnapshot.empty) {
+      // Conversation already exists
+      const existingConversationId = querySnapshot.docs[0].id;
+      console.log(`Conversation found for post ${postId}: ${existingConversationId}`);
+      return existingConversationId;
     } else {
-        console.log(`Conversation ${conversationId} not found. Attempting to create...`);
-        // Data to be written for the new conversation
-        // Use serverTimestamp() for Firestore Timestamp objects
-        const newConversationData: Omit<Conversation, 'id'> = { // Use the Firestore Conversation type here
-            participants: participants,
-            createdAt: serverTimestamp() as Timestamp, // Use serverTimestamp for creation
-            lastMessage: null,
-            lastMessageTimestamp: null,
-        };
-        console.log('Data for new conversation:', newConversationData); // Log data being written
+      // Conversation doesn't exist, create a new one
+      console.log(`Conversation for post ${postId} not found. Attempting to create...`);
+      const newConversationData: NewConversationData = { // Use the Firestore Conversation type here
+        participants: participants,
+        postId: postId, // Store the post ID
+        createdAt: serverTimestamp() as Timestamp, // Use serverTimestamp for creation
+        lastMessage: null,
+        lastMessageTimestamp: null,
+      };
+      console.log('Data for new conversation:', newConversationData);
 
-        // Create a new conversation document using set with the specific ID
-        await setDoc(conversationDocRef, newConversationData); // Use setDoc to create with specific ID
+      // Add a new document with an auto-generated ID
+      const docRef = await addDoc(conversationsCollectionRef, newConversationData);
 
-        console.log(`Conversation created successfully: ${conversationId}`);
-        return conversationId;
+      console.log(`Conversation created successfully for post ${postId}: ${docRef.id}`);
+      return docRef.id;
     }
   } catch (error: any) {
-    console.error(`Error finding or creating conversation between ${userId1} and ${userId2}:`, error);
+    console.error(`Error finding or creating conversation for post ${postId} between ${userId1} and ${userId2}:`, error);
     const currentUser = auth.currentUser;
     console.error('Current auth state:', currentUser ? `UID: ${currentUser.uid}` : 'No user authenticated');
     console.error('Participants being used:', participants);
 
     if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied for creating/accessing conversation. Check security rules for 'conversations' collection.");
-        console.error("Ensure rule allows 'create' on '/conversations/{conversationId}' when authenticated, participants array is size 2, and contains the auth uid.");
-        throw new Error(`Permission denied when trying to access or create conversation. Check Firestore Rules.`);
+        console.error("Firestore permission denied for creating/accessing conversation. Check security rules.");
+        console.error("Ensure rule allows 'create' on '/conversations/{conversationId}' when authenticated, participants array is size 2, and contains the auth uid, and includes the postId.");
+        console.error("Ensure rule allows 'list' (or 'query') on '/conversations' with appropriate where clauses (participants, postId).");
+        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
     }
+    if (error.code === 'failed-precondition' && error.message.includes('index')) {
+         console.error("Firestore query requires an index. Please create a composite index on 'participants' (Equality) and 'postId' (Equality) in the Firebase console for the 'conversations' collection.");
+         throw new Error("Firestore query requires an index. Please create it in the Firebase console (participants ==, postId ==).");
+     }
     throw new Error(`Failed to find or create conversation: ${error.message}`);
   }
 };
@@ -242,4 +256,22 @@ export const getUserDetails = async (userId: string): Promise<{ name: string; av
     //     return { name: userData.displayName || `User ${userId.substring(0,4)}`, avatar: userData.photoURL };
     // }
     return { name: `User ${userId.substring(0, 4)}...` }; // Fallback
+};
+
+// --- Function to get post details (example placeholder) ---
+// In a real app, fetch from the 'posts' collection
+export const getPostDetails = async (postId: string): Promise<{ question: string } | null> => {
+    if (!postId) return null;
+    try {
+        const postDocRef = doc(db, 'posts', postId);
+        const postSnap = await getDoc(postDocRef);
+        if (postSnap.exists()) {
+            const postData = postSnap.data();
+            return { question: postData.question || 'Post details unavailable' };
+        }
+        return null;
+    } catch (error) {
+        console.error(`Error fetching post details for ${postId}:`, error);
+        return null; // Return null on error
+    }
 };
