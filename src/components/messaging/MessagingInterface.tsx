@@ -17,7 +17,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, User, Users, AlertTriangle, Eye } from 'lucide-react'; // Added AlertTriangle, Eye
+import { Loader2, Send, User, Users, AlertTriangle, Eye, Building } from 'lucide-react'; // Added AlertTriangle, Eye, Building
 // Timestamp import no longer needed here as we work with numbers
 import { cn } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation'; // Import useSearchParams
@@ -97,7 +97,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
           <span className="text-xs text-muted-foreground self-start pt-1">{formattedTime}</span>
         )}
       </button>
-        {/* "View Details" button - only shown if postId exists */}
+        {/* "View Post Details" button - only shown if postId exists */}
        {conversation.postId && (
            <Link href={`/?postId=${conversation.postId}`} // Link back to home page, potentially highlighting the post
                  className={cn(
@@ -373,6 +373,15 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                           Regarding: <span className="font-medium text-primary">{selectedPostQuestion}</span>
                       </p>
                    )}
+                   {/* Link to the other participant's profile */}
+                    {otherParticipantId && (
+                        <Link
+                            href={`/profile/${otherParticipantId}`}
+                            className="text-xs text-muted-foreground hover:text-primary hover:underline flex items-center gap-1 mt-1"
+                        >
+                            <Building className="h-3 w-3" /> View Profile
+                        </Link>
+                    )}
                </div>
                {/* Optional: Link to post details from header */}
                {selectedConversation?.postId && (
