@@ -426,4 +426,3 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
       throw new Error(`Failed to fetch connections: ${error.message}`);
     }
 };
-```
