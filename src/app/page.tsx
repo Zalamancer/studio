@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building } from "lucide-react"; // Added Eye and Building icons
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2 } from "lucide-react"; // Added Eye, Building, Link2 icons
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
@@ -182,6 +182,34 @@ function BoardPageContent() {
      }
    };
    // --- End Offer Help Handler ---
+
+   // --- Connect Handler (Placeholder) ---
+   const handleConnect = (targetUserId: string | undefined) => {
+       if (!user) {
+         toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to connect." });
+         return;
+       }
+       if (!targetUserId) {
+            toast({ variant: "destructive", title: "Error", description: "Target user ID is missing." });
+            return;
+       }
+       if (user.uid === targetUserId) {
+           toast({ variant: "default", title: "Action Info", description: "You cannot connect with yourself." });
+           return; // Prevent connecting with oneself
+       }
+
+       // Placeholder logic: In a real app, this might send a connection request,
+       // navigate to a profile, or initiate another type of interaction.
+       console.log(`Connect requested with user: ${targetUserId}`);
+       toast({
+           title: "Connect (Placeholder)",
+           description: `Connect functionality with user ${targetUserId.substring(0,6)}... is not yet implemented.`,
+       });
+       // Example: Maybe navigate to the user's profile?
+       // router.push(`/profile/${targetUserId}`);
+       // setSelectedPost(null); // Close the sheet
+   };
+   // --- End Connect Handler ---
 
 
   const handleTagClick = (tag: string) => {
@@ -390,17 +418,26 @@ function BoardPageContent() {
                         </div>
                          {/* --- Buttons including Delete --- */}
                          <div className="mt-6 pt-4 border-t flex justify-end gap-2">
-                             {/* Render "Offer Help" button only if user is logged in AND is NOT the owner of the post */}
+                             {/* Render action buttons only if user is logged in AND is NOT the owner of the post */}
                               {user && selectedPost.userId !== user.uid && (
-                                 <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id)} // Pass owner ID and post ID
-                                    >
-                                     <HandHelping className="mr-2 h-4 w-4" /> Offer Help
-                                 </Button>
+                                <>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id)} // Pass owner ID and post ID
+                                        >
+                                         <HandHelping className="mr-2 h-4 w-4" /> Offer Help
+                                     </Button>
+                                     <Button
+                                        variant="default" // Or choose another appropriate variant
+                                        size="sm"
+                                        onClick={() => handleConnect(selectedPost.userId)}
+                                        className="bg-accent hover:bg-accent/90 text-accent-foreground" // Example styling
+                                        >
+                                         <Link2 className="mr-2 h-4 w-4" /> Connect
+                                     </Button>
+                                 </>
                               )}
-                              {/* Removed generic Connect button, Offer Help handles this */}
 
                              {/* Render Delete Button only if the user is logged in AND IS the owner of the post */}
                              {user && selectedPost.userId === user.uid && (
