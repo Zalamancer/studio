@@ -6,11 +6,12 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone, Link2 } from 'lucide-react'; // Added Link2 icon
+import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone } from 'lucide-react'; // Removed Link2, ConnectionButton imports it
 import { Separator } from '@/components/ui/separator'; // Import Separator component
-import { Button } from '@/components/ui/button'; // Import Button
+// import { Button } from '@/components/ui/button'; // Button is now inside ConnectionButton
 import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 import { useToast } from "@/hooks/use-toast"; // Import useToast
+import { ConnectionButton } from '@/components/ConnectionButton'; // Import the new component
 
 // Placeholder function to get user data (replace with actual data fetching)
 const getBusinessProfileData = (userId: string) => {
@@ -41,33 +42,8 @@ const BusinessProfilePage = () => {
   const router = useRouter();
   const { toast } = useToast();
 
-  // --- Connect Handler (Placeholder) ---
-  const handleConnect = (targetUserId: string | undefined) => {
-    if (!user) {
-      toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to connect." });
-      return;
-    }
-    if (!targetUserId) {
-         toast({ variant: "destructive", title: "Error", description: "Target user ID is missing." });
-         return;
-    }
-    if (user.uid === targetUserId) {
-        toast({ variant: "default", title: "Action Info", description: "You cannot connect with yourself." });
-        return; // Prevent connecting with oneself
-    }
-
-    // Placeholder logic: In a real app, this might send a connection request,
-    // navigate to a profile, or initiate another type of interaction.
-    console.log(`Connect requested with user: ${targetUserId}`);
-    toast({
-        title: "Connect (Placeholder)",
-        description: `Connect functionality with user ${targetUserId.substring(0,6)}... is not yet implemented.`,
-    });
-    // Example: Maybe navigate to the user's profile?
-    // router.push(`/profile/${targetUserId}`);
-    // setSelectedPost(null); // Close the sheet
-  };
-  // --- End Connect Handler ---
+  // --- Placeholder Connect Handler Removed ---
+  // Logic is now handled within ConnectionButton component
 
   // Handle case where userId is not available (should ideally not happen with proper routing)
   if (!userId) {
@@ -129,16 +105,14 @@ const BusinessProfilePage = () => {
                         <p className="text-2xl font-semibold text-primary">{profileData.rating.toFixed(1)} / 5.0</p>
                      </div>
                  )}
-                 {/* Show Connect Button only if logged in and NOT viewing own profile */}
-                  {!isOwnProfile && user && (
-                     <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => handleConnect(profileData.userId)}
-                        className="mt-2 w-full md:w-auto bg-accent hover:bg-accent/90 text-accent-foreground"
-                     >
-                         <Link2 className="mr-2 h-4 w-4" /> Connect
-                     </Button>
+                  {/* Use ConnectionButton component */}
+                 {user && !isOwnProfile && (
+                    <ConnectionButton
+                      targetUserId={profileData.userId}
+                      targetUserName={profileData.companyName}
+                      size="default" // Make it a bit larger on profile page
+                      className="mt-2 w-full md:w-auto"
+                    />
                  )}
             </div>
           </div>

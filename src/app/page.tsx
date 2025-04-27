@@ -36,6 +36,7 @@ import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postS
 import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
+import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
@@ -182,34 +183,6 @@ function BoardPageContent() {
      }
    };
    // --- End Offer Help Handler ---
-
-   // --- Connect Handler (Placeholder) ---
-   const handleConnect = (targetUserId: string | undefined) => {
-       if (!user) {
-         toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to connect." });
-         return;
-       }
-       if (!targetUserId) {
-            toast({ variant: "destructive", title: "Error", description: "Target user ID is missing." });
-            return;
-       }
-       if (user.uid === targetUserId) {
-           toast({ variant: "default", title: "Action Info", description: "You cannot connect with yourself." });
-           return; // Prevent connecting with oneself
-       }
-
-       // Placeholder logic: In a real app, this might send a connection request,
-       // navigate to a profile, or initiate another type of interaction.
-       console.log(`Connect requested with user: ${targetUserId}`);
-       toast({
-           title: "Connect (Placeholder)",
-           description: `Connect functionality with user ${targetUserId.substring(0,6)}... is not yet implemented.`,
-       });
-       // Example: Maybe navigate to the user's profile?
-       // router.push(`/profile/${targetUserId}`);
-       // setSelectedPost(null); // Close the sheet
-   };
-   // --- End Connect Handler ---
 
 
   const handleTagClick = (tag: string) => {
@@ -428,14 +401,14 @@ function BoardPageContent() {
                                         >
                                          <HandHelping className="mr-2 h-4 w-4" /> Offer Help
                                      </Button>
-                                     <Button
-                                        variant="default" // Or choose another appropriate variant
+                                     {/* Use ConnectionButton for connect actions */}
+                                     <ConnectionButton
+                                        targetUserId={selectedPost.userId}
+                                        // Pass target user name if available for better messages
+                                        // targetUserName={selectedPost.userName || 'this user'}
                                         size="sm"
-                                        onClick={() => handleConnect(selectedPost.userId)}
-                                        className="bg-accent hover:bg-accent/90 text-accent-foreground" // Example styling
-                                        >
-                                         <Link2 className="mr-2 h-4 w-4" /> Connect
-                                     </Button>
+                                        variant="default" // Keep consistent with old style or choose another
+                                     />
                                  </>
                               )}
 
