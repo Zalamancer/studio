@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone } from 'lucide-react'; // Added icons
+import { Separator } from '@/components/ui/separator'; // Import Separator component
 
 // Placeholder function to get user data (replace with actual data fetching)
 const getBusinessProfileData = (userId: string) => {
