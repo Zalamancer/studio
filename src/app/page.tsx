@@ -3,6 +3,7 @@
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link'; // Import Link
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +27,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home } from "lucide-react"; // Added missing icons
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building } from "lucide-react"; // Added Eye and Building icons
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
@@ -344,22 +345,40 @@ function BoardPageContent() {
                                     </div>
                                     <div className="flex items-center gap-2">
                                         <strong className="text-foreground">Safety Indicator:</strong>
-                                        <Badge
-                                            variant={
-                                                selectedPost.safetyIndicator === 'High' ? 'default'
-                                                : selectedPost.safetyIndicator === 'Medium' ? 'secondary'
-                                                : 'destructive'
-                                            }
-                                            className="text-xs"
-                                        >
+                                        {/* Changed Badge to span as it cannot be inside p */}
+                                        <span className={cn(
+                                            "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                                            selectedPost.safetyIndicator === 'High' ? "bg-primary text-primary-foreground"
+                                            : selectedPost.safetyIndicator === 'Medium' ? "bg-secondary text-secondary-foreground"
+                                            : "bg-destructive text-destructive-foreground"
+                                          )}>
                                             {selectedPost.safetyIndicator || 'N/A'}
-                                        </Badge>
+                                        </span>
                                     </div>
                                     <div>
                                         <strong className="block text-foreground">Rating Score:</strong>
                                         <span className="text-muted-foreground">{selectedPost.ratingScore ? `${selectedPost.ratingScore} / 5` : 'N/A'}</span>
                                     </div>
                              </div>
+                               {/* --- View Business Profile Link --- */}
+                               {user && selectedPost.userId !== user.uid && ( // Show only if logged in and not the owner
+                                 <div className="mt-4 border-t pt-4">
+                                   <Link
+                                       href={`/profile/${selectedPost.userId}`} // Link to a dynamic profile page
+                                       passHref
+                                       legacyBehavior // Needed for passing href to Button asChild
+                                   >
+                                       <Button variant="link" size="sm" className="text-primary p-0 h-auto flex items-center gap-1">
+                                           <Building className="h-4 w-4" /> View Business Profile
+                                       </Button>
+                                   </Link>
+                                   <p className="text-xs text-muted-foreground mt-1">
+                                       (Business details are revealed upon connection/contract)
+                                   </p>
+                                 </div>
+                               )}
+                               {/* --- End View Business Profile Link --- */}
+
                              {/* Placeholder for Stock Graph */}
                               {/* <div>
                                  <strong className="text-foreground">Business Stock Graph:</strong>
