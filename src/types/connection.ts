@@ -12,7 +12,7 @@ export type ConnectionStatus =
 
 // Represents the document stored in the 'mutuals' collection in Firestore
 export interface MutualConnection {
-  id: string; // Document ID (e.g., userId1_userId2 sorted)
+  id?: string; // Make ID optional as it's not part of the document data itself
   userIds: string[]; // Array containing the two user IDs, sorted alphabetically
   status: 'pending' | 'connected' | 'blocked'; // Status of the connection
   requesterId: string; // User ID of the person who initiated the request (if status is 'pending')
@@ -47,3 +47,4 @@ export interface UserProfileBasic {
     displayName: string;
     avatarUrl?: string;
 }
+```
