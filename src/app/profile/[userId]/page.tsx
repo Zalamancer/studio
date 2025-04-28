@@ -10,6 +10,7 @@ import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone, Loader2, Aler
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
+import { Button } from '@/components/ui/button'; // Import Button component
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery } from '@tanstack/react-query';
 import { getConnectionStatus } from '@/services/connectionService';
@@ -254,3 +255,4 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
+
