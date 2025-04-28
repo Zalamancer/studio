@@ -1,3 +1,4 @@
+// src/services/connectionService.ts
 'use server';
 
 import { db } from '@/lib/firebase/config';
@@ -47,8 +48,15 @@ export const sendConnectionRequest = async (requesterId: string, recipientId: st
             console.log("Connection already exists.");
             throw new Error("Already connected.");
         } else if (existingStatus === 'pending') {
-            console.log("Connection request already pending.");
-            throw new Error("Connection request already pending.");
+            // Check who sent the existing pending request
+            const existingRequester = connectionDocSnap.data().requesterId;
+            if (existingRequester === requesterId) {
+                console.log("You already sent a request.");
+                throw new Error("Connection request already sent by you.");
+            } else {
+                 console.log("Other user already sent you a request.");
+                 throw new Error("This user already sent you a connection request. Please check your pending requests.");
+            }
         }
       // Handle other statuses if needed (e.g., blocked)
     }
@@ -72,7 +80,7 @@ export const sendConnectionRequest = async (requesterId: string, recipientId: st
     if (error.code === 'permission-denied') {
       throw new Error('Permission denied. Check Firestore rules for creating mutuals documents.');
     }
-    throw new Error(`Failed to send connection request: ${error.message}`);
+    throw new Error(`${error.message}`); // Propagate existing error messages
   }
 };
 
@@ -426,3 +434,10 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
       throw new Error(`Failed to fetch connections: ${error.message}`);
     }
 };
+
+
+// --- Get Basic User Profile Info (callable directly) ---
+export const getUserProfileBasic = async (userId: string): Promise<UserProfileBasic | null> => {
+    // This just wraps the internal helper function
+    return fetchUserProfileBasic(userId);
+}

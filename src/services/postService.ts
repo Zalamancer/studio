@@ -10,7 +10,8 @@ import {
   limit,
   serverTimestamp, // Use serverTimestamp for consistency
   deleteDoc, // Import deleteDoc
-  doc // Import doc to get a document reference
+  doc, // Import doc to get a document reference
+  where // Import where for filtering
 } from 'firebase/firestore';
 import type { Post, NewPostData } from '@/types/post';
 
@@ -89,4 +90,53 @@ export const deletePostFromFirestore = async (postId: string): Promise<void> => 
         }
         throw new Error(`Failed to delete post: ${error.message}`);
     }
+};
+
+
+// Function to fetch posts created by a specific user
+export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
+  if (!userId) {
+    console.warn("getPostsByUserId called with invalid userId.");
+    return [];
+  }
+  console.log(`Fetching posts for user ${userId}`);
+
+  try {
+    const q = query(
+      postsCollectionRef,
+      where('userId', '==', userId), // Filter by userId
+      orderBy('createdAt', 'desc'), // Order by creation date
+      limit(20) // Limit results (adjust as needed)
+    );
+
+    console.log("Executing Firestore query for user's posts...");
+    const querySnapshot = await getDocs(q);
+    console.log(`Query snapshot received. Found ${querySnapshot.docs.length} posts for user ${userId}.`);
+
+    const posts = querySnapshot.docs.map((docSnap) => {
+      const data = docSnap.data();
+      const createdAt = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now();
+
+      return {
+        id: docSnap.id,
+        ...(data as Omit<Post, 'id' | 'createdAt'>),
+        createdAt: createdAt,
+      };
+    });
+
+    console.log(`Successfully mapped ${posts.length} posts for user ${userId}`);
+    return posts;
+
+  } catch (error: any) {
+    console.error(`Error fetching posts for user ${userId}:`, error);
+    if (error.code === 'permission-denied') {
+      console.error(`Firestore permission denied fetching posts for user ${userId}. Check rules.`);
+      throw new Error('Permission denied fetching user posts.');
+    }
+    if (error.code === 'failed-precondition' && error.message.includes('index')) {
+      console.error("Firestore query for user posts requires an index. Create a composite index on 'userId' (==) and 'createdAt' (desc) in the Firebase console for the 'posts' collection.");
+      throw new Error("Firestore query requires an index for user posts. Please create it in the Firebase console.");
+    }
+    throw new Error(`Failed to fetch posts for user ${userId}: ${error.message}`);
+  }
 };
