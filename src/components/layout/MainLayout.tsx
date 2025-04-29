@@ -20,7 +20,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle } from "lucide-react"; // Added UserCircle
+import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard } from "lucide-react"; // Added CreditCard icon
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,6 +35,7 @@ const navItems = [
   { title: "Invest", href: "/invest", icon: LineChart },
   { title: "Connect", href: "/connect", icon: Network },
   { title: "Contracts", href: "/contracts", icon: FileText },
+  { title: "Subscription", href: "/subscription", icon: CreditCard }, // Added Subscription link
 ];
 
 // Available tags (can be fetched or defined globally if needed elsewhere)
@@ -122,7 +123,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         description: formData.description,
         tags: formData.tags || [],
         userId: user.uid, // Associate post with the logged-in user
-        createdAt: new Date(), // Service layer will convert to serverTimestamp
+        // createdAt is handled by serverTimestamp in the service
         sector: "Tech", // Placeholder - Should ideally come from user profile or form
         businessType: "Startup", // Placeholder
         safetyIndicator: "Medium", // Placeholder
@@ -154,6 +155,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
                   }`}
                 >
+                  <item.icon className="mr-1 h-4 w-4 inline-block" aria-hidden="true" />
                   {item.title}
                 </Link>
               ))}
