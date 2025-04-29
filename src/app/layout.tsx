@@ -24,9 +24,9 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning> {/* Add suppressHydrationWarning */}
       <body className={`${inter.variable} font-sans antialiased`}>
-        {/* Wrap children with the client-side Providers component */}
+        {/* Providers now wraps ThemeProvider */}
         <Providers>
            {/* Wrap the main content with MainLayout */}
            <MainLayout>

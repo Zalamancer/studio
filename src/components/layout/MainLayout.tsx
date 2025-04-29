@@ -37,6 +37,7 @@ import { CreatePostForm } from '@/components/CreatePostForm';
 import type { NewPostData, Post } from '@/types/post';
 import { addPostToFirestore } from '@/services/postService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 
 // Navigation items definition (moved here for clarity)
 const navItems = [
@@ -244,6 +245,8 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                       <span>Settings</span>
                       {/* <DropdownMenuShortcut>⌘S</DropdownMenuShortcut> */}
                     </DropdownMenuItem>
+                    {/* Add Theme Toggle Item */}
+                    <ThemeToggle />
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout}>
                        <LogOut className="mr-2 h-4 w-4" />
