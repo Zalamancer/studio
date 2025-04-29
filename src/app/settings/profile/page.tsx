@@ -10,10 +10,26 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Import Avatar components
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, User, Upload } from 'lucide-react';
+import { Loader2, User, Upload, ImageDown } from 'lucide-react'; // Added ImageDown
 import { useToast } from '@/hooks/use-toast'; // Import useToast
+import imageCompression from 'browser-image-compression'; // Import compression library
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger, // We won't use trigger directly, but keep import for consistency
+} from "@/components/ui/alert-dialog"; // Import AlertDialog
+
 // Placeholder: Import functions for fetching profile, updating profile, and uploading image
 // import { getUserProfile, updateUserProfile, uploadProfilePicture } from '@/services/userService';
+
+const MAX_FILE_SIZE_MB = 1; // Max file size in MB before prompting for compression
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 // Helper to get initials
 const getInitials = (name: string | undefined | null): string => {
@@ -35,12 +51,15 @@ const ProfileSettingsPage = () => {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null); // Store fetched avatar URL
 
   // State for file upload
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null); // Can be original or compressed
+  const [originalFile, setOriginalFile] = useState<File | null>(null); // Keep track of the originally selected large file
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
-  // State for loading/submitting
+  // State for loading/submitting/compressing
   const [isFetchingProfile, setIsFetchingProfile] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false); // New state for compression loading
+  const [showCompressionDialog, setShowCompressionDialog] = useState(false); // State to control the dialog
 
   useEffect(() => {
     // Fetch user profile data when component mounts and user is available
@@ -88,25 +107,100 @@ const ProfileSettingsPage = () => {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) {
-      // Basic validation (optional: add more checks for size, type)
-      if (file.size > 1 * 1024 * 1024) { // 1MB limit example
-        toast({ variant: "destructive", title: "File Too Large", description: "Please select an image smaller than 1MB." });
-        return;
-      }
-      if (!file.type.startsWith('image/')) {
-          toast({ variant: "destructive", title: "Invalid File Type", description: "Please select an image file (JPG, PNG, GIF)." });
-          return;
-      }
+        // Validate type first
+        if (!file.type.startsWith('image/')) {
+            toast({ variant: "destructive", title: "Invalid File Type", description: "Please select an image file (JPG, PNG, GIF)." });
+             setSelectedFile(null);
+             setOriginalFile(null);
+             setPreviewUrl(avatarUrl); // Reset preview to current avatar
+             // Reset file input value
+             if (fileInputRef.current) fileInputRef.current.value = '';
+            return;
+        }
 
-      setSelectedFile(file);
-      // Create a preview URL
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setPreviewUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+        // Check size
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            // File is too large, prompt for compression
+            setOriginalFile(file); // Store the original large file
+            setShowCompressionDialog(true);
+            // Clear selected file and preview until compression is confirmed/done
+            setSelectedFile(null);
+            setPreviewUrl(avatarUrl); // Reset preview
+            // Reset file input value to allow re-selection if needed
+             if (fileInputRef.current) fileInputRef.current.value = '';
+        } else {
+            // File is within size limits, proceed normally
+            setSelectedFile(file);
+            setOriginalFile(null); // No need for original file storage
+            setShowCompressionDialog(false); // Ensure dialog is closed
+            // Create a preview URL
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPreviewUrl(reader.result as string);
+            };
+            reader.readAsDataURL(file);
+        }
+    } else {
+        // No file selected, reset states
+        setSelectedFile(null);
+        setOriginalFile(null);
+        setPreviewUrl(avatarUrl); // Reset preview to current avatar
     }
   };
+
+
+  // Handle image compression
+   const handleCompressImage = async () => {
+       if (!originalFile) {
+            toast({ variant: "destructive", title: "Compression Error", description: "No file selected for compression." });
+            return;
+        }
+
+       setIsCompressing(true);
+       setShowCompressionDialog(false); // Close the dialog
+        toast({ title: "Compressing...", description: "Please wait while the image is being compressed.", duration: 3000 });
+
+        try {
+            const options = {
+                maxSizeMB: MAX_FILE_SIZE_MB, // Target size
+                maxWidthOrHeight: 1024, // Resize limit
+                useWebWorker: true, // Use web worker for better performance
+            };
+            console.log(`Compressing image: ${originalFile.name} (${(originalFile.size / 1024 / 1024).toFixed(2)} MB)`);
+            const compressedFile = await imageCompression(originalFile, options);
+             console.log(`Compressed image: ${compressedFile.name} (${(compressedFile.size / 1024 / 1024).toFixed(2)} MB)`);
+
+            // Update state with the compressed file
+            setSelectedFile(compressedFile);
+            setOriginalFile(null); // Clear original file reference
+
+            // Create preview URL for the compressed file
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                setPreviewUrl(reader.result as string);
+            };
+            reader.readAsDataURL(compressedFile);
+
+            toast({ title: "Compression Successful", description: "The image has been compressed and is ready for upload." });
+
+        } catch (error) {
+            console.error("Image compression error:", error);
+            toast({
+                variant: "destructive",
+                title: "Compression Failed",
+                description: "Could not compress the image. Please try a smaller file or a different image.",
+            });
+            // Reset file input and selections
+            setSelectedFile(null);
+             setOriginalFile(null);
+             setPreviewUrl(avatarUrl);
+             if (fileInputRef.current) fileInputRef.current.value = '';
+
+        } finally {
+            setIsCompressing(false);
+        }
+    };
+
 
   // Trigger hidden file input
   const handleAvatarChangeClick = () => {
@@ -122,7 +216,7 @@ const ProfileSettingsPage = () => {
     let uploadedAvatarUrl = avatarUrl; // Start with the current or initially fetched URL
 
     try {
-        // 1. If a new file was selected, upload it
+        // 1. If a new file was selected (original or compressed), upload it
         if (selectedFile) {
             console.log("Uploading new profile picture...");
             // --- Placeholder: Replace with actual image upload logic ---
@@ -155,6 +249,7 @@ const ProfileSettingsPage = () => {
 
         setAvatarUrl(uploadedAvatarUrl); // Update local state with the final URL
         setSelectedFile(null); // Reset selected file after successful update
+        setOriginalFile(null); // Reset original file
 
         toast({
             title: "Profile Updated",
@@ -228,18 +323,23 @@ const ProfileSettingsPage = () => {
                             onChange={handleFileChange}
                             accept="image/png, image/jpeg, image/gif" // Specify acceptable image types
                             style={{ display: 'none' }} // Hide the default input
+                            disabled={isSubmitting || isCompressing} // Disable while submitting or compressing
                         />
                        <Button
                             type="button"
                             variant="outline"
                             size="sm"
                             onClick={handleAvatarChangeClick}
-                            disabled={isSubmitting}
+                            disabled={isSubmitting || isCompressing} // Disable while submitting or compressing
                         >
-                            <Upload className="mr-2 h-4 w-4" /> Change
+                            {isCompressing ? (
+                                <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Compressing... </>
+                            ) : (
+                                <> <Upload className="mr-2 h-4 w-4" /> Change </>
+                            )}
                         </Button>
                    </div>
-                    <p className="text-xs text-muted-foreground">Upload a JPG, PNG, or GIF. Max size 1MB.</p>
+                    <p className="text-xs text-muted-foreground">Upload a JPG, PNG, or GIF. Max size {MAX_FILE_SIZE_MB}MB.</p>
                </div>
            </div>
 
@@ -280,7 +380,7 @@ const ProfileSettingsPage = () => {
           </div>
 
           <div className="flex justify-end pt-4">
-            <Button type="submit" disabled={isSubmitting || isFetchingProfile}>
+            <Button type="submit" disabled={isSubmitting || isFetchingProfile || isCompressing}>
               {isSubmitting ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...
@@ -291,10 +391,41 @@ const ProfileSettingsPage = () => {
             </Button>
           </div>
         </form>
+
+        {/* Compression Confirmation Dialog */}
+        <AlertDialog open={showCompressionDialog} onOpenChange={setShowCompressionDialog}>
+            {/* <AlertDialogTrigger asChild> */}
+                {/* Trigger is handled programmatically */}
+            {/* </AlertDialogTrigger> */}
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Image Too Large</AlertDialogTitle>
+                    <AlertDialogDescription>
+                         The selected image exceeds the {MAX_FILE_SIZE_MB}MB size limit ({(originalFile?.size ?? 0 / 1024 / 1024).toFixed(2)}MB).
+                         Would you like to compress it to fit? Compression may slightly reduce quality.
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => {
+                         // Reset file selections if user cancels compression
+                         setSelectedFile(null);
+                         setOriginalFile(null);
+                         setPreviewUrl(avatarUrl);
+                         if (fileInputRef.current) fileInputRef.current.value = '';
+                         setShowCompressionDialog(false);
+                     }}>
+                        Cancel
+                    </AlertDialogCancel>
+                    <AlertDialogAction onClick={handleCompressImage} className="bg-primary hover:bg-primary/90">
+                       <ImageDown className="mr-2 h-4 w-4" /> Compress Image
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+
       </CardContent>
     </Card>
   );
 };
 
 export default ProfileSettingsPage;
-
