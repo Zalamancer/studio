@@ -20,7 +20,15 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard } from "lucide-react"; // Added CreditCard icon
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"; // Import Dropdown components
+import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User } from "lucide-react"; // Added CreditCard, Settings, User icons
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,7 +43,8 @@ const navItems = [
   { title: "Invest", href: "/invest", icon: LineChart },
   { title: "Connect", href: "/connect", icon: Network },
   { title: "Contracts", href: "/contracts", icon: FileText },
-  { title: "Subscription", href: "/subscription", icon: CreditCard }, // Added Subscription link
+  // Subscription is moved to the profile dropdown
+  // { title: "Subscription", href: "/subscription", icon: CreditCard },
 ];
 
 // Available tags (can be fetched or defined globally if needed elsewhere)
@@ -45,7 +54,10 @@ export const availableTags = [
 
 // Helper to get initials for Avatar
 const getInitials = (email: string | null | undefined): string => {
-    if (!email) return 'U';
+    if (!email) return '?';
+    // Prefer display name's first char if available, otherwise email
+    const name = auth.currentUser?.displayName;
+    if (name) return name.charAt(0).toUpperCase();
     return email.substring(0, 1).toUpperCase();
 };
 
@@ -192,10 +204,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
             {/* --- User Actions Area --- */}
             {user ? (
-                <div className="flex items-center gap-3">
-                   {/* Profile Link/Avatar */}
-                   <Link href={`/profile/${user.uid}`} passHref legacyBehavior>
-                     <Button variant="ghost" size="icon" aria-label="View Profile" className="rounded-full h-8 w-8">
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    {/* Use the existing avatar button as the trigger */}
+                     <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
                        <Avatar className="h-8 w-8">
                          <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName ?? "User"} />
                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
@@ -203,12 +215,41 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                          </AvatarFallback>
                        </Avatar>
                      </Button>
-                   </Link>
-                   {/* Logout Button */}
-                   <Button variant="ghost" size="icon" onClick={handleLogout} aria-label="Logout" className="text-muted-foreground hover:text-foreground">
-                     <LogOut className="h-5 w-5" />
-                   </Button>
-                </div>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="font-normal">
+                       <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">{user.displayName || 'User'}</p>
+                        <p className="text-xs leading-none text-muted-foreground">
+                          {user.email}
+                        </p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild>
+                      <Link href={`/profile/${user.uid}`}>
+                        <User className="mr-2 h-4 w-4" />
+                        <span>Profile</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                       <Link href="/subscription">
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        <span>Subscription</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem disabled> {/* Add disabled prop for placeholder */}
+                      <Settings className="mr-2 h-4 w-4" />
+                      <span>Settings</span>
+                      {/* <DropdownMenuShortcut>⌘S</DropdownMenuShortcut> */}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout}>
+                       <LogOut className="mr-2 h-4 w-4" />
+                      <span>Log out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
             ) : (
               // Show Login/Signup buttons if not logged in
               <div className="flex items-center gap-2">
