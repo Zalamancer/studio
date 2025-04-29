@@ -29,7 +29,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"; // Import Dropdown components
 import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User } from "lucide-react"; // Added CreditCard, Settings, User icons
-import { signOut } from '@/lib/firebase/auth';
+import { signOut } from '@/lib/firebase/auth'; // Import signOut
+import { auth } from '@/lib/firebase/config'; // Import auth from config
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { CreatePostForm } from '@/components/CreatePostForm';
@@ -56,7 +57,7 @@ export const availableTags = [
 const getInitials = (email: string | null | undefined): string => {
     if (!email) return '?';
     // Prefer display name's first char if available, otherwise email
-    const name = auth.currentUser?.displayName;
+    const name = auth.currentUser?.displayName; // Use imported auth object
     if (name) return name.charAt(0).toUpperCase();
     return email.substring(0, 1).toUpperCase();
 };
