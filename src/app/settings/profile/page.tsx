@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { useAuth } from '@/contexts/AuthContext'; // Assuming you have an auth context
-import { Loader2 } from 'lucide-react';
+import { Loader2, User } from 'lucide-react'; // Import User icon
 
 // Placeholder: You'll need a form library (like react-hook-form) and state management
 // Also, functions to fetch and update user profile data from Firestore
