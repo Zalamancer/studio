@@ -240,10 +240,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                         <span>Subscription</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem disabled> {/* Add disabled prop for placeholder */}
-                      <Settings className="mr-2 h-4 w-4" />
-                      <span>Settings</span>
-                      {/* <DropdownMenuShortcut>⌘S</DropdownMenuShortcut> */}
+                    <DropdownMenuItem asChild>
+                       <Link href="/settings/profile"> {/* Link to settings */}
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Settings</span>
+                      </Link>
                     </DropdownMenuItem>
                     {/* Add Theme Toggle Item */}
                     <ThemeToggle />
@@ -285,3 +286,4 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     </div>
   );
 }
+
