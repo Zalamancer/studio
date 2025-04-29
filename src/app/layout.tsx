@@ -25,7 +25,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning> {/* Ensure no whitespace before or after this tag */}
+    <html lang="en" suppressHydrationWarning>{/* Ensure no whitespace before or after this tag */}
       <body className={`${inter.variable} font-sans antialiased`}>
         {/* Providers now wraps ThemeProvider */}
         <Providers>
