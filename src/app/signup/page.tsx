@@ -107,6 +107,8 @@ const SignUpPage = () => {
             description = "An account already exists with this email. Please log in using the original method.";
         } else if (authError.code === 'auth/api-key-not-valid') {
              description = "Invalid Firebase API Key configuration.";
+        } else if (authError.code === 'auth/auth-domain-config-required' || authError.code === 'auth/operation-not-allowed') {
+             description = "Google Sign-Up is not enabled for this project. Please check Firebase console settings.";
         }
 
        toast({
@@ -196,3 +198,6 @@ const SignUpPage = () => {
 };
 
 export default SignUpPage;
+
+
+    

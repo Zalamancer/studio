@@ -44,7 +44,7 @@ const LoginPage = () => {
        const authError = error as AuthError;
        let description = "An unexpected error occurred during login.";
 
-       if (authError.code === 'auth/invalid-credential') {
+       if (authError.code === 'auth/invalid-credential' || authError.code === 'auth/wrong-password' || authError.code === 'auth/user-not-found') {
            description = "Incorrect email or password. Please try again or sign up.";
        } else if (authError.code === 'auth/invalid-email') {
             description = "Please enter a valid email address.";
@@ -52,7 +52,7 @@ const LoginPage = () => {
            description = "Access to this account has been temporarily disabled due to many failed login attempts. You can immediately restore it by resetting your password or you can try again later.";
        }
        // Avoid logging expected invalid credential errors to the console, but log others.
-       if (authError.code !== 'auth/invalid-credential') {
+       if (!['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found'].includes(authError.code)) {
            console.error("Email Login Error:", authError.code, authError.message);
        }
 
@@ -87,6 +87,8 @@ const LoginPage = () => {
             description = "An account already exists with the same email address but different sign-in credentials. Sign in using a provider associated with this email address.";
         } else if (authError.code === 'auth/api-key-not-valid') {
              description = "Invalid Firebase API Key. Please check your environment variables.";
+        } else if (authError.code === 'auth/auth-domain-config-required' || authError.code === 'auth/operation-not-allowed') {
+             description = "Google Sign-In is not enabled for this project. Please check Firebase console settings.";
         }
 
        toast({
@@ -168,3 +170,6 @@ const LoginPage = () => {
 
 export default LoginPage;
 
+
+
+    

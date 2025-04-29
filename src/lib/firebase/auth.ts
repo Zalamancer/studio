@@ -19,10 +19,13 @@ export const signInWithGoogle = async (): Promise<UserCredential | null> => {
   try {
     const result = await signInWithPopup(auth, googleProvider);
     // Could add logic here to check if user is new and add to Firestore if needed
+    console.log("Google Sign-In successful:", result.user);
     return result;
   } catch (error) {
     const authError = error as AuthError;
-    // Re-throw the error so the calling component can handle specific cases
+    // Log the detailed error for debugging
+    console.error("Error signing in with Google (auth.ts):", authError.code, authError.message);
+    // Re-throw the error so the calling component can handle specific cases and show user-friendly messages
     throw authError;
   }
 };
@@ -32,9 +35,11 @@ export const signUpWithEmailPassword = async (email: string, password: string): 
     try {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         // Could add logic here to store additional user info (like companyName) in Firestore
+        console.log("Email/Password Sign-Up successful:", userCredential.user);
         return userCredential;
     } catch (error) {
         const authError = error as AuthError;
+        console.error("Error signing up with Email/Password (auth.ts):", authError.code, authError.message);
         throw authError; // Re-throw for component handling
     }
 };
@@ -43,9 +48,12 @@ export const signUpWithEmailPassword = async (email: string, password: string): 
 export const signInWithEmailPassword = async (email: string, password: string): Promise<UserCredential> => {
     try {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        console.log("Email/Password Sign-In successful:", userCredential.user);
         return userCredential;
     } catch (error) {
         const authError = error as AuthError;
+         console.error("Error signing in with Email/Password (auth.ts):", authError.code, authError.message);
+        // Add more specific error handling if needed, but re-throwing is generally good
         throw authError; // Re-throw for component handling
     }
 };
@@ -54,9 +62,11 @@ export const signInWithEmailPassword = async (email: string, password: string): 
 export const sendPasswordReset = async (email: string): Promise<void> => {
     try {
         await sendPasswordResetEmail(auth, email);
+        console.log("Password reset email sent successfully to:", email);
         // Email sent successfully (or user not found, Firebase doesn't reveal this)
     } catch (error) {
         const authError = error as AuthError;
+         console.error("Error sending password reset email (auth.ts):", authError.code, authError.message);
         // Re-throw specific errors for the component to handle
         throw authError;
     }
@@ -67,8 +77,12 @@ export const sendPasswordReset = async (email: string): Promise<void> => {
 export const signOut = async (): Promise<void> => {
   try {
     await firebaseSignOut(auth);
+     console.log("User signed out successfully.");
   } catch (error) {
-    console.error("Error signing out:", error);
+    console.error("Error signing out (auth.ts):", error);
      throw error; // Re-throw for component handling if needed
   }
 };
+
+
+    
