@@ -14,10 +14,9 @@ export interface Comment {
 export interface ClientComment extends Omit<Comment, 'timestamp'> {
   timestamp: number; // Milliseconds since epoch
   // Add optional fields needed for display
-  userName?: string;
-  userAvatar?: string;
+  userName?: string; // Made optional as it's fetched
+  userAvatar?: string; // Made optional as it's fetched
 }
 
 // Data needed to create a new comment (postId is implicit via subcollection path)
 export type NewCommentData = Omit<Comment, 'id' | 'timestamp'>;
-```

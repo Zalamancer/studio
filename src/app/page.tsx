@@ -31,7 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; //
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator"; // Import Separator
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send } from "lucide-react"; // Added MessageCircle, Send icons
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash } from "lucide-react"; // Added MessageCircle, Send, Trash icons
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,7 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
-import { addCommentToPost, getCommentsForPost } from '@/services/commentService'; // Import comment services
+import { addCommentToPost, getCommentsForPost, deleteCommentFromPost } from '@/services/commentService'; // Import comment services
 import type { NewCommentData, ClientComment } from '@/types/comment'; // Import comment types
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
@@ -98,16 +98,41 @@ PostCard.displayName = 'PostCard'; // Add display name for React DevTools
 
 
 // Component for displaying a single comment
-const CommentItem = React.memo(({ comment }: { comment: ClientComment }) => {
+const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { comment: ClientComment, currentUserId: string | null, postId: string, onDelete: () => void }) => {
+    const queryClient = useQueryClient();
+    const { toast } = useToast();
+    const isOwnComment = comment.userId === currentUserId;
+
+    // Delete Comment Mutation
+    const deleteCommentMutation = useMutation({
+        mutationFn: () => deleteCommentFromPost(postId, comment.id),
+        onSuccess: () => {
+            toast({ title: "Comment Deleted" });
+            onDelete(); // Trigger parent refetch
+        },
+        onError: (error: Error) => {
+            console.error("Error deleting comment:", error);
+            toast({
+                variant: "destructive",
+                title: "Delete Failed",
+                description: `Could not delete comment: ${error.message}`,
+            });
+        },
+    });
+
+    const handleDeleteClick = () => {
+        deleteCommentMutation.mutate();
+    };
+
     return (
-        <div key={comment.id} className="flex items-start gap-3">
+        <div key={comment.id} className="flex items-start gap-3 group"> {/* Add group for hover effect */}
             <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
                 <AvatarImage src={comment.userAvatar} alt={comment.userName} />
                 <AvatarFallback className="text-xs bg-muted text-muted-foreground">
                     {getInitials(comment.userName)}
                 </AvatarFallback>
             </Avatar>
-            <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0"> {/* Added min-w-0 */}
+            <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0 relative"> {/* Added min-w-0 and relative */}
                 <div className="flex justify-between items-center mb-1">
                     <p className="text-sm font-medium text-foreground truncate">{comment.userName || 'Anonymous'}</p>
                     <p className="text-xs text-muted-foreground flex-shrink-0 ml-2"> {/* Added ml-2 */}
@@ -115,6 +140,41 @@ const CommentItem = React.memo(({ comment }: { comment: ClientComment }) => {
                     </p>
                 </div>
                 <p className="text-sm text-muted-foreground break-words">{comment.text}</p> {/* Added break-words */}
+
+                {/* Delete Button */}
+                {isOwnComment && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                           <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-1 right-1 h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                disabled={deleteCommentMutation.isPending}
+                                aria-label="Delete comment"
+                           >
+                                {deleteCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin"/> : <Trash className="h-3 w-3"/>}
+                           </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Are you sure you want to delete this comment? This action cannot be undone.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel disabled={deleteCommentMutation.isPending}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={handleDeleteClick}
+                                    disabled={deleteCommentMutation.isPending}
+                                    className="bg-destructive hover:bg-destructive/90"
+                                >
+                                    {deleteCommentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                )}
             </div>
         </div>
     );
@@ -262,7 +322,8 @@ function BoardPageContent() {
    const {
        data: comments = [],
        isLoading: isLoadingComments,
-       error: commentsError
+       error: commentsError,
+       refetch: refetchComments, // Add refetch function
    } = useQuery<ClientComment[]>({
        queryKey: ['comments', selectedPost?.id], // Include post ID in query key
        queryFn: () => getCommentsForPost(selectedPost!.id), // Fetch comments for the selected post
@@ -307,6 +368,11 @@ function BoardPageContent() {
        }
    };
    // --- End Handle Comment Submission ---
+
+   // Callback function for CommentItem to trigger refetch after deletion
+   const handleCommentDeleted = () => {
+       refetchComments();
+   };
 
 
   // Loading state for authentication check or initial data fetch
@@ -489,7 +555,13 @@ function BoardPageContent() {
                                     ) : (
                                         <div className="space-y-4">
                                             {comments.map((comment) => (
-                                                <CommentItem key={comment.id} comment={comment} />
+                                                <CommentItem
+                                                   key={comment.id}
+                                                   comment={comment}
+                                                   currentUserId={user?.uid ?? null} // Pass current user ID
+                                                   postId={selectedPost!.id} // Pass post ID
+                                                   onDelete={handleCommentDeleted} // Pass delete handler
+                                                />
                                             ))}
                                         </div>
                                     )}

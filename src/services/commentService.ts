@@ -12,6 +12,8 @@ import {
   orderBy, // Import orderBy
   getDocs, // Import getDocs
   limit,   // Import limit
+  deleteDoc, // Import deleteDoc
+  getDoc,   // Import getDoc
 } from 'firebase/firestore';
 import type { NewCommentData, ClientComment } from '@/types/comment';
 import { getUserProfileBasic } from '@/services/connectionService'; // Import function to get basic user info
@@ -107,7 +109,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
         userId: data.userId,
         text: data.text,
         timestamp: timestampMillis,
-        userName: userProfile?.displayName, // Add user name
+        userName: userProfile?.displayName || `User ${data.userId.substring(0, 4)}...`, // Add user name with fallback
         userAvatar: userProfile?.avatarUrl, // Add avatar url
       };
       return clientComment;
@@ -128,5 +130,37 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
         throw new Error("Firestore query requires an index for comments. Please create it in the Firebase console.");
     }
     throw new Error(`Failed to fetch comments: ${error.message}`);
+  }
+};
+
+// Function to delete a comment from a post's subcollection
+export const deleteCommentFromPost = async (postId: string, commentId: string): Promise<void> => {
+  if (!postId) {
+    throw new Error('Post ID is required to delete a comment.');
+  }
+  if (!commentId) {
+    throw new Error('Comment ID is required to delete a comment.');
+  }
+
+  try {
+    // Reference the specific comment document within the post's subcollection
+    const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
+
+    // Optional: Check if the document exists before attempting deletion (or let rules handle it)
+    // const docSnap = await getDoc(commentDocRef);
+    // if (!docSnap.exists()) {
+    //     console.warn(`Comment ${commentId} on post ${postId} not found.`);
+    //     return; // Or throw error
+    // }
+
+    await deleteDoc(commentDocRef);
+    console.log(`Comment ${commentId} deleted successfully from post ${postId}`);
+  } catch (error: any) {
+    console.error(`Error deleting comment ${commentId} from post ${postId}:`, error);
+    if (error.code === 'permission-denied') {
+      console.error("Firestore permission denied deleting comment. Check rules for 'posts/{postId}/comments/{commentId}'.");
+      throw new Error('Permission denied deleting comment. Ensure you own the comment or have appropriate permissions.');
+    }
+    throw new Error(`Failed to delete comment: ${error.message}`);
   }
 };
