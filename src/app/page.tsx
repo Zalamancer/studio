@@ -41,6 +41,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
+import { addCommentToPost } from '@/services/commentService'; // Import the new comment service
+import type { NewCommentData, ClientComment } from '@/types/comment'; // Import comment types
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
@@ -100,14 +102,15 @@ function BoardPageContent() {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [newComment, setNewComment] = useState(''); // State for new comment input
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false); // State for comment submission loading
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Placeholder comments data
-  const [comments, setComments] = useState([
-      { id: 'c1', userId: 'user1', name: 'Alice B.', avatar: 'https://picsum.photos/seed/user1/40', text: 'This is a helpful question, interested in the answers!', timestamp: new Date(Date.now() - 1000 * 60 * 5) },
-      { id: 'c2', userId: 'user2', name: 'Bob C.', avatar: 'https://picsum.photos/seed/user2/40', text: 'Following this thread.', timestamp: new Date(Date.now() - 1000 * 60 * 2) },
+  // Placeholder comments data - Replace with real-time fetching later
+  const [comments, setComments] = useState<ClientComment[]>([
+      { id: 'c1', userId: 'user1', userName: 'Alice B.', userAvatar: 'https://picsum.photos/seed/user1/40', text: 'This is a helpful question, interested in the answers!', timestamp: Date.now() - 1000 * 60 * 5 },
+      { id: 'c2', userId: 'user2', userName: 'Bob C.', userAvatar: 'https://picsum.photos/seed/user2/40', text: 'Following this thread.', timestamp: Date.now() - 1000 * 60 * 2 },
   ]);
 
 
@@ -239,29 +242,46 @@ function BoardPageContent() {
   }, [posts, selectedTags]);
 
    // --- Handle Comment Submission ---
-   const handleCommentSubmit = (e: React.FormEvent) => {
+   const handleCommentSubmit = async (e: React.FormEvent) => {
        e.preventDefault();
-       if (!user || !selectedPost || !newComment.trim()) return;
+       if (!user || !selectedPost || !newComment.trim() || isSubmittingComment) return;
 
-       console.log(`Submitting comment for post ${selectedPost.id}: "${newComment.trim()}" by user ${user.uid}`);
+       setIsSubmittingComment(true); // Indicate loading state
 
-       // Placeholder: Add comment to Firestore subcollection here
-       // Example:
-       // addCommentToPost(selectedPost.id, { userId: user.uid, text: newComment.trim() });
-
-       // Add to local state for immediate feedback (remove when using real-time listener)
-        const commentToAdd = {
-           id: `c${comments.length + 1}`,
+       const commentData: NewCommentData = {
            userId: user.uid,
-           name: user.displayName || getInitials(user.email), // Use display name or initials
-           avatar: user.photoURL || undefined,
            text: newComment.trim(),
-           timestamp: new Date(),
+           // timestamp is set by the server in the service function
        };
-       setComments(prev => [...prev, commentToAdd]);
 
-       setNewComment(''); // Clear input
-       toast({ title: "Comment Added" });
+       try {
+            const newCommentId = await addCommentToPost(selectedPost.id, commentData);
+            console.log(`Comment ${newCommentId} added to post ${selectedPost.id}`);
+
+            // Add to local state for immediate feedback (replace later with real-time listener)
+             const commentToAdd: ClientComment = {
+               id: newCommentId, // Use the ID returned from Firestore
+               userId: user.uid,
+               userName: user.displayName || getInitials(user.email), // Use display name or initials
+               userAvatar: user.photoURL || undefined,
+               text: newComment.trim(),
+               timestamp: Date.now(), // Use current client time for immediate display
+           };
+           setComments(prev => [...prev, commentToAdd]);
+
+            setNewComment(''); // Clear input
+            toast({ title: "Comment Added" });
+
+       } catch (error: any) {
+           console.error("Error submitting comment:", error);
+           toast({
+               variant: "destructive",
+               title: "Comment Failed",
+               description: `Could not add comment: ${error.message}. Check rules.`,
+           });
+       } finally {
+           setIsSubmittingComment(false); // Reset loading state
+       }
    };
    // --- End Handle Comment Submission ---
 
@@ -438,19 +458,21 @@ function BoardPageContent() {
                                         <p className="text-sm text-muted-foreground">No comments yet.</p>
                                     ) : (
                                         <div className="space-y-4">
+                                            {/* TODO: Fetch and display real comments, map over fetched data */}
                                             {comments.map((comment) => (
                                                 <div key={comment.id} className="flex items-start gap-3">
                                                     <Avatar className="h-8 w-8 mt-1">
-                                                        <AvatarImage src={comment.avatar} alt={comment.name}/>
+                                                        <AvatarImage src={comment.userAvatar} alt={comment.userName}/>
                                                         <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-                                                            {getInitials(comment.name)}
+                                                            {getInitials(comment.userName)}
                                                         </AvatarFallback>
                                                     </Avatar>
                                                     <div className="flex-grow bg-muted/50 p-3 rounded-lg">
                                                         <div className="flex justify-between items-center mb-1">
-                                                             <p className="text-sm font-medium text-foreground">{comment.name}</p>
+                                                             <p className="text-sm font-medium text-foreground">{comment.userName || 'Anonymous'}</p>
                                                              <p className="text-xs text-muted-foreground">
-                                                                 {comment.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                 {/* Format timestamp correctly */}
+                                                                 {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                              </p>
                                                         </div>
                                                         <p className="text-sm text-muted-foreground">{comment.text}</p>
@@ -474,12 +496,12 @@ function BoardPageContent() {
                                          placeholder="Add a comment..."
                                          value={newComment}
                                          onChange={(e) => setNewComment(e.target.value)}
-                                         disabled={!user} // Disable if not logged in
+                                         disabled={!user || isSubmittingComment} // Disable if not logged in or submitting
                                          className="flex-grow"
                                          aria-label="New comment input"
                                      />
-                                     <Button type="submit" size="icon" disabled={!newComment.trim() || !user}>
-                                         <Send className="h-4 w-4" />
+                                     <Button type="submit" size="icon" disabled={!newComment.trim() || !user || isSubmittingComment}>
+                                         {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
                                          <span className="sr-only">Send Comment</span>
                                      </Button>
                                  </form>
