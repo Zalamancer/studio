@@ -1,17 +1,69 @@
-
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow authenticated users to read and write to the 'posts' collection
-    match /posts/{postId} {
-      allow read, write: if request.auth != null;
+
+    // Rules for the 'posts' collection and its 'comments' subcollection
+    match /posts/{postId} { // Changed {document} to {postId} for clarity
+      allow read, write: if request.auth != null; // Basic rule for posts
+
+      // Rules for the 'comments' subcollection within each post
+      match /comments/{commentId} { // Changed {comment} to {commentId} for clarity
+        // Allow any authenticated user to read comments
+        allow read: if request.auth != null;
+        // Allow authenticated users to create comments, ensuring the userId matches
+        allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+        // Allow users to update/delete ONLY their own comments
+        allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+      }
     }
 
-    // Add other rules for different collections if needed
-    // Example: Allow users to read/write their own profile data
-    // match /users/{userId} {
-    //  allow read, update: if request.auth != null && request.auth.uid == userId;
-    //  allow create: if request.auth != null;
-    // }
+    // Rules for the 'conversations' collection and its 'messages' subcollection
+    match /conversations/{conversationId} {
+      allow get, list: if request.auth != null && resource.data.participants.hasAny([request.auth.uid]); // Use resource.data for get/list
+      allow create: if request.auth != null && request.resource.data.participants.size() == 2 && request.resource.data.participants.hasAll([request.auth.uid]);
+      // Separate rule for update might be needed if fields other than messages are updated
+      allow update: if request.auth != null && resource.data.participants.hasAny([request.auth.uid]); // Allow participants to update (e.g., lastMessage)
+
+      // Rules for the 'messages' subcollection within each conversation
+      match /messages/{messageId} {
+        // Allow participants of the conversation to read messages
+        allow read: if request.auth != null
+            && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+        // Allow participants to create messages
+        allow create: if request.auth != null
+            && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid])
+            && request.resource.data.senderId == request.auth.uid; // Ensure senderId matches auth uid
+        // Generally disallow direct updates/deletes of messages
+        allow update, delete: if false; // Or restrict further if needed
+      }
+    }
+
+    // Rules for the 'mutuals' collection (connections)
+    match /mutuals/{connectionId} { // Changed {document} to {connectionId}
+        // Allow users involved in the connection to read it
+        allow read: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
+        // Allow authenticated users to create requests (write is handled by create/update/delete)
+        allow create: if request.auth != null && request.resource.data.requesterId == request.auth.uid; // User can only create requests for themselves
+        // Allow users involved to update (e.g., accept request)
+        allow update: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
+        // Allow users involved to delete (e.g., cancel/reject request, remove connection)
+        allow delete: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
+    }
+
+     // Rules for the 'users' collection (basic profiles)
+     match /users/{userId} {
+       // Allow anyone to read basic profile info
+       allow read: if true;
+       // Allow only the authenticated user to write to their own profile
+       allow write: if request.auth != null && request.auth.uid == userId;
+     }
+
+
+    // Fallback rule - keeps things secure by default if no specific rule matches
+    // Setting this to `if true;` is generally **NOT recommended** for production
+    // as it opens up your entire database. Keep it specific or default to false.
+    match /{document=**} {
+      allow read, write: if false; // Default deny for security
+    }
   }
 }
