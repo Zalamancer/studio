@@ -41,7 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
-import { addCommentToPost } from '@/services/commentService'; // Import the new comment service
+import { addCommentToPost, getCommentsForPost } from '@/services/commentService'; // Import comment services
 import type { NewCommentData, ClientComment } from '@/types/comment'; // Import comment types
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
@@ -96,6 +96,31 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
 });
 PostCard.displayName = 'PostCard'; // Add display name for React DevTools
 
+
+// Component for displaying a single comment
+const CommentItem = React.memo(({ comment }: { comment: ClientComment }) => {
+    return (
+        <div key={comment.id} className="flex items-start gap-3">
+            <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
+                <AvatarImage src={comment.userAvatar} alt={comment.userName} />
+                <AvatarFallback className="text-xs bg-muted text-muted-foreground">
+                    {getInitials(comment.userName)}
+                </AvatarFallback>
+            </Avatar>
+            <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0"> {/* Added min-w-0 */}
+                <div className="flex justify-between items-center mb-1">
+                    <p className="text-sm font-medium text-foreground truncate">{comment.userName || 'Anonymous'}</p>
+                    <p className="text-xs text-muted-foreground flex-shrink-0 ml-2"> {/* Added ml-2 */}
+                        {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                </div>
+                <p className="text-sm text-muted-foreground break-words">{comment.text}</p> {/* Added break-words */}
+            </div>
+        </div>
+    );
+});
+CommentItem.displayName = 'CommentItem';
+
 // Main Board Page Content Component Logic (Renamed from HomePageContent)
 function BoardPageContent() {
   const { user, loading: authLoading } = useAuth(); // Get user and loading state
@@ -106,13 +131,6 @@ function BoardPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-
-  // Placeholder comments data - Replace with real-time fetching later
-  const [comments, setComments] = useState<ClientComment[]>([
-      { id: 'c1', userId: 'user1', userName: 'Alice B.', userAvatar: 'https://picsum.photos/seed/user1/40', text: 'This is a helpful question, interested in the answers!', timestamp: Date.now() - 1000 * 60 * 5 },
-      { id: 'c2', userId: 'user2', userName: 'Bob C.', userAvatar: 'https://picsum.photos/seed/user2/40', text: 'Following this thread.', timestamp: Date.now() - 1000 * 60 * 2 },
-  ]);
-
 
   // Redirect unauthenticated users after loading is finished
   useEffect(() => {
@@ -149,8 +167,6 @@ function BoardPageContent() {
                title: "Deletion Failed",
                description: `Could not delete the post: ${error.message}. Check console and Firestore rules.`,
            });
-           // Optionally close the sheet even on error, or leave it open
-           // setSelectedPost(null);
        },
    });
    // --- End Delete Post Mutation ---
@@ -241,6 +257,21 @@ function BoardPageContent() {
 
   }, [posts, selectedTags]);
 
+
+   // --- Fetch Comments for Selected Post ---
+   const {
+       data: comments = [],
+       isLoading: isLoadingComments,
+       error: commentsError
+   } = useQuery<ClientComment[]>({
+       queryKey: ['comments', selectedPost?.id], // Include post ID in query key
+       queryFn: () => getCommentsForPost(selectedPost!.id), // Fetch comments for the selected post
+       enabled: !!selectedPost && !!selectedPost.id, // Only fetch if a post is selected and has an ID
+       staleTime: 1000 * 60 * 1, // 1 minute stale time
+       refetchOnWindowFocus: true,
+   });
+   // --- End Fetch Comments ---
+
    // --- Handle Comment Submission ---
    const handleCommentSubmit = async (e: React.FormEvent) => {
        e.preventDefault();
@@ -258,16 +289,8 @@ function BoardPageContent() {
             const newCommentId = await addCommentToPost(selectedPost.id, commentData);
             console.log(`Comment ${newCommentId} added to post ${selectedPost.id}`);
 
-            // Add to local state for immediate feedback (replace later with real-time listener)
-             const commentToAdd: ClientComment = {
-               id: newCommentId, // Use the ID returned from Firestore
-               userId: user.uid,
-               userName: user.displayName || getInitials(user.email), // Use display name or initials
-               userAvatar: user.photoURL || undefined,
-               text: newComment.trim(),
-               timestamp: Date.now(), // Use current client time for immediate display
-           };
-           setComments(prev => [...prev, commentToAdd]);
+            // --- Invalidate comments query to refetch ---
+            queryClient.invalidateQueries({ queryKey: ['comments', selectedPost.id] });
 
             setNewComment(''); // Clear input
             toast({ title: "Comment Added" });
@@ -452,32 +475,21 @@ function BoardPageContent() {
                                 {/* --- Comments Section --- */}
                                 <div className="mt-6 border-t pt-4">
                                     <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
-                                        <MessageCircle className="h-5 w-5 text-primary"/> Comments ({comments.length})
+                                        <MessageCircle className="h-5 w-5 text-primary"/> Comments ({isLoadingComments ? '...' : comments.length})
                                     </h4>
-                                    {comments.length === 0 ? (
+                                    {isLoadingComments ? (
+                                        <div className="space-y-4">
+                                            <Skeleton className="h-16 w-full" />
+                                            <Skeleton className="h-16 w-full" />
+                                        </div>
+                                    ) : commentsError ? (
+                                        <p className="text-sm text-destructive">Error loading comments.</p>
+                                    ) : comments.length === 0 ? (
                                         <p className="text-sm text-muted-foreground">No comments yet.</p>
                                     ) : (
                                         <div className="space-y-4">
-                                            {/* TODO: Fetch and display real comments, map over fetched data */}
                                             {comments.map((comment) => (
-                                                <div key={comment.id} className="flex items-start gap-3">
-                                                    <Avatar className="h-8 w-8 mt-1">
-                                                        <AvatarImage src={comment.userAvatar} alt={comment.userName}/>
-                                                        <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-                                                            {getInitials(comment.userName)}
-                                                        </AvatarFallback>
-                                                    </Avatar>
-                                                    <div className="flex-grow bg-muted/50 p-3 rounded-lg">
-                                                        <div className="flex justify-between items-center mb-1">
-                                                             <p className="text-sm font-medium text-foreground">{comment.userName || 'Anonymous'}</p>
-                                                             <p className="text-xs text-muted-foreground">
-                                                                 {/* Format timestamp correctly */}
-                                                                 {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                             </p>
-                                                        </div>
-                                                        <p className="text-sm text-muted-foreground">{comment.text}</p>
-                                                    </div>
-                                                </div>
+                                                <CommentItem key={comment.id} comment={comment} />
                                             ))}
                                         </div>
                                     )}

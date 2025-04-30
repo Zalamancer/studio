@@ -20,3 +20,4 @@ export interface ClientComment extends Omit<Comment, 'timestamp'> {
 
 // Data needed to create a new comment (postId is implicit via subcollection path)
 export type NewCommentData = Omit<Comment, 'id' | 'timestamp'>;
+```
