@@ -21,7 +21,7 @@ This is a Next.js application for the AnonyCollab platform, built using Firebase
     NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=YOUR_FIREBASE_STORAGE_BUCKET
     NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=YOUR_FIREBASE_MESSAGING_SENDER_ID
     NEXT_PUBLIC_FIREBASE_APP_ID=YOUR_FIREBASE_APP_ID
-    # NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=YOUR_FIREBASE_MEASUREMENT_ID # Optional
+    NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID=YOUR_FIREBASE_MEASUREMENT_ID # Optional
 
     # Genkit/Google AI Config (Required for AI features)
     # Obtain an API key from Google AI Studio: https://aistudio.google.com/app/apikey

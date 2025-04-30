@@ -5,7 +5,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation';
 import Link from 'next/link'; // Import Link
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader } from "@/components/ui/card";
+import { Card, CardHeader, CardContent, CardTitle as UICardTitle } from "@/components/ui/card"; // Renamed CardTitle import
 import { Badge } from "@/components/ui/badge";
 import {
   Sheet,
@@ -13,6 +13,7 @@ import {
   SheetDescription,
   SheetHeader,
   SheetTitle,
+  SheetFooter, // Import SheetFooter
 } from "@/components/ui/sheet"
 import {
     AlertDialog,
@@ -25,9 +26,12 @@ import {
     AlertDialogTitle,
     AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Input } from "@/components/ui/input"; // Import Input for comment form
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Import Avatar for comment display
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Separator } from "@/components/ui/separator"; // Import Separator
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2 } from "lucide-react"; // Added Eye, Building, Link2 icons
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send } from "lucide-react"; // Added MessageCircle, Send icons
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
@@ -40,6 +44,15 @@ import { ConnectionButton } from '@/components/ConnectionButton'; // Import Conn
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
+
+// Helper to get initials
+const getInitials = (name: string | undefined | null): string => {
+    if (!name) return '?';
+    const names = name.split(' ');
+    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
+    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
+};
+
 
 // Component for Post Card
 const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void }) => {
@@ -86,9 +99,17 @@ function BoardPageContent() {
   const { user, loading: authLoading } = useAuth(); // Get user and loading state
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
+  const [newComment, setNewComment] = useState(''); // State for new comment input
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // Placeholder comments data
+  const [comments, setComments] = useState([
+      { id: 'c1', userId: 'user1', name: 'Alice B.', avatar: 'https://picsum.photos/seed/user1/40', text: 'This is a helpful question, interested in the answers!', timestamp: new Date(Date.now() - 1000 * 60 * 5) },
+      { id: 'c2', userId: 'user2', name: 'Bob C.', avatar: 'https://picsum.photos/seed/user2/40', text: 'Following this thread.', timestamp: new Date(Date.now() - 1000 * 60 * 2) },
+  ]);
+
 
   // Redirect unauthenticated users after loading is finished
   useEffect(() => {
@@ -217,6 +238,33 @@ function BoardPageContent() {
 
   }, [posts, selectedTags]);
 
+   // --- Handle Comment Submission ---
+   const handleCommentSubmit = (e: React.FormEvent) => {
+       e.preventDefault();
+       if (!user || !selectedPost || !newComment.trim()) return;
+
+       console.log(`Submitting comment for post ${selectedPost.id}: "${newComment.trim()}" by user ${user.uid}`);
+
+       // Placeholder: Add comment to Firestore subcollection here
+       // Example:
+       // addCommentToPost(selectedPost.id, { userId: user.uid, text: newComment.trim() });
+
+       // Add to local state for immediate feedback (remove when using real-time listener)
+        const commentToAdd = {
+           id: `c${comments.length + 1}`,
+           userId: user.uid,
+           name: user.displayName || getInitials(user.email), // Use display name or initials
+           avatar: user.photoURL || undefined,
+           text: newComment.trim(),
+           timestamp: new Date(),
+       };
+       setComments(prev => [...prev, commentToAdd]);
+
+       setNewComment(''); // Clear input
+       toast({ title: "Comment Added" });
+   };
+   // --- End Handle Comment Submission ---
+
 
   // Loading state for authentication check or initial data fetch
   if (authLoading || (isLoadingPosts && !posts?.length)) {
@@ -311,163 +359,200 @@ function BoardPageContent() {
 
         {/* Post Detail Side Panel */}
         <Sheet open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
-            <SheetContent className="sm:max-w-lg w-[90vw] p-0" side="right">
-                <ScrollArea className="h-screen">
+            <SheetContent className="sm:max-w-lg w-[90vw] p-0 flex flex-col" side="right"> {/* Make content flex column */}
                 {selectedPost && (
-                    <div className="p-6 flex flex-col h-full"> {/* Make flex column */}
-                        <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
-                            <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
-                             <div className="flex flex-wrap items-center gap-2 pt-1">
-                                {selectedPost.tags?.map((tag, index) => (
-                                <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
-                                ))}
+                    <>
+                        <ScrollArea className="flex-grow"> {/* Scroll main content */}
+                            <div className="p-6 pb-0"> {/* Add padding, remove bottom padding */}
+                                <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
+                                    <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
+                                     <div className="flex flex-wrap items-center gap-2 pt-1">
+                                        {selectedPost.tags?.map((tag, index) => (
+                                        <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
+                                        ))}
+                                    </div>
+                                     <SheetDescription className="text-sm pt-1">
+                                        Posted on: {selectedPost.createdAt instanceof Timestamp ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
+                                    </SheetDescription>
+                                </SheetHeader>
+
+                                <div className="space-y-4 text-sm mb-6"> {/* Add bottom margin */}
+                                     {selectedPost.description && (
+                                         <div>
+                                             <strong className="text-foreground">Details:</strong>
+                                             <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{selectedPost.description}</p>
+                                         </div>
+                                     )}
+
+                                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4">
+                                          <div>
+                                              <strong className="block text-foreground">Sector:</strong>
+                                              <span className="text-muted-foreground">{selectedPost.sector || 'N/A'}</span>
+                                           </div>
+                                            <div>
+                                                <strong className="block text-foreground">Business Type:</strong>
+                                                <span className="text-muted-foreground">{selectedPost.businessType || 'N/A'}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <strong className="text-foreground">Safety Indicator:</strong>
+                                                <span className={cn(
+                                                    "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                                                    selectedPost.safetyIndicator === 'High' ? "bg-primary text-primary-foreground"
+                                                    : selectedPost.safetyIndicator === 'Medium' ? "bg-secondary text-secondary-foreground"
+                                                    : "bg-destructive text-destructive-foreground"
+                                                  )}>
+                                                    {selectedPost.safetyIndicator || 'N/A'}
+                                                </span>
+                                            </div>
+                                            <div>
+                                                <strong className="block text-foreground">Rating Score:</strong>
+                                                <span className="text-muted-foreground">{selectedPost.ratingScore ? `${selectedPost.ratingScore} / 5` : 'N/A'}</span>
+                                            </div>
+                                     </div>
+                                       {/* --- View Business Profile Link --- */}
+                                       {user && selectedPost.userId !== user.uid && ( // Show only if logged in and not the owner
+                                         <div className="mt-4 border-t pt-4">
+                                           <Link
+                                               href={`/profile/${selectedPost.userId}`} // Link to a dynamic profile page
+                                               passHref
+                                               legacyBehavior // Needed for passing href to Button asChild
+                                           >
+                                               <Button variant="link" size="sm" className="text-primary p-0 h-auto flex items-center gap-1">
+                                                   <Building className="h-4 w-4" /> View Business Profile
+                                               </Button>
+                                           </Link>
+                                           <p className="text-xs text-muted-foreground mt-1">
+                                               (Business details are revealed upon connection/contract)
+                                           </p>
+                                         </div>
+                                       )}
+                                       {/* --- End View Business Profile Link --- */}
+                                </div>
+
+                                {/* --- Comments Section --- */}
+                                <div className="mt-6 border-t pt-4">
+                                    <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                                        <MessageCircle className="h-5 w-5 text-primary"/> Comments ({comments.length})
+                                    </h4>
+                                    {comments.length === 0 ? (
+                                        <p className="text-sm text-muted-foreground">No comments yet.</p>
+                                    ) : (
+                                        <div className="space-y-4">
+                                            {comments.map((comment) => (
+                                                <div key={comment.id} className="flex items-start gap-3">
+                                                    <Avatar className="h-8 w-8 mt-1">
+                                                        <AvatarImage src={comment.avatar} alt={comment.name}/>
+                                                        <AvatarFallback className="text-xs bg-muted text-muted-foreground">
+                                                            {getInitials(comment.name)}
+                                                        </AvatarFallback>
+                                                    </Avatar>
+                                                    <div className="flex-grow bg-muted/50 p-3 rounded-lg">
+                                                        <div className="flex justify-between items-center mb-1">
+                                                             <p className="text-sm font-medium text-foreground">{comment.name}</p>
+                                                             <p className="text-xs text-muted-foreground">
+                                                                 {comment.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                             </p>
+                                                        </div>
+                                                        <p className="text-sm text-muted-foreground">{comment.text}</p>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                                {/* --- End Comments Section --- */}
                             </div>
-                             <SheetDescription className="text-sm pt-1">
-                                Posted on: {selectedPost.createdAt instanceof Timestamp ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
-                            </SheetDescription>
-                        </SheetHeader>
+                        </ScrollArea>
 
-                        <div className="space-y-4 text-sm flex-grow"> {/* Make content area grow */}
-                             {selectedPost.description && (
-                                 <div>
-                                     <strong className="text-foreground">Details:</strong>
-                                     <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{selectedPost.description}</p>
-                                 </div>
-                             )}
-
-                             <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4">
-                                  <div>
-                                      <strong className="block text-foreground">Sector:</strong>
-                                      <span className="text-muted-foreground">{selectedPost.sector || 'N/A'}</span>
-                                   </div>
-                                    <div>
-                                        <strong className="block text-foreground">Business Type:</strong>
-                                        <span className="text-muted-foreground">{selectedPost.businessType || 'N/A'}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2">
-                                        <strong className="text-foreground">Safety Indicator:</strong>
-                                        {/* Changed Badge to span as it cannot be inside p */}
-                                        <span className={cn(
-                                            "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
-                                            selectedPost.safetyIndicator === 'High' ? "bg-primary text-primary-foreground"
-                                            : selectedPost.safetyIndicator === 'Medium' ? "bg-secondary text-secondary-foreground"
-                                            : "bg-destructive text-destructive-foreground"
-                                          )}>
-                                            {selectedPost.safetyIndicator || 'N/A'}
-                                        </span>
-                                    </div>
-                                    <div>
-                                        <strong className="block text-foreground">Rating Score:</strong>
-                                        <span className="text-muted-foreground">{selectedPost.ratingScore ? `${selectedPost.ratingScore} / 5` : 'N/A'}</span>
-                                    </div>
-                             </div>
-                               {/* --- View Business Profile Link --- */}
-                               {user && selectedPost.userId !== user.uid && ( // Show only if logged in and not the owner
-                                 <div className="mt-4 border-t pt-4">
-                                   <Link
-                                       href={`/profile/${selectedPost.userId}`} // Link to a dynamic profile page
-                                       passHref
-                                       legacyBehavior // Needed for passing href to Button asChild
-                                   >
-                                       <Button variant="link" size="sm" className="text-primary p-0 h-auto flex items-center gap-1">
-                                           <Building className="h-4 w-4" /> View Business Profile
-                                       </Button>
-                                   </Link>
-                                   <p className="text-xs text-muted-foreground mt-1">
-                                       (Business details are revealed upon connection/contract)
-                                   </p>
-                                 </div>
-                               )}
-                               {/* --- End View Business Profile Link --- */}
-
-                             {/* Placeholder for Stock Graph */}
-                              {/* <div>
-                                 <strong className="text-foreground">Business Stock Graph:</strong>
-                                  Placeholder content
-                                 <div className="mt-2 h-32 bg-muted rounded flex items-center justify-center text-muted-foreground text-xs">
-                                    Stock Graph Placeholder
-                                 </div>
-                              </div> */}
-                        </div>
-                         {/* --- Buttons including Delete --- */}
-                         <div className="mt-6 pt-4 border-t flex justify-end gap-2">
-                             {/* Render action buttons only if user is logged in AND is NOT the owner of the post */}
-                              {user && selectedPost.userId !== user.uid && (
-                                <>
-                                    <Button
-                                        variant="outline"
-                                        size="sm"
-                                        onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id)} // Pass owner ID and post ID
-                                        >
-                                         <HandHelping className="mr-2 h-4 w-4" /> Offer Help
-                                     </Button>
-                                     {/* Use ConnectionButton for connect actions */}
-                                     <ConnectionButton
-                                        targetUserId={selectedPost.userId}
-                                        // Pass target user name if available for better messages
-                                        // targetUserName={selectedPost.userName || 'this user'}
-                                        size="sm"
-                                        variant="default" // Keep consistent with old style or choose another
+                         {/* Fixed Footer for Actions and Comment Input */}
+                         <SheetFooter className="p-6 border-t bg-background mt-auto sticky bottom-0"> {/* Make footer sticky */}
+                             <div className="w-full space-y-4">
+                                 {/* Comment Input Form */}
+                                 <form onSubmit={handleCommentSubmit} className="flex items-center gap-2">
+                                     <Input
+                                         type="text"
+                                         placeholder="Add a comment..."
+                                         value={newComment}
+                                         onChange={(e) => setNewComment(e.target.value)}
+                                         disabled={!user} // Disable if not logged in
+                                         className="flex-grow"
+                                         aria-label="New comment input"
                                      />
-                                 </>
-                              )}
-
-                             {/* Render Delete Button only if the user is logged in AND IS the owner of the post */}
-                             {user && selectedPost.userId === user.uid && (
-                                 <AlertDialog>
-                                     <AlertDialogTrigger asChild>
-                                         <Button
-                                             variant="destructive"
-                                             size="sm"
-                                             disabled={deletePostMutation.isPending}
-                                         >
-                                             {deletePostMutation.isPending ? (
-                                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                             ) : (
-                                                 <Trash2 className="mr-2 h-4 w-4" />
-                                             )}
-                                             Delete
-                                         </Button>
-                                     </AlertDialogTrigger>
-                                     <AlertDialogContent>
-                                         <AlertDialogHeader>
-                                             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                                             <AlertDialogDescription>
-                                                 This action cannot be undone. This will permanently delete your post
-                                                 and remove your data from our servers.
-                                             </AlertDialogDescription>
-                                         </AlertDialogHeader>
-                                         <AlertDialogFooter>
-                                             <AlertDialogCancel disabled={deletePostMutation.isPending}>Cancel</AlertDialogCancel>
-                                             <AlertDialogAction
-                                                 onClick={() => handleDeletePost(selectedPost.id)}
-                                                 disabled={deletePostMutation.isPending}
-                                                 className="bg-destructive hover:bg-destructive/90"
+                                     <Button type="submit" size="icon" disabled={!newComment.trim() || !user}>
+                                         <Send className="h-4 w-4" />
+                                         <span className="sr-only">Send Comment</span>
+                                     </Button>
+                                 </form>
+                                 {/* Existing Action Buttons */}
+                                 <div className="flex justify-end gap-2">
+                                     {user && selectedPost.userId !== user.uid && (
+                                         <>
+                                             <Button
+                                                 variant="outline"
+                                                 size="sm"
+                                                 onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id)}
                                              >
-                                                 {deletePostMutation.isPending ? (
-                                                     <>
+                                                 <HandHelping className="mr-2 h-4 w-4" /> Offer Help
+                                             </Button>
+                                             <ConnectionButton
+                                                 targetUserId={selectedPost.userId}
+                                                 size="sm"
+                                                 variant="default"
+                                             />
+                                         </>
+                                     )}
+                                     {user && selectedPost.userId === user.uid && (
+                                         <AlertDialog>
+                                             <AlertDialogTrigger asChild>
+                                                 <Button
+                                                     variant="destructive"
+                                                     size="sm"
+                                                     disabled={deletePostMutation.isPending}
+                                                 >
+                                                     {deletePostMutation.isPending ? (
                                                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                                                         Deleting...
-                                                     </>
-                                                 ) : (
-                                                     'Continue'
-                                                 )}
-                                             </AlertDialogAction>
-                                         </AlertDialogFooter>
-                                     </AlertDialogContent>
-                                 </AlertDialog>
-                             )}
-                         </div>
-                         {/* --- End Buttons --- */}
-                    </div>
+                                                     ) : (
+                                                         <Trash2 className="mr-2 h-4 w-4" />
+                                                     )}
+                                                     Delete Post
+                                                 </Button>
+                                             </AlertDialogTrigger>
+                                             <AlertDialogContent>
+                                                 <AlertDialogHeader>
+                                                     <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                                                     <AlertDialogDescription>
+                                                         This action cannot be undone. This will permanently delete your post.
+                                                     </AlertDialogDescription>
+                                                 </AlertDialogHeader>
+                                                 <AlertDialogFooter>
+                                                     <AlertDialogCancel disabled={deletePostMutation.isPending}>Cancel</AlertDialogCancel>
+                                                     <AlertDialogAction
+                                                         onClick={() => handleDeletePost(selectedPost.id)}
+                                                         disabled={deletePostMutation.isPending}
+                                                         className="bg-destructive hover:bg-destructive/90"
+                                                     >
+                                                         {deletePostMutation.isPending ? (
+                                                             <>
+                                                                 <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...
+                                                             </>
+                                                         ) : (
+                                                             'Continue'
+                                                         )}
+                                                     </AlertDialogAction>
+                                                 </AlertDialogFooter>
+                                             </AlertDialogContent>
+                                         </AlertDialog>
+                                     )}
+                                 </div>
+                             </div>
+                         </SheetFooter>
+                    </>
                 )}
-                </ScrollArea>
             </SheetContent>
         </Sheet>
     </div>
   );
 }
 
-// Wrap the main content with QueryClientProvider (this is handled by Providers in layout now)
 // Export the BoardPageContent component as the default export for this page route
 export default BoardPageContent;
