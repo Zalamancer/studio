@@ -38,6 +38,7 @@ import type { NewPostData, Post } from '@/types/post';
 import { addPostToFirestore } from '@/services/postService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
+import { cn } from '@/lib/utils'; // Import cn for class merging
 
 // Navigation items definition (moved here for clarity)
 const navItems = [
@@ -228,28 +229,29 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild>
+                    {/* Apply cursor-pointer to interactive items */}
+                    <DropdownMenuItem asChild className="cursor-pointer">
                       <Link href={`/profile/${user.uid}`}>
                         <User className="mr-2 h-4 w-4" />
                         <span>Profile</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                        <Link href="/subscription">
                         <CreditCard className="mr-2 h-4 w-4" />
                         <span>Subscription</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
+                    <DropdownMenuItem asChild className="cursor-pointer">
                        <Link href="/settings/profile"> {/* Link to settings */}
                         <Settings className="mr-2 h-4 w-4" />
                         <span>Settings</span>
                       </Link>
                     </DropdownMenuItem>
-                    {/* Add Theme Toggle Item */}
+                    {/* Add Theme Toggle Item - keep cursor-pointer */}
                     <ThemeToggle />
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout}>
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
                        <LogOut className="mr-2 h-4 w-4" />
                       <span>Log out</span>
                     </DropdownMenuItem>

@@ -17,8 +17,9 @@ export function ThemeToggle() {
     setTheme(theme === "light" ? "dark" : "light");
   };
 
+  // Apply cursor-pointer directly to the DropdownMenuItem
   return (
-    <DropdownMenuItem onClick={toggleTheme}>
+    <DropdownMenuItem onClick={toggleTheme} className="cursor-pointer">
       {theme === "light" ? (
         <Sun className="mr-2 h-4 w-4" />
       ) : (
@@ -28,3 +29,4 @@ export function ThemeToggle() {
     </DropdownMenuItem>
   );
 }
+
