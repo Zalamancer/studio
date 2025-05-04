@@ -14,6 +14,10 @@ import {
   limit,   // Import limit
   deleteDoc, // Import deleteDoc
   getDoc,   // Import getDoc
+  runTransaction, // Import runTransaction for atomic updates
+  arrayUnion, // For adding to likedBy array
+  arrayRemove, // For removing from likedBy array
+  increment, // For updating likeCount atomically
 } from 'firebase/firestore';
 import type { NewCommentData, ClientComment, NewSubCommentData, ClientSubComment } from '@/types/comment';
 import { getUserProfileBasic } from '@/services/connectionService'; // Import function to get basic user info
@@ -21,7 +25,7 @@ import { getUserProfileBasic } from '@/services/connectionService'; // Import fu
 // --- Comment Functions ---
 
 // Function to add a new comment to a post's subcollection
-export const addCommentToPost = async (postId: string, commentData: NewCommentData): Promise<string> => {
+export const addCommentToPost = async (postId: string, commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
   if (!postId) {
     throw new Error('Post ID is required to add a comment.');
   }
@@ -36,10 +40,15 @@ export const addCommentToPost = async (postId: string, commentData: NewCommentDa
     const postDocRef = doc(db, 'posts', postId);
     const commentsCollectionRef = collection(postDocRef, 'comments');
 
-    const docRef = await addDoc(commentsCollectionRef, {
-      ...commentData,
-      timestamp: serverTimestamp(),
-    });
+    // Initialize like fields
+    const fullCommentData: NewCommentData & { timestamp: Timestamp } = {
+        ...commentData,
+        likeCount: 0, // Initialize like count
+        likedBy: [], // Initialize empty likedBy array
+        timestamp: serverTimestamp() as Timestamp, // Add server timestamp here
+    };
+
+    const docRef = await addDoc(commentsCollectionRef, fullCommentData);
 
     console.log(`Comment added successfully to post ${postId} with ID: ${docRef.id}`);
     return docRef.id;
@@ -53,7 +62,7 @@ export const addCommentToPost = async (postId: string, commentData: NewCommentDa
   }
 };
 
-// Function to fetch comments for a specific post, returning serializable data
+// Function to fetch comments for a specific post, returning serializable data including likes
 export const getCommentsForPost = async (postId: string): Promise<ClientComment[]> => {
   if (!postId) {
     console.warn("getCommentsForPost called with invalid postId.");
@@ -107,6 +116,8 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
         timestamp: timestampMillis,
         userName: userProfile?.displayName || `User ${data.userId.substring(0, 4)}...`,
         userAvatar: userProfile?.avatarUrl,
+        likeCount: data.likeCount || 0, // Include like count, default to 0
+        likedBy: data.likedBy || [], // Include likedBy array, default to empty
       };
       return clientComment;
     }).filter((comment): comment is ClientComment => comment !== null);
@@ -127,6 +138,51 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
     throw new Error(`Failed to fetch comments: ${error.message}`);
   }
 };
+
+// Function to toggle a like on a comment (atomic update)
+export const toggleLikeComment = async (postId: string, commentId: string, userId: string): Promise<void> => {
+    if (!postId || !commentId || !userId) {
+        throw new Error('Post ID, Comment ID, and User ID are required to toggle like.');
+    }
+
+    const commentRef = doc(db, 'posts', postId, 'comments', commentId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const commentSnap = await transaction.get(commentRef);
+            if (!commentSnap.exists()) {
+                throw new Error("Comment does not exist!");
+            }
+
+            const commentData = commentSnap.data();
+            const likedBy: string[] = commentData.likedBy || [];
+            const isLiked = likedBy.includes(userId);
+
+            if (isLiked) {
+                // User has already liked, so unlike
+                transaction.update(commentRef, {
+                    likedBy: arrayRemove(userId),
+                    likeCount: increment(-1)
+                });
+            } else {
+                // User has not liked, so like
+                transaction.update(commentRef, {
+                    likedBy: arrayUnion(userId),
+                    likeCount: increment(1)
+                });
+            }
+        });
+        console.log(`Like toggled successfully for comment ${commentId} by user ${userId}`);
+    } catch (error: any) {
+        console.error(`Error toggling like for comment ${commentId}:`, error);
+        if (error.code === 'permission-denied') {
+            console.error("Firestore permission denied toggling like. Check rules for updating 'posts/{postId}/comments/{commentId}'.");
+            throw new Error('Permission denied. Check Firestore security rules.');
+        }
+        throw new Error(`Failed to toggle like: ${error.message}`);
+    }
+};
+
 
 // Function to delete a comment from a post's subcollection
 export const deleteCommentFromPost = async (postId: string, commentId: string): Promise<void> => {

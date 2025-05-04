@@ -31,7 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; //
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator"; // Import Separator
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight } from "lucide-react"; // Added MessageCircle, Send, Trash, CornerDownRight icons
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart } from "lucide-react"; // Added MessageCircle, Send, Trash, CornerDownRight, Heart icons
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,7 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
-import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment } from '@/services/commentService'; // Import comment/subcomment services
+import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment } from '@/services/commentService'; // Import comment/subcomment/like services
 import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment'; // Import comment/subcomment types
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
@@ -183,12 +183,16 @@ SubCommentItem.displayName = 'SubCommentItem';
 const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { comment: ClientComment, currentUserId: string | null, postId: string, onDelete: () => void }) => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const { user } = useAuth(); // Get current user for adding replies
+    const { user } = useAuth(); // Get current user for adding replies and liking
     const isOwnComment = comment.userId === currentUserId;
     const [showReplies, setShowReplies] = useState(false); // State to toggle replies visibility
     const [newReply, setNewReply] = useState(''); // State for new reply input
     const [isReplying, setIsReplying] = useState(false); // State to show reply input form
     const [isSubmittingReply, setIsSubmittingReply] = useState(false);
+    const [isLiking, setIsLiking] = useState(false); // State for liking loading
+
+    // Derived state: Check if the current user has liked this comment
+    const hasLiked = !!(currentUserId && comment.likedBy?.includes(currentUserId));
 
     // --- Fetch SubComments (Replies) ---
     const {
@@ -263,6 +267,55 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         addReplyMutation.mutate(replyData);
     };
 
+    // --- Toggle Like Mutation ---
+    const toggleLikeMutation = useMutation({
+        mutationFn: () => {
+            if (!user) throw new Error("User must be logged in to like");
+            return toggleLikeComment(postId, comment.id, user.uid);
+        },
+        onMutate: async () => {
+            setIsLiking(true);
+            // Optimistic UI update
+            await queryClient.cancelQueries({ queryKey: ['comments', postId] });
+            const previousComments = queryClient.getQueryData<ClientComment[]>(['comments', postId]);
+
+            queryClient.setQueryData<ClientComment[]>(['comments', postId], (oldComments = []) =>
+                oldComments.map(c => {
+                    if (c.id === comment.id) {
+                        const currentlyLiked = c.likedBy?.includes(user!.uid);
+                        return {
+                            ...c,
+                            likeCount: currentlyLiked ? (c.likeCount ?? 1) - 1 : (c.likeCount ?? 0) + 1,
+                            likedBy: currentlyLiked
+                                ? c.likedBy?.filter(uid => uid !== user!.uid) ?? []
+                                : [...(c.likedBy ?? []), user!.uid],
+                        };
+                    }
+                    return c;
+                })
+            );
+            return { previousComments };
+        },
+        onError: (err, _variables, context) => {
+            console.error("Error toggling like:", err);
+            toast({ variant: "destructive", title: "Like Failed", description: "Could not update like." });
+            // Rollback on error
+            if (context?.previousComments) {
+                queryClient.setQueryData(['comments', postId], context.previousComments);
+            }
+        },
+        onSettled: () => {
+            setIsLiking(false);
+            // Refetch comments after mutation to ensure consistency
+            queryClient.invalidateQueries({ queryKey: ['comments', postId] });
+        },
+    });
+
+    const handleLikeClick = () => {
+        if (!user || isLiking) return;
+        toggleLikeMutation.mutate();
+    };
+
     // Toggle showing/hiding replies
     const toggleShowReplies = () => {
         setShowReplies(prev => !prev);
@@ -334,13 +387,33 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                 </div>
             </div>
 
-            {/* Reply & Show Replies Buttons */}
-            <div className="flex items-center gap-2 pl-11 mt-2"> {/* Align with comment text */}
+            {/* Reply, Like & Show Replies Buttons */}
+            <div className="flex items-center gap-3 pl-11 mt-2"> {/* Align with comment text, added gap */}
                  {user && ( // Only show reply button if logged in
                     <Button variant="ghost" size="xs" onClick={toggleReplyForm} className="text-xs text-muted-foreground hover:text-primary h-auto p-1">
                         <CornerDownRight className="h-3 w-3 mr-1" /> Reply
                     </Button>
                  )}
+                  {user && ( // Only show like button if logged in
+                      <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={handleLikeClick}
+                          disabled={isLiking}
+                          className={cn(
+                              "text-xs h-auto p-1 flex items-center gap-1",
+                              hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
+                          )}
+                          aria-pressed={hasLiked}
+                      >
+                          {isLiking ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                              <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
+                          )}
+                          Like {comment.likeCount > 0 ? `(${comment.likeCount})` : ''}
+                      </Button>
+                  )}
                  <Button variant="ghost" size="xs" onClick={toggleShowReplies} className="text-xs text-muted-foreground hover:text-primary h-auto p-1">
                      {showReplies ? 'Hide Replies' : `View Replies ${isLoadingSubComments ? '...' : subComments.length > 0 ? `(${subComments.length})` : ''}`}
                  </Button>
@@ -555,7 +628,8 @@ function BoardPageContent() {
 
        setIsSubmittingComment(true); // Indicate loading state
 
-       const commentData: NewCommentData = {
+       // Adjust type based on imported comment service function expectation
+       const commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'> = {
            userId: user.uid,
            text: newComment.trim(),
            // timestamp is set by the server in the service function
@@ -566,7 +640,8 @@ function BoardPageContent() {
             console.log(`Comment ${newCommentId} added to post ${selectedPost.id}`);
 
             // --- Invalidate comments query to refetch ---
-            queryClient.invalidateQueries({ queryKey: ['comments', selectedPost.id] });
+            // Use invalidateQueries for better reactivity
+            await queryClient.invalidateQueries({ queryKey: ['comments', selectedPost.id] });
 
             setNewComment(''); // Clear input
             toast({ title: "Comment Added" });
