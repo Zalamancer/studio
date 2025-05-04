@@ -30,6 +30,7 @@ import { Input } from "@/components/ui/input"; // Import Input for comment form
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Import Avatar for comment display
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator"; // Import Separator
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover for suggestions
 import { cn } from "@/lib/utils";
 import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles, AtSign } from "lucide-react"; // Added AtSign icon
 import { useToast } from "@/hooks/use-toast";
@@ -45,20 +46,79 @@ import { ConnectionButton } from '@/components/ConnectionButton'; // Import Conn
 import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService'; // Import comment/subcomment/like services
 import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment'; // Import comment/subcomment types
 import { getUserProfileBasic } from '@/services/connectionService'; // To potentially resolve mentions
+import type { UserProfileBasic } from '@/types/connection'; // Import UserProfileBasic type
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
 
-// Helper to get initials
+// --- Helper: Get Initials ---
 const getInitials = (displayName: string | undefined | null): string => {
     if (!displayName) return '?';
-    // If starts with @, use the next char or default to '?'
     if (displayName.startsWith('@')) {
         return displayName.length > 1 ? displayName.charAt(1).toUpperCase() : '?';
     }
-    // Use first letter of the name
     return displayName.charAt(0).toUpperCase();
 };
+
+// --- Helper: Render Text with Mentions as Links ---
+const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: string, mentionedUserIds?: string[] }) => {
+    const { data: mentionProfilesMap = new Map(), isLoading: isLoadingMentions } = useQuery<Map<string, UserProfileBasic | null>>({
+        queryKey: ['mentionProfiles', mentionedUserIds],
+        queryFn: async () => {
+            const profiles = new Map<string, UserProfileBasic | null>();
+            await Promise.all(
+                mentionedUserIds.map(async (userId) => {
+                    // Use existing profile fetching function
+                    const profile = await getUserProfileBasic(userId);
+                    profiles.set(userId, profile);
+                })
+            );
+            return profiles;
+        },
+        enabled: mentionedUserIds.length > 0,
+        staleTime: Infinity, // Cache profiles heavily
+    });
+
+    if (mentionedUserIds.length === 0 || isLoadingMentions) {
+        return <>{text}</>; // Return plain text if no mentions or still loading profiles
+    }
+
+    // Simple replacement logic (can be improved for robustness)
+    // Split text by potential mention patterns (e.g., @username or @id)
+    const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
+
+    return (
+        <>
+            {parts.map((part, index) => {
+                if (part.startsWith('@')) {
+                    const potentialIdOrName = part.substring(1);
+                    // Find the user ID from the map whose name matches or whose ID matches
+                    const mentionedUserId = mentionedUserIds.find(id => {
+                         const profile = mentionProfilesMap.get(id);
+                         // Check if the potential match is the ID or the display name (without the @)
+                         return id === potentialIdOrName || (profile?.displayName && profile.displayName === potentialIdOrName);
+                     });
+
+                    if (mentionedUserId) {
+                        const profile = mentionProfilesMap.get(mentionedUserId);
+                        const displayName = profile?.displayName || potentialIdOrName; // Fallback to the matched string
+                        return (
+                            <Link
+                                key={`${mentionedUserId}-${index}`}
+                                href={`/profile/${mentionedUserId}`}
+                                className="text-primary hover:underline font-medium"
+                            >
+                                @{displayName}
+                            </Link>
+                        );
+                    }
+                }
+                return <React.Fragment key={index}>{part}</React.Fragment>; // Return non-mention parts as is
+            })}
+        </>
+    );
+});
+TextWithMentions.displayName = 'TextWithMentions';
 
 
 // Component for Post Card
@@ -182,14 +242,6 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
         toggleLikeSubCommentMutation.mutate();
     };
 
-    // Placeholder: Render mentions differently (e.g., bold, link)
-    const renderTextWithMentions = (text: string, mentionedUserIds?: string[]) => {
-        // TODO: Implement actual logic to find and highlight mentions based on IDs/names
-        // For now, just return the text
-        return text;
-    };
-
-
     return (
         <div key={subComment.id} className="flex items-start gap-2 group"> {/* Add group for hover effect */}
             <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
@@ -269,7 +321,7 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                 </div>
                  {/* Main Content: Text */}
                 <p className="text-sm text-muted-foreground break-words">
-                    {renderTextWithMentions(subComment.text, subComment.mentionedUserIds)}
+                     <TextWithMentions text={subComment.text} mentionedUserIds={subComment.mentionedUserIds} />
                 </p>
             </div>
         </div>
@@ -289,6 +341,12 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
     const [isSubmittingReply, setIsSubmittingReply] = useState(false);
     const [isLiking, setIsLiking] = useState(false); // State for liking loading
 
+    // --- State for mention suggestions ---
+    const [mentionQuery, setMentionQuery] = useState('');
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const replyInputRef = useRef<HTMLInputElement>(null);
+    const suggestionsPopoverRef = useRef<HTMLDivElement>(null); // Ref for popover content
+
     // Derived state: Check if the current user has liked this comment
     const hasLiked = !!(currentUserId && comment.likedBy?.includes(currentUserId));
 
@@ -305,6 +363,41 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         staleTime: 1000 * 60 * 1, // 1 minute stale time
     });
     // --- End Fetch SubComments ---
+
+    // --- Fetch User Profiles for Mentions ---
+    // Get unique user IDs from the current comment and all subcomments
+    const userIdsToFetch = useMemo(() => {
+        const ids = new Set<string>([comment.userId]);
+        subComments.forEach(sc => ids.add(sc.userId));
+        return Array.from(ids).filter(id => id !== currentUserId); // Exclude self
+    }, [comment.userId, subComments, currentUserId]);
+
+    const { data: userProfilesMap = new Map(), isLoading: isLoadingProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
+        queryKey: ['userProfilesForMentions', userIdsToFetch],
+        queryFn: async () => {
+            const profiles = new Map<string, UserProfileBasic | null>();
+            await Promise.all(
+                userIdsToFetch.map(async (userId) => {
+                    const profile = await getUserProfileBasic(userId);
+                    profiles.set(userId, profile);
+                })
+            );
+            return profiles;
+        },
+        enabled: userIdsToFetch.length > 0 && isReplying, // Only fetch when reply form is open
+        staleTime: Infinity,
+    });
+    // --- End Fetch User Profiles ---
+
+    // --- Filtered suggestions based on mentionQuery ---
+    const filteredSuggestions = useMemo(() => {
+        if (!mentionQuery || isLoadingProfiles) return [];
+        const queryLower = mentionQuery.toLowerCase();
+        return Array.from(userProfilesMap.values())
+            .filter((profile): profile is UserProfileBasic => profile !== null && profile.displayName.toLowerCase().includes(queryLower))
+            .slice(0, 5); // Limit suggestions
+    }, [mentionQuery, userProfilesMap, isLoadingProfiles]);
+
 
     // --- Delete Comment Mutation ---
     const deleteCommentMutation = useMutation({
@@ -334,6 +427,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
             toast({ title: "Reply Added" });
             setNewReply(''); // Clear input
             setIsReplying(false); // Hide reply input
+            setShowSuggestions(false); // Hide suggestions
             if (!showReplies) {
                 setShowReplies(true); // Show replies section if it was hidden
             } else {
@@ -358,11 +452,56 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         },
     });
 
-    // Placeholder function to handle mention suggestions (e.g., fetching users)
-    const handleMentionInput = (text: string) => {
-        // TODO: Implement logic to detect '@' and suggest users
-        setNewReply(text);
+    // --- Handle Mention Input Changes ---
+    const handleMentionInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setNewReply(value);
+
+        const lastAtIndex = value.lastIndexOf('@');
+        const lastSpaceIndex = value.lastIndexOf(' ');
+
+        // Check if '@' is the last character or follows a space, and there's no space after it
+        if (lastAtIndex > -1 && lastAtIndex > lastSpaceIndex && value.indexOf(' ', lastAtIndex) === -1) {
+            const query = value.substring(lastAtIndex + 1);
+            setMentionQuery(query);
+            setShowSuggestions(true); // Show suggestions when @ is typed correctly
+        } else {
+            setMentionQuery('');
+            setShowSuggestions(false); // Hide otherwise
+        }
     };
+
+    // --- Handle Selecting a Suggestion ---
+    const handleSelectSuggestion = (profile: UserProfileBasic) => {
+        const lastAtIndex = newReply.lastIndexOf('@');
+        if (lastAtIndex > -1) {
+            const textBeforeMention = newReply.substring(0, lastAtIndex);
+            // Append the selected username and a space
+            setNewReply(`${textBeforeMention}@${profile.displayName} `);
+        }
+        setShowSuggestions(false); // Hide suggestions after selection
+        setMentionQuery(''); // Clear query
+        replyInputRef.current?.focus(); // Keep focus on input
+    };
+
+     // --- Use effect to handle clicks outside the suggestions popover ---
+     useEffect(() => {
+         const handleClickOutside = (event: MouseEvent) => {
+             if (
+                 suggestionsPopoverRef.current &&
+                 !suggestionsPopoverRef.current.contains(event.target as Node) &&
+                 replyInputRef.current &&
+                 !replyInputRef.current.contains(event.target as Node) // Don't close if clicking inside input
+             ) {
+                 setShowSuggestions(false);
+             }
+         };
+
+         document.addEventListener('mousedown', handleClickOutside);
+         return () => {
+             document.removeEventListener('mousedown', handleClickOutside);
+         };
+     }, []); // Empty dependency array to run only once on mount
 
 
     const handleReplySubmit = (e: React.FormEvent) => {
@@ -439,19 +578,18 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
     // Toggle showing/hiding the reply input form
     const toggleReplyForm = () => {
         setIsReplying(prev => !prev);
+        if (!isReplying) {
+             // Delay focus slightly to ensure input is rendered
+             setTimeout(() => replyInputRef.current?.focus(), 0);
+        } else {
+            setShowSuggestions(false); // Hide suggestions when closing form
+        }
     };
 
     // Callback for SubCommentItem to trigger refetch
     const handleSubCommentDeleted = () => {
         refetchSubComments();
     };
-
-     // Placeholder: Render mentions differently (e.g., bold, link)
-     const renderTextWithMentions = (text: string, mentionedUserIds?: string[]) => {
-         // TODO: Implement actual logic to find and highlight mentions based on IDs/names
-         // For now, just return the text
-         return text;
-     };
 
     return (
         <div className="group border-b border-border/50 pb-4"> {/* Wrap entire comment + replies */}
@@ -519,7 +657,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                                         <AlertDialogFooter>
                                             <AlertDialogCancel disabled={deleteCommentMutation.isPending}>Cancel</AlertDialogCancel>
                                             <AlertDialogAction
-                                                onClick={() => handleDeleteClick(comment.id)}
+                                                onClick={() => handleDeleteClick()}
                                                 disabled={deleteCommentMutation.isPending}
                                                 className="bg-destructive hover:bg-destructive/90"
                                             >
@@ -533,7 +671,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                     </div>
                     {/* Main Content: Text */}
                     <p className="text-sm text-muted-foreground break-words">
-                         {renderTextWithMentions(comment.text, comment.mentionedUserIds)}
+                         <TextWithMentions text={comment.text} mentionedUserIds={comment.mentionedUserIds} />
                     </p>
                 </div>
             </div>
@@ -550,24 +688,61 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                  </Button>
             </div>
 
-            {/* Reply Input Form */}
+            {/* Reply Input Form with Suggestions Popover */}
             {isReplying && user && (
-                <form onSubmit={handleReplySubmit} className="flex items-center gap-2 pl-11 mt-2">
-                    {/* Replace Input with a component supporting mentions if needed */}
-                    <Input
-                        type="text"
-                        placeholder={`Replying to ${comment.userName || `@${comment.userId}`}... (@mention someone)`} // Use @ fallback
-                        value={newReply}
-                        onChange={(e) => handleMentionInput(e.target.value)} // Use handler for potential suggestions
-                        disabled={isSubmittingReply}
-                        className="flex-grow h-8 text-sm"
-                        aria-label="New reply input"
-                    />
-                    <Button type="submit" size="sm" disabled={!newReply.trim() || isSubmittingReply}>
-                        {isSubmittingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                        <span className="sr-only">Send Reply</span>
-                    </Button>
-                </form>
+                <Popover open={showSuggestions} onOpenChange={setShowSuggestions}>
+                    <PopoverTrigger asChild>
+                        <form onSubmit={handleReplySubmit} className="flex items-center gap-2 pl-11 mt-2 relative">
+                             <Input
+                                ref={replyInputRef}
+                                type="text"
+                                placeholder={`Replying to ${comment.userName || `@${comment.userId}`}... (@mention someone)`} // Use @ fallback
+                                value={newReply}
+                                onChange={handleMentionInputChange} // Use handler for suggestions
+                                disabled={isSubmittingReply}
+                                className="flex-grow h-8 text-sm"
+                                aria-label="New reply input"
+                                autoComplete="off" // Prevent browser autocomplete interfering
+                             />
+                             <Button type="submit" size="sm" disabled={!newReply.trim() || isSubmittingReply}>
+                                 {isSubmittingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                                 <span className="sr-only">Send Reply</span>
+                             </Button>
+                         </form>
+                    </PopoverTrigger>
+                    {/* Suggestions Popover Content */}
+                    <PopoverContent
+                        ref={suggestionsPopoverRef} // Attach ref here
+                        className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" // Style popover
+                        side="top" // Adjust side as needed
+                        align="start"
+                        onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus stealing
+                    >
+                         {isLoadingProfiles ? (
+                            <div className="p-2 text-center text-xs text-muted-foreground">Loading users...</div>
+                         ) : filteredSuggestions.length > 0 ? (
+                             <div className="space-y-1">
+                                 {filteredSuggestions.map(profile => (
+                                     <Button
+                                         key={profile.userId}
+                                         variant="ghost"
+                                         size="sm"
+                                         className="w-full justify-start h-auto px-2 py-1 text-xs"
+                                         onClick={() => handleSelectSuggestion(profile)}
+                                     >
+                                         <Avatar className="h-5 w-5 mr-2">
+                                             <AvatarImage src={profile.avatarUrl} alt={profile.displayName} />
+                                             <AvatarFallback className="text-xs">{getInitials(profile.displayName)}</AvatarFallback>
+                                         </Avatar>
+                                         {profile.displayName}
+                                     </Button>
+                                 ))}
+                             </div>
+                         ) : mentionQuery ? ( // Only show "no users found" if actively querying
+                             <div className="p-2 text-center text-xs text-muted-foreground">No users found.</div>
+                         ) : null}
+                    </PopoverContent>
+                </Popover>
             )}
 
 
@@ -601,7 +776,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
 });
 CommentItem.displayName = 'CommentItem';
 
-// Main Board Page Content Component Logic (Renamed from HomePageContent)
+// --- Main Board Page Content Component Logic ---
 function BoardPageContent() {
   const { user, loading: authLoading } = useAuth(); // Get user and loading state
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -814,7 +989,7 @@ function BoardPageContent() {
 
     // Placeholder function to handle mention suggestions in the main comment input
     const handleMentionInput = (text: string) => {
-        // TODO: Implement logic to detect '@' and suggest users
+        // For the main comment input, we don't implement suggestions yet
         setNewComment(text);
     };
 
@@ -1108,11 +1283,17 @@ function BoardPageContent() {
 // Export the BoardPageContent component as the default export for this page route
 export default BoardPageContent;
 
-// Helper function to extract mentioned user IDs from text (Placeholder)
+// Helper function to extract mentioned user IDs from text (Improved)
 const extractMentions = (text: string): string[] => {
-  const mentionRegex = /@([a-zA-Z0-9_]+)/g;
-  const mentions = text.match(mentionRegex);
-  if (!mentions) return [];
-  // TODO: Resolve usernames to IDs here
-  return mentions.map(mention => mention.substring(1)); // Placeholder: assumes mention IS the ID
+    const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+    const matches = text.matchAll(mentionRegex);
+    const userIdentifiers = new Set<string>(); // Use Set to avoid duplicates
+    for (const match of matches) {
+        if (match[1]) {
+            userIdentifiers.add(match[1]);
+        }
+    }
+    // TODO: Resolve usernames to actual user IDs here
+    // For now, returning the matched identifier (which might be username or ID)
+    return Array.from(userIdentifiers);
 };
