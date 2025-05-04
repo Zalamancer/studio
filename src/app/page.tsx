@@ -187,73 +187,77 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                     {getInitials(subComment.userName)}
                 </AvatarFallback>
             </Avatar>
-            <div className="flex-grow bg-background p-2 rounded-md min-w-0 relative border border-border/50"> {/* Added min-w-0 and relative */}
+            <div className="flex-grow bg-background p-2 rounded-md min-w-0 border border-border/50"> {/* Added min-w-0 */}
+                {/* Header: Username (Left) | Like, Time, Delete (Right) */}
                 <div className="flex justify-between items-center mb-1">
+                    {/* Left: Username */}
                     <p className="text-xs font-medium text-foreground truncate">{subComment.userName || 'Anonymous'}</p>
-                    <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                        {new Date(subComment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                </div>
-                <p className="text-sm text-muted-foreground break-words">{subComment.text}</p> {/* Added break-words */}
 
-                 {/* SubComment Actions (Like) - Positioned to the right below time */}
-                 <div className="flex items-center justify-end gap-2 mt-1">
-                    {user && ( // Only show like button if logged in
-                       <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={handleLikeClick}
-                          disabled={isLiking}
-                          className={cn(
-                              "text-xs h-auto p-1 flex items-center gap-1",
-                              hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
-                          )}
-                          aria-pressed={hasLiked}
-                       >
-                          {isLiking ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                              <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
-                          )}
-                          {subComment.likeCount > 0 ? `(${subComment.likeCount})` : ''}
-                       </Button>
-                    )}
-                 </div>
-
-                {/* Delete Button */}
-                {isOwnSubComment && (
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
+                    {/* Right: Actions (Like, Time, Delete) */}
+                    <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                         {/* Like Button */}
+                         {user && ( // Only show like button if logged in
                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-0 right-0 h-5 w-5 text-muted-foreground/70 hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                                disabled={deleteSubCommentMutation.isPending}
-                                aria-label="Delete reply"
+                              variant="ghost"
+                              size="xs"
+                              onClick={handleLikeClick}
+                              disabled={isLiking}
+                              className={cn(
+                                  "text-xs h-auto p-0.5 flex items-center gap-0.5",
+                                  hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
+                              )}
+                              aria-pressed={hasLiked}
                            >
-                                {deleteSubCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin"/> : <Trash className="h-3 w-3"/>}
+                              {isLiking ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                  <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
+                              )}
+                              {subComment.likeCount > 0 ? <span className="text-xs">({subComment.likeCount})</span> : ''}
                            </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Reply?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Are you sure you want to delete this reply? This action cannot be undone.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel disabled={deleteSubCommentMutation.isPending}>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={handleDeleteClick}
+                        )}
+                        {/* Time */}
+                        <p className="text-xs text-muted-foreground">
+                            {new Date(subComment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        {/* Delete Button */}
+                        {isOwnSubComment && (
+                            <AlertDialog>
+                                <AlertDialogTrigger asChild>
+                                <Button
+                                    variant="ghost"
+                                    size="icon"
+                                    className="h-5 w-5 text-muted-foreground/70 hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                                     disabled={deleteSubCommentMutation.isPending}
-                                    className="bg-destructive hover:bg-destructive/90"
+                                    aria-label="Delete reply"
                                 >
-                                    {deleteSubCommentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                )}
+                                    {deleteSubCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin"/> : <Trash className="h-3 w-3"/>}
+                                </Button>
+                                </AlertDialogTrigger>
+                                <AlertDialogContent>
+                                    <AlertDialogHeader>
+                                        <AlertDialogTitle>Delete Reply?</AlertDialogTitle>
+                                        <AlertDialogDescription>
+                                            Are you sure you want to delete this reply? This action cannot be undone.
+                                        </AlertDialogDescription>
+                                    </AlertDialogHeader>
+                                    <AlertDialogFooter>
+                                        <AlertDialogCancel disabled={deleteSubCommentMutation.isPending}>Cancel</AlertDialogCancel>
+                                        <AlertDialogAction
+                                            onClick={handleDeleteClick}
+                                            disabled={deleteSubCommentMutation.isPending}
+                                            className="bg-destructive hover:bg-destructive/90"
+                                        >
+                                            {deleteSubCommentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                        </AlertDialogAction>
+                                    </AlertDialogFooter>
+                                </AlertDialogContent>
+                            </AlertDialog>
+                        )}
+                    </div>
+                </div>
+                 {/* Main Content: Text */}
+                <p className="text-sm text-muted-foreground break-words">{subComment.text}</p>
             </div>
         </div>
     );
@@ -422,14 +426,15 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                         {getInitials(comment.userName)}
                     </AvatarFallback>
                 </Avatar>
-                <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0 relative"> {/* Added min-w-0 and relative */}
+                <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0"> {/* Added min-w-0 */}
+                     {/* Header: Username (Left) | Like, Time, Delete (Right) */}
                     <div className="flex justify-between items-center mb-1">
+                        {/* Left: Username */}
                         <p className="text-sm font-medium text-foreground truncate">{comment.userName || 'Anonymous'}</p>
-                        <div className="flex flex-col items-end flex-shrink-0 ml-2"> {/* Container for time and like */}
-                            <p className="text-xs text-muted-foreground">
-                                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
-                            {/* Like Button - Positioned below time on the right */}
+
+                        {/* Right: Actions (Like, Time, Delete) */}
+                        <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                             {/* Like Button */}
                             {user && ( // Only show like button if logged in
                                 <Button
                                     variant="ghost"
@@ -437,7 +442,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                                     onClick={handleLikeClick}
                                     disabled={isLiking}
                                     className={cn(
-                                        "text-xs h-auto p-1 flex items-center gap-1 mt-0.5", // Added mt-0.5
+                                        "text-xs h-auto p-0.5 flex items-center gap-0.5", // Reduced padding and gap
                                         hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
                                     )}
                                     aria-pressed={hasLiked}
@@ -447,48 +452,51 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                                     ) : (
                                         <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
                                     )}
-                                    {comment.likeCount > 0 ? `(${comment.likeCount})` : ''}
+                                    {comment.likeCount > 0 ? <span className="text-xs">({comment.likeCount})</span> : ''}
                                 </Button>
+                             )}
+                            {/* Time */}
+                            <p className="text-xs text-muted-foreground">
+                                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            {/* Delete Button */}
+                            {isOwnComment && (
+                                <AlertDialog>
+                                    <AlertDialogTrigger asChild>
+                                    <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        className="h-5 w-5 text-muted-foreground/70 hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                        disabled={deleteCommentMutation.isPending}
+                                        aria-label="Delete comment"
+                                    >
+                                        {deleteCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin"/> : <Trash className="h-3 w-3"/>}
+                                    </Button>
+                                    </AlertDialogTrigger>
+                                    <AlertDialogContent>
+                                        <AlertDialogHeader>
+                                            <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                                            <AlertDialogDescription>
+                                                Are you sure you want to delete this comment? This action cannot be undone. Deleting the comment will also remove all replies.
+                                            </AlertDialogDescription>
+                                        </AlertDialogHeader>
+                                        <AlertDialogFooter>
+                                            <AlertDialogCancel disabled={deleteCommentMutation.isPending}>Cancel</AlertDialogCancel>
+                                            <AlertDialogAction
+                                                onClick={handleDeleteClick}
+                                                disabled={deleteCommentMutation.isPending}
+                                                className="bg-destructive hover:bg-destructive/90"
+                                            >
+                                                {deleteCommentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                            </AlertDialogAction>
+                                        </AlertDialogFooter>
+                                    </AlertDialogContent>
+                                </AlertDialog>
                             )}
                         </div>
                     </div>
+                    {/* Main Content: Text */}
                     <p className="text-sm text-muted-foreground break-words">{comment.text}</p>
-
-                    {/* Delete Button for Comment */}
-                    {isOwnComment && (
-                        <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                className="absolute top-1 right-1 h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
-                                disabled={deleteCommentMutation.isPending}
-                                aria-label="Delete comment"
-                            >
-                                {deleteCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin"/> : <Trash className="h-3 w-3"/>}
-                            </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                                {/* ... (Delete confirmation dialog remains the same) ... */}
-                                <AlertDialogHeader>
-                                    <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
-                                    <AlertDialogDescription>
-                                        Are you sure you want to delete this comment? This action cannot be undone. Deleting the comment will also remove all replies.
-                                    </AlertDialogDescription>
-                                </AlertDialogHeader>
-                                <AlertDialogFooter>
-                                    <AlertDialogCancel disabled={deleteCommentMutation.isPending}>Cancel</AlertDialogCancel>
-                                    <AlertDialogAction
-                                        onClick={handleDeleteClick}
-                                        disabled={deleteCommentMutation.isPending}
-                                        className="bg-destructive hover:bg-destructive/90"
-                                    >
-                                        {deleteCommentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
-                                    </AlertDialogAction>
-                                </AlertDialogFooter>
-                            </AlertDialogContent>
-                        </AlertDialog>
-                    )}
                 </div>
             </div>
 
@@ -1046,5 +1054,3 @@ function BoardPageContent() {
 
 // Export the BoardPageContent component as the default export for this page route
 export default BoardPageContent;
-
-    
