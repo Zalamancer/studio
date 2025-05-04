@@ -41,7 +41,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
-import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment } from '@/services/commentService'; // Import comment/subcomment/like services
+import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService'; // Import comment/subcomment/like services
 import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment'; // Import comment/subcomment types
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
@@ -100,7 +100,13 @@ PostCard.displayName = 'PostCard'; // Add display name for React DevTools
 // Component for displaying a single subcomment (reply)
 const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentId, onDelete }: { subComment: ClientSubComment, currentUserId: string | null, postId: string, commentId: string, onDelete: () => void }) => {
     const { toast } = useToast();
+    const queryClient = useQueryClient();
+    const { user } = useAuth(); // Get current user for liking
     const isOwnSubComment = subComment.userId === currentUserId;
+    const [isLiking, setIsLiking] = useState(false);
+
+    // Derived state: Check if the current user has liked this subcomment
+    const hasLiked = !!(currentUserId && subComment.likedBy?.includes(currentUserId));
 
     const deleteSubCommentMutation = useMutation({
         mutationFn: () => deleteSubCommentFromComment(postId, commentId, subComment.id),
@@ -122,6 +128,56 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
         deleteSubCommentMutation.mutate();
     };
 
+    // --- Toggle Like SubComment Mutation ---
+    const toggleLikeSubCommentMutation = useMutation({
+        mutationFn: () => {
+            if (!user) throw new Error("User must be logged in to like");
+            return toggleLikeSubComment(postId, commentId, subComment.id, user.uid);
+        },
+        onMutate: async () => {
+            setIsLiking(true);
+            // Optimistic UI update for subcomments
+            await queryClient.cancelQueries({ queryKey: ['subComments', postId, commentId] });
+            const previousSubComments = queryClient.getQueryData<ClientSubComment[]>(['subComments', postId, commentId]);
+
+            queryClient.setQueryData<ClientSubComment[]>(['subComments', postId, commentId], (oldSubComments = []) =>
+                oldSubComments.map(sc => {
+                    if (sc.id === subComment.id) {
+                        const currentlyLiked = sc.likedBy?.includes(user!.uid);
+                        return {
+                            ...sc,
+                            likeCount: currentlyLiked ? (sc.likeCount ?? 1) - 1 : (sc.likeCount ?? 0) + 1,
+                            likedBy: currentlyLiked
+                                ? sc.likedBy?.filter(uid => uid !== user!.uid) ?? []
+                                : [...(sc.likedBy ?? []), user!.uid],
+                        };
+                    }
+                    return sc;
+                })
+            );
+            return { previousSubComments };
+        },
+        onError: (err, _variables, context) => {
+            console.error("Error toggling subcomment like:", err);
+            toast({ variant: "destructive", title: "Like Failed", description: "Could not update like." });
+            // Rollback on error
+            if (context?.previousSubComments) {
+                queryClient.setQueryData(['subComments', postId, commentId], context.previousSubComments);
+            }
+        },
+        onSettled: () => {
+            setIsLiking(false);
+            // Refetch subcomments after mutation to ensure consistency
+            queryClient.invalidateQueries({ queryKey: ['subComments', postId, commentId] });
+        },
+    });
+
+    const handleLikeClick = () => {
+        if (!user || isLiking) return;
+        toggleLikeSubCommentMutation.mutate();
+    };
+
+
     return (
         <div key={subComment.id} className="flex items-start gap-2 group"> {/* Add group for hover effect */}
             <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
@@ -138,6 +194,31 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                     </p>
                 </div>
                 <p className="text-sm text-muted-foreground break-words">{subComment.text}</p> {/* Added break-words */}
+
+                 {/* SubComment Actions (Like) */}
+                <div className="flex items-center gap-2 mt-1">
+                    {user && ( // Only show like button if logged in
+                       <Button
+                          variant="ghost"
+                          size="xs"
+                          onClick={handleLikeClick}
+                          disabled={isLiking}
+                          className={cn(
+                              "text-xs h-auto p-1 flex items-center gap-1",
+                              hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
+                          )}
+                          aria-pressed={hasLiked}
+                       >
+                          {isLiking ? (
+                              <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                              <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
+                          )}
+                          {subComment.likeCount > 0 ? `(${subComment.likeCount})` : ''}
+                       </Button>
+                    )}
+                </div>
+
 
                 {/* Delete Button */}
                 {isOwnSubComment && (
@@ -231,7 +312,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
 
     // --- Add SubComment (Reply) Mutation ---
     const addReplyMutation = useMutation({
-        mutationFn: (replyData: NewSubCommentData) => addSubCommentToComment(postId, comment.id, replyData),
+        mutationFn: (replyData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'>) => addSubCommentToComment(postId, comment.id, replyData),
         onSuccess: () => {
             toast({ title: "Reply Added" });
             setNewReply(''); // Clear input
@@ -260,7 +341,8 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         if (!user || !newReply.trim() || isSubmittingReply) return;
 
         setIsSubmittingReply(true);
-        const replyData: NewSubCommentData = {
+        // Omit likeCount and likedBy as they are initialized in the service
+        const replyData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'> = {
             userId: user.uid,
             text: newReply.trim(),
         };
@@ -629,11 +711,13 @@ function BoardPageContent() {
        setIsSubmittingComment(true); // Indicate loading state
 
        // Adjust type based on imported comment service function expectation
+       // Omit likeCount and likedBy as they are initialized in the service
        const commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'> = {
            userId: user.uid,
            text: newComment.trim(),
            // timestamp is set by the server in the service function
        };
+
 
        try {
             const newCommentId = await addCommentToPost(selectedPost.id, commentData);

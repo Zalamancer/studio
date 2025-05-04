@@ -36,6 +36,8 @@ export interface SubComment {
   userId: string; // ID of the user who posted the subcomment
   text: string; // The subcomment text
   timestamp: Timestamp; // Firestore Timestamp when the subcomment was posted
+  likeCount?: number; // Number of likes
+  likedBy?: string[]; // Array of user IDs who liked the subcomment
 }
 
 // Represents subcomment data used on the client-side (serializable timestamp)
@@ -43,7 +45,13 @@ export interface ClientSubComment extends Omit<SubComment, 'timestamp'> {
   timestamp: number; // Milliseconds since epoch
   userName?: string; // Fetched for display
   userAvatar?: string; // Fetched for display
+  likeCount?: number; // Include like count
+  likedBy?: string[]; // Include likedBy array
 }
 
 // Data needed to create a new subcomment (postId and commentId are implicit)
-export type NewSubCommentData = Omit<SubComment, 'id' | 'timestamp'>;
+// Initialize like fields
+export type NewSubCommentData = Omit<SubComment, 'id' | 'timestamp' | 'likeCount' | 'likedBy'> & {
+    likeCount: number;
+    likedBy: string[];
+};

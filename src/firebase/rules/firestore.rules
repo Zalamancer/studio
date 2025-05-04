@@ -1,0 +1,51 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /posts/{postId} { // Renamed {document} to {postId} for clarity
+      allow read, write: if request.auth != null;
+       // Rule for the 'comments' subcollection
+       match /comments/{commentId} {
+        allow read: if request.auth != null;
+        allow create: if request.auth != null;
+        allow update: if request.auth != null && request.auth.uid == resource.data.userId; // Allow update only by owner (for likes)
+        allow delete: if request.auth != null && request.auth.uid == resource.data.userId; // Allow delete only by owner
+
+        // Rule for the 'subcomments' subcollection within a comment
+         match /subcomments/{subCommentId} {
+          allow read: if request.auth != null;
+          allow create: if request.auth != null;
+          allow update: if request.auth != null && request.auth.uid == resource.data.userId; // Allow update only by owner (for likes)
+          allow delete: if request.auth != null && request.auth.uid == resource.data.userId; // Allow delete only by owner
+         }
+      }
+    }
+        match /conversations/{conversationId} {
+      allow get, list: if request.auth != null && request.resource.data.participants.hasAny([request.auth.uid]);
+      allow create, update: if request.auth != null && request.resource.data.participants.size() == 2 && request.resource.data.participants.hasAll([request.auth.uid]);
+          match /messages/{messageId} {
+            allow read: if request.auth != null
+                && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+            allow create: if request.auth != null
+                && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+            allow update, delete: if true; // Consider tightening update/delete rules
+          }
+        }
+        match /mutuals/{mutualId} { // Renamed {document} to {mutualId} for clarity
+            allow read: if request.auth != null && request.resource.data.userIds.hasAny([request.auth.uid]);
+            allow create: if request.auth != null; // Consider adding validation: request.auth.uid is in request.resource.data.userIds?
+            allow update: if request.auth != null && request.resource.data.userIds.hasAny([request.auth.uid]); // Who can update? Requester? Recipient?
+            allow delete: if request.auth != null && request.resource.data.userIds.hasAny([request.auth.uid]); // Allow either connected user to delete?
+        }
+        // Add rules for the 'users' collection if you have one for profiles
+        // match /users/{userId} {
+        //  allow read: if true; // Or if request.auth != null;
+        //  allow write: if request.auth != null && request.auth.uid == userId;
+        // }
+
+    // Catch-all rule (use with caution, especially in production)
+    // If you want stricter rules, remove this or make it 'if false;'
+    match /{document=**} {
+      allow read, write: if true; // WARNING: Very permissive, allows anyone to read/write anything not matched above.
+    }
+  }
+}

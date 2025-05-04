@@ -212,7 +212,7 @@ export const deleteCommentFromPost = async (postId: string, commentId: string): 
 // --- SubComment Functions ---
 
 // Function to add a new subcomment to a comment's subcollection
-export const addSubCommentToComment = async (postId: string, commentId: string, subCommentData: NewSubCommentData): Promise<string> => {
+export const addSubCommentToComment = async (postId: string, commentId: string, subCommentData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
   if (!postId || !commentId) {
     throw new Error('Post ID and Comment ID are required to add a subcomment.');
   }
@@ -227,10 +227,16 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
     const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
     const subCommentsCollectionRef = collection(commentDocRef, 'subcomments');
 
-    const docRef = await addDoc(subCommentsCollectionRef, {
-      ...subCommentData,
-      timestamp: serverTimestamp(),
-    });
+    // Initialize like fields for the subcomment
+    const fullSubCommentData: NewSubCommentData & { timestamp: Timestamp } = {
+        ...subCommentData,
+        likeCount: 0,
+        likedBy: [],
+        timestamp: serverTimestamp() as Timestamp,
+    };
+
+
+    const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
 
     console.log(`Subcomment added successfully to comment ${commentId} with ID: ${docRef.id}`);
     return docRef.id;
@@ -298,6 +304,8 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
         timestamp: timestampMillis,
         userName: userProfile?.displayName || `User ${data.userId.substring(0, 4)}...`,
         userAvatar: userProfile?.avatarUrl,
+        likeCount: data.likeCount || 0, // Include like count
+        likedBy: data.likedBy || [], // Include likedBy array
       };
       return clientSubComment;
     }).filter((subComment): subComment is ClientSubComment => subComment !== null);
@@ -338,4 +346,48 @@ export const deleteSubCommentFromComment = async (postId: string, commentId: str
     }
     throw new Error(`Failed to delete subcomment: ${error.message}`);
   }
+};
+
+// Function to toggle a like on a subcomment (atomic update)
+export const toggleLikeSubComment = async (postId: string, commentId: string, subCommentId: string, userId: string): Promise<void> => {
+    if (!postId || !commentId || !subCommentId || !userId) {
+        throw new Error('Post ID, Comment ID, SubComment ID, and User ID are required to toggle like.');
+    }
+
+    const subCommentRef = doc(db, 'posts', postId, 'comments', commentId, 'subcomments', subCommentId);
+
+    try {
+        await runTransaction(db, async (transaction) => {
+            const subCommentSnap = await transaction.get(subCommentRef);
+            if (!subCommentSnap.exists()) {
+                throw new Error("Subcomment does not exist!");
+            }
+
+            const subCommentData = subCommentSnap.data();
+            const likedBy: string[] = subCommentData.likedBy || [];
+            const isLiked = likedBy.includes(userId);
+
+            if (isLiked) {
+                // User has already liked, so unlike
+                transaction.update(subCommentRef, {
+                    likedBy: arrayRemove(userId),
+                    likeCount: increment(-1)
+                });
+            } else {
+                // User has not liked, so like
+                transaction.update(subCommentRef, {
+                    likedBy: arrayUnion(userId),
+                    likeCount: increment(1)
+                });
+            }
+        });
+        console.log(`Like toggled successfully for subcomment ${subCommentId} by user ${userId}`);
+    } catch (error: any) {
+        console.error(`Error toggling like for subcomment ${subCommentId}:`, error);
+        if (error.code === 'permission-denied') {
+            console.error("Firestore permission denied toggling subcomment like. Check rules for updating 'posts/{postId}/comments/{commentId}/subcomments/{subCommentId}'.");
+            throw new Error('Permission denied. Check Firestore security rules.');
+        }
+        throw new Error(`Failed to toggle subcomment like: ${error.message}`);
+    }
 };
