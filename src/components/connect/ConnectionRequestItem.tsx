@@ -66,15 +66,15 @@ export const ConnectionRequestItem: React.FC<ConnectionRequestItemProps> = ({
   return (
     <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
       <div className="flex items-center gap-3 flex-grow min-w-0">
-        <Link href={`/profile/${request.requesterId}`}>
+        <Link href={`/profile/${request.requesterId}`} passHref>
           <Avatar className="h-10 w-10 cursor-pointer">
             <AvatarImage src={request.requesterAvatarUrl} alt={request.requesterDisplayName} />
             <AvatarFallback className="bg-secondary text-secondary-foreground">{getInitials(request.requesterDisplayName)}</AvatarFallback>
           </Avatar>
         </Link>
         <div className="flex-grow min-w-0">
-          <Link href={`/profile/${request.requesterId}`}>
-             <p className="text-sm font-medium text-foreground truncate hover:underline">{request.requesterDisplayName}</p>
+          <Link href={`/profile/${request.requesterId}`} passHref>
+             <p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">{request.requesterDisplayName}</p>
           </Link>
           <p className="text-xs text-muted-foreground">{timeAgo}</p>
         </div>

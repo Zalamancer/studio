@@ -89,15 +89,15 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
   return (
     <div className="flex items-center justify-between p-3 bg-muted/50 rounded-lg border">
        <div className="flex items-center gap-3 flex-grow min-w-0">
-          <Link href={`/profile/${connection.otherUserId}`}>
+          <Link href={`/profile/${connection.otherUserId}`} passHref>
              <Avatar className="h-10 w-10 cursor-pointer">
                 <AvatarImage src={connection.otherUserAvatarUrl} alt={connection.otherUserDisplayName} />
                 <AvatarFallback className="bg-primary text-primary-foreground">{getInitials(connection.otherUserDisplayName)}</AvatarFallback>
              </Avatar>
           </Link>
           <div className="flex-grow min-w-0">
-             <Link href={`/profile/${connection.otherUserId}`}>
-                 <p className="text-sm font-medium text-foreground truncate hover:underline">{connection.otherUserDisplayName}</p>
+             <Link href={`/profile/${connection.otherUserId}`} passHref>
+                 <p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">{connection.otherUserDisplayName}</p>
              </Link>
              <p className="text-xs text-muted-foreground">Connected {timeAgo}</p>
           </div>

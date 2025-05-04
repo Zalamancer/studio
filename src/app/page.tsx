@@ -244,17 +244,24 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
 
     return (
         <div key={subComment.id} className="flex items-start gap-2 group"> {/* Add group for hover effect */}
-            <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
-                <AvatarImage src={subComment.userAvatar} alt={subComment.userName} />
-                <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
-                    {getInitials(subComment.userName)}
-                </AvatarFallback>
-            </Avatar>
+            {/* Wrap Avatar in Link */}
+            <Link href={`/profile/${subComment.userId}`} passHref>
+                <Avatar className="h-6 w-6 mt-1 flex-shrink-0 cursor-pointer">
+                    <AvatarImage src={subComment.userAvatar} alt={subComment.userName} />
+                    <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
+                        {getInitials(subComment.userName)}
+                    </AvatarFallback>
+                </Avatar>
+            </Link>
             <div className="flex-grow bg-background p-2 rounded-md min-w-0 border border-border/50"> {/* Added min-w-0 */}
                 {/* Header: Username (Left) | Like, Time, Delete (Right) */}
                 <div className="flex justify-between items-center mb-1">
-                    {/* Left: Username */}
-                    <p className="text-xs font-medium text-foreground truncate">{subComment.userName || `@${subComment.userId}`}</p> {/* Use @ fallback */}
+                    {/* Left: Username (Wrapped in Link) */}
+                    <Link href={`/profile/${subComment.userId}`} passHref>
+                         <p className="text-xs font-medium text-foreground truncate hover:underline cursor-pointer">
+                             {subComment.userName || `@${subComment.userId}`}
+                         </p>
+                    </Link>
 
                     {/* Right: Actions (Like, Time, Delete) */}
                     <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
@@ -594,17 +601,24 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
     return (
         <div className="group border-b border-border/50 pb-4"> {/* Wrap entire comment + replies */}
             <div className="flex items-start gap-3 "> {/* Main comment content */}
-                <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
-                    <AvatarImage src={comment.userAvatar} alt={comment.userName} />
-                    <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-                        {getInitials(comment.userName)}
-                    </AvatarFallback>
-                </Avatar>
+                 {/* Wrap Avatar in Link */}
+                 <Link href={`/profile/${comment.userId}`} passHref>
+                     <Avatar className="h-8 w-8 mt-1 flex-shrink-0 cursor-pointer">
+                         <AvatarImage src={comment.userAvatar} alt={comment.userName} />
+                         <AvatarFallback className="text-xs bg-muted text-muted-foreground">
+                             {getInitials(comment.userName)}
+                         </AvatarFallback>
+                     </Avatar>
+                 </Link>
                 <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0"> {/* Added min-w-0 */}
                      {/* Header: Username (Left) | Like, Time, Delete (Right) */}
                     <div className="flex justify-between items-center mb-1">
-                        {/* Left: Username */}
-                         <p className="text-sm font-medium text-foreground truncate">{comment.userName || `@${comment.userId}`}</p> {/* Use @ fallback */}
+                         {/* Left: Username (Wrapped in Link) */}
+                         <Link href={`/profile/${comment.userId}`} passHref>
+                             <p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">
+                                 {comment.userName || `@${comment.userId}`}
+                             </p>
+                         </Link>
 
                         {/* Right: Actions (Like, Time, Delete) */}
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
