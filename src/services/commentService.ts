@@ -143,7 +143,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
                 avatarUrl: profile.avatarUrl
             });
         } else {
-            userProfilesMap.set(userId, { displayName: `User ${userId.substring(0, 4)}...` });
+            userProfilesMap.set(userId, { displayName: `@${userId}` }); // Fallback with @
         }
     }));
 
@@ -164,7 +164,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
         userId: data.userId,
         text: data.text,
         timestamp: timestampMillis,
-        userName: userProfile?.displayName || `User ${data.userId.substring(0, 4)}...`,
+        userName: userProfile?.displayName || `@${data.userId}`, // Fallback with @
         userAvatar: userProfile?.avatarUrl,
         likeCount: data.likeCount || 0, // Include like count, default to 0
         likedBy: data.likedBy || [], // Include likedBy array, default to empty
@@ -389,7 +389,7 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
                 avatarUrl: profile.avatarUrl
             });
         } else {
-            userProfilesMap.set(userId, { displayName: `User ${userId.substring(0, 4)}...` });
+             userProfilesMap.set(userId, { displayName: `@${userId}` }); // Fallback with @
         }
     }));
 
@@ -409,7 +409,7 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
         userId: data.userId,
         text: data.text,
         timestamp: timestampMillis,
-        userName: userProfile?.displayName || `User ${data.userId.substring(0, 4)}...`,
+        userName: userProfile?.displayName || `@${data.userId}`, // Fallback with @
         userAvatar: userProfile?.avatarUrl,
         likeCount: data.likeCount || 0, // Include like count
         likedBy: data.likedBy || [], // Include likedBy array

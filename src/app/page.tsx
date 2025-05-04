@@ -50,11 +50,14 @@ import { getUserProfileBasic } from '@/services/connectionService'; // To potent
 import { availableTags } from '@/components/layout/MainLayout';
 
 // Helper to get initials
-const getInitials = (name: string | undefined | null): string => {
-    if (!name) return '?';
-    const names = name.split(' ');
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
+const getInitials = (displayName: string | undefined | null): string => {
+    if (!displayName) return '?';
+    // If starts with @, use the next char or default to '?'
+    if (displayName.startsWith('@')) {
+        return displayName.length > 1 ? displayName.charAt(1).toUpperCase() : '?';
+    }
+    // Use first letter of the name
+    return displayName.charAt(0).toUpperCase();
 };
 
 
@@ -199,7 +202,7 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                 {/* Header: Username (Left) | Like, Time, Delete (Right) */}
                 <div className="flex justify-between items-center mb-1">
                     {/* Left: Username */}
-                    <p className="text-xs font-medium text-foreground truncate">{subComment.userName || 'Anonymous'}</p>
+                    <p className="text-xs font-medium text-foreground truncate">{subComment.userName || `@${subComment.userId}`}</p> {/* Use @ fallback */}
 
                     {/* Right: Actions (Like, Time, Delete) */}
                     <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
@@ -463,7 +466,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                      {/* Header: Username (Left) | Like, Time, Delete (Right) */}
                     <div className="flex justify-between items-center mb-1">
                         {/* Left: Username */}
-                        <p className="text-sm font-medium text-foreground truncate">{comment.userName || 'Anonymous'}</p>
+                         <p className="text-sm font-medium text-foreground truncate">{comment.userName || `@${comment.userId}`}</p> {/* Use @ fallback */}
 
                         {/* Right: Actions (Like, Time, Delete) */}
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
@@ -516,7 +519,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                                         <AlertDialogFooter>
                                             <AlertDialogCancel disabled={deleteCommentMutation.isPending}>Cancel</AlertDialogCancel>
                                             <AlertDialogAction
-                                                onClick={handleDeleteClick}
+                                                onClick={() => handleDeleteClick(comment.id)}
                                                 disabled={deleteCommentMutation.isPending}
                                                 className="bg-destructive hover:bg-destructive/90"
                                             >
@@ -553,7 +556,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                     {/* Replace Input with a component supporting mentions if needed */}
                     <Input
                         type="text"
-                        placeholder={`Replying to ${comment.userName || 'Anonymous'}... (@mention someone)`}
+                        placeholder={`Replying to ${comment.userName || `@${comment.userId}`}... (@mention someone)`} // Use @ fallback
                         value={newReply}
                         onChange={(e) => handleMentionInput(e.target.value)} // Use handler for potential suggestions
                         disabled={isSubmittingReply}

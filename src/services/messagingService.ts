@@ -22,6 +22,7 @@ import {
 } from 'firebase/firestore';
 import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData } from '@/types/messaging'; // Import ClientConversation
 import { auth } from '@/lib/firebase/config'; // Import auth if needed for debugging
+import { getUserProfileBasic } from './connectionService'; // For getting user details
 
 const conversationsCollectionRef = collection(db, 'conversations');
 const messagesSubcollectionRef = (conversationId: string) => collection(db, 'conversations', conversationId, 'messages');
@@ -96,7 +97,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
     }
      // Check for missing index error
      if (error.code === 'failed-precondition') {
-         console.error("Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index on 'participants' (array-contains) and 'lastMessageTimestamp' (desc).");
+         console.error("Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index on 'participants' and 'lastMessageTimestamp'.");
          throw new Error("Firestore query requires an index. Please create it in the Firebase console.");
      }
     // Throw a generic error for other issues
@@ -269,16 +270,12 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
 // --- Function to get user details (example placeholder) ---
 // In a real app, fetch from a 'users' collection
 export const getUserDetails = async (userId: string): Promise<{ name: string; avatar?: string }> => {
-    // Placeholder implementation
-    // You would query your 'users' collection here based on userId
-    // For example:
-    // const userDocRef = doc(db, 'users', userId);
-    // const userSnap = await getDoc(userDocRef);
-    // if (userSnap.exists()) {
-    //     const userData = userSnap.data();
-    //     return { name: userData.displayName || `User ${userId.substring(0,4)}`, avatar: userData.photoURL };
-    // }
-    return { name: `User ${userId.substring(0, 4)}...` }; // Fallback
+    // Fetch using the existing service function
+    const profile = await getUserProfileBasic(userId);
+    return {
+        name: profile?.displayName || `@${userId}`, // Use @ fallback
+        avatar: profile?.avatarUrl,
+    };
 };
 
 // --- Function to get post details (used for messaging context) ---

@@ -8,6 +8,7 @@ import {
   getMessagesForConversation,
   sendMessage,
   getPostDetails, // Import getPostDetails
+  getUserDetails, // Import getUserDetails
 } from '@/services/messagingService';
 import type { ClientConversation, SerializableMessage, NewMessageData } from '@/types/messaging'; // Use ClientConversation & SerializableMessage
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -30,12 +31,14 @@ interface MessagingInterfaceProps {
 }
 
 // Helper function to get the initials from a name or email
-const getInitials = (id: string | undefined | null): string => {
-    if (!id) return '?';
-    // In a real app, you'd fetch user details (name/email) based on the ID
-    // For now, we'll use the first 2 chars of the ID or a placeholder
-    const nameOrEmail = id.substring(0, 2).toUpperCase(); // Placeholder
-    return nameOrEmail || '?';
+const getInitials = (displayName: string | undefined | null): string => {
+    if (!displayName) return '?';
+    // If starts with @, use the next char or default to '?'
+    if (displayName.startsWith('@')) {
+        return displayName.length > 1 ? displayName.charAt(1).toUpperCase() : '?';
+    }
+    // Use first letter of the name
+    return displayName.charAt(0).toUpperCase();
 };
 
 // --- Conversation List Item ---
@@ -56,11 +59,22 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
   postQuestion, // Receive post question
   highlight, // Receive highlight flag
 }) => {
+    const queryClient = useQueryClient();
     // Determine the other participant's ID
     const otherParticipantId = conversation.participants.find(p => p !== currentUserId);
-    // In a real app, fetch the participant's name/avatar based on otherParticipantId
-    const participantName = otherParticipantId ? `User ${otherParticipantId.substring(0, 4)}...` : 'Unknown User';
-    const initials = getInitials(otherParticipantId);
+
+    // --- Fetch Other Participant's Details ---
+    const { data: otherParticipantDetails, isLoading: isLoadingDetails } = useQuery({
+        queryKey: ['userDetails', otherParticipantId],
+        queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : null,
+        enabled: !!otherParticipantId,
+        staleTime: Infinity, // Cache user details indefinitely as they rarely change quickly
+    });
+
+    const participantName = isLoadingDetails
+        ? 'Loading...'
+        : otherParticipantDetails?.name || `@${otherParticipantId || 'Unknown'}`; // Use @ fallback
+    const initials = getInitials(participantName);
 
     // Format timestamp (now a number)
     const formattedTime = conversation.lastMessageTimestamp
@@ -78,7 +92,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
         aria-current={isSelected ? "page" : undefined}
       >
          <Avatar className="h-9 w-9">
-          {/* <AvatarImage src={participantAvatar} alt={participantName} /> */}
+          <AvatarImage src={otherParticipantDetails?.avatar} alt={participantName} />
           <AvatarFallback className="bg-primary text-primary-foreground text-xs">{initials}</AvatarFallback>
          </Avatar>
         <div className="flex-grow overflow-hidden">
@@ -98,7 +112,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
         )}
       </button>
         {/* "View Post Details" button - only shown if postId exists */}
-       {conversation.postId && (
+       {conversation.postId && conversation.postId !== 'general_connection' && ( // Exclude general chats
            <Link href={`/?postId=${conversation.postId}`} // Link back to home page, potentially highlighting the post
                  className={cn(
                      "absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity",
@@ -196,7 +210,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
    const postDetailsQueries = useQuery({
      queryKey: ['postDetails', conversations.map(c => c.postId).filter(Boolean)], // Key depends on postIds
      queryFn: async () => {
-       const postIds = conversations.map(c => c.postId).filter((id): id is string => !!id);
+       const postIds = conversations.map(c => c.postId).filter((id): id is string => !!id && id !== 'general_connection');
        const detailsMap = new Map<string, { question: string } | null>();
        await Promise.all(postIds.map(async (postId) => {
          const details = await getPostDetails(postId);
@@ -204,7 +218,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        }));
        return detailsMap;
      },
-     enabled: conversations.length > 0 && conversations.some(c => c.postId), // Only run if there are conversations with postIds
+     enabled: conversations.length > 0 && conversations.some(c => c.postId && c.postId !== 'general_connection'), // Only run if there are conversations with postIds
      staleTime: 1000 * 60 * 10, // Cache post details for 10 minutes
    });
 
@@ -293,9 +307,22 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   // --- Derive Selected Conversation Details ---
    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
    const otherParticipantId = selectedConversation?.participants.find(p => p !== currentUserId);
-   const otherParticipantName = otherParticipantId ? `User ${otherParticipantId.substring(0, 4)}...` : 'Select a Conversation';
-   const otherParticipantInitials = getInitials(otherParticipantId);
-   const selectedPostQuestion = selectedConversation?.postId ? postDetailsMap?.get(selectedConversation.postId)?.question : null;
+   // Fetch other participant details for the header
+   const { data: headerParticipantDetails, isLoading: isLoadingHeaderDetails } = useQuery({
+       queryKey: ['userDetails', otherParticipantId],
+       queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : null,
+       enabled: !!otherParticipantId,
+       staleTime: Infinity,
+   });
+
+   const otherParticipantName = isLoadingHeaderDetails
+       ? 'Loading...'
+       : headerParticipantDetails?.name || `@${otherParticipantId || 'Select Conversation'}`; // Use @ fallback
+   const otherParticipantInitials = getInitials(otherParticipantName);
+   const otherParticipantAvatar = headerParticipantDetails?.avatar;
+   const selectedPostQuestion = selectedConversation?.postId && selectedConversation.postId !== 'general_connection'
+        ? postDetailsMap?.get(selectedConversation.postId)?.question
+        : null;
 
 
   return (
@@ -335,7 +362,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             ) : (
               conversations.map((conv) => {
                  // Get the post question from the map
-                 const postQuestion = conv.postId ? postDetailsMap?.get(conv.postId)?.question : null;
+                 const postQuestion = conv.postId && conv.postId !== 'general_connection' ? postDetailsMap?.get(conv.postId)?.question : null;
                  // Determine if this conversation should be highlighted based on URL params
                  const shouldHighlight = highlightPostId === conv.postId && initialConversationId === conv.id;
                  return (
@@ -362,7 +389,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             {/* Message Header */}
             <div className="p-4 border-b flex items-center gap-3 bg-muted/50">
                <Avatar className="h-9 w-9">
-                   {/* <AvatarImage src={otherParticipantAvatar} alt={otherParticipantName} /> */}
+                   <AvatarImage src={otherParticipantAvatar} alt={otherParticipantName} />
                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">{otherParticipantInitials}</AvatarFallback>
                </Avatar>
                <div className="flex-grow">
@@ -384,7 +411,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                     )}
                </div>
                {/* Optional: Link to post details from header */}
-               {selectedConversation?.postId && (
+               {selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && (
                    <Link href={`/?postId=${selectedConversation.postId}`}
                          className={cn(
                              "text-primary hover:underline text-xs flex items-center gap-1 ml-auto",

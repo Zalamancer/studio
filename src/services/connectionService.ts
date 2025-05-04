@@ -252,7 +252,8 @@ const fetchUserProfileBasic = async (userId: string): Promise<UserProfileBasic |
              // Adapt these field names based on your actual user profile structure
              const profile: UserProfileBasic = {
                 userId: userId,
-                displayName: userData.companyName || userData.displayName || `User ${userId.substring(0, 4)}...`,
+                // Use companyName or displayName, otherwise fallback to @userId format
+                displayName: userData.companyName || userData.displayName || `@${userId}`, // Fallback with @
                 avatarUrl: userData.avatarUrl || userData.photoURL || undefined, // Check both fields
              };
              console.log(`Profile found for ${userId}:`, profile);
@@ -260,7 +261,7 @@ const fetchUserProfileBasic = async (userId: string): Promise<UserProfileBasic |
         }
         console.warn(`Basic profile document not found for userId: ${userId}`);
         // Return a fallback structure even if profile doc is missing
-        return { userId: userId, displayName: `User ${userId.substring(0, 4)}...` };
+        return { userId: userId, displayName: `@${userId}` }; // Fallback with @
     } catch (error: any) {
         console.error(`Error fetching basic profile for ${userId}:`, error);
         if (error.code === 'permission-denied') {
@@ -330,7 +331,7 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
         const requestItem: ConnectionRequest = {
           connectionId: docSnap.id,
           requesterId: data.requesterId,
-          requesterDisplayName: requesterProfile?.displayName || `User ${data.requesterId.substring(0,4)}...`, // Use fallback if profile missing
+          requesterDisplayName: requesterProfile?.displayName || `@${data.requesterId}`, // Use fallback with @
           requesterAvatarUrl: requesterProfile?.avatarUrl,
           requestedAt: requestedAtMillis, // Use milliseconds
         };
@@ -409,7 +410,7 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
             const connectionItem: Connection = {
                 connectionId: docSnap.id,
                 otherUserId: otherUserId,
-                otherUserDisplayName: otherUserProfile?.displayName || `User ${otherUserId.substring(0,4)}...`, // Use fallback
+                otherUserDisplayName: otherUserProfile?.displayName || `@${otherUserId}`, // Use fallback with @
                 otherUserAvatarUrl: otherUserProfile?.avatarUrl,
                 connectedAt: connectedAtMillis, // Use milliseconds
             };

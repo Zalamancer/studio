@@ -33,7 +33,7 @@ export const createNotification = async (notificationData: Omit<NewNotificationD
 
     const fullNotificationData: NewNotificationData & { timestamp: Timestamp, isRead: boolean } = {
       ...notificationData,
-      senderName: senderProfile?.displayName || `User ${notificationData.senderId.substring(0, 4)}...`,
+      senderName: senderProfile?.displayName || `@${notificationData.senderId}`, // Use @ fallback
       senderAvatar: senderProfile?.avatarUrl,
       timestamp: serverTimestamp() as Timestamp,
       isRead: false, // Notifications start as unread
