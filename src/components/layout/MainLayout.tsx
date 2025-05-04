@@ -28,7 +28,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"; // Import Dropdown components
-import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User } from "lucide-react"; // Added CreditCard, Settings, User icons
+import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react"; // Added Bell icon
 import { signOut } from '@/lib/firebase/auth'; // Import signOut
 import { auth } from '@/lib/firebase/config'; // Import auth from config
 import { useToast } from "@/hooks/use-toast";
@@ -39,6 +39,7 @@ import { addPostToFirestore } from '@/services/postService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
 import { cn } from '@/lib/utils'; // Import cn for class merging
+import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'; // Import NotificationDropdown
 
 // Navigation items definition (moved here for clarity)
 const navItems = [
@@ -166,9 +167,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 <Link
                   key={item.title}
                   href={item.href}
-                  className={`transition-colors hover:text-foreground/80 ${
+                  className={cn(
+                    "transition-colors hover:text-foreground/80",
                     pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
-                  }`}
+                  )}
                 >
                   <item.icon className="mr-1 h-4 w-4 inline-block" aria-hidden="true" />
                   {item.title}
@@ -207,9 +209,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
             {/* --- User Actions Area --- */}
             {user ? (
+              <div className="flex items-center gap-2">
+                {/* Notification Dropdown */}
+                <NotificationDropdown userId={user.uid} />
+
+                {/* User Profile Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    {/* Use the existing avatar button as the trigger */}
                      <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
                        <Avatar className="h-8 w-8">
                          <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName ?? "User"} />
@@ -257,6 +263,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
+              </div>
             ) : (
               // Show Login/Signup buttons if not logged in
               <div className="flex items-center gap-2">

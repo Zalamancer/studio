@@ -21,6 +21,24 @@ import {
 } from 'firebase/firestore';
 import type { NewCommentData, ClientComment, NewSubCommentData, ClientSubComment } from '@/types/comment';
 import { getUserProfileBasic } from '@/services/connectionService'; // Import function to get basic user info
+import { createNotification } from './notificationService'; // Import notification service
+import type { NewNotificationData } from '@/types/notification';
+import { getPostDetails } from './messagingService'; // Import to get post details for notification
+
+// Helper function to extract mentioned user IDs from text
+const extractMentions = (text: string): string[] => {
+  // Basic regex to find @mentions (adjust as needed for more complex scenarios)
+  // This regex assumes mentions are followed by alphanumeric characters and underscores
+  const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+  const mentions = text.match(mentionRegex);
+  if (!mentions) {
+    return [];
+  }
+  // Extract the user ID part (without the '@')
+  // TODO: In a real app, you'd likely need a way to map mentioned usernames back to user IDs
+  // This placeholder assumes the mention *is* the user ID for simplicity
+  return mentions.map(mention => mention.substring(1));
+};
 
 // --- Comment Functions ---
 
@@ -40,18 +58,50 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
     const postDocRef = doc(db, 'posts', postId);
     const commentsCollectionRef = collection(postDocRef, 'comments');
 
-    // Initialize like fields
+    // Extract mentions
+    const mentionedUserIds = extractMentions(commentData.text);
+
+    // Initialize like fields and mentions
     const fullCommentData: NewCommentData & { timestamp: Timestamp } = {
         ...commentData,
         likeCount: 0, // Initialize like count
         likedBy: [], // Initialize empty likedBy array
+        mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [], // Store mentions
         timestamp: serverTimestamp() as Timestamp, // Add server timestamp here
     };
 
     const docRef = await addDoc(commentsCollectionRef, fullCommentData);
+    const newCommentId = docRef.id;
+    console.log(`Comment added successfully to post ${postId} with ID: ${newCommentId}`);
 
-    console.log(`Comment added successfully to post ${postId} with ID: ${docRef.id}`);
-    return docRef.id;
+    // --- Create Notifications for Mentions ---
+    if (mentionedUserIds.length > 0) {
+      const postDetails = await getPostDetails(postId); // Fetch post question for context
+      for (const mentionedUserId of mentionedUserIds) {
+        if (mentionedUserId !== commentData.userId) { // Don't notify user for self-mention
+          const notification: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
+            userId: mentionedUserId, // The user being notified
+            type: 'mention',
+            senderId: commentData.userId, // The user who made the comment
+            postId: postId,
+            postQuestion: postDetails?.question,
+            commentId: newCommentId,
+            textSnippet: commentData.text.substring(0, 100), // Snippet of the comment
+          };
+          try {
+             await createNotification(notification);
+             console.log(`Mention notification created for user ${mentionedUserId} regarding comment ${newCommentId}`);
+          } catch (notifyError) {
+              console.error(`Failed to create mention notification for user ${mentionedUserId}:`, notifyError);
+              // Decide if failure to notify should block the whole process (probably not)
+          }
+        }
+      }
+    }
+    // --- End Notification Creation ---
+
+
+    return newCommentId;
   } catch (error: any) {
     console.error(`Error adding comment to post ${postId}:`, error);
     if (error.code === 'permission-denied') {
@@ -118,6 +168,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
         userAvatar: userProfile?.avatarUrl,
         likeCount: data.likeCount || 0, // Include like count, default to 0
         likedBy: data.likedBy || [], // Include likedBy array, default to empty
+        mentionedUserIds: data.mentionedUserIds || [], // Include mentions
       };
       return clientComment;
     }).filter((comment): comment is ClientComment => comment !== null);
@@ -227,19 +278,75 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
     const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
     const subCommentsCollectionRef = collection(commentDocRef, 'subcomments');
 
+    // Extract mentions
+    const mentionedUserIds = extractMentions(subCommentData.text);
+
     // Initialize like fields for the subcomment
     const fullSubCommentData: NewSubCommentData & { timestamp: Timestamp } = {
         ...subCommentData,
         likeCount: 0,
         likedBy: [],
+        mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [], // Store mentions
         timestamp: serverTimestamp() as Timestamp,
     };
 
-
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
+    const newSubCommentId = docRef.id;
 
-    console.log(`Subcomment added successfully to comment ${commentId} with ID: ${docRef.id}`);
-    return docRef.id;
+    console.log(`Subcomment added successfully to comment ${commentId} with ID: ${newSubCommentId}`);
+
+    // --- Create Notifications for Replies and Mentions ---
+    const postDetails = await getPostDetails(postId); // Fetch post question for context
+    const commentSnap = await getDoc(commentDocRef);
+    const originalCommenterId = commentSnap.data()?.userId;
+
+    // 1. Notify original commenter (if they are not the one replying)
+    if (originalCommenterId && originalCommenterId !== subCommentData.userId) {
+        const replyNotification: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
+            userId: originalCommenterId,
+            type: 'reply',
+            senderId: subCommentData.userId,
+            postId: postId,
+            postQuestion: postDetails?.question,
+            commentId: commentId,
+            subCommentId: newSubCommentId,
+            textSnippet: subCommentData.text.substring(0, 100),
+        };
+         try {
+             await createNotification(replyNotification);
+             console.log(`Reply notification created for user ${originalCommenterId}`);
+         } catch (notifyError) {
+             console.error(`Failed to create reply notification for user ${originalCommenterId}:`, notifyError);
+         }
+    }
+
+    // 2. Notify mentioned users (excluding original commenter if already notified, and self-mentions)
+    if (mentionedUserIds.length > 0) {
+       for (const mentionedUserId of mentionedUserIds) {
+           // Don't notify self, and don't double-notify the original commenter
+           if (mentionedUserId !== subCommentData.userId && mentionedUserId !== originalCommenterId) {
+               const mentionNotification: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
+                   userId: mentionedUserId,
+                   type: 'mention',
+                   senderId: subCommentData.userId,
+                   postId: postId,
+                   postQuestion: postDetails?.question,
+                   commentId: commentId,
+                   subCommentId: newSubCommentId,
+                   textSnippet: subCommentData.text.substring(0, 100),
+               };
+                try {
+                   await createNotification(mentionNotification);
+                   console.log(`Mention notification created for user ${mentionedUserId} regarding subcomment ${newSubCommentId}`);
+                } catch (notifyError) {
+                    console.error(`Failed to create mention notification for user ${mentionedUserId}:`, notifyError);
+                }
+           }
+       }
+    }
+    // --- End Notification Creation ---
+
+    return newSubCommentId;
   } catch (error: any) {
     console.error(`Error adding subcomment to comment ${commentId}:`, error);
     if (error.code === 'permission-denied') {
@@ -306,6 +413,7 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
         userAvatar: userProfile?.avatarUrl,
         likeCount: data.likeCount || 0, // Include like count
         likedBy: data.likedBy || [], // Include likedBy array
+        mentionedUserIds: data.mentionedUserIds || [], // Include mentions
       };
       return clientSubComment;
     }).filter((subComment): subComment is ClientSubComment => subComment !== null);

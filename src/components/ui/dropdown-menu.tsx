@@ -7,6 +7,7 @@ import { Check, ChevronRight, Circle } from "lucide-react"
 import { Slot } from "@radix-ui/react-slot"; // Import Slot
 
 import { cn } from "@/lib/utils"
+import { cva, type VariantProps } from "class-variance-authority" // Import cva and VariantProps
 
 const DropdownMenu = DropdownMenuPrimitive.Root
 
@@ -76,20 +77,44 @@ const DropdownMenuContent = React.forwardRef<
 ))
 DropdownMenuContent.displayName = DropdownMenuPrimitive.Content.displayName
 
+// --- Add variants for DropdownMenuItem ---
+const dropdownMenuItemVariants = cva(
+    "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
+    {
+        variants: {
+            size: {
+                default: "py-1.5",
+                xs: "py-1 text-xs", // Extra small size
+            },
+            inset: {
+                true: "pl-8",
+            },
+        },
+        defaultVariants: {
+            size: "default",
+            inset: false,
+        },
+    }
+);
+
+// --- Update DropdownMenuItem props ---
+interface DropdownMenuItemProps
+    extends React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item>,
+    VariantProps<typeof dropdownMenuItemVariants> { // Use VariantProps here
+    asChild?: boolean;
+}
+
+
 const DropdownMenuItem = React.forwardRef<
   React.ElementRef<typeof DropdownMenuPrimitive.Item>,
-  React.ComponentPropsWithoutRef<typeof DropdownMenuPrimitive.Item> & {
-    inset?: boolean;
-    asChild?: boolean; // Add asChild prop
-  }
->(({ className, inset, asChild = false, ...props }, ref) => {
+  DropdownMenuItemProps // Use the updated props interface
+>(({ className, inset, size, asChild = false, ...props }, ref) => { // Include size in destructured props
   const Comp = asChild ? Slot : DropdownMenuPrimitive.Item; // Use Slot if asChild is true
   return (
     <Comp
       ref={ref}
       className={cn(
-        "relative flex cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none transition-colors focus:bg-accent focus:text-accent-foreground data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-        inset && "pl-8",
+        dropdownMenuItemVariants({ size, inset }), // Apply variants here
         className
       )}
       {...props}

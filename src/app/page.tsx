@@ -31,7 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; //
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator"; // Import Separator
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles } from "lucide-react"; // Added MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles icons
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles, AtSign } from "lucide-react"; // Added AtSign icon
 import { useToast } from "@/hooks/use-toast";
 import type { Post, NewPostData } from '@/types/post'; // Correctly import types
 import { useAuth } from '@/contexts/AuthContext';
@@ -44,6 +44,7 @@ import { findOrCreateConversation } from '@/services/messagingService'; // Impor
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
 import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService'; // Import comment/subcomment/like services
 import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment'; // Import comment/subcomment types
+import { getUserProfileBasic } from '@/services/connectionService'; // To potentially resolve mentions
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
@@ -178,6 +179,13 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
         toggleLikeSubCommentMutation.mutate();
     };
 
+    // Placeholder: Render mentions differently (e.g., bold, link)
+    const renderTextWithMentions = (text: string, mentionedUserIds?: string[]) => {
+        // TODO: Implement actual logic to find and highlight mentions based on IDs/names
+        // For now, just return the text
+        return text;
+    };
+
 
     return (
         <div key={subComment.id} className="flex items-start gap-2 group"> {/* Add group for hover effect */}
@@ -213,7 +221,7 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                               ) : (
                                   <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
                               )}
-                              {subComment.likeCount > 0 ? <span className="text-xs">({subComment.likeCount})</span> : ''}
+                              {subComment.likeCount && subComment.likeCount > 0 ? <span className="text-xs">({subComment.likeCount})</span> : ''}
                            </Button>
                         )}
                         {/* Time */}
@@ -257,7 +265,9 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                     </div>
                 </div>
                  {/* Main Content: Text */}
-                <p className="text-sm text-muted-foreground break-words">{subComment.text}</p>
+                <p className="text-sm text-muted-foreground break-words">
+                    {renderTextWithMentions(subComment.text, subComment.mentionedUserIds)}
+                </p>
             </div>
         </div>
     );
@@ -326,6 +336,11 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
             } else {
                 refetchSubComments(); // Refetch replies if section was already open
             }
+            // Invalidate notifications query for the recipient of the reply
+            // (The recipient ID would ideally be fetched or known, here assuming comment.userId)
+            queryClient.invalidateQueries({ queryKey: ['notifications', comment.userId] });
+             // Invalidate notifications for mentioned users (if any) - Requires resolving mentions to IDs
+             // This part is complex without a proper mention resolution system
         },
         onError: (error: Error) => {
             console.error("Error adding reply:", error);
@@ -340,15 +355,26 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         },
     });
 
+    // Placeholder function to handle mention suggestions (e.g., fetching users)
+    const handleMentionInput = (text: string) => {
+        // TODO: Implement logic to detect '@' and suggest users
+        setNewReply(text);
+    };
+
+
     const handleReplySubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!user || !newReply.trim() || isSubmittingReply) return;
 
         setIsSubmittingReply(true);
         // Omit likeCount and likedBy as they are initialized in the service
+        // Extract mentions from the reply text (placeholder)
+         const mentionedUserIds = extractMentions(newReply.trim()); // Use the same helper
+
         const replyData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'> = {
             userId: user.uid,
             text: newReply.trim(),
+            mentionedUserIds: mentionedUserIds, // Add mentioned IDs
         };
         addReplyMutation.mutate(replyData);
     };
@@ -417,6 +443,13 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         refetchSubComments();
     };
 
+     // Placeholder: Render mentions differently (e.g., bold, link)
+     const renderTextWithMentions = (text: string, mentionedUserIds?: string[]) => {
+         // TODO: Implement actual logic to find and highlight mentions based on IDs/names
+         // For now, just return the text
+         return text;
+     };
+
     return (
         <div className="group border-b border-border/50 pb-4"> {/* Wrap entire comment + replies */}
             <div className="flex items-start gap-3 "> {/* Main comment content */}
@@ -452,7 +485,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                                     ) : (
                                         <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
                                     )}
-                                    {comment.likeCount > 0 ? <span className="text-xs">({comment.likeCount})</span> : ''}
+                                    {comment.likeCount && comment.likeCount > 0 ? <span className="text-xs">({comment.likeCount})</span> : ''}
                                 </Button>
                              )}
                             {/* Time */}
@@ -496,7 +529,9 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                         </div>
                     </div>
                     {/* Main Content: Text */}
-                    <p className="text-sm text-muted-foreground break-words">{comment.text}</p>
+                    <p className="text-sm text-muted-foreground break-words">
+                         {renderTextWithMentions(comment.text, comment.mentionedUserIds)}
+                    </p>
                 </div>
             </div>
 
@@ -515,11 +550,12 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
             {/* Reply Input Form */}
             {isReplying && user && (
                 <form onSubmit={handleReplySubmit} className="flex items-center gap-2 pl-11 mt-2">
+                    {/* Replace Input with a component supporting mentions if needed */}
                     <Input
                         type="text"
-                        placeholder={`Replying to ${comment.userName || 'Anonymous'}...`}
+                        placeholder={`Replying to ${comment.userName || 'Anonymous'}... (@mention someone)`}
                         value={newReply}
-                        onChange={(e) => setNewReply(e.target.value)}
+                        onChange={(e) => handleMentionInput(e.target.value)} // Use handler for potential suggestions
                         disabled={isSubmittingReply}
                         className="flex-grow h-8 text-sm"
                         aria-label="New reply input"
@@ -728,11 +764,15 @@ function BoardPageContent() {
 
        setIsSubmittingComment(true); // Indicate loading state
 
+       // Extract mentions (placeholder)
+       const mentionedUserIds = extractMentions(newComment.trim()); // Use the same helper
+
        // Adjust type based on imported comment service function expectation
        // Omit likeCount and likedBy as they are initialized in the service
        const commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'> = {
            userId: user.uid,
            text: newComment.trim(),
+           mentionedUserIds: mentionedUserIds, // Add mentioned IDs
            // timestamp is set by the server in the service function
        };
 
@@ -742,8 +782,11 @@ function BoardPageContent() {
             console.log(`Comment ${newCommentId} added to post ${selectedPost.id}`);
 
             // --- Invalidate comments query to refetch ---
-            // Use invalidateQueries for better reactivity
             await queryClient.invalidateQueries({ queryKey: ['comments', selectedPost.id] });
+            // --- Invalidate notifications query for mentioned users ---
+            mentionedUserIds.forEach(mentionedId => {
+                queryClient.invalidateQueries({ queryKey: ['notifications', mentionedId] });
+            });
 
             setNewComment(''); // Clear input
             toast({ title: "Comment Added" });
@@ -765,6 +808,12 @@ function BoardPageContent() {
    const handleCommentDeleted = () => {
        refetchComments();
    };
+
+    // Placeholder function to handle mention suggestions in the main comment input
+    const handleMentionInput = (text: string) => {
+        // TODO: Implement logic to detect '@' and suggest users
+        setNewComment(text);
+    };
 
 
   // Loading state for authentication check or initial data fetch
@@ -967,11 +1016,12 @@ function BoardPageContent() {
                              <div className="w-full space-y-4">
                                  {/* Comment Input Form */}
                                  <form onSubmit={handleCommentSubmit} className="flex items-center gap-2">
+                                     {/* Replace Input with a component supporting mentions if needed */}
                                      <Input
                                          type="text"
-                                         placeholder="Add a comment..."
+                                         placeholder="Add a comment... (@mention someone)"
                                          value={newComment}
-                                         onChange={(e) => setNewComment(e.target.value)}
+                                         onChange={(e) => handleMentionInput(e.target.value)} // Use handler
                                          disabled={!user || isSubmittingComment} // Disable if not logged in or submitting
                                          className="flex-grow"
                                          aria-label="New comment input"
@@ -1054,3 +1104,12 @@ function BoardPageContent() {
 
 // Export the BoardPageContent component as the default export for this page route
 export default BoardPageContent;
+
+// Helper function to extract mentioned user IDs from text (Placeholder)
+const extractMentions = (text: string): string[] => {
+  const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+  const mentions = text.match(mentionRegex);
+  if (!mentions) return [];
+  // TODO: Resolve usernames to IDs here
+  return mentions.map(mention => mention.substring(1)); // Placeholder: assumes mention IS the ID
+};
