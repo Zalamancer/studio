@@ -31,14 +31,15 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; //
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator"; // Import Separator
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart } from "lucide-react"; // Added MessageCircle, Send, Trash, CornerDownRight, Heart icons
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles } from "lucide-react"; // Added MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles icons
 import { useToast } from "@/hooks/use-toast";
-import type { Post } from '@/types/post';
+import type { Post, NewPostData } from '@/types/post'; // Correctly import types
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postService';
+import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp } from 'firebase/firestore'; // Import Timestamp
+import { autocompletePostDescription } from '@/ai/flows/autocomplete-post-description'; // Import the AI flow
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
 import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService'; // Import comment/subcomment/like services
@@ -195,8 +196,8 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                 </div>
                 <p className="text-sm text-muted-foreground break-words">{subComment.text}</p> {/* Added break-words */}
 
-                 {/* SubComment Actions (Like) */}
-                <div className="flex items-center gap-2 mt-1">
+                 {/* SubComment Actions (Like) - Positioned to the right below time */}
+                 <div className="flex items-center justify-end gap-2 mt-1">
                     {user && ( // Only show like button if logged in
                        <Button
                           variant="ghost"
@@ -217,8 +218,7 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                           {subComment.likeCount > 0 ? `(${subComment.likeCount})` : ''}
                        </Button>
                     )}
-                </div>
-
+                 </div>
 
                 {/* Delete Button */}
                 {isOwnSubComment && (
@@ -425,9 +425,32 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                 <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0 relative"> {/* Added min-w-0 and relative */}
                     <div className="flex justify-between items-center mb-1">
                         <p className="text-sm font-medium text-foreground truncate">{comment.userName || 'Anonymous'}</p>
-                        <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                            {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
+                        <div className="flex flex-col items-end flex-shrink-0 ml-2"> {/* Container for time and like */}
+                            <p className="text-xs text-muted-foreground">
+                                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                            {/* Like Button - Positioned below time on the right */}
+                            {user && ( // Only show like button if logged in
+                                <Button
+                                    variant="ghost"
+                                    size="xs"
+                                    onClick={handleLikeClick}
+                                    disabled={isLiking}
+                                    className={cn(
+                                        "text-xs h-auto p-1 flex items-center gap-1 mt-0.5", // Added mt-0.5
+                                        hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
+                                    )}
+                                    aria-pressed={hasLiked}
+                                >
+                                    {isLiking ? (
+                                        <Loader2 className="h-3 w-3 animate-spin" />
+                                    ) : (
+                                        <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
+                                    )}
+                                    {comment.likeCount > 0 ? `(${comment.likeCount})` : ''}
+                                </Button>
+                            )}
+                        </div>
                     </div>
                     <p className="text-sm text-muted-foreground break-words">{comment.text}</p>
 
@@ -469,33 +492,13 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                 </div>
             </div>
 
-            {/* Reply, Like & Show Replies Buttons */}
+            {/* Reply & Show Replies Buttons */}
             <div className="flex items-center gap-3 pl-11 mt-2"> {/* Align with comment text, added gap */}
                  {user && ( // Only show reply button if logged in
                     <Button variant="ghost" size="xs" onClick={toggleReplyForm} className="text-xs text-muted-foreground hover:text-primary h-auto p-1">
                         <CornerDownRight className="h-3 w-3 mr-1" /> Reply
                     </Button>
                  )}
-                  {user && ( // Only show like button if logged in
-                      <Button
-                          variant="ghost"
-                          size="xs"
-                          onClick={handleLikeClick}
-                          disabled={isLiking}
-                          className={cn(
-                              "text-xs h-auto p-1 flex items-center gap-1",
-                              hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
-                          )}
-                          aria-pressed={hasLiked}
-                      >
-                          {isLiking ? (
-                              <Loader2 className="h-3 w-3 animate-spin" />
-                          ) : (
-                              <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
-                          )}
-                          Like {comment.likeCount > 0 ? `(${comment.likeCount})` : ''}
-                      </Button>
-                  )}
                  <Button variant="ghost" size="xs" onClick={toggleShowReplies} className="text-xs text-muted-foreground hover:text-primary h-auto p-1">
                      {showReplies ? 'Hide Replies' : `View Replies ${isLoadingSubComments ? '...' : subComments.length > 0 ? `(${subComments.length})` : ''}`}
                  </Button>
@@ -561,6 +564,13 @@ function BoardPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
+  // --- State for AI Autocomplete ---
+   const [isAutocompleting, setIsAutocompleting] = useState(false);
+   const [autocompleteSuggestion, setAutocompleteSuggestion] = useState<string | null>(null);
+   const descriptionRef = useRef<HTMLTextAreaElement>(null); // Ref for description textarea
+   const autocompleteTimeoutRef = useRef<NodeJS.Timeout | null>(null); // Ref for debounce timer
+   // --- End AI Autocomplete State ---
 
   // Redirect unauthenticated users after loading is finished
   useEffect(() => {
@@ -1036,3 +1046,5 @@ function BoardPageContent() {
 
 // Export the BoardPageContent component as the default export for this page route
 export default BoardPageContent;
+
+    
