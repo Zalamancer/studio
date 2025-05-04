@@ -31,7 +31,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; //
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator"; // Import Separator
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash } from "lucide-react"; // Added MessageCircle, Send, Trash icons
+import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight } from "lucide-react"; // Added MessageCircle, Send, Trash, CornerDownRight icons
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
@@ -41,8 +41,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
-import { addCommentToPost, getCommentsForPost, deleteCommentFromPost } from '@/services/commentService'; // Import comment services
-import type { NewCommentData, ClientComment } from '@/types/comment'; // Import comment types
+import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment } from '@/services/commentService'; // Import comment/subcomment services
+import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment'; // Import comment/subcomment types
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
@@ -97,13 +97,114 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
 PostCard.displayName = 'PostCard'; // Add display name for React DevTools
 
 
-// Component for displaying a single comment
+// Component for displaying a single subcomment (reply)
+const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentId, onDelete }: { subComment: ClientSubComment, currentUserId: string | null, postId: string, commentId: string, onDelete: () => void }) => {
+    const { toast } = useToast();
+    const isOwnSubComment = subComment.userId === currentUserId;
+
+    const deleteSubCommentMutation = useMutation({
+        mutationFn: () => deleteSubCommentFromComment(postId, commentId, subComment.id),
+        onSuccess: () => {
+            toast({ title: "Reply Deleted" });
+            onDelete(); // Trigger parent (CommentItem) refetch
+        },
+        onError: (error: Error) => {
+            console.error("Error deleting subcomment:", error);
+            toast({
+                variant: "destructive",
+                title: "Delete Failed",
+                description: `Could not delete reply: ${error.message}`,
+            });
+        },
+    });
+
+    const handleDeleteClick = () => {
+        deleteSubCommentMutation.mutate();
+    };
+
+    return (
+        <div key={subComment.id} className="flex items-start gap-2 group"> {/* Add group for hover effect */}
+            <Avatar className="h-6 w-6 mt-1 flex-shrink-0">
+                <AvatarImage src={subComment.userAvatar} alt={subComment.userName} />
+                <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
+                    {getInitials(subComment.userName)}
+                </AvatarFallback>
+            </Avatar>
+            <div className="flex-grow bg-background p-2 rounded-md min-w-0 relative border border-border/50"> {/* Added min-w-0 and relative */}
+                <div className="flex justify-between items-center mb-1">
+                    <p className="text-xs font-medium text-foreground truncate">{subComment.userName || 'Anonymous'}</p>
+                    <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                        {new Date(subComment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                </div>
+                <p className="text-sm text-muted-foreground break-words">{subComment.text}</p> {/* Added break-words */}
+
+                {/* Delete Button */}
+                {isOwnSubComment && (
+                    <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                           <Button
+                                variant="ghost"
+                                size="icon"
+                                className="absolute top-0 right-0 h-5 w-5 text-muted-foreground/70 hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
+                                disabled={deleteSubCommentMutation.isPending}
+                                aria-label="Delete reply"
+                           >
+                                {deleteSubCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin"/> : <Trash className="h-3 w-3"/>}
+                           </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                            <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Reply?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                    Are you sure you want to delete this reply? This action cannot be undone.
+                                </AlertDialogDescription>
+                            </AlertDialogHeader>
+                            <AlertDialogFooter>
+                                <AlertDialogCancel disabled={deleteSubCommentMutation.isPending}>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                    onClick={handleDeleteClick}
+                                    disabled={deleteSubCommentMutation.isPending}
+                                    className="bg-destructive hover:bg-destructive/90"
+                                >
+                                    {deleteSubCommentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                </AlertDialogAction>
+                            </AlertDialogFooter>
+                        </AlertDialogContent>
+                    </AlertDialog>
+                )}
+            </div>
+        </div>
+    );
+});
+SubCommentItem.displayName = 'SubCommentItem';
+
+// Component for displaying a single comment and its replies (subcomments)
 const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { comment: ClientComment, currentUserId: string | null, postId: string, onDelete: () => void }) => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
+    const { user } = useAuth(); // Get current user for adding replies
     const isOwnComment = comment.userId === currentUserId;
+    const [showReplies, setShowReplies] = useState(false); // State to toggle replies visibility
+    const [newReply, setNewReply] = useState(''); // State for new reply input
+    const [isReplying, setIsReplying] = useState(false); // State to show reply input form
+    const [isSubmittingReply, setIsSubmittingReply] = useState(false);
 
-    // Delete Comment Mutation
+    // --- Fetch SubComments (Replies) ---
+    const {
+        data: subComments = [],
+        isLoading: isLoadingSubComments,
+        error: subCommentsError,
+        refetch: refetchSubComments,
+    } = useQuery<ClientSubComment[]>({
+        queryKey: ['subComments', postId, comment.id], // Unique key for this comment's replies
+        queryFn: () => getSubCommentsForComment(postId, comment.id),
+        enabled: showReplies, // Only fetch when showReplies is true
+        staleTime: 1000 * 60 * 1, // 1 minute stale time
+    });
+    // --- End Fetch SubComments ---
+
+    // --- Delete Comment Mutation ---
     const deleteCommentMutation = useMutation({
         mutationFn: () => deleteCommentFromPost(postId, comment.id),
         onSuccess: () => {
@@ -124,58 +225,172 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         deleteCommentMutation.mutate();
     };
 
-    return (
-        <div key={comment.id} className="flex items-start gap-3 group"> {/* Add group for hover effect */}
-            <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
-                <AvatarImage src={comment.userAvatar} alt={comment.userName} />
-                <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-                    {getInitials(comment.userName)}
-                </AvatarFallback>
-            </Avatar>
-            <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0 relative"> {/* Added min-w-0 and relative */}
-                <div className="flex justify-between items-center mb-1">
-                    <p className="text-sm font-medium text-foreground truncate">{comment.userName || 'Anonymous'}</p>
-                    <p className="text-xs text-muted-foreground flex-shrink-0 ml-2"> {/* Added ml-2 */}
-                        {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                    </p>
-                </div>
-                <p className="text-sm text-muted-foreground break-words">{comment.text}</p> {/* Added break-words */}
+    // --- Add SubComment (Reply) Mutation ---
+    const addReplyMutation = useMutation({
+        mutationFn: (replyData: NewSubCommentData) => addSubCommentToComment(postId, comment.id, replyData),
+        onSuccess: () => {
+            toast({ title: "Reply Added" });
+            setNewReply(''); // Clear input
+            setIsReplying(false); // Hide reply input
+            if (!showReplies) {
+                setShowReplies(true); // Show replies section if it was hidden
+            } else {
+                refetchSubComments(); // Refetch replies if section was already open
+            }
+        },
+        onError: (error: Error) => {
+            console.error("Error adding reply:", error);
+            toast({
+                variant: "destructive",
+                title: "Reply Failed",
+                description: `Could not add reply: ${error.message}`,
+            });
+        },
+        onSettled: () => {
+            setIsSubmittingReply(false); // Always reset loading state
+        },
+    });
 
-                {/* Delete Button */}
-                {isOwnComment && (
-                    <AlertDialog>
-                        <AlertDialogTrigger asChild>
-                           <Button
+    const handleReplySubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!user || !newReply.trim() || isSubmittingReply) return;
+
+        setIsSubmittingReply(true);
+        const replyData: NewSubCommentData = {
+            userId: user.uid,
+            text: newReply.trim(),
+        };
+        addReplyMutation.mutate(replyData);
+    };
+
+    // Toggle showing/hiding replies
+    const toggleShowReplies = () => {
+        setShowReplies(prev => !prev);
+    };
+
+    // Toggle showing/hiding the reply input form
+    const toggleReplyForm = () => {
+        setIsReplying(prev => !prev);
+    };
+
+    // Callback for SubCommentItem to trigger refetch
+    const handleSubCommentDeleted = () => {
+        refetchSubComments();
+    };
+
+    return (
+        <div className="group border-b border-border/50 pb-4"> {/* Wrap entire comment + replies */}
+            <div className="flex items-start gap-3 "> {/* Main comment content */}
+                <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
+                    <AvatarImage src={comment.userAvatar} alt={comment.userName} />
+                    <AvatarFallback className="text-xs bg-muted text-muted-foreground">
+                        {getInitials(comment.userName)}
+                    </AvatarFallback>
+                </Avatar>
+                <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0 relative"> {/* Added min-w-0 and relative */}
+                    <div className="flex justify-between items-center mb-1">
+                        <p className="text-sm font-medium text-foreground truncate">{comment.userName || 'Anonymous'}</p>
+                        <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                            {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                    </div>
+                    <p className="text-sm text-muted-foreground break-words">{comment.text}</p>
+
+                    {/* Delete Button for Comment */}
+                    {isOwnComment && (
+                        <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                            <Button
                                 variant="ghost"
                                 size="icon"
                                 className="absolute top-1 right-1 h-6 w-6 text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity"
                                 disabled={deleteCommentMutation.isPending}
                                 aria-label="Delete comment"
-                           >
+                            >
                                 {deleteCommentMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin"/> : <Trash className="h-3 w-3"/>}
-                           </Button>
-                        </AlertDialogTrigger>
-                        <AlertDialogContent>
-                            <AlertDialogHeader>
-                                <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                    Are you sure you want to delete this comment? This action cannot be undone.
-                                </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                                <AlertDialogCancel disabled={deleteCommentMutation.isPending}>Cancel</AlertDialogCancel>
-                                <AlertDialogAction
-                                    onClick={handleDeleteClick}
-                                    disabled={deleteCommentMutation.isPending}
-                                    className="bg-destructive hover:bg-destructive/90"
-                                >
-                                    {deleteCommentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
-                                </AlertDialogAction>
-                            </AlertDialogFooter>
-                        </AlertDialogContent>
-                    </AlertDialog>
-                )}
+                            </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                                {/* ... (Delete confirmation dialog remains the same) ... */}
+                                <AlertDialogHeader>
+                                    <AlertDialogTitle>Delete Comment?</AlertDialogTitle>
+                                    <AlertDialogDescription>
+                                        Are you sure you want to delete this comment? This action cannot be undone. Deleting the comment will also remove all replies.
+                                    </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                    <AlertDialogCancel disabled={deleteCommentMutation.isPending}>Cancel</AlertDialogCancel>
+                                    <AlertDialogAction
+                                        onClick={handleDeleteClick}
+                                        disabled={deleteCommentMutation.isPending}
+                                        className="bg-destructive hover:bg-destructive/90"
+                                    >
+                                        {deleteCommentMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Delete'}
+                                    </AlertDialogAction>
+                                </AlertDialogFooter>
+                            </AlertDialogContent>
+                        </AlertDialog>
+                    )}
+                </div>
             </div>
+
+            {/* Reply & Show Replies Buttons */}
+            <div className="flex items-center gap-2 pl-11 mt-2"> {/* Align with comment text */}
+                 {user && ( // Only show reply button if logged in
+                    <Button variant="ghost" size="xs" onClick={toggleReplyForm} className="text-xs text-muted-foreground hover:text-primary h-auto p-1">
+                        <CornerDownRight className="h-3 w-3 mr-1" /> Reply
+                    </Button>
+                 )}
+                 <Button variant="ghost" size="xs" onClick={toggleShowReplies} className="text-xs text-muted-foreground hover:text-primary h-auto p-1">
+                     {showReplies ? 'Hide Replies' : `View Replies ${isLoadingSubComments ? '...' : subComments.length > 0 ? `(${subComments.length})` : ''}`}
+                 </Button>
+            </div>
+
+            {/* Reply Input Form */}
+            {isReplying && user && (
+                <form onSubmit={handleReplySubmit} className="flex items-center gap-2 pl-11 mt-2">
+                    <Input
+                        type="text"
+                        placeholder={`Replying to ${comment.userName || 'Anonymous'}...`}
+                        value={newReply}
+                        onChange={(e) => setNewReply(e.target.value)}
+                        disabled={isSubmittingReply}
+                        className="flex-grow h-8 text-sm"
+                        aria-label="New reply input"
+                    />
+                    <Button type="submit" size="sm" disabled={!newReply.trim() || isSubmittingReply}>
+                        {isSubmittingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                        <span className="sr-only">Send Reply</span>
+                    </Button>
+                </form>
+            )}
+
+
+            {/* Replies (SubComments) Section */}
+            {showReplies && (
+                <div className="pl-11 mt-3 space-y-3 border-l-2 border-border ml-5"> {/* Indent replies */}
+                    {isLoadingSubComments ? (
+                         <div className="flex items-center justify-center py-4">
+                            <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                         </div>
+                    ) : subCommentsError ? (
+                        <p className="text-xs text-destructive pl-2">Error loading replies.</p>
+                    ) : subComments.length === 0 ? (
+                        <p className="text-xs text-muted-foreground pl-2">No replies yet.</p>
+                    ) : (
+                        subComments.map((subComment) => (
+                            <SubCommentItem
+                                key={subComment.id}
+                                subComment={subComment}
+                                currentUserId={currentUserId}
+                                postId={postId}
+                                commentId={comment.id}
+                                onDelete={handleSubCommentDeleted} // Pass refetch handler
+                            />
+                        ))
+                    )}
+                </div>
+            )}
         </div>
     );
 });

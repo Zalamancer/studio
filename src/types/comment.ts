@@ -20,3 +20,22 @@ export interface ClientComment extends Omit<Comment, 'timestamp'> {
 
 // Data needed to create a new comment (postId is implicit via subcollection path)
 export type NewCommentData = Omit<Comment, 'id' | 'timestamp'>;
+
+// Represents a subcomment (reply) document stored in Firestore subcollection
+// posts/{postId}/comments/{commentId}/subcomments
+export interface SubComment {
+  id: string;
+  userId: string; // ID of the user who posted the subcomment
+  text: string; // The subcomment text
+  timestamp: Timestamp; // Firestore Timestamp when the subcomment was posted
+}
+
+// Represents subcomment data used on the client-side (serializable timestamp)
+export interface ClientSubComment extends Omit<SubComment, 'timestamp'> {
+  timestamp: number; // Milliseconds since epoch
+  userName?: string; // Fetched for display
+  userAvatar?: string; // Fetched for display
+}
+
+// Data needed to create a new subcomment (postId and commentId are implicit)
+export type NewSubCommentData = Omit<SubComment, 'id' | 'timestamp'>;
