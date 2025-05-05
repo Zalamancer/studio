@@ -3,13 +3,15 @@
 import React from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
+import Link from 'next/link'; // Import Link
+import { cn } from '@/lib/utils'; // Import cn for conditional classes
 
 const sectors = [
   { code: "11", title: "Agriculture, Forestry, Fishing and Hunting", hint: "farming crops" },
   { code: "21", title: "Mining, Quarrying, and Oil and Gas Extraction", hint: "mining equipment" },
   { code: "22", title: "Utilities", hint: "power lines" },
   { code: "23", title: "Construction", hint: "construction site" },
-  { code: "31-33", title: "Manufacturing", hint: "factory assembly line" },
+  { code: "31-33", title: "Manufacturing", hint: "factory assembly line", link: "/discover/manufacturing" }, // Add link prop
   { code: "42", title: "Wholesale Trade", hint: "warehouse pallets" },
   { code: "44-45", title: "Retail Trade", hint: "shopping mall" },
   { code: "48-49", title: "Transportation and Warehousing", hint: "trucks highway" },
@@ -35,41 +37,53 @@ const DiscoverPage = () => {
           Discover Sectors
         </h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Explore different business sectors within the AnonyCollab community.
+          Explore different business sectors within the AnonyCollab community. Click on Manufacturing for more details.
         </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {sectors.map((sector) => (
-          <Card key={sector.code} className="overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200 flex flex-col h-full">
-            <CardHeader className="p-4 border-b bg-muted/30">
-              <CardTitle className="text-lg font-semibold text-foreground truncate">
-                {sector.title}
-              </CardTitle>
-              <p className="text-xs text-muted-foreground">NAICS: {sector.code}</p>
-            </CardHeader>
-            <CardContent className="p-0 flex-grow">
-              <div className="aspect-video relative w-full">
-                <Image
-                  src={`https://picsum.photos/seed/${sector.code}/400/225`} // Placeholder image based on code
-                  alt={sector.title}
-                  layout="fill"
-                  objectFit="cover"
-                  className="transition-transform duration-300 group-hover:scale-105"
-                  data-ai-hint={sector.hint} // Add hint for image generation
-                />
-              </div>
-              {/* Optional: Add a short description or link here */}
-               {/* <p className="p-4 text-sm text-muted-foreground">
-                 Find collaborators and resources in the {sector.title} sector.
-               </p> */}
-            </CardContent>
-             {/* Optional Footer for actions */}
-             {/* <CardFooter className="p-4">
-               <Button variant="link" className="p-0 h-auto text-primary">View Posts</Button>
-             </CardFooter> */}
-          </Card>
-        ))}
+        {sectors.map((sector) => {
+          const CardContentWrapper = sector.link ? Link : 'div'; // Use Link if link exists, otherwise div
+          const cardContentProps = sector.link ? { href: sector.link, passHref: true } : {};
+
+          return (
+            <CardContentWrapper key={sector.code} {...cardContentProps}>
+              <Card
+                className={cn(
+                  "overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200 flex flex-col h-full group", // Add group class
+                  sector.link && "cursor-pointer" // Add cursor pointer if it's a link
+                )}
+              >
+                <CardHeader className="p-4 border-b bg-muted/30">
+                  <CardTitle className="text-lg font-semibold text-foreground truncate">
+                    {sector.title}
+                  </CardTitle>
+                  <p className="text-xs text-muted-foreground">NAICS: {sector.code}</p>
+                </CardHeader>
+                <CardContent className="p-0 flex-grow">
+                  <div className="aspect-video relative w-full">
+                    <Image
+                      src={`https://picsum.photos/seed/${sector.code}/400/225`} // Placeholder image based on code
+                      alt={sector.title}
+                      fill // Use fill instead of layout="fill" objectFit="cover"
+                      sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw" // Add sizes prop
+                      className="object-cover transition-transform duration-300 group-hover:scale-105" // Use object-cover
+                      data-ai-hint={sector.hint} // Add hint for image generation
+                    />
+                  </div>
+                   {/* Optional: Add a short description or link here */}
+                   {/* <p className="p-4 text-sm text-muted-foreground">
+                     Find collaborators and resources in the {sector.title} sector.
+                   </p> */}
+                </CardContent>
+                 {/* Optional Footer for actions */}
+                 {/* <CardFooter className="p-4">
+                   <Button variant="link" className="p-0 h-auto text-primary">View Posts</Button>
+                 </CardFooter> */}
+              </Card>
+            </CardContentWrapper>
+          );
+        })}
       </div>
     </div>
   );
