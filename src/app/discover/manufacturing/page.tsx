@@ -189,4 +189,3 @@ const ManufacturingPage = () => {
 };
 
 export default ManufacturingPage;
-```
