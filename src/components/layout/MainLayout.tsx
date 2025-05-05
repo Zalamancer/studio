@@ -28,9 +28,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"; // Import Dropdown components
-import { Home, LineChart, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react"; // Added Bell icon
-import { signOut } from '@/lib/firebase/auth'; // Import signOut
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react"; // Changed LineChart to Compass
 import { auth } from '@/lib/firebase/config'; // Import auth from config
+import { signOut } from '@/lib/firebase/auth'; // Import signOut
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { CreatePostForm } from '@/components/CreatePostForm';
@@ -44,11 +44,10 @@ import { NotificationDropdown } from '@/components/notifications/NotificationDro
 // Navigation items definition (moved here for clarity)
 const navItems = [
   { title: "Board", href: "/", icon: Home },
-  { title: "Invest", href: "/invest", icon: LineChart },
+  { title: "Discover", href: "/discover", icon: Compass }, // Updated title and icon
   { title: "Connect", href: "/connect", icon: Network },
   { title: "Contracts", href: "/contracts", icon: FileText },
   // Subscription is moved to the profile dropdown
-  // { title: "Subscription", href: "/subscription", icon: CreditCard },
 ];
 
 // Available tags (can be fetched or defined globally if needed elsewhere)
@@ -295,4 +294,3 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     </div>
   );
 }
-
