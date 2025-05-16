@@ -157,18 +157,23 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     if (file) {
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a JPG, PNG, or GIF image." });
-        if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        form.setValue("image", null); // Explicitly set form value to null
+        setImagePreviewUrl(null);
+        setSelectedImageFile(null);
         return;
       }
 
       if (file.size > MAX_FILE_SIZE_BYTES) {
         setOriginalTooLargeFile(file);
         setShowCompressionDialog(true);
-        if (fileInputRef.current) fileInputRef.current.value = ""; // Reset, user will confirm compression
+        if (fileInputRef.current) fileInputRef.current.value = "";
+        form.setValue("image", null); // Explicitly set form value to null
+        setImagePreviewUrl(null);
+        setSelectedImageFile(null);
         return;
       }
 
-      // File is acceptable, set for preview and form
       setSelectedImageFile(file);
       form.setValue("image", file);
       const reader = new FileReader();
@@ -185,7 +190,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     toast({ title: "Compressing image...", description: "Please wait." });
     try {
       const compressedFile = await imageCompression(originalTooLargeFile, {
-        maxSizeMB: 1, // Target 1MB
+        maxSizeMB: 1,
         maxWidthOrHeight: 1920,
         useWebWorker: true,
       });
@@ -198,7 +203,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     } catch (error) {
       console.error("Image compression error:", error);
       toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress image. Try a smaller file." });
-      if (fileInputRef.current) fileInputRef.current.value = ""; // Reset
+      if (fileInputRef.current) fileInputRef.current.value = "";
+      form.setValue("image", null); // Ensure form value is null on compression failure
+      setImagePreviewUrl(null);
+      setSelectedImageFile(null);
     } finally {
       setIsCompressing(false);
       setOriginalTooLargeFile(null);
@@ -210,7 +218,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     setImagePreviewUrl(null);
     form.setValue("image", null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = ""; // Reset the file input
+      fileInputRef.current.value = "";
     }
   };
 
@@ -222,15 +230,15 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         sector: values.sector,
         subSector: values.subSector,
         industry: values.industry,
-        imageFile: selectedImageFile, // Use the state variable which might hold the compressed file
+        imageFile: selectedImageFile, 
     };
     onSubmit(submitData);
   };
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-0"> {/* Remove space-y-6 from form if grid handles spacing */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 p-1"> {/* Increased gap-x */}
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-0">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 p-1">
           {/* Left Column */}
           <div className="space-y-6 flex flex-col">
             <FormField
@@ -257,7 +265,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                   <FormControl className="flex-grow">
                     <Textarea
                       placeholder="Provide more context or details..."
-                      className="resize-y min-h-[120px] flex-1" // Ensure textarea can grow
+                      className="resize-y min-h-[120px] flex-1"
                       {...field}
                       disabled={isSubmitting}
                     />
@@ -267,11 +275,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
               )}
             />
 
-            {/* Image Upload Section */}
              <FormField
                 control={form.control}
                 name="image"
-                render={() => ( // field prop not directly used for file input like this
+                render={() => ( 
                     <FormItem>
                         <FormLabel>Image (Optional)</FormLabel>
                         <FormControl>
@@ -280,7 +287,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                 accept="image/png, image/jpeg, image/gif"
                                 ref={fileInputRef}
                                 onChange={handleImageChange}
-                                className="hidden" // Hide the default input
+                                className="hidden" 
                                 disabled={isSubmitting || isCompressing}
                             />
                         </FormControl>
@@ -306,7 +313,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                             </div>
                         )}
                         <FormDescription>Max 2MB. JPG, PNG, GIF accepted.</FormDescription>
-                        <FormMessage /> {/* For Zod validation errors */}
+                        <FormMessage /> 
                     </FormItem>
                 )}
              />
@@ -423,7 +430,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
           </div>
         </div>
 
-        <DialogFooter className="pt-8 md:col-span-2"> {/* Ensure footer spans both columns and has padding */}
+        <DialogFooter className="pt-8 md:col-span-2">
             <DialogClose asChild>
                  <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
             </DialogClose>
@@ -440,7 +447,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         </DialogFooter>
       </form>
 
-       {/* Compression Dialog */}
       <AlertDialog open={showCompressionDialog} onOpenChange={setShowCompressionDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -451,7 +457,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { setOriginalTooLargeFile(null); if (fileInputRef.current) fileInputRef.current.value = ""; }}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel onClick={() => {
+              setOriginalTooLargeFile(null);
+              if (fileInputRef.current) fileInputRef.current.value = "";
+              form.setValue("image", null); // Explicitly set form value to null
+              setImagePreviewUrl(null);
+              setSelectedImageFile(null);
+            }}>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={handleCompressAndSetImage} className="bg-primary hover:bg-primary/90">
               <ImageDown className="mr-2 h-4 w-4" /> Compress Image
             </AlertDialogAction>
@@ -461,3 +473,4 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     </Form>
   );
 };
+
