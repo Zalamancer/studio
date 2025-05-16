@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FilterX, Star, Tag, Briefcase, Building, Info, Loader2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, FilterX, Star, Tag, Loader2, AlertTriangle, Info } from 'lucide-react';
 import {
   Accordion,
   AccordionContent,
@@ -19,23 +19,20 @@ import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
 import type { Post } from '@/types/post';
 import { Timestamp } from 'firebase/firestore';
-import { useQuery } from '@tanstack/react-query';
-import { getPostsFromFirestore } from '@/services/postService'; // Import post fetching service
-import { detailedSectorsData, type SectorWithSubSectors, type SubSector, type Industry } from '@/components/layout/MainLayout'; // Import sector data from MainLayout
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getPostsFromFirestore } from '@/services/postService';
+import { detailedSectorsData, type SectorWithSubSectors, type SubSector, type Industry } from '@/components/layout/MainLayout';
+import { useAuth } from '@/contexts/AuthContext';
+import { getUserFavoriteSectors, addFavoriteSector, removeFavoriteSector } from '@/services/userPreferenceService';
+import { useToast } from '@/hooks/use-toast';
 
-// Helper to find sector data (can be moved to a util if used elsewhere)
+// Helper to find sector data
 const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
-    // Special handling for manufacturing "31-33" which is a range
     if (code === "31-33") {
         return detailedSectorsData.find(s => s.code === "31-33") || null;
     }
-    // For other codes, check if they are top-level (e.g., "11")
     const sector = detailedSectorsData.find(s => s.code === code);
     if (sector) return sector;
-
-    // If not found, it might be a sub-sector or industry code,
-    // but this page is designed for top-level sectors.
-    // For simplicity, we'll only return top-level matches here.
     return null;
 };
 
@@ -43,32 +40,77 @@ const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
 const SectorDetailPage = () => {
   const params = useParams();
   const router = useRouter();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const { user } = useAuth();
   const sectorCode = params?.sectorCode as string | undefined;
 
   const [selectedSubSector, setSelectedSubSector] = useState<string | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
-  const [isFavorited, setIsFavorited] = useState(false); // UI only for now
 
   const sectorData = useMemo(() => {
     if (!sectorCode) return null;
     return getSectorDataByCode(sectorCode);
   }, [sectorCode]);
 
-  // --- Fetch Posts Dynamically ---
+  // Fetch user's favorite sectors
+  const { data: favoriteSectorCodes = [], isLoading: isLoadingFavorites } = useQuery<string[]>({
+    queryKey: ['userFavoriteSectors', user?.uid],
+    queryFn: () => user ? getUserFavoriteSectors(user.uid) : Promise.resolve([]),
+    enabled: !!user, // Only fetch if user is logged in
+  });
+
+  const isFavorited = useMemo(() => {
+    if (!sectorData || !sectorData.code) return false;
+    return favoriteSectorCodes.includes(sectorData.code);
+  }, [favoriteSectorCodes, sectorData]);
+
+  // Mutation for toggling favorite status
+  const toggleFavoriteMutation = useMutation({
+    mutationFn: async () => {
+      if (!user || !sectorData || !sectorData.code) {
+        throw new Error("User not authenticated or sector data missing.");
+      }
+      if (isFavorited) {
+        await removeFavoriteSector(user.uid, sectorData.code);
+        toast({ title: "Sector Unfavorited", description: `${sectorData.name} removed from your favorites.` });
+      } else {
+        await addFavoriteSector(user.uid, sectorData.code);
+        toast({ title: "Sector Favorited!", description: `${sectorData.name} added to your favorites.` });
+      }
+    },
+    onSuccess: () => {
+      // Invalidate queries to refetch favorite status on this page and on the main discover page
+      queryClient.invalidateQueries({ queryKey: ['userFavoriteSectors', user?.uid] });
+      queryClient.invalidateQueries({ queryKey: ['userFavoriteSectorsOnDiscoverPage', user?.uid] });
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Error Updating Favorite", description: error.message });
+    },
+  });
+
+  const handleToggleFavorite = () => {
+    if (!user) {
+      toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to favorite sectors." });
+      return;
+    }
+    if (!sectorData || !sectorData.code) return;
+    toggleFavoriteMutation.mutate();
+  };
+
   const {
     data: allPosts = [],
     isLoading: isLoadingPosts,
     error: postsError,
   } = useQuery<Post[]>({
-    queryKey: ['allPostsForSectorPage'], // Unique key, might need to be more specific if global
+    queryKey: ['allPostsForSectorPage'],
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: 1000 * 60 * 2,
   });
-  // --- End Fetch Posts ---
 
   const handleSubSectorSelect = (subSectorCode: string | null) => {
     setSelectedSubSector(current => (current === subSectorCode ? null : subSectorCode));
-    setSelectedIndustry(null); // Reset industry when sub-sector changes
+    setSelectedIndustry(null);
   };
 
   const handleIndustrySelect = (industryCode: string | null) => {
@@ -82,14 +124,9 @@ const SectorDetailPage = () => {
 
   const filteredPosts = useMemo(() => {
     if (!sectorData || isLoadingPosts) return [];
-
     let postsToFilter = allPosts.filter(post => {
-        // Primary filter: post's NAICS code must belong to the current main sector
-        // A post's naicsCode (e.g., "3111") should start with the main sector code (e.g., "31")
-        // For "31-33", we check if it starts with "31", "32", or "33".
         const mainSectorCodeForFilter = sectorData.code;
-        const postNaics = post.naicsCode || ""; // Ensure post.naicsCode is a string
-
+        const postNaics = post.naicsCode || "";
         let isInMainSector = false;
         if (mainSectorCodeForFilter === "31-33") {
             isInMainSector = postNaics.startsWith("31") || postNaics.startsWith("32") || postNaics.startsWith("33");
@@ -99,24 +136,17 @@ const SectorDetailPage = () => {
         return isInMainSector;
     });
 
-    // Secondary filter: by selected industry (most specific)
     if (selectedIndustry) {
       return postsToFilter.filter(post => post.naicsCode === selectedIndustry);
     }
-
-    // Tertiary filter: by selected sub-sector
     if (selectedSubSector) {
-      // Show posts directly matching the sub-sector code OR
-      // posts whose NAICS code (industry) starts with the sub-sector code.
       return postsToFilter.filter(post =>
         post.naicsCode === selectedSubSector ||
         (post.naicsCode && post.naicsCode.startsWith(selectedSubSector))
       );
     }
-    // If no sub-sector or industry filter, return all posts for the main sector
     return postsToFilter;
   }, [sectorData, selectedSubSector, selectedIndustry, allPosts, isLoadingPosts]);
-
 
   if (!sectorCode) {
     return (
@@ -155,10 +185,7 @@ const SectorDetailPage = () => {
     );
   }
 
-  // Find the current main sector's data from the imported `detailedSectorsData`
-  // This is to ensure we use the most up-to-date structure for sub-sectors and industries
   const currentDisplaySectorData = detailedSectorsData.find(s => s.code === sectorCode);
-
 
   return (
     <div className="container mx-auto p-4 md:p-6">
@@ -176,24 +203,28 @@ const SectorDetailPage = () => {
             <Button
                 variant={isFavorited ? "default" : "outline"}
                 size="sm"
-                onClick={() => setIsFavorited(!isFavorited)}
+                onClick={handleToggleFavorite}
                 className="mt-2 ml-4 flex-shrink-0"
+                disabled={!user || isLoadingFavorites || toggleFavoriteMutation.isPending}
                 aria-pressed={isFavorited}
             >
-                <Star className={cn("h-4 w-4 mr-2", isFavorited && "fill-yellow-400 text-yellow-500")}/>
+                {isLoadingFavorites || toggleFavoriteMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin"/>
+                ) : (
+                    <Star className={cn("h-4 w-4 mr-2", isFavorited && "fill-yellow-400 text-yellow-500")}/>
+                )}
                 {isFavorited ? "Favorited" : "Favorite Sector"}
             </Button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Left Sidebar: Filters */}
         <div className="lg:col-span-1 space-y-4">
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">Filter by Industry</CardTitle>
               <CardDescription>
-                {currentDisplaySectorData && currentDisplaySectorData.subSectors && currentDisplaySectorData.subSectors.length > 0
+                {currentDisplaySectorData?.subSectors?.length > 0
                   ? "Select sub-sectors and industries to narrow down posts."
                   : `No detailed industry filters available for ${sectorData.name}.`}
               </CardDescription>
@@ -204,7 +235,7 @@ const SectorDetailPage = () => {
                         <FilterX className="h-4 w-4 mr-2" /> Clear All Filters
                     </Button>
                 )}
-                {currentDisplaySectorData && currentDisplaySectorData.subSectors && currentDisplaySectorData.subSectors.length > 0 ? (
+                {currentDisplaySectorData?.subSectors?.length > 0 ? (
                   <Accordion type="single" collapsible className="w-full space-y-1.5">
                     {currentDisplaySectorData.subSectors.map((subsector) => (
                       <AccordionItem key={subsector.code} value={`subsector-${subsector.code}`}>
@@ -218,7 +249,7 @@ const SectorDetailPage = () => {
                           {subsector.code}: {subsector.name}
                         </AccordionTrigger>
                         <AccordionContent className="px-1 pt-2 pb-1 border-none">
-                          {subsector.industries && subsector.industries.length > 0 && (
+                          {subsector.industries?.length > 0 && (
                             <Accordion type="single" collapsible className="w-full space-y-1 pl-3 border-l-2 ml-2">
                               {subsector.industries.map((industry) => (
                                 <AccordionItem key={industry.code} value={`industry-${industry.code}`} className="border-b-0">
@@ -231,10 +262,6 @@ const SectorDetailPage = () => {
                                   >
                                     {industry.code}: {industry.name}
                                   </AccordionTrigger>
-                                  {/* Optional: Industry Description (can be added if available) */}
-                                  {/* <AccordionContent className="px-2 pt-1 pb-0 text-xs text-muted-foreground">
-                                    {industry.description}
-                                  </AccordionContent> */}
                                 </AccordionItem>
                               ))}
                             </Accordion>
@@ -253,7 +280,6 @@ const SectorDetailPage = () => {
           </Card>
         </div>
 
-        {/* Right Content: Posts */}
         <div className="lg:col-span-2">
           <Card>
             <CardHeader>
@@ -313,5 +339,3 @@ const SectorDetailPage = () => {
 };
 
 export default SectorDetailPage;
-
-    
