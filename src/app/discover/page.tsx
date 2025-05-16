@@ -5,34 +5,34 @@
 import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import Link from 'next/link'; // Keep Link import
+import { useRouter } from 'next/navigation'; // Keep useRouter import
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, ArrowRight } from 'lucide-react';
+import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, ArrowRight, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, Bank, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion } from 'lucide-react'; // Added more icons
 
 const sectors = [
-  { code: "11", title: "Agriculture, Forestry, Fishing and Hunting", hint: "farming crops", description: "Activities related to growing crops, raising animals, harvesting timber, and fishing." },
-  { code: "21", title: "Mining, Quarrying, and Oil and Gas Extraction", hint: "mining equipment", description: "Extraction of naturally occurring mineral solids, such as coal and ores; liquid minerals, such as crude petroleum; and gases, such as natural gas." },
-  { code: "22", title: "Utilities", hint: "power lines", description: "Generating, transmitting, and distributing electricity, gas, steam, water, and sewage removal." },
-  { code: "23", title: "Construction", hint: "construction site", description: "Building, repairing, and renovating buildings and engineering projects (e.g., highways and utility systems)." },
-  { code: "31-33", title: "Manufacturing", hint: "factory assembly", link: "/discover/manufacturing", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products." },
-  { code: "42", title: "Wholesale Trade", hint: "warehouse pallets", description: "Selling or arranging for the purchase or sale of goods for resale, capital or durable nonconsumer goods, and raw and intermediate materials." },
-  { code: "44-45", title: "Retail Trade", hint: "shopping mall", description: "Retailing merchandise, generally without transformation, and rendering services incidental to the sale of merchandise." },
-  { code: "48-49", title: "Transportation and Warehousing", hint: "trucks highway", description: "Providing transportation of passengers and cargo, warehousing and storing goods, and support activities." },
-  { code: "51", title: "Information", hint: "data center", description: "Producing and distributing information and cultural products, providing the means to transmit or distribute these products, and processing data." },
-  { code: "52", title: "Finance and Insurance", hint: "stock market", description: "Financial transactions (e.g., raising funds by taking deposits, issuing securities) and/or facilitating financial transactions." },
-  { code: "53", title: "Real Estate and Rental and Leasing", hint: "modern house", description: "Renting, leasing, or otherwise allowing the use of tangible or intangible assets, and related services." },
-  { code: "54", title: "Professional, Scientific, and Technical Services", hint: "scientist laboratory", description: "Performing professional, scientific, and technical activities for others, requiring a high degree of expertise and training." },
-  { code: "55", title: "Management of Companies and Enterprises", hint: "office boardroom", description: "Holding the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions." },
-  { code: "56", title: "Administrative and Support and Waste Management and Remediation Services", hint: "office support", description: "Performing routine support activities for the day-to-day operations of other organizations, or waste management services." },
-  { code: "61", title: "Educational Services", hint: "classroom students", description: "Providing instruction and training in a wide variety of subjects. These establishments may be privately owned or public institutions." },
-  { code: "62", title: "Health Care and Social Assistance", hint: "doctor patient", description: "Providing health care and social assistance for individuals. Establishments in this sector deliver services by trained professionals." },
-  { code: "71", title: "Arts, Entertainment, and Recreation", hint: "concert stage", description: "Operating facilities or providing services to meet varied cultural, entertainment, and recreational interests of their patrons." },
-  { code: "72", title: "Accommodation and Food Services", hint: "restaurant chef", description: "Providing customers with lodging and/or preparing meals, snacks, and beverages for immediate consumption." },
-  { code: "81", title: "Other Services (except Public Administration)", hint: "mechanic workshop", description: "Providing services not elsewhere classified, including repairs, religious activities, grantmaking, advocacy, and personal care." },
-  { code: "92", title: "Public Administration", hint: "government building", description: "Governmental activities of administration, legislation, and judicial and regulatory functions at the federal, state, or local levels." },
+  { code: "11", title: "Agriculture, Forestry, Fishing and Hunting", hint: "farming crops", description: "Activities related to growing crops, raising animals, harvesting timber, and fishing.", icon: Trees },
+  { code: "21", title: "Mining, Quarrying, and Oil and Gas Extraction", hint: "mining equipment", description: "Extraction of naturally occurring mineral solids, such as coal and ores; liquid minerals, such as crude petroleum; and gases, such as natural gas.", icon: Hammer },
+  { code: "22", title: "Utilities", hint: "power lines", description: "Generating, transmitting, and distributing electricity, gas, steam, water, and sewage removal.", icon: Wrench },
+  { code: "23", title: "Construction", hint: "construction site", description: "Building, repairing, and renovating buildings and engineering projects (e.g., highways and utility systems).", icon: Building2 },
+  { code: "31-33", title: "Manufacturing", hint: "factory assembly", link: "/discover/31-33", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products.", icon: Factory },
+  { code: "42", title: "Wholesale Trade", hint: "warehouse pallets", description: "Selling or arranging for the purchase or sale of goods for resale, capital or durable nonconsumer goods, and raw and intermediate materials.", icon: Package },
+  { code: "44-45", title: "Retail Trade", hint: "shopping mall", description: "Retailing merchandise, generally without transformation, and rendering services incidental to the sale of merchandise.", icon: ShoppingCart },
+  { code: "48-49", title: "Transportation and Warehousing", hint: "trucks highway", description: "Providing transportation of passengers and cargo, warehousing and storing goods, and support activities.", icon: Plane },
+  { code: "51", title: "Information", hint: "data center", description: "Producing and distributing information and cultural products, providing the means to transmit or distribute these products, and processing data.", icon: Code },
+  { code: "52", title: "Finance and Insurance", hint: "stock market", description: "Financial transactions (e.g., raising funds by taking deposits, issuing securities) and/or facilitating financial transactions.", icon: Bank },
+  { code: "53", title: "Real Estate and Rental and Leasing", hint: "modern house", description: "Renting, leasing, or otherwise allowing the use of tangible or intangible assets, and related services.", icon: HomeIcon },
+  { code: "54", title: "Professional, Scientific, and Technical Services", hint: "scientist laboratory", description: "Performing professional, scientific, and technical activities for others, requiring a high degree of expertise and training.", icon: Briefcase },
+  { code: "55", title: "Management of Companies and Enterprises", hint: "office boardroom", description: "Holding the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions.", icon: Users },
+  { code: "56", title: "Administrative and Support and Waste Management and Remediation Services", hint: "office support", description: "Performing routine support activities for the day-to-day operations of other organizations, or waste management services.", icon: UserCog },
+  { code: "61", title: "Educational Services", hint: "classroom students", description: "Providing instruction and training in a wide variety of subjects. These establishments may be privately owned or public institutions.", icon: Landmark },
+  { code: "62", title: "Health Care and Social Assistance", hint: "doctor patient", description: "Providing health care and social assistance for individuals. Establishments in this sector deliver services by trained professionals.", icon: Stethoscope },
+  { code: "71", title: "Arts, Entertainment, and Recreation", hint: "concert stage", description: "Operating facilities or providing services to meet varied cultural, entertainment, and recreational interests of their patrons.", icon: Film },
+  { code: "72", title: "Accommodation and Food Services", hint: "restaurant chef", description: "Providing customers with lodging and/or preparing meals, snacks, and beverages for immediate consumption.", icon: Utensils },
+  { code: "81", title: "Other Services (except Public Administration)", hint: "mechanic workshop", description: "Providing services not elsewhere classified, including repairs, religious activities, grantmaking, advocacy, and personal care.", icon: Palette },
+  { code: "92", title: "Public Administration", hint: "government building", description: "Governmental activities of administration, legislation, and judicial and regulatory functions at the federal, state, or local levels.", icon: ShieldQuestion },
 ];
 
 const filterCategories = [
@@ -54,12 +54,15 @@ const DiscoverPage = () => {
   const recommendedSectors = sectors.slice(0, 6);
   const displayedRecommendedSectors = showAllRecommended ? sectors : recommendedSectors;
 
-
-  // Placeholder filtering logic
+  // Placeholder filtering logic - adjust if needed for future post filtering on this page
   const filteredSectors = activeFilter === "All"
     ? sectors
     : sectors.filter(sector => sector.title.toLowerCase().includes(activeFilter.toLowerCase()) || sector.description.toLowerCase().includes(activeFilter.toLowerCase()));
 
+  const handleSectorClick = (sectorCode: string, sectorLink?: string) => {
+    const path = sectorLink || `/discover/${sectorCode}`;
+    router.push(path);
+  };
 
   return (
     <div className="container mx-auto p-4 md:p-6 min-h-screen">
@@ -67,6 +70,9 @@ const DiscoverPage = () => {
         <h1 className="text-3xl md:text-4xl font-bold text-foreground">
           Explore Sectors
         </h1>
+        <p className="text-lg text-muted-foreground mt-1">
+          Dive into various industries to find collaboration opportunities and insights.
+        </p>
       </header>
 
       {/* Filter Bar */}
@@ -119,10 +125,10 @@ const DiscoverPage = () => {
                 <Button
                   size="sm"
                   className="bg-accent hover:bg-accent/90 text-accent-foreground flex-shrink-0 self-center px-4 py-2"
-                  onClick={() => sector.link && router.push(sector.link)}
-                  aria-label={sector.link ? `View details for ${sector.title}` : `Explore ${sector.title}`}
+                  onClick={() => handleSectorClick(sector.code, sector.link)}
+                  aria-label={`Explore ${sector.title}`}
                 >
-                  {sector.link ? "Details" : "Explore"}
+                  Explore
                 </Button>
               </div>
             </Card>
@@ -137,7 +143,7 @@ const DiscoverPage = () => {
         )}
       </section>
 
-      {/* All Sectors Section (or could be context-specific like "More like [filter]") */}
+      {/* All Sectors Section */}
       <section>
         <h2 className="text-2xl font-semibold text-foreground mb-4">
           {activeFilter === "All" ? "All Sectors" : `More in ${activeFilter}`}
@@ -167,10 +173,10 @@ const DiscoverPage = () => {
                   <Button
                     size="sm"
                     className="bg-accent hover:bg-accent/90 text-accent-foreground flex-shrink-0 self-center px-4 py-2"
-                    onClick={() => sector.link && router.push(sector.link)}
-                    aria-label={sector.link ? `View details for ${sector.title}` : `Explore ${sector.title}`}
+                    onClick={() => handleSectorClick(sector.code, sector.link)}
+                    aria-label={`Explore ${sector.title}`}
                   >
-                     {sector.link ? "Details" : "Explore"}
+                     Explore
                   </Button>
                 </div>
              </Card>
@@ -185,3 +191,5 @@ const DiscoverPage = () => {
 };
 
 export default DiscoverPage;
+
+    

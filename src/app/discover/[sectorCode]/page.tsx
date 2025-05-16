@@ -1,10 +1,11 @@
+
 // src/app/discover/[sectorCode]/page.tsx
 "use client";
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FilterX, Star, Tag, Briefcase, Building } from 'lucide-react';
+import { ArrowLeft, FilterX, Star, Tag, Briefcase, Building, Info } from 'lucide-react';
 import {
   Accordion,
   AccordionContent,
@@ -16,11 +17,10 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from '@/components/ui/separator';
 import { cn } from '@/lib/utils';
-import type { Post } from '@/types/post'; // Assuming Post type has naicsCode
-import { Timestamp } from 'firebase/firestore'; // For mock data
+import type { Post } from '@/types/post';
+import { Timestamp } from 'firebase/firestore';
 
 // Hardcoded data for Manufacturing sector (NAICS 31-33)
-// In a real app, this would likely come from a database or a more structured data source
 const manufacturingSectorData = {
   code: "31-33",
   title: "Manufacturing",
@@ -65,7 +65,6 @@ const manufacturingSectorData = {
         { code: "3212", title: "Veneer, Plywood, and Engineered Wood Product Manufacturing", description: "Manufacturing veneer, plywood, engineered wood members." },
         { code: "3219", title: "Other Wood Product Manufacturing", description: "Millwork, containers, pallets, mobile homes, prefabricated buildings, etc." },
     ]},
-    // ... (Add all other sub-sectors and industries for Manufacturing from the provided text)
      { code: "322", title: "Paper Manufacturing", description: "Making pulp, paper, or converted paper products.", industries: [
         { code: "3221", title: "Pulp, Paper, and Paperboard Mills", description: "Manufacturing pulp, paper, or paperboard." },
         { code: "3222", title: "Converted Paper Product Manufacturing", description: "Converting paper/paperboard into containers, bags, stationery, sanitary products, etc." },
@@ -158,13 +157,23 @@ const manufacturingSectorData = {
   ]
 };
 
-// Mock Post Data (replace with actual data fetching in a real app)
+// Fallback data for sectors without detailed sub-sectors
+const genericSectorData = (code: string, title: string) => ({
+    code,
+    title,
+    description: `Information and posts related to the ${title} sector (NAICS ${code}). Detailed sub-sector data is being compiled.`,
+    subSectors: [], // No detailed sub-sectors for generic view
+});
+
+// Mock Post Data (replace with actual data fetching)
 const mockPosts: Post[] = [
   { id: 'post1', userId: 'userA', tags: ['Innovation'], question: 'Seeking partners for AI in food processing', description: 'Looking for tech companies specializing in AI for optimizing food manufacturing processes.', sector: 'Manufacturing', businessType: 'SME', safetyIndicator: 'High', ratingScore: 4, naicsCode: '3119', createdAt: Timestamp.now() },
   { id: 'post2', userId: 'userB', tags: ['Efficiency', 'Logistics'], question: 'Need help with textile supply chain', description: 'Our textile mill is facing challenges with supply chain visibility. Seeking solutions.', sector: 'Manufacturing', businessType: 'Large Enterprise', safetyIndicator: 'Medium', ratingScore: 5, naicsCode: '3131', createdAt: Timestamp.now() },
   { id: 'post3', userId: 'userC', tags: ['Sustainability'], question: 'Sustainable packaging for beverages?', description: 'Beverage manufacturer looking for eco-friendly packaging alternatives.', sector: 'Manufacturing', businessType: 'Startup', safetyIndicator: 'Medium', ratingScore: 3, naicsCode: '3121', createdAt: Timestamp.now() },
   { id: 'post4', userId: 'userD', tags: ['Robotics'], question: 'Automation in wood product manufacturing', description: 'Exploring robotic solutions for our wood products assembly line.', sector: 'Manufacturing', businessType: 'SME', safetyIndicator: 'High', ratingScore: 4.5, naicsCode: '3219', createdAt: Timestamp.now() },
-  { id: 'post5', userId: 'userE', tags: ['New Materials'], question: 'Advanced chemical for plastics', description: 'Researching new chemical compounds for enhancing plastic durability.', sector: 'Manufacturing', businessType: 'Research Institute', safetyIndicator: 'Low', ratingScore: 4, naicsCode: '325211', createdAt: Timestamp.now() },
+  { id: 'post5', userId: 'userE', tags: ['New Materials'], question: 'Advanced chemical for plastics', description: 'Researching new chemical compounds for enhancing plastic durability.', sector: 'Manufacturing', businessType: 'Research Institute', safetyIndicator: 'Low', ratingScore: 4, naicsCode: '3252', createdAt: Timestamp.now() }, // Corrected naicsCode to be a sub-sector level
+  // Add more generic posts for other sectors if needed for testing
+  { id: 'post6', userId: 'userF', tags: ['Software'], question: 'Need a CRM for a small construction business', description: 'Looking for CRM recommendations suitable for construction project management.', sector: 'Construction', businessType: 'SME', safetyIndicator: 'High', ratingScore: 4, naicsCode: '23', createdAt: Timestamp.now() },
 ];
 
 
@@ -175,19 +184,36 @@ const SectorDetailPage = () => {
 
   const [selectedSubSector, setSelectedSubSector] = useState<string | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
-  const [isFavorited, setIsFavorited] = useState(false); // Placeholder for favorite state
+  const [isFavorited, setIsFavorited] = useState(false);
 
-  // Determine which sector data to use
-  // For now, only "31-33" (Manufacturing) has detailed data
-  const sectorData = sectorCode === "31-33" ? manufacturingSectorData : null;
+  const sectorData = useMemo(() => {
+    if (sectorCode === "31-33") {
+      return manufacturingSectorData;
+    }
+    // Placeholder for fetching other sector data by code
+    // For now, return a generic structure
+    // In a real app, you'd fetch this from a service based on sectorCode
+    const allSectorsList = [ // This should ideally come from a shared source or API
+        { code: "11", title: "Agriculture, Forestry, Fishing and Hunting" },
+        { code: "21", title: "Mining, Quarrying, and Oil and Gas Extraction" },
+        { code: "22", title: "Utilities" },
+        { code: "23", title: "Construction" },
+        // ... add all other sectors
+    ];
+    const currentSectorInfo = allSectorsList.find(s => s.code === sectorCode);
+    if (currentSectorInfo) {
+        return genericSectorData(sectorCode, currentSectorInfo.title);
+    }
+    return null; // Sector not found or not implemented
+  }, [sectorCode]);
 
   const handleSubSectorSelect = (subSectorCode: string | null) => {
-    setSelectedSubSector(current => (current === subSectorCode ? null : subSectorCode)); // Toggle or set
-    setSelectedIndustry(null); // Reset industry when sub-sector changes
+    setSelectedSubSector(current => (current === subSectorCode ? null : subSectorCode));
+    setSelectedIndustry(null);
   };
 
   const handleIndustrySelect = (industryCode: string | null) => {
-    setSelectedIndustry(current => (current === industryCode ? null : industryCode)); // Toggle or set
+    setSelectedIndustry(current => (current === industryCode ? null : industryCode));
   };
 
   const clearFilters = () => {
@@ -196,47 +222,71 @@ const SectorDetailPage = () => {
   };
 
   const filteredPosts = useMemo(() => {
-    if (!sectorData) return []; // Or all posts if no specific sector data (e.g., sectorCode !== '31-33')
+    if (!sectorData) return [];
 
     let postsToFilter = mockPosts.filter(post => {
-        // Broadly filter by the main sector first if needed
-        // This example assumes mockPosts are already somewhat relevant to "Manufacturing"
-        // A real app might fetch posts specific to sectorCode
-        return post.sector === sectorData.title;
+        // Filter by main sector if not manufacturing (where mock data is specific)
+        if (sectorData.code !== "31-33") {
+             // This assumes posts have a 'sector' field matching the sectorData.title or sectorData.code
+            return post.sector === sectorData.title || (post.naicsCode && post.naicsCode.startsWith(sectorData.code.substring(0,2))); // Check if NAICS starts with 2-digit code
+        }
+        // For manufacturing, allow broader match if no sub-filters
+        return post.sector === "Manufacturing";
     });
 
-
     if (selectedIndustry) {
-      // Filter by specific industry (most granular)
       return postsToFilter.filter(post => post.naicsCode === selectedIndustry);
     }
     if (selectedSubSector) {
-      // Filter by sub-sector (includes all industries within it)
       const subSectorInfo = sectorData.subSectors.find(ss => ss.code === selectedSubSector);
       if (subSectorInfo) {
         const industryCodesInSubSector = subSectorInfo.industries.map(ind => ind.code);
         return postsToFilter.filter(post =>
-          post.naicsCode === selectedSubSector || // Post tagged directly with sub-sector code
-          (post.naicsCode && industryCodesInSubSector.includes(post.naicsCode)) // Post tagged with an industry in this sub-sector
+          post.naicsCode === selectedSubSector ||
+          (post.naicsCode && industryCodesInSubSector.includes(post.naicsCode))
         );
       }
     }
-    return postsToFilter; // Or return all posts for the sector if no sub-filters
+    return postsToFilter;
   }, [sectorData, selectedSubSector, selectedIndustry]);
 
 
   if (!sectorCode) {
-    return <div className="container mx-auto p-8 text-center">Loading sector information...</div>;
+    // This case should ideally be handled by Next.js routing (e.g., 404 if no sectorCode)
+    // but adding a fallback for safety.
+    return (
+        <div className="container mx-auto p-8 text-center">
+            <p className="text-xl text-muted-foreground">Loading sector information...</p>
+            <p className="text-sm text-muted-foreground mt-2">If this persists, please go back and try again.</p>
+            <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
+        </div>
+    );
   }
 
   if (!sectorData) {
     return (
       <div className="container mx-auto p-8">
-        <Link href="/discover" className="inline-flex items-center text-primary hover:underline mb-6">
+        <Link href="/discover" className="inline-flex items-center text-primary hover:underline mb-6 text-sm">
           <ArrowLeft className="h-4 w-4 mr-1" /> Back to Discover
         </Link>
-        <h1 className="text-3xl font-bold text-foreground mb-2">Sector Details</h1>
-        <p className="text-lg text-muted-foreground">Details for NAICS sector code {sectorCode} are coming soon.</p>
+        <Card className="shadow-lg border-border">
+            <CardHeader>
+                <CardTitle className="text-2xl text-destructive flex items-center gap-2">
+                    <Info className="h-6 w-6" /> Sector Not Found
+                </CardTitle>
+            </CardHeader>
+            <CardContent>
+                 <p className="text-muted-foreground">
+                    Sorry, we couldn't find details for NAICS sector code <strong className="text-foreground">{sectorCode}</strong>.
+                 </p>
+                 <p className="text-muted-foreground mt-2">
+                    It's possible this sector is not yet detailed or the code is incorrect.
+                 </p>
+                 <Button onClick={() => router.push('/discover')} className="mt-6">
+                    Return to Discover Page
+                 </Button>
+            </CardContent>
+        </Card>
       </div>
     );
   }
@@ -262,7 +312,7 @@ const SectorDetailPage = () => {
                 className="mt-2 ml-4 flex-shrink-0"
                 aria-pressed={isFavorited}
             >
-                <Star className={cn("h-4 w-4 mr-2", isFavorited && "fill-current text-yellow-400")}/>
+                <Star className={cn("h-4 w-4 mr-2", isFavorited && "fill-yellow-400 text-yellow-500")}/>
                 {isFavorited ? "Favorited" : "Favorite Sector"}
             </Button>
         </div>
@@ -274,7 +324,11 @@ const SectorDetailPage = () => {
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">Filter by Industry</CardTitle>
-              <CardDescription>Select sub-sectors and industries to narrow down posts.</CardDescription>
+              <CardDescription>
+                {sectorData.subSectors && sectorData.subSectors.length > 0
+                  ? "Select sub-sectors and industries to narrow down posts."
+                  : `No detailed industry filters available for ${sectorData.title}.`}
+              </CardDescription>
             </CardHeader>
             <CardContent>
                 {(selectedSubSector || selectedIndustry) && (
@@ -282,43 +336,47 @@ const SectorDetailPage = () => {
                         <FilterX className="h-4 w-4 mr-2" /> Clear All Filters
                     </Button>
                 )}
-              <Accordion type="single" collapsible className="w-full space-y-1.5">
-                {sectorData.subSectors.map((subsector) => (
-                  <AccordionItem key={subsector.code} value={`subsector-${subsector.code}`}>
-                    <AccordionTrigger
-                      onClick={() => handleSubSectorSelect(subsector.code)}
-                      className={cn(
-                        "text-md font-medium hover:no-underline px-3 py-2.5 rounded-md border text-left",
-                        selectedSubSector === subsector.code && !selectedIndustry ? "bg-primary/10 text-primary border-primary" : "bg-muted/30 hover:bg-muted/50"
-                      )}
-                    >
-                      {subsector.code}: {subsector.title}
-                    </AccordionTrigger>
-                    <AccordionContent className="px-1 pt-2 pb-1 border-none">
-                      {subsector.industries && subsector.industries.length > 0 && (
-                        <Accordion type="single" collapsible className="w-full space-y-1 pl-3 border-l-2 ml-2">
-                          {subsector.industries.map((industry) => (
-                            <AccordionItem key={industry.code} value={`industry-${industry.code}`} className="border-b-0">
-                              <AccordionTrigger
-                                onClick={() => handleIndustrySelect(industry.code)}
-                                className={cn(
-                                  "text-sm font-normal hover:no-underline px-2 py-1.5 rounded-md text-left",
-                                   selectedIndustry === industry.code ? "bg-accent text-accent-foreground font-medium" : "hover:bg-muted/20"
-                                )}
-                              >
-                                {industry.code}: {industry.title}
-                              </AccordionTrigger>
-                              <AccordionContent className="px-2 pt-1 pb-0 text-xs text-muted-foreground">
-                                {industry.description}
-                              </AccordionContent>
-                            </AccordionItem>
-                          ))}
-                        </Accordion>
-                      )}
-                    </AccordionContent>
-                  </AccordionItem>
-                ))}
-              </Accordion>
+                {sectorData.subSectors && sectorData.subSectors.length > 0 ? (
+                  <Accordion type="single" collapsible className="w-full space-y-1.5">
+                    {sectorData.subSectors.map((subsector) => (
+                      <AccordionItem key={subsector.code} value={`subsector-${subsector.code}`}>
+                        <AccordionTrigger
+                          onClick={() => handleSubSectorSelect(subsector.code)}
+                          className={cn(
+                            "text-md font-medium hover:no-underline px-3 py-2.5 rounded-md border text-left",
+                            selectedSubSector === subsector.code && !selectedIndustry ? "bg-primary/10 text-primary border-primary" : "bg-muted/30 hover:bg-muted/50"
+                          )}
+                        >
+                          {subsector.code}: {subsector.title}
+                        </AccordionTrigger>
+                        <AccordionContent className="px-1 pt-2 pb-1 border-none">
+                          {subsector.industries && subsector.industries.length > 0 && (
+                            <Accordion type="single" collapsible className="w-full space-y-1 pl-3 border-l-2 ml-2">
+                              {subsector.industries.map((industry) => (
+                                <AccordionItem key={industry.code} value={`industry-${industry.code}`} className="border-b-0">
+                                  <AccordionTrigger
+                                    onClick={() => handleIndustrySelect(industry.code)}
+                                    className={cn(
+                                      "text-sm font-normal hover:no-underline px-2 py-1.5 rounded-md text-left",
+                                      selectedIndustry === industry.code ? "bg-accent text-accent-foreground font-medium" : "hover:bg-muted/20"
+                                    )}
+                                  >
+                                    {industry.code}: {industry.title}
+                                  </AccordionTrigger>
+                                  <AccordionContent className="px-2 pt-1 pb-0 text-xs text-muted-foreground">
+                                    {industry.description}
+                                  </AccordionContent>
+                                </AccordionItem>
+                              ))}
+                            </Accordion>
+                          )}
+                        </AccordionContent>
+                      </AccordionItem>
+                    ))}
+                  </Accordion>
+                ) : (
+                    <p className="text-sm text-muted-foreground p-4 text-center">Detailed industry filters for this sector will be available soon.</p>
+                )}
             </CardContent>
           </Card>
         </div>
@@ -339,12 +397,17 @@ const SectorDetailPage = () => {
               </CardDescription>
             </CardHeader>
             <CardContent>
+              {/* Placeholder for "Create Post" button within this sector context */}
+              {/* <div className="mb-4">
+                <Button>Create Post in {sectorData.title}</Button>
+              </div> */}
               {filteredPosts.length > 0 ? (
                 <div className="space-y-4">
                   {filteredPosts.map((post) => (
                     <Card key={post.id} className="shadow-sm hover:shadow-md transition-shadow">
                         <CardHeader className="pb-3">
                              <CardTitle className="text-md font-semibold hover:text-primary cursor-pointer">
+                                {/* Link to the main page, passing postId to open the sheet */}
                                 <Link href={`/?postId=${post.id}`}>{post.question}</Link>
                              </CardTitle>
                              <CardDescription className="text-xs pt-0.5">
@@ -358,17 +421,11 @@ const SectorDetailPage = () => {
                                 {post.naicsCode && <Badge variant="outline" className="text-xs"><Tag className="h-3 w-3 mr-1"/>NAICS: {post.naicsCode}</Badge>}
                             </div>
                         </CardContent>
-                        {/* Add a footer for actions like "View Details" or "Offer Help" if needed */}
-                        {/* <CardFooter className="pt-3">
-                            <Button size="xs" asChild variant="link" className="p-0 h-auto">
-                                <Link href={`/?postId=${post.id}`}>View Details</Link>
-                            </Button>
-                        </CardFooter> */}
                     </Card>
                   ))}
                 </div>
               ) : (
-                <p className="text-muted-foreground text-center py-8">No posts found matching your current filters.</p>
+                <p className="text-muted-foreground text-center py-8">No posts found matching your current filters for this sector.</p>
               )}
             </CardContent>
           </Card>
@@ -379,3 +436,5 @@ const SectorDetailPage = () => {
 };
 
 export default SectorDetailPage;
+
+    
