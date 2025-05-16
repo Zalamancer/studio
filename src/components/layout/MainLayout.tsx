@@ -63,70 +63,32 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
         name: "Crop Production",
         code: "111",
         industries: [
-          { name: "Soybean Farming", code: "111110" },
-          { name: "Oilseed (except Soybean) Farming", code: "111120" },
-          { name: "Dry Pea and Bean Farming", code: "111130" },
-          { name: "Wheat Farming", code: "111140" },
-          { name: "Corn Farming", code: "111150" },
-          { name: "Rice Farming", code: "111160" },
-          { name: "Oilseed and Grain Combination Farming", code: "111191" },
-          { name: "All Other Grain Farming", code: "111199" },
-          { name: "Potato Farming", code: "111211" },
-          { name: "Other Vegetable (except Potato) and Melon Farming", code: "111219" },
-          { name: "Orange Groves", code: "111310" },
-          { name: "Citrus (except Orange) Groves", code: "111320" },
-          { name: "Apple Orchards", code: "111331" },
-          { name: "Grape Vineyards", code: "111332" },
-          { name: "Strawberry Farming", code: "111333" },
-          { name: "Berry (except Strawberry) Farming", code: "111334" },
-          { name: "Tree Nut Farming", code: "111335" },
-          { name: "Fruit and Tree Nut Combination Farming", code: "111336" },
-          { name: "Other Noncitrus Fruit Farming", code: "111339" },
-          { name: "Mushroom Production", code: "111411" },
-          { name: "Other Food Crops Grown Under Cover", code: "111419" },
-          { name: "Nursery and Tree Production", code: "111421" },
-          { name: "Floriculture Production", code: "111422" },
-          { name: "Tobacco Farming", code: "111910" },
-          { name: "Cotton Farming", code: "111920" },
-          { name: "Sugarcane Farming", code: "111930" },
-          { name: "Hay Farming", code: "111940" },
-          { name: "Sugar Beet Farming", code: "111991" },
-          { name: "Peanut Farming", code: "111992" },
-          { name: "All Other Miscellaneous Crop Farming", code: "111998" },
+          { name: "Oilseed and Grain Farming", code: "1111" },
+          { name: "Vegetable and Melon Farming", code: "1112" },
+          { name: "Fruit and Tree Nut Farming", code: "1113" },
+          { name: "Greenhouse, Nursery, and Floriculture Production", code: "1114" },
+          { name: "Other Crop Farming", code: "1119" },
         ],
       },
       {
         name: "Animal Production and Aquaculture",
         code: "112",
         industries: [
-          { name: "Beef Cattle Ranching and Farming", code: "112111" },
-          { name: "Cattle Feedlots", code: "112112" },
-          { name: "Dairy Cattle and Milk Production", code: "112120" },
-          { name: "Dual-Purpose Cattle Ranching and Farming", code: "112130" },
-          { name: "Hog and Pig Farming", code: "112210" },
-          { name: "Chicken Egg Production", code: "112310" },
-          { name: "Broilers and Other Meat Type Chicken Production", code: "112320" },
-          { name: "Turkey Production", code: "112330" },
-          { name: "Poultry Hatcheries", code: "112340" },
-          { name: "Other Poultry Production", code: "112390" },
-          { name: "Sheep Farming", code: "112410" },
-          { name: "Goat Farming", code: "112420" },
-          { name: "Finfish Farming and Fish Hatcheries", code: "112511" },
-          { name: "Shellfish Farming", code: "112512" },
-          { name: "Other Aquaculture", code: "112519" },
-          { name: "Apiculture", code: "112910" },
-          { name: "Horses and Other Equine Production", code: "112920" },
-          { name: "Fur-Bearing Animal and Rabbit Production", code: "112930" },
-          { name: "All Other Animal Production", code: "112990" },
+          { name: "Cattle Ranching and Farming", code: "1121" },
+          { name: "Hog and Pig Farming", code: "1122" },
+          { name: "Poultry and Egg Production", code: "1123" },
+          { name: "Sheep and Goat Farming", code: "1124" },
+          { name: "Aquaculture", code: "1125" },
+          { name: "Other Animal Production", code: "1129" },
         ],
       },
       {
         name: "Forestry and Logging",
         code: "113",
         industries: [
-          { name: "Timber Tract Operations", code: "113110" },
-          { name: "Forest Nurseries and Gathering of Forest Products", code: "113210" },
-          { name: "Logging", code: "113310" },
+          { name: "Timber Tract Operations", code: "1131" },
+          { name: "Forest Nurseries and Gathering of Forest Products", code: "1132" },
+          { name: "Logging", code: "1133" },
         ],
       },
       {
@@ -143,14 +105,9 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
         name: "Support Activities for Agriculture and Forestry",
         code: "115",
         industries: [
-          { name: "Cotton Ginning", code: "115111" },
-          { name: "Soil Preparation, Planting, and Cultivating", code: "115112" },
-          { name: "Crop Harvesting, Primarily by Machine", code: "115113" },
-          { name: "Postharvest Crop Activities (except Cotton Ginning)", code: "115114" },
-          { name: "Farm Labor Contractors and Crew Leaders", code: "115115" },
-          { name: "Farm Management Services", code: "115116" },
-          { name: "Support Activities for Animal Production", code: "115210" },
-          { name: "Support Activities for Forestry", code: "115310" },
+          { name: "Support Activities for Crop Production", code: "1151" },
+          { name: "Support Activities for Animal Production", code: "1152" },
+          { name: "Support Activities for Forestry", code: "1153" },
         ],
       },
     ],
@@ -169,7 +126,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     code: "22",
     subSectors: [
       { name: "Electric Power Generation, Transmission and Distribution", code: "221", industries: [{ name: "Electric Power Generation", code: "2211" }] },
-      { name: "Natural Gas Distribution", code: "222", industries: [{ name: "Natural Gas Distribution", code: "2212" }] }, // Example, NAICS combines water/sewage with gas but simplified here
+      { name: "Natural Gas Distribution", code: "222", industries: [{ name: "Natural Gas Distribution", code: "2212" }] },
       { name: "Water, Sewage and Other Systems", code: "223", industries: [{ name: "Water Supply and Irrigation Systems", code: "2213" }] },
     ],
   },
@@ -183,7 +140,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     ],
   },
   {
-    name: "Manufacturing", // NAICS 31-33
+    name: "Manufacturing",
     code: "31-33",
     subSectors: [
       {
@@ -363,16 +320,16 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
   { name: "Wholesale Trade", code: "42", subSectors: [{ name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{name: "Motor Vehicle and Motor Vehicle Parts and Supplies Merchant Wholesalers", code: "4231"}] }, { name: "Merchant Wholesalers, Nondurable Goods", code: "424", industries: [{name: "Paper and Paper Product Merchant Wholesalers", code: "4241"}] }] },
   { name: "Retail Trade", code: "44-45", subSectors: [{ name: "Motor Vehicle and Parts Dealers", code: "441", industries: [{name: "Automobile Dealers", code: "4411"}] }, { name: "Clothing and Clothing Accessories Stores", code: "448", industries: [{name: "Clothing Stores", code: "4481"}] }] },
   { name: "Transportation and Warehousing", code: "48-49", subSectors: [{ name: "Air Transportation", code: "481", industries: [{name: "Scheduled Passenger Air Transportation", code: "4811"}] }, { name: "Truck Transportation", code: "484", industries: [{name: "General Freight Trucking", code: "4841"}] }, { name: "Warehousing and Storage", code: "493", industries: [{name: "General Warehousing and Storage", code: "4931"}] }] },
-  { name: "Information", code: "51", subSectors: [{ name: "Publishing Industries (except Internet)", code: "511", industries: [{ name: "Newspaper, Periodical, Book, and Directory Publishers", code: "5111" }] }, { name: "Telecommunications", code: "517", industries: [{ name: "Wired and Wireless Telecommunications Carriers", code: "5173" }] }] }, // Updated 517 to 5173 for more specificity
+  { name: "Information", code: "51", subSectors: [{ name: "Publishing Industries (except Internet)", code: "511", industries: [{ name: "Newspaper, Periodical, Book, and Directory Publishers", code: "5111" }] }, { name: "Telecommunications", code: "517", industries: [{ name: "Wired and Wireless Telecommunications Carriers", code: "5173" }] }] },
   { name: "Finance and Insurance", code: "52", subSectors: [{ name: "Monetary Authorities - Central Bank", code: "521", industries: [{ name: "Monetary Authorities - Central Bank", code: "5211" }] }, { name: "Credit Intermediation and Related Activities", code: "522", industries: [{ name: "Commercial Banking", code: "5221" }] }, { name: "Insurance Carriers and Related Activities", code: "524", industries: [{ name: "Direct Life Insurance Carriers", code: "5241" }] }] },
   { name: "Real Estate and Rental and Leasing", code: "53", subSectors: [{ name: "Real Estate", code: "531", industries: [{ name: "Lessors of Real Estate", code: "5311" }] }, { name: "Rental and Leasing Services", code: "532", industries: [{ name: "Automotive Equipment Rental and Leasing", code: "5321" }] }] },
-  { name: "Professional, Scientific, and Technical Services", code: "54", subSectors: [{ name: "Legal Services", code: "541", industries: [{ name: "Offices of Lawyers", code: "5411" }] }, { name: "Architectural, Engineering, and Related Services", code: "5413", industries: [{name: "Architectural Services", code: "541310"}] }, { name: "Computer Systems Design and Related Services", code: "5415", industries: [{name: "Custom Computer Programming Services", code: "541511"}] }] },
+  { name: "Professional, Scientific, and Technical Services", code: "54", subSectors: [{ name: "Legal Services", code: "5411" , industries: [{ name: "Offices of Lawyers", code: "541110" }] }, { name: "Architectural, Engineering, and Related Services", code: "5413", industries: [{name: "Architectural Services", code: "541310"}] }, { name: "Computer Systems Design and Related Services", code: "5415", industries: [{name: "Custom Computer Programming Services", code: "541511"}] }] },
   { name: "Management of Companies and Enterprises", code: "55", subSectors: [{ name: "Management of Companies and Enterprises", code: "551", industries: [{ name: "Offices of Bank Holding Companies", code: "551111" }] }] },
   { name: "Administrative and Support and Waste Management and Remediation Services", code: "56", subSectors: [{ name: "Administrative and Support Services", code: "561", industries: [{ name: "Office Administrative Services", code: "5611" }] }, { name: "Waste Management and Remediation Services", code: "562", industries: [{ name: "Waste Collection", code: "5621" }] }] },
-  { name: "Educational Services", code: "61", subSectors: [{ name: "Elementary and Secondary Schools", code: "611", industries: [{ name: "Elementary and Secondary Schools", code: "6111" }] }, { name: "Colleges, Universities, and Professional Schools", code: "6113", industries: [{name: "Colleges, Universities, and Professional Schools", code: "611310"}] } ] },
+  { name: "Educational Services", code: "61", subSectors: [{ name: "Elementary and Secondary Schools", code: "6111", industries: [{ name: "Elementary and Secondary Schools", code: "611110" }] }, { name: "Colleges, Universities, and Professional Schools", code: "6113", industries: [{name: "Colleges, Universities, and Professional Schools", code: "611310"}] } ] },
   { name: "Health Care and Social Assistance", code: "62", subSectors: [{ name: "Ambulatory Health Care Services", code: "621", industries: [{ name: "Offices of Physicians", code: "6211" }] }, { name: "Hospitals", code: "622", industries: [{ name: "General Medical and Surgical Hospitals", code: "6221" }] }, { name: "Social Assistance", code: "624", industries: [{ name: "Individual and Family Services", code: "6241" }] }] },
   { name: "Arts, Entertainment, and Recreation", code: "71", subSectors: [{ name: "Performing Arts, Spectator Sports, and Related Industries", code: "711", industries: [{ name: "Performing Arts Companies", code: "7111" }] }, { name: "Museums, Historical Sites, and Similar Institutions", code: "712", industries: [{ name: "Museums", code: "7121" }] }] },
-  { name: "Accommodation and Food Services", code: "72", subSectors: [{ name: "Accommodation", code: "721", industries: [{ name: "Traveler Accommodation", code: "7211" }] }, { name: "Food Services and Drinking Places", code: "722", industries: [{ name: "Full-Service Restaurants", code: "722511" }] }] }, // Used 722511 for more specificity
+  { name: "Accommodation and Food Services", code: "72", subSectors: [{ name: "Accommodation", code: "721", industries: [{ name: "Traveler Accommodation", code: "7211" }] }, { name: "Food Services and Drinking Places", code: "722", industries: [{ name: "Full-Service Restaurants", code: "722511" }] }] },
   { name: "Other Services (except Public Administration)", code: "81", subSectors: [{ name: "Repair and Maintenance", code: "811", industries: [{ name: "Automotive Repair and Maintenance", code: "8111" }] }, { name: "Personal and Laundry Services", code: "812", industries: [{ name: "Hair, Nail, and Skin Care Services", code: "8121" }] }] },
   { name: "Public Administration", code: "92", subSectors: [{ name: "Executive, Legislative, and Other General Government Support", code: "921", industries: [{ name: "Executive Offices", code: "92111" }] }, { name: "National Security and International Affairs", code: "928", industries: [{ name: "National Security", code: "9281" }] }] }
 ];
@@ -382,16 +339,13 @@ const getInitials = (displayNameOrEmail: string | null | undefined): string => {
     if (!displayNameOrEmail) return '?';
     const name = displayNameOrEmail;
     if (name.includes('@') && !name.includes(' ')) {
-        // For emails without spaces, take the first letter
         return name.charAt(0).toUpperCase();
     }
-    const parts = name.split(' ').filter(Boolean); // Split by space and remove empty strings
+    const parts = name.split(' ').filter(Boolean);
     if (parts.length === 0) return '?';
     if (parts.length === 1) {
-        // Single name part, take its first letter
         return parts[0].charAt(0).toUpperCase();
     }
-    // Multiple name parts, take first letter of first and last part
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
@@ -433,7 +387,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               setIsCreatePostOpen(false);
           }).catch(err => {
               console.error("Error during post-success operations (invalidate/toast/close):", err);
-               setIsCreatePostOpen(false); // Still close dialog on any post-success error
+               setIsCreatePostOpen(false);
           });
        },
       onError: (error: Error) => {
@@ -456,7 +410,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         return;
     }
 
-    // Find the full details for sector, sub-sector, and industry
     const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
     const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
     const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
@@ -465,14 +418,14 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         question: formData.question,
         description: formData.description,
         tags: formData.tags || [],
-        sector: mainSectorDetails?.name || formData.sector, // Use name, fallback to code
-        subSector: subSectorDetails?.name || formData.subSector, // Use name, fallback to code
-        industry: industryDetails?.name || formData.industry, // Use name, fallback to code
-        naicsCode: formData.industry || formData.subSector || formData.sector, // Most specific code
+        sector: mainSectorDetails?.name || formData.sector,
+        subSector: subSectorDetails?.name || formData.subSector,
+        industry: industryDetails?.name || formData.industry,
+        naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Startup", // Example, can be made dynamic later
-        safetyIndicator: "Medium", // Example
-        ratingScore: Math.floor(Math.random() * 3) + 3, // Example
+        businessType: "Startup",
+        safetyIndicator: "Medium",
+        ratingScore: Math.floor(Math.random() * 3) + 3,
     };
     addPostMutation.mutate(newPostDataForService);
   };
@@ -520,11 +473,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                          Share your question or need with the community. Keep it anonymous.
                        </DialogDescription>
                      </DialogHeader>
-                     {isCreatePostOpen && ( // Conditionally render to re-mount form on open
+                     {isCreatePostOpen && (
                         <CreatePostForm
                            onSubmit={handleAddPost}
                            availableTags={availableTags}
-                           detailedSectorsData={detailedSectorsData} // Pass the detailed data
+                           detailedSectorsData={detailedSectorsData}
                            isSubmitting={addPostMutation.isPending}
                         />
                      )}
