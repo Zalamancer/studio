@@ -1,3 +1,4 @@
+
 // src/services/postService.ts
 import { db } from '@/lib/firebase/config';
 import {
@@ -20,11 +21,19 @@ const postsCollectionRef = collection(db, 'posts');
 // Function to add a new post to Firestore
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
-    // Use serverTimestamp() for createdAt to ensure server-side consistency
-    const docRef = await addDoc(postsCollectionRef, {
-        ...postData,
-        createdAt: serverTimestamp(), // Let Firestore set the timestamp
+    // Create a new object for Firestore, filtering out any undefined properties
+    const dataForFirestore: { [key: string]: any } = {};
+    Object.keys(postData).forEach(keyStr => {
+      const key = keyStr as keyof NewPostData;
+      if (postData[key] !== undefined) {
+        dataForFirestore[key] = postData[key];
+      }
     });
+
+    // Add server timestamp for createdAt, overriding any client-sent value for consistency
+    dataForFirestore.createdAt = serverTimestamp();
+
+    const docRef = await addDoc(postsCollectionRef, dataForFirestore);
     console.log("Post added successfully with ID: ", docRef.id);
     return docRef.id;
   } catch (error: any) {
@@ -55,7 +64,8 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
 
        return {
             id: doc.id,
-            ...(data as Omit<Post, 'id' | 'createdAt'>), // Spread data, assert type
+            ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrl'>), // Spread data, assert type
+            imageUrl: data.imageUrl || undefined, // Ensure imageUrl is explicitly undefined if not present
             createdAt: createdAt, // Assign the potentially handled timestamp
        };
     });
@@ -119,7 +129,8 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
 
       return {
         id: docSnap.id,
-        ...(data as Omit<Post, 'id' | 'createdAt'>),
+        ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrl'>),
+        imageUrl: data.imageUrl || undefined,
         createdAt: createdAt,
       };
     });
