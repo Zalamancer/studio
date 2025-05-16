@@ -13,6 +13,7 @@ export interface Post {
   ratingScore: number;
   stockGraphData?: { name: string; uv: number }[]; // Make stockGraphData optional for profile posts
   createdAt: Timestamp; // Use Firestore Timestamp for sorting/querying and data consistency
+  naicsCode?: string; // Add NAICS code for filtering by sector/industry
 }
 
 // Type for data being added (before Firestore assigns ID and converts Date to Timestamp)
