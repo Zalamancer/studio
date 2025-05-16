@@ -1,7 +1,7 @@
 // src/components/CreatePostForm.tsx
 "use client";
 
-import React from 'react';
+import React, { useState, useEffect } from 'react'; // Added useState and useEffect
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -19,52 +19,79 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"; // Import Select components
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Loader2 } from 'lucide-react';
 
-// Define Zod schema for validation, now including sector
+// Define the shape of a single sector with sub-sectors
+export interface SectorWithSubSectors {
+  name: string; // Main sector name (e.g., "Agriculture, Forestry, Fishing and Hunting")
+  code: string; // Main sector NAICS code (e.g., "11")
+  subSectors: Array<{
+    name: string; // Sub-sector name (e.g., "Crop Production")
+    code: string; // Sub-sector NAICS code (e.g., "111")
+  }>;
+}
+
+// Zod schema update
 const postFormSchema = z.object({
   question: z.string().min(10, "Question must be at least 10 characters long.").max(200, "Question cannot exceed 200 characters."),
   description: z.string().optional(),
   tags: z.array(z.string()).min(1, "Please select at least one tag."),
-  sector: z.string().min(1, "Please select a sector."), // Sector is now mandatory
+  sector: z.string().min(1, "Please select a sector."),
+  subSector: z.string().optional(), // Sub-sector is optional
 });
 
 type PostFormValues = z.infer<typeof postFormSchema>;
 
-// Define the shape of the data the form outputs
 export interface CreatePostFormData {
   question: string;
   description?: string;
   tags: string[];
-  sector: string; // Include sector here
+  sector: string; // Main sector code/name
+  subSector?: string; // Sub-sector code/name, optional
 }
 
 interface CreatePostFormProps {
   onSubmit: (data: CreatePostFormData) => void;
   availableTags: string[];
-  availableSectors: string[]; // Add prop for available sectors
+  detailedSectorsData: SectorWithSubSectors[]; // Use the new detailed structure
   isSubmitting: boolean;
 }
 
-export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availableTags, availableSectors, isSubmitting }) => {
+export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availableTags, detailedSectorsData, isSubmitting }) => {
   const form = useForm<PostFormValues>({
     resolver: zodResolver(postFormSchema),
     defaultValues: {
       question: "",
       description: "",
       tags: [],
-      sector: "", // Default empty sector
+      sector: "",
+      subSector: "", // Default empty subSector
     },
   });
+
+  const [currentSubSectors, setCurrentSubSectors] = useState<Array<{name: string; code: string}>>([]);
+  const selectedSectorCode = form.watch("sector"); // Watch for changes in the main sector field
+
+  useEffect(() => {
+    if (selectedSectorCode) {
+      const selectedMainSector = detailedSectorsData.find(s => s.code === selectedSectorCode);
+      setCurrentSubSectors(selectedMainSector?.subSectors || []);
+      form.resetField("subSector"); // Reset subSector when main sector changes
+    } else {
+      setCurrentSubSectors([]);
+      form.resetField("subSector");
+    }
+  }, [selectedSectorCode, detailedSectorsData, form]);
 
   const handleSubmit = (values: PostFormValues) => {
     const submitData: CreatePostFormData = {
         question: values.question,
         description: values.description,
         tags: values.tags,
-        sector: values.sector, // Pass the sector from form values
+        sector: values.sector, // This will be the main sector's code
+        subSector: values.subSector, // This will be the sub-sector's code
     };
     onSubmit(submitData);
   };
@@ -114,22 +141,60 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
           render={({ field }) => (
             <FormItem>
               <FormLabel>Sector</FormLabel>
-              <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
+              <Select
+                onValueChange={(value) => {
+                  field.onChange(value);
+                }}
+                defaultValue={field.value}
+                disabled={isSubmitting}
+              >
                 <FormControl>
                   <SelectTrigger>
-                    <SelectValue placeholder="Select a sector" />
+                    <SelectValue placeholder="Select a main sector" />
                   </SelectTrigger>
                 </FormControl>
                 <SelectContent>
-                  {availableSectors.map((sectorName) => (
-                    <SelectItem key={sectorName} value={sectorName}>
-                      {sectorName}
+                  {detailedSectorsData.map((sector) => (
+                    <SelectItem key={sector.code} value={sector.code}>
+                      {sector.name} ({sector.code})
                     </SelectItem>
                   ))}
                 </SelectContent>
               </Select>
               <FormDescription>
-                Choose the sector most relevant to your post.
+                Choose the primary sector for your post.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="subSector"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Sub-sector (Optional)</FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value} // Ensure value is controlled
+                disabled={isSubmitting || currentSubSectors.length === 0}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "No sub-sectors available"} />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {currentSubSectors.map((sub) => (
+                    <SelectItem key={sub.code} value={sub.code}>
+                      {sub.name} ({sub.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Choose a specific sub-sector if applicable. This depends on the main sector selected.
               </FormDescription>
               <FormMessage />
             </FormItem>

@@ -29,12 +29,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react";
-import { auth } from '@/lib/firebase/config';
 import { signOut } from '@/lib/firebase/auth';
+import { auth } from '@/lib/firebase/config'; // Import auth from config
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import { CreatePostForm, type CreatePostFormData } from '@/components/CreatePostForm'; // Import CreatePostFormData type
-import type { NewPostData } from '@/types/post'; // Keep NewPostData for service layer
+import { CreatePostForm, type CreatePostFormData, type SectorWithSubSectors } from '@/components/CreatePostForm';
+import type { NewPostData } from '@/types/post';
 import { addPostToFirestore } from '@/services/postService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -52,34 +52,54 @@ export const availableTags = [
     "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
-// Define the list of sectors for the form
-const formSectors = [
-  "Agriculture, Forestry, Fishing and Hunting",
-  "Mining, Quarrying, and Oil and Gas Extraction",
-  "Utilities",
-  "Construction",
-  "Manufacturing",
-  "Wholesale Trade",
-  "Retail Trade",
-  "Transportation and Warehousing",
-  "Information",
-  "Finance and Insurance",
-  "Real Estate and Rental and Leasing",
-  "Professional, Scientific, and Technical Services",
-  "Management of Companies and Enterprises",
-  "Administrative and Support and Waste Management and Remediation Services",
-  "Educational Services",
-  "Health Care and Social Assistance",
-  "Arts, Entertainment, and Recreation",
-  "Accommodation and Food Services",
-  "Other Services (except Public Administration)",
-  "Public Administration"
+// Define the detailed sector data structure
+const detailedSectorsData: SectorWithSubSectors[] = [
+  {
+    name: "Agriculture, Forestry, Fishing and Hunting",
+    code: "11",
+    subSectors: [
+      { name: "Crop Production", code: "111" },
+      { name: "Animal Production and Aquaculture", code: "112" },
+      { name: "Forestry and Logging", code: "113" },
+      { name: "Fishing, Hunting and Trapping", code: "114" },
+      { name: "Support Activities for Agriculture and Forestry", code: "115" },
+    ]
+  },
+  { name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21", subSectors: [] },
+  { name: "Utilities", code: "22", subSectors: [] },
+  { name: "Construction", code: "23", subSectors: [] },
+  {
+    name: "Manufacturing",
+    code: "31-33",
+    subSectors: [ // Example sub-sectors for Manufacturing
+      { name: "Food Manufacturing", code: "311" },
+      { name: "Beverage and Tobacco Product Manufacturing", code: "312" },
+      { name: "Textile Mills", code: "313" },
+      // Add more manufacturing sub-sectors as needed
+    ]
+  },
+  { name: "Wholesale Trade", code: "42", subSectors: [] },
+  { name: "Retail Trade", code: "44-45", subSectors: [] },
+  { name: "Transportation and Warehousing", code: "48-49", subSectors: [] },
+  { name: "Information", code: "51", subSectors: [] },
+  { name: "Finance and Insurance", code: "52", subSectors: [] },
+  { name: "Real Estate and Rental and Leasing", code: "53", subSectors: [] },
+  { name: "Professional, Scientific, and Technical Services", code: "54", subSectors: [] },
+  { name: "Management of Companies and Enterprises", code: "55", subSectors: [] },
+  { name: "Administrative and Support and Waste Management and Remediation Services", code: "56", subSectors: [] },
+  { name: "Educational Services", code: "61", subSectors: [] },
+  { name: "Health Care and Social Assistance", code: "62", subSectors: [] },
+  { name: "Arts, Entertainment, and Recreation", code: "71", subSectors: [] },
+  { name: "Accommodation and Food Services", code: "72", subSectors: [] },
+  { name: "Other Services (except Public Administration)", code: "81", subSectors: [] },
+  { name: "Public Administration", code: "92", subSectors: [] }
 ];
+
 
 const getInitials = (displayNameOrEmail: string | null | undefined): string => {
     if (!displayNameOrEmail) return '?';
-    const name = displayNameOrEmail; // Use directly
-    if (name.includes('@') && !displayNameOrEmail) { // Fallback to email initial if display name is email-like
+    const name = displayNameOrEmail;
+    if (name.includes('@') && !name.includes(' ')) {
         return name.charAt(0).toUpperCase();
     }
     const parts = name.split(' ').filter(Boolean);
@@ -140,7 +160,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       },
   });
 
-  const handleAddPost = (formData: CreatePostFormData) => { // formData type now includes sector
+  const handleAddPost = (formData: CreatePostFormData) => {
     if (!user) {
         toast({
             variant: "destructive",
@@ -150,18 +170,21 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         return;
     }
 
-    // NewPostData is the type expected by addPostToFirestore service
+    // Find the full sector object to get the name for the post
+    const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
+    const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
+
     const newPostDataForService: NewPostData = {
         question: formData.question,
         description: formData.description,
         tags: formData.tags || [],
-        sector: formData.sector, // Use sector from the form data
+        sector: mainSectorDetails?.name || formData.sector, // Use main sector name, fallback to code
+        subSector: subSectorDetails?.name || formData.subSector, // Use sub-sector name, fallback to code
+        naicsCode: formData.subSector || formData.sector, // Store the most specific code selected
         userId: user.uid,
-        // Placeholders for other required fields in Post type, not yet collected by this form
-        businessType: "Startup", // Example placeholder
-        safetyIndicator: "Medium", // Example placeholder
-        ratingScore: Math.floor(Math.random() * 3) + 3, // Example placeholder (3-5)
-        // naicsCode and stockGraphData are optional in the Post type or handled differently
+        businessType: "Startup",
+        safetyIndicator: "Medium",
+        ratingScore: Math.floor(Math.random() * 3) + 3,
     };
     addPostMutation.mutate(newPostDataForService);
   };
@@ -213,7 +236,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                         <CreatePostForm
                            onSubmit={handleAddPost}
                            availableTags={availableTags}
-                           availableSectors={formSectors} // Pass sectors to the form
+                           detailedSectorsData={detailedSectorsData} // Pass the detailed data
                            isSubmitting={addPostMutation.isPending}
                         />
                      )}
@@ -245,19 +268,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild className={cn("cursor-pointer", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                     <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
                       <Link href={`/profile/${user.uid}`} className="w-full">
                         <User className="mr-2 h-4 w-4" />
                         <span>Profile</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild className={cn("cursor-pointer", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                     <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
                        <Link href="/subscription" className="w-full">
                         <CreditCard className="mr-2 h-4 w-4" />
                         <span>Subscription</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild className={cn("cursor-pointer", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
+                     <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
                        <Link href="/settings/profile" className="w-full">
                         <Settings className="mr-2 h-4 w-4" />
                         <span>Settings</span>

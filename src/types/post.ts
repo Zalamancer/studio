@@ -7,17 +7,17 @@ export interface Post {
   tags: string[];
   question: string;
   description?: string; // Make description optional
-  sector: string;
+  sector: string; // Main sector
+  subSector?: string; // Optional: NAICS sub-sector code or title
   businessType: string;
   safetyIndicator: 'High' | 'Medium' | 'Low';
   ratingScore: number;
-  stockGraphData?: { name: string; uv: number }[]; // Make stockGraphData optional for profile posts
-  createdAt: Timestamp; // Use Firestore Timestamp for sorting/querying and data consistency
-  naicsCode?: string; // Add NAICS code for filtering by sector/industry
+  stockGraphData?: { name: string; uv: number }[];
+  createdAt: Timestamp;
+  naicsCode?: string; // Can store the most specific NAICS code (industry or sub-sector)
 }
 
-// Type for data being added (before Firestore assigns ID and converts Date to Timestamp)
-// We still use Date here as input, but the service layer will convert to serverTimestamp
+// Type for data being added
 export type NewPostData = Omit<Post, 'id' | 'createdAt'> & {
-    createdAt?: Date; // Use Date for input, will be converted by service (make optional here too)
+    createdAt?: Date;
 };
