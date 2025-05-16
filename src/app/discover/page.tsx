@@ -2,22 +2,22 @@
 // src/app/discover/page.tsx
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
-import Link from 'next/link'; // Keep Link import
-import { useRouter } from 'next/navigation'; // Keep useRouter import
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, ArrowRight, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion } from 'lucide-react'; // Added more icons
+import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, Star, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion, Info } from 'lucide-react'; // Added Star, Info icons
 
 const sectors = [
   { code: "11", title: "Agriculture, Forestry, Fishing and Hunting", hint: "farming crops", description: "Activities related to growing crops, raising animals, harvesting timber, and fishing.", icon: Trees },
   { code: "21", title: "Mining, Quarrying, and Oil and Gas Extraction", hint: "mining equipment", description: "Extraction of naturally occurring mineral solids, such as coal and ores; liquid minerals, such as crude petroleum; and gases, such as natural gas.", icon: Hammer },
   { code: "22", title: "Utilities", hint: "power lines", description: "Generating, transmitting, and distributing electricity, gas, steam, water, and sewage removal.", icon: Wrench },
   { code: "23", title: "Construction", hint: "construction site", description: "Building, repairing, and renovating buildings and engineering projects (e.g., highways and utility systems).", icon: Building2 },
-  { code: "31-33", title: "Manufacturing", hint: "factory assembly", link: "/discover/31-33", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products.", icon: Factory },
+  { code: "31-33", title: "Manufacturing", hint: "factory assembly", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products.", icon: Factory },
   { code: "42", title: "Wholesale Trade", hint: "warehouse pallets", description: "Selling or arranging for the purchase or sale of goods for resale, capital or durable nonconsumer goods, and raw and intermediate materials.", icon: Package },
   { code: "44-45", title: "Retail Trade", hint: "shopping mall", description: "Retailing merchandise, generally without transformation, and rendering services incidental to the sale of merchandise.", icon: ShoppingCart },
   { code: "48-49", title: "Transportation and Warehousing", hint: "trucks highway", description: "Providing transportation of passengers and cargo, warehousing and storing goods, and support activities.", icon: Plane },
@@ -49,18 +49,21 @@ const filterCategories = [
 const DiscoverPage = () => {
   const router = useRouter();
   const [activeFilter, setActiveFilter] = useState("All");
-  const [showAllRecommended, setShowAllRecommended] = useState(false);
+  // Placeholder for favorited sector codes. In a real app, this would come from user preferences/backend.
+  const [favoriteSectorCodes, setFavoriteSectorCodes] = useState<string[]>([]);
 
-  const recommendedSectors = sectors.slice(0, 6);
-  const displayedRecommendedSectors = showAllRecommended ? sectors : recommendedSectors;
+  const favoriteSectors = useMemo(() => {
+    return sectors.filter(sector => favoriteSectorCodes.includes(sector.code));
+  }, [favoriteSectorCodes]);
 
-  // Placeholder filtering logic - adjust if needed for future post filtering on this page
+  // Placeholder filtering logic for "All Sectors" - adjust if needed
   const filteredSectors = activeFilter === "All"
     ? sectors
     : sectors.filter(sector => sector.title.toLowerCase().includes(activeFilter.toLowerCase()) || sector.description.toLowerCase().includes(activeFilter.toLowerCase()));
 
-  const handleSectorClick = (sectorCode: string, sectorLink?: string) => {
-    const path = sectorLink || `/discover/${sectorCode}`;
+  const handleSectorClick = (sectorCode: string) => {
+    // Manufacturing (31-33) has a specific detailed page for now
+    const path = sectorCode === "31-33" ? `/discover/manufacturing` : `/discover/${sectorCode}`;
     router.push(path);
   };
 
@@ -98,47 +101,50 @@ const DiscoverPage = () => {
         </ScrollArea>
       </div>
 
-      {/* Recommended Sectors Section */}
+      {/* Favorite Sectors Section */}
       <section className="mb-10">
-        <h2 className="text-2xl font-semibold text-foreground mb-4">Recommended Sectors</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {displayedRecommendedSectors.map((sector) => (
-            <Card key={sector.code + "-rec"} className="p-3.5 shadow-sm hover:shadow-md transition-shadow bg-card">
-              <div className="flex items-center justify-between gap-3">
-                <div className="flex items-start gap-3 flex-grow min-w-0">
-                  <Image
-                    src={`https://placehold.co/48x48.png`}
-                    alt={sector.title}
-                    width={40}
-                    height={40}
-                    className="rounded-md object-cover mt-0.5 flex-shrink-0"
-                    data-ai-hint={sector.hint}
-                  />
-                  <div className="flex-grow overflow-hidden">
-                    <h3 className="font-semibold text-base text-foreground truncate">{sector.title}</h3>
-                    <p className="text-xs text-muted-foreground">NAICS: {sector.code}</p>
-                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                      {sector.description || `Explore opportunities in the ${sector.title} sector.`}
-                    </p>
+        <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center">
+          <Star className="mr-2 h-5 w-5 text-yellow-500" /> Favorite Sectors
+        </h2>
+        {favoriteSectors.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {favoriteSectors.map((sector) => (
+              <Card key={sector.code + "-fav"} className="p-3.5 shadow-sm hover:shadow-md transition-shadow bg-card">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-grow min-w-0">
+                    <Image
+                      src={`https://placehold.co/48x48.png`}
+                      alt={sector.title}
+                      width={40}
+                      height={40}
+                      className="rounded-md object-cover mt-0.5 flex-shrink-0"
+                      data-ai-hint={sector.hint}
+                    />
+                    <div className="flex-grow overflow-hidden">
+                      <h3 className="font-semibold text-base text-foreground truncate">{sector.title}</h3>
+                      <p className="text-xs text-muted-foreground">NAICS: {sector.code}</p>
+                      <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {sector.description || `Explore opportunities in the ${sector.title} sector.`}
+                      </p>
+                    </div>
                   </div>
+                  <Button
+                    size="sm"
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground flex-shrink-0 self-center px-4 py-2"
+                    onClick={() => handleSectorClick(sector.code)}
+                    aria-label={`Explore ${sector.title}`}
+                  >
+                    Explore
+                  </Button>
                 </div>
-                <Button
-                  size="sm"
-                  className="bg-accent hover:bg-accent/90 text-accent-foreground flex-shrink-0 self-center px-4 py-2"
-                  onClick={() => handleSectorClick(sector.code, sector.link)}
-                  aria-label={`Explore ${sector.title}`}
-                >
-                  Explore
-                </Button>
-              </div>
-            </Card>
-          ))}
-        </div>
-        {!showAllRecommended && sectors.length > recommendedSectors.length && (
-          <div className="mt-6 text-center">
-            <Button variant="outline" onClick={() => setShowAllRecommended(true)}>
-              Show more <ArrowRight className="ml-2 h-4 w-4" />
-            </Button>
+              </Card>
+            ))}
+          </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center p-6 border border-dashed rounded-lg bg-muted/30">
+            <Info className="h-8 w-8 text-muted-foreground mb-3" />
+            <p className="text-muted-foreground text-sm">You haven't favorited any sectors yet.</p>
+            <p className="text-xs text-muted-foreground mt-1">Click the star on a sector's detail page to add it here.</p>
           </div>
         )}
       </section>
@@ -173,7 +179,7 @@ const DiscoverPage = () => {
                   <Button
                     size="sm"
                     className="bg-accent hover:bg-accent/90 text-accent-foreground flex-shrink-0 self-center px-4 py-2"
-                    onClick={() => handleSectorClick(sector.code, sector.link)}
+                    onClick={() => handleSectorClick(sector.code)}
                     aria-label={`Explore ${sector.title}`}
                   >
                      Explore
