@@ -17,16 +17,16 @@ const sectors = [
   { code: "21", title: "Mining, Quarrying, and Oil and Gas Extraction", hint: "mining equipment", description: "Extraction of naturally occurring mineral solids, such as coal and ores; liquid minerals, such as crude petroleum; and gases, such as natural gas." },
   { code: "22", title: "Utilities", hint: "power lines", description: "Generating, transmitting, and distributing electricity, gas, steam, water, and sewage removal." },
   { code: "23", title: "Construction", hint: "construction site", description: "Building, repairing, and renovating buildings and engineering projects (e.g., highways and utility systems)." },
-  { code: "31-33", title: "Manufacturing", hint: "factory assembly line", link: "/discover/manufacturing", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products." },
+  { code: "31-33", title: "Manufacturing", hint: "factory assembly", link: "/discover/manufacturing", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products." },
   { code: "42", title: "Wholesale Trade", hint: "warehouse pallets", description: "Selling or arranging for the purchase or sale of goods for resale, capital or durable nonconsumer goods, and raw and intermediate materials." },
   { code: "44-45", title: "Retail Trade", hint: "shopping mall", description: "Retailing merchandise, generally without transformation, and rendering services incidental to the sale of merchandise." },
   { code: "48-49", title: "Transportation and Warehousing", hint: "trucks highway", description: "Providing transportation of passengers and cargo, warehousing and storing goods, and support activities." },
-  { code: "51", title: "Information", hint: "data center servers", description: "Producing and distributing information and cultural products, providing the means to transmit or distribute these products, and processing data." },
-  { code: "52", title: "Finance and Insurance", hint: "stock market graph", description: "Financial transactions (e.g., raising funds by taking deposits, issuing securities) and/or facilitating financial transactions." },
+  { code: "51", title: "Information", hint: "data center", description: "Producing and distributing information and cultural products, providing the means to transmit or distribute these products, and processing data." },
+  { code: "52", title: "Finance and Insurance", hint: "stock market", description: "Financial transactions (e.g., raising funds by taking deposits, issuing securities) and/or facilitating financial transactions." },
   { code: "53", title: "Real Estate and Rental and Leasing", hint: "modern house", description: "Renting, leasing, or otherwise allowing the use of tangible or intangible assets, and related services." },
   { code: "54", title: "Professional, Scientific, and Technical Services", hint: "scientist laboratory", description: "Performing professional, scientific, and technical activities for others, requiring a high degree of expertise and training." },
-  { code: "55", title: "Management of Companies and Enterprises", hint: "office building boardroom", description: "Holding the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions." },
-  { code: "56", title: "Administrative and Support and Waste Management and Remediation Services", hint: "office workers support", description: "Performing routine support activities for the day-to-day operations of other organizations, or waste management services." },
+  { code: "55", title: "Management of Companies and Enterprises", hint: "office boardroom", description: "Holding the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions." },
+  { code: "56", title: "Administrative and Support and Waste Management and Remediation Services", hint: "office support", description: "Performing routine support activities for the day-to-day operations of other organizations, or waste management services." },
   { code: "61", title: "Educational Services", hint: "classroom students", description: "Providing instruction and training in a wide variety of subjects. These establishments may be privately owned or public institutions." },
   { code: "62", title: "Health Care and Social Assistance", hint: "doctor patient", description: "Providing health care and social assistance for individuals. Establishments in this sector deliver services by trained professionals." },
   { code: "71", title: "Arts, Entertainment, and Recreation", hint: "concert stage", description: "Operating facilities or providing services to meet varied cultural, entertainment, and recreational interests of their patrons." },
@@ -58,7 +58,7 @@ const DiscoverPage = () => {
   // Placeholder filtering logic
   const filteredSectors = activeFilter === "All"
     ? sectors
-    : sectors.filter(sector => sector.title.toLowerCase().includes(activeFilter.toLowerCase()) || sector.tags?.includes(activeFilter));
+    : sectors.filter(sector => sector.title.toLowerCase().includes(activeFilter.toLowerCase()) || sector.description.toLowerCase().includes(activeFilter.toLowerCase()));
 
 
   return (
@@ -101,7 +101,7 @@ const DiscoverPage = () => {
               <div className="flex items-center justify-between gap-3">
                 <div className="flex items-start gap-3 flex-grow min-w-0">
                   <Image
-                    src={`https://placehold.co/48x48.png?text=${sector.title.charAt(0)}`}
+                    src={`https://placehold.co/48x48.png`}
                     alt={sector.title}
                     width={40}
                     height={40}
@@ -149,7 +149,7 @@ const DiscoverPage = () => {
                 <div className="flex items-center justify-between gap-3">
                   <div className="flex items-start gap-3 flex-grow min-w-0">
                     <Image
-                       src={`https://placehold.co/48x48.png?text=${sector.title.charAt(0)}`}
+                       src={`https://placehold.co/48x48.png`}
                        alt={sector.title}
                        width={40}
                        height={40}
