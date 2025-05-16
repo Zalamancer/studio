@@ -1126,11 +1126,32 @@ function BoardPageContent() {
                                          </div>
                                      )}
 
+                                     <div className="grid grid-cols-1 gap-y-2 mt-4 border-t pt-4">
+                                         <div>
+                                            <strong className="block text-foreground">Sector:</strong>
+                                            <span className="text-muted-foreground">{selectedPost.sector || 'N/A'}</span>
+                                         </div>
+                                         {selectedPost.subSector && (
+                                            <div>
+                                                <strong className="block text-foreground">Sub-Sector:</strong>
+                                                <span className="text-muted-foreground">{selectedPost.subSector}</span>
+                                            </div>
+                                         )}
+                                         {selectedPost.industry && (
+                                            <div>
+                                                <strong className="block text-foreground">Industry:</strong>
+                                                <span className="text-muted-foreground">{selectedPost.industry}</span>
+                                            </div>
+                                         )}
+                                         {selectedPost.naicsCode && (
+                                            <div>
+                                                <strong className="block text-foreground">NAICS Code:</strong>
+                                                <span className="text-muted-foreground">{selectedPost.naicsCode}</span>
+                                            </div>
+                                         )}
+                                      </div>
+
                                      <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4">
-                                          <div>
-                                              <strong className="block text-foreground">Sector:</strong>
-                                              <span className="text-muted-foreground">{selectedPost.sector || 'N/A'}</span>
-                                           </div>
                                             <div>
                                                 <strong className="block text-foreground">Business Type:</strong>
                                                 <span className="text-muted-foreground">{selectedPost.businessType || 'N/A'}</span>
@@ -1311,3 +1332,4 @@ const extractMentions = (text: string): string[] => {
     // For now, returning the matched identifier (which might be username or ID)
     return Array.from(userIdentifiers);
 };
+
