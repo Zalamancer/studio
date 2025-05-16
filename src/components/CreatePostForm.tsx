@@ -1,7 +1,7 @@
 // src/components/CreatePostForm.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react'; // Added useState and useEffect
+import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -23,14 +23,24 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
 import { Loader2 } from 'lucide-react';
 
+// Define the shape of a single industry
+interface Industry {
+  name: string;
+  code: string;
+}
+
+// Define the shape of a single sub-sector with industries
+interface SubSector {
+  name: string;
+  code: string;
+  industries: Industry[];
+}
+
 // Define the shape of a single sector with sub-sectors
 export interface SectorWithSubSectors {
-  name: string; // Main sector name (e.g., "Agriculture, Forestry, Fishing and Hunting")
-  code: string; // Main sector NAICS code (e.g., "11")
-  subSectors: Array<{
-    name: string; // Sub-sector name (e.g., "Crop Production")
-    code: string; // Sub-sector NAICS code (e.g., "111")
-  }>;
+  name: string;
+  code: string;
+  subSectors: SubSector[];
 }
 
 // Zod schema update
@@ -39,7 +49,8 @@ const postFormSchema = z.object({
   description: z.string().optional(),
   tags: z.array(z.string()).min(1, "Please select at least one tag."),
   sector: z.string().min(1, "Please select a sector."),
-  subSector: z.string().optional(), // Sub-sector is optional
+  subSector: z.string().optional(),
+  industry: z.string().optional(), // Industry is optional
 });
 
 type PostFormValues = z.infer<typeof postFormSchema>;
@@ -48,14 +59,15 @@ export interface CreatePostFormData {
   question: string;
   description?: string;
   tags: string[];
-  sector: string; // Main sector code/name
-  subSector?: string; // Sub-sector code/name, optional
+  sector: string; // Main sector code
+  subSector?: string; // Sub-sector code, optional
+  industry?: string; // Industry code, optional
 }
 
 interface CreatePostFormProps {
   onSubmit: (data: CreatePostFormData) => void;
   availableTags: string[];
-  detailedSectorsData: SectorWithSubSectors[]; // Use the new detailed structure
+  detailedSectorsData: SectorWithSubSectors[];
   isSubmitting: boolean;
 }
 
@@ -67,31 +79,51 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       description: "",
       tags: [],
       sector: "",
-      subSector: "", // Default empty subSector
+      subSector: "",
+      industry: "", // Default empty industry
     },
   });
 
-  const [currentSubSectors, setCurrentSubSectors] = useState<Array<{name: string; code: string}>>([]);
-  const selectedSectorCode = form.watch("sector"); // Watch for changes in the main sector field
+  const [currentSubSectors, setCurrentSubSectors] = useState<SubSector[]>([]);
+  const [currentIndustries, setCurrentIndustries] = useState<Industry[]>([]);
+
+  const selectedSectorCode = form.watch("sector");
+  const selectedSubSectorCode = form.watch("subSector");
 
   useEffect(() => {
     if (selectedSectorCode) {
       const selectedMainSector = detailedSectorsData.find(s => s.code === selectedSectorCode);
       setCurrentSubSectors(selectedMainSector?.subSectors || []);
-      form.resetField("subSector"); // Reset subSector when main sector changes
+      form.resetField("subSector");
+      form.resetField("industry");
+      setCurrentIndustries([]); // Also clear industries when main sector changes
     } else {
       setCurrentSubSectors([]);
+      setCurrentIndustries([]);
       form.resetField("subSector");
+      form.resetField("industry");
     }
   }, [selectedSectorCode, detailedSectorsData, form]);
+
+  useEffect(() => {
+    if (selectedSubSectorCode) {
+      const selectedSub = currentSubSectors.find(ss => ss.code === selectedSubSectorCode);
+      setCurrentIndustries(selectedSub?.industries || []);
+      form.resetField("industry");
+    } else {
+      setCurrentIndustries([]);
+      form.resetField("industry");
+    }
+  }, [selectedSubSectorCode, currentSubSectors, form]);
 
   const handleSubmit = (values: PostFormValues) => {
     const submitData: CreatePostFormData = {
         question: values.question,
         description: values.description,
         tags: values.tags,
-        sector: values.sector, // This will be the main sector's code
-        subSector: values.subSector, // This will be the sub-sector's code
+        sector: values.sector,
+        subSector: values.subSector,
+        industry: values.industry,
     };
     onSubmit(submitData);
   };
@@ -177,7 +209,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
               <FormLabel>Sub-sector (Optional)</FormLabel>
               <Select
                 onValueChange={field.onChange}
-                value={field.value} // Ensure value is controlled
+                value={field.value}
                 disabled={isSubmitting || currentSubSectors.length === 0}
               >
                 <FormControl>
@@ -194,7 +226,39 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                 </SelectContent>
               </Select>
               <FormDescription>
-                Choose a specific sub-sector if applicable. This depends on the main sector selected.
+                Choose a specific sub-sector if applicable.
+              </FormDescription>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+
+        <FormField
+          control={form.control}
+          name="industry"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Industry (Optional)</FormLabel>
+              <Select
+                onValueChange={field.onChange}
+                value={field.value}
+                disabled={isSubmitting || currentIndustries.length === 0}
+              >
+                <FormControl>
+                  <SelectTrigger>
+                    <SelectValue placeholder={currentIndustries.length > 0 ? "Select an industry" : "No industries available"} />
+                  </SelectTrigger>
+                </FormControl>
+                <SelectContent>
+                  {currentIndustries.map((industry) => (
+                    <SelectItem key={industry.code} value={industry.code}>
+                      {industry.name} ({industry.code})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <FormDescription>
+                Choose a specific industry if applicable.
               </FormDescription>
               <FormMessage />
             </FormItem>

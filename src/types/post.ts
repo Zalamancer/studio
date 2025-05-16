@@ -7,14 +7,15 @@ export interface Post {
   tags: string[];
   question: string;
   description?: string; // Make description optional
-  sector: string; // Main sector
-  subSector?: string; // Optional: NAICS sub-sector code or title
+  sector: string; // Main sector name
+  subSector?: string; // Optional: Sub-sector name
+  industry?: string; // Optional: Industry name
   businessType: string;
   safetyIndicator: 'High' | 'Medium' | 'Low';
   ratingScore: number;
   stockGraphData?: { name: string; uv: number }[];
   createdAt: Timestamp;
-  naicsCode?: string; // Can store the most specific NAICS code (industry or sub-sector)
+  naicsCode?: string; // Stores the most specific NAICS code selected (Industry > Sub-sector > Sector)
 }
 
 // Type for data being added

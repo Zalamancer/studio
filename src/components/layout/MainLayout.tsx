@@ -28,8 +28,8 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react";
-import { signOut } from '@/lib/firebase/auth';
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react"; // Changed LineChart to Compass
+import { signOut } from '@/lib/firebase/auth'; // Import auth and signOut
 import { auth } from '@/lib/firebase/config'; // Import auth from config
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -52,17 +52,30 @@ export const availableTags = [
     "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
-// Define the detailed sector data structure
+// Define the detailed sector data structure including industries
 const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Agriculture, Forestry, Fishing and Hunting",
     code: "11",
     subSectors: [
-      { name: "Crop Production", code: "111" },
-      { name: "Animal Production and Aquaculture", code: "112" },
-      { name: "Forestry and Logging", code: "113" },
-      { name: "Fishing, Hunting and Trapping", code: "114" },
-      { name: "Support Activities for Agriculture and Forestry", code: "115" },
+      {
+        name: "Crop Production", code: "111", industries: [
+          { name: "Oilseed and Grain Farming", code: "1111" },
+          { name: "Vegetable and Melon Farming", code: "1112" },
+          { name: "Fruit and Tree Nut Farming", code: "1113" },
+          { name: "Greenhouse, Nursery, and Floriculture Production", code: "1114" },
+          { name: "Other Crop Farming", code: "1119" },
+        ]
+      },
+      {
+        name: "Animal Production and Aquaculture", code: "112", industries: [
+          { name: "Cattle Ranching and Farming", code: "1121" },
+          { name: "Hog and Pig Farming", code: "1122" },
+        ]
+      },
+      { name: "Forestry and Logging", code: "113", industries: [] },
+      { name: "Fishing, Hunting and Trapping", code: "114", industries: [] },
+      { name: "Support Activities for Agriculture and Forestry", code: "115", industries: [] },
     ]
   },
   { name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21", subSectors: [] },
@@ -71,11 +84,16 @@ const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Manufacturing",
     code: "31-33",
-    subSectors: [ // Example sub-sectors for Manufacturing
-      { name: "Food Manufacturing", code: "311" },
-      { name: "Beverage and Tobacco Product Manufacturing", code: "312" },
-      { name: "Textile Mills", code: "313" },
-      // Add more manufacturing sub-sectors as needed
+    subSectors: [
+      {
+        name: "Food Manufacturing", code: "311", industries: [
+          { name: "Animal Food Manufacturing", code: "3111" },
+          { name: "Grain and Oilseed Milling", code: "3112" },
+          { name: "Sugar and Confectionery Product Manufacturing", code: "3113" },
+        ]
+      },
+      { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [] },
+      { name: "Textile Mills", code: "313", industries: [] },
     ]
   },
   { name: "Wholesale Trade", code: "42", subSectors: [] },
@@ -120,7 +138,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   const handleLogout = async () => {
     try {
-      await signOut();
+      await signOut(); // Use signOut from auth.ts
       toast({
         title: "Logged Out",
         description: "You have been successfully logged out.",
@@ -144,10 +162,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   title: "Post Created",
                   description: "Your post has been added to the board.",
               });
-              setIsCreatePostOpen(false);
+              setIsCreatePostOpen(false); // Close dialog on success
           }).catch(err => {
               console.error("Error during post-success operations (invalidate/toast/close):", err);
-               setIsCreatePostOpen(false);
+               setIsCreatePostOpen(false); // Still close dialog on error here
           });
        },
       onError: (error: Error) => {
@@ -170,21 +188,22 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         return;
     }
 
-    // Find the full sector object to get the name for the post
     const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
     const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
+    const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
 
     const newPostDataForService: NewPostData = {
         question: formData.question,
         description: formData.description,
         tags: formData.tags || [],
-        sector: mainSectorDetails?.name || formData.sector, // Use main sector name, fallback to code
-        subSector: subSectorDetails?.name || formData.subSector, // Use sub-sector name, fallback to code
-        naicsCode: formData.subSector || formData.sector, // Store the most specific code selected
+        sector: mainSectorDetails?.name || formData.sector,
+        subSector: subSectorDetails?.name || formData.subSector,
+        industry: industryDetails?.name || formData.industry,
+        naicsCode: formData.industry || formData.subSector || formData.sector, // Most specific code
         userId: user.uid,
-        businessType: "Startup",
-        safetyIndicator: "Medium",
-        ratingScore: Math.floor(Math.random() * 3) + 3,
+        businessType: "Startup", // Placeholder, consider adding to form
+        safetyIndicator: "Medium", // Placeholder
+        ratingScore: Math.floor(Math.random() * 3) + 3, // Placeholder
     };
     addPostMutation.mutate(newPostDataForService);
   };
@@ -232,11 +251,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                          Share your question or need with the community. Keep it anonymous.
                        </DialogDescription>
                      </DialogHeader>
-                     {isCreatePostOpen && (
+                     {isCreatePostOpen && ( // Conditionally render to reset form state on open
                         <CreatePostForm
                            onSubmit={handleAddPost}
                            availableTags={availableTags}
-                           detailedSectorsData={detailedSectorsData} // Pass the detailed data
+                           detailedSectorsData={detailedSectorsData}
                            isSubmitting={addPostMutation.isPending}
                         />
                      )}
