@@ -8,6 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardContent, CardTitle as UICardTitle } from "@/components/ui/card"; // Renamed CardTitle import
 import { Badge } from "@/components/ui/badge";
 import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel"
+import Image from 'next/image'; // For Next.js optimized images
+import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -147,6 +155,17 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
                 ))}
             </div>
            <h3 className="text-base font-semibold leading-snug text-card-foreground">{post.question}</h3>
+           {post.imageUrls && post.imageUrls.length > 0 && (
+             <div className="mt-2 rounded-md overflow-hidden aspect-video relative">
+               <Image
+                 src={post.imageUrls[0]} // Display first image as preview
+                 alt={post.question}
+                 layout="fill"
+                 objectFit="cover"
+                 data-ai-hint="post image" // Generic hint
+               />
+             </div>
+           )}
            {post.description && (
              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
               {post.description}
@@ -523,7 +542,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         const replyData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'> = {
             userId: user.uid,
             text: newReply.trim(),
-            mentionedUserIds: mentionedUserIds, // Add mentioned IDs
+            mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [], // Add mentioned IDs
         };
         addReplyMutation.mutate(replyData);
     };
@@ -964,7 +983,7 @@ function BoardPageContent() {
        const commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'> = {
            userId: user.uid,
            text: newComment.trim(),
-           mentionedUserIds: mentionedUserIds, // Add mentioned IDs
+           mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [], // Add mentioned IDs
            // timestamp is set by the server in the service function
        };
 
@@ -1117,6 +1136,36 @@ function BoardPageContent() {
                                         Posted on: {selectedPost.createdAt instanceof Timestamp ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
                                     </SheetDescription>
                                 </SheetHeader>
+
+                                {selectedPost.imageUrls && selectedPost.imageUrls.length > 0 && (
+                                    <div className="mb-4 rounded-lg overflow-hidden shadow-md">
+                                        <Carousel className="w-full">
+                                            <CarouselContent>
+                                                {selectedPost.imageUrls.map((url, index) => (
+                                                <CarouselItem key={index}>
+                                                    <div className="aspect-video relative">
+                                                    <Image
+                                                        src={url}
+                                                        alt={`Post image ${index + 1}`}
+                                                        layout="fill"
+                                                        objectFit="contain" // Use contain to see full image, or cover
+                                                        className="rounded-md"
+                                                        data-ai-hint="uploaded content"
+                                                    />
+                                                    </div>
+                                                </CarouselItem>
+                                                ))}
+                                            </CarouselContent>
+                                            {selectedPost.imageUrls.length > 1 && (
+                                                <>
+                                                    <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2" />
+                                                    <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2" />
+                                                </>
+                                            )}
+                                        </Carousel>
+                                    </div>
+                                )}
+
 
                                 <div className="space-y-4 text-sm mb-6"> {/* Add bottom margin */}
                                      {selectedPost.description && (
@@ -1332,4 +1381,3 @@ const extractMentions = (text: string): string[] => {
     // For now, returning the matched identifier (which might be username or ID)
     return Array.from(userIdentifiers);
 };
-

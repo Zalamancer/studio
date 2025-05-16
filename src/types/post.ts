@@ -16,9 +16,11 @@ export interface Post {
   stockGraphData?: { name: string; uv: number }[];
   createdAt: Timestamp;
   naicsCode?: string; // Stores the most specific NAICS code selected (Industry > Sub-sector > Sector)
+  imageUrls?: string[]; // Changed from imageUrl to support multiple images
 }
 
 // Type for data being added
 export type NewPostData = Omit<Post, 'id' | 'createdAt'> & {
-    createdAt?: Date;
+    createdAt?: Date; // For client-side representation before server timestamp
+    // imageUrl?: string; // This was used temporarily by form handling, actual storage is imageUrls
 };

@@ -1,4 +1,3 @@
-
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -31,8 +30,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react"; // Changed LineChart to Compass
-import { signOut } from '@/lib/firebase/auth';
-import { auth } from '@/lib/firebase/config';
+import { signOut, auth } from '@/lib/firebase/auth'; // Import auth and signOut
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { CreatePostForm, type CreatePostFormData, type SectorWithSubSectors, type SubSector, type Industry } from '@/components/CreatePostForm';
@@ -334,14 +332,17 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
 const getInitials = (displayNameOrEmail: string | null | undefined): string => {
     if (!displayNameOrEmail) return '?';
     const name = displayNameOrEmail;
-    if (name.includes('@') && !name.includes(' ')) {
+    // Handle cases where displayName might be an email
+    if (name.includes('@') && !name.includes(' ')) { // Likely an email without spaces
         return name.charAt(0).toUpperCase();
     }
-    const parts = name.split(' ').filter(Boolean);
+    // Split by space for display names like "John Doe" or just "John"
+    const parts = name.split(' ').filter(Boolean); // Filter out empty strings if there are multiple spaces
     if (parts.length === 0) return '?';
-    if (parts.length === 1) {
+    if (parts.length === 1) { // Single name like "John" or "Company"
         return parts[0].charAt(0).toUpperCase();
     }
+    // Multiple parts like "John Doe", take first char of first and last
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
@@ -373,31 +374,40 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   };
 
   const addPostMutation = useMutation({
-    mutationFn: async (newPostData: NewPostData & { imageFile?: File | null }) => {
+    mutationFn: async (newPostDataWithImage: NewPostData & { imageFile?: File | null, imageUrls?: string[] }) => {
       if (!user) {
         throw new Error("User not authenticated to create post.");
       }
-      let imageUrl: string | undefined = undefined;
 
-      // --- TEMPORARY DEBUGGING: MOCK IMAGE UPLOAD ---
-      if (newPostData.imageFile) {
-        console.log("DEBUG: Simulating image upload for:", newPostData.imageFile.name);
-        // Instead of calling await uploadPostImage(newPostData.imageFile, user.uid);
-        // We'll use a placeholder URL and simulate a delay
-        await new Promise(resolve => setTimeout(resolve, 500)); // Simulate network delay
-        imageUrl = `https://placehold.co/600x400.png?text=MockUpload_${Date.now()}`;
-        console.log("DEBUG: Mock imageUrl:", imageUrl);
-        // IMPORTANT: Remember to revert this to the actual uploadPostImage call for production
+      let finalImageUrls: string[] = newPostDataWithImage.imageUrls || [];
+
+      if (newPostDataWithImage.imageFile) {
+        try {
+          console.log("Uploading image:", newPostDataWithImage.imageFile.name);
+          const uploadedUrl = await uploadPostImage(newPostDataWithImage.imageFile, user.uid);
+          finalImageUrls = [uploadedUrl]; // Replace or add to existing logic for multiple images
+          console.log("Image uploaded, URL:", uploadedUrl);
+        } catch (uploadError) {
+          console.error("Image upload failed:", uploadError);
+          toast({
+            variant: "destructive",
+            title: "Image Upload Failed",
+            description: (uploadError as Error).message || "Could not upload the image.",
+          });
+          // Decide if post creation should proceed without image or fail
+          throw uploadError; // Re-throw to stop post creation if image is critical
+        }
       }
-      // --- END TEMPORARY DEBUGGING ---
+      
+      // Prepare data for Firestore, ensuring imageUrls is correctly set
+      const { imageFile, ...postDataForFirestore } = newPostDataWithImage;
+      postDataForFirestore.imageUrls = finalImageUrls; // Use the processed imageUrls
 
-      // Remove imageFile before sending to Firestore
-      const { imageFile, ...postDataForFirestore } = newPostData;
-      return addPostToFirestore({ ...postDataForFirestore, imageUrl });
+      return addPostToFirestore(postDataForFirestore as NewPostData);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
-      queryClient.invalidateQueries({ queryKey: ['userPosts'] }); // Invalidate user-specific posts too
+      queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       toast({
         title: "Post Created",
         description: "Your post has been added to the board.",
@@ -406,12 +416,16 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     },
     onError: (error: Error) => {
       console.error("Add Post Mutation failed:", error);
-      toast({
-        variant: "destructive",
-        title: "Post Failed",
-        description: `Could not add your post: ${error.message}. Check console and Firestore rules.`,
-      });
-      setIsCreatePostOpen(false); // Ensure dialog closes even on error
+      // No need to show another toast if image upload already showed one
+      if (!error.message.includes("Could not upload the image")) {
+        toast({
+          variant: "destructive",
+          title: "Post Failed",
+          description: `Could not add your post: ${error.message}. Check console and Firestore rules.`,
+        });
+      }
+      // Do not close dialog here if image upload failed, let user try again or cancel
+      // setIsCreatePostOpen(false); // Only close on general post failure, not image upload failure if user might want to retry image
     },
   });
 
@@ -436,12 +450,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
         industry: industryDetails?.name || formData.industry,
-        naicsCode: formData.industry || formData.subSector || formData.sector,
+        naicsCode: formData.industry || formData.subSector || formData.sector, // Most specific code
         userId: user.uid,
         businessType: "Startup", // Example, consider making this a form field
         safetyIndicator: "Medium", // Example
         ratingScore: Math.floor(Math.random() * 3) + 3, // Example
-        imageFile: formData.imageFile, // Pass the file object
+        imageFile: formData.imageFile,
+        imageUrls: [], // Initialize as empty, will be populated if imageFile exists
     };
     addPostMutation.mutate(newPostDataForService);
   };
@@ -580,4 +595,3 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     </div>
   );
 }
-

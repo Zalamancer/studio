@@ -1,4 +1,3 @@
-
 // src/services/postService.ts
 import { db } from '@/lib/firebase/config';
 import {
@@ -25,13 +24,25 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
     const dataForFirestore: { [key: string]: any } = {};
     Object.keys(postData).forEach(keyStr => {
       const key = keyStr as keyof NewPostData;
-      if (postData[key] !== undefined) {
-        dataForFirestore[key] = postData[key];
+      const value = postData[key];
+      if (value !== undefined) {
+        // Special handling for imageUrls: ensure it's an array
+        if (key === 'imageUrls') {
+          dataForFirestore[key] = Array.isArray(value) ? value : (value ? [value] : []);
+        } else {
+          dataForFirestore[key] = value;
+        }
       }
     });
 
     // Add server timestamp for createdAt, overriding any client-sent value for consistency
     dataForFirestore.createdAt = serverTimestamp();
+
+    // Ensure imageUrls is at least an empty array if not provided
+    if (dataForFirestore.imageUrls === undefined) {
+        dataForFirestore.imageUrls = [];
+    }
+
 
     const docRef = await addDoc(postsCollectionRef, dataForFirestore);
     console.log("Post added successfully with ID: ", docRef.id);
@@ -58,15 +69,13 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
     const querySnapshot = await getDocs(q);
     const posts = querySnapshot.docs.map((doc) => {
        const data = doc.data();
-       // Ensure createdAt is converted to a Timestamp object if needed, although SDK usually handles it.
-       // Firestore Timestamps are retrieved directly. We only need to ensure they exist.
        const createdAt = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now(); // Fallback if needed
 
        return {
             id: doc.id,
-            ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrl'>), // Spread data, assert type
-            imageUrl: data.imageUrl || undefined, // Ensure imageUrl is explicitly undefined if not present
-            createdAt: createdAt, // Assign the potentially handled timestamp
+            ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls'>),
+            imageUrls: data.imageUrls || [], // Ensure imageUrls is an array, default to empty
+            createdAt: createdAt,
        };
     });
     console.log(`Fetched ${posts.length} posts from Firestore.`);
@@ -78,7 +87,6 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
      if (error.code === 'permission-denied') {
         console.error("Firestore permission denied for reading. Check your security rules.");
     }
-    // Return empty array or throw error based on how you want to handle fetch failures
     return [];
   }
 };
@@ -87,7 +95,7 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
 // Function to delete a post from Firestore
 export const deletePostFromFirestore = async (postId: string): Promise<void> => {
     try {
-        const postDocRef = doc(db, 'posts', postId); // Get reference to the specific post document
+        const postDocRef = doc(db, 'posts', postId);
         await deleteDoc(postDocRef);
         console.log(`Post with ID ${postId} deleted successfully.`);
     } catch (error: any) {
@@ -114,9 +122,9 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
   try {
     const q = query(
       postsCollectionRef,
-      where('userId', '==', userId), // Filter by userId
-      orderBy('createdAt', 'desc'), // Order by creation date
-      limit(20) // Limit results (adjust as needed)
+      where('userId', '==', userId),
+      orderBy('createdAt', 'desc'),
+      limit(20)
     );
 
     console.log("Executing Firestore query for user's posts...");
@@ -129,8 +137,8 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
 
       return {
         id: docSnap.id,
-        ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrl'>),
-        imageUrl: data.imageUrl || undefined,
+        ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls'>),
+        imageUrls: data.imageUrls || [], // Ensure imageUrls is an array
         createdAt: createdAt,
       };
     });
