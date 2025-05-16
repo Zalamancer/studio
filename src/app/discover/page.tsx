@@ -1,90 +1,185 @@
 
 // src/app/discover/page.tsx
-import React from 'react';
+"use client";
+
+import React, { useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import Image from 'next/image';
-import Link from 'next/link'; // Import Link
-import { cn } from '@/lib/utils'; // Import cn for conditional classes
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
+import { cn } from '@/lib/utils';
+import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, ArrowRight } from 'lucide-react';
 
 const sectors = [
-  { code: "11", title: "Agriculture, Forestry, Fishing and Hunting", hint: "farming crops" },
-  { code: "21", title: "Mining, Quarrying, and Oil and Gas Extraction", hint: "mining equipment" },
-  { code: "22", title: "Utilities", hint: "power lines" },
-  { code: "23", title: "Construction", hint: "construction site" },
-  { code: "31-33", title: "Manufacturing", hint: "factory assembly line", link: "/discover/manufacturing" }, // Add link prop
-  { code: "42", title: "Wholesale Trade", hint: "warehouse pallets" },
-  { code: "44-45", title: "Retail Trade", hint: "shopping mall" },
-  { code: "48-49", title: "Transportation and Warehousing", hint: "trucks highway" },
-  { code: "51", title: "Information", hint: "data center servers" },
-  { code: "52", title: "Finance and Insurance", hint: "stock market graph" },
-  { code: "53", title: "Real Estate and Rental and Leasing", hint: "modern house" },
-  { code: "54", title: "Professional, Scientific, and Technical Services", hint: "scientist laboratory" },
-  { code: "55", title: "Management of Companies and Enterprises", hint: "office building boardroom" },
-  { code: "56", title: "Administrative and Support and Waste Management and Remediation Services", hint: "office workers support" },
-  { code: "61", title: "Educational Services", hint: "classroom students" },
-  { code: "62", title: "Health Care and Social Assistance", hint: "doctor patient" },
-  { code: "71", title: "Arts, Entertainment, and Recreation", hint: "concert stage" },
-  { code: "72", title: "Accommodation and Food Services", hint: "restaurant chef" },
-  { code: "81", title: "Other Services (except Public Administration)", hint: "mechanic workshop" },
-  { code: "92", title: "Public Administration", hint: "government building" },
+  { code: "11", title: "Agriculture, Forestry, Fishing and Hunting", hint: "farming crops", description: "Activities related to growing crops, raising animals, harvesting timber, and fishing." },
+  { code: "21", title: "Mining, Quarrying, and Oil and Gas Extraction", hint: "mining equipment", description: "Extraction of naturally occurring mineral solids, such as coal and ores; liquid minerals, such as crude petroleum; and gases, such as natural gas." },
+  { code: "22", title: "Utilities", hint: "power lines", description: "Generating, transmitting, and distributing electricity, gas, steam, water, and sewage removal." },
+  { code: "23", title: "Construction", hint: "construction site", description: "Building, repairing, and renovating buildings and engineering projects (e.g., highways and utility systems)." },
+  { code: "31-33", title: "Manufacturing", hint: "factory assembly line", link: "/discover/manufacturing", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products." },
+  { code: "42", title: "Wholesale Trade", hint: "warehouse pallets", description: "Selling or arranging for the purchase or sale of goods for resale, capital or durable nonconsumer goods, and raw and intermediate materials." },
+  { code: "44-45", title: "Retail Trade", hint: "shopping mall", description: "Retailing merchandise, generally without transformation, and rendering services incidental to the sale of merchandise." },
+  { code: "48-49", title: "Transportation and Warehousing", hint: "trucks highway", description: "Providing transportation of passengers and cargo, warehousing and storing goods, and support activities." },
+  { code: "51", title: "Information", hint: "data center servers", description: "Producing and distributing information and cultural products, providing the means to transmit or distribute these products, and processing data." },
+  { code: "52", title: "Finance and Insurance", hint: "stock market graph", description: "Financial transactions (e.g., raising funds by taking deposits, issuing securities) and/or facilitating financial transactions." },
+  { code: "53", title: "Real Estate and Rental and Leasing", hint: "modern house", description: "Renting, leasing, or otherwise allowing the use of tangible or intangible assets, and related services." },
+  { code: "54", title: "Professional, Scientific, and Technical Services", hint: "scientist laboratory", description: "Performing professional, scientific, and technical activities for others, requiring a high degree of expertise and training." },
+  { code: "55", title: "Management of Companies and Enterprises", hint: "office building boardroom", description: "Holding the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions." },
+  { code: "56", title: "Administrative and Support and Waste Management and Remediation Services", hint: "office workers support", description: "Performing routine support activities for the day-to-day operations of other organizations, or waste management services." },
+  { code: "61", title: "Educational Services", hint: "classroom students", description: "Providing instruction and training in a wide variety of subjects. These establishments may be privately owned or public institutions." },
+  { code: "62", title: "Health Care and Social Assistance", hint: "doctor patient", description: "Providing health care and social assistance for individuals. Establishments in this sector deliver services by trained professionals." },
+  { code: "71", title: "Arts, Entertainment, and Recreation", hint: "concert stage", description: "Operating facilities or providing services to meet varied cultural, entertainment, and recreational interests of their patrons." },
+  { code: "72", title: "Accommodation and Food Services", hint: "restaurant chef", description: "Providing customers with lodging and/or preparing meals, snacks, and beverages for immediate consumption." },
+  { code: "81", title: "Other Services (except Public Administration)", hint: "mechanic workshop", description: "Providing services not elsewhere classified, including repairs, religious activities, grantmaking, advocacy, and personal care." },
+  { code: "92", title: "Public Administration", hint: "government building", description: "Governmental activities of administration, legislation, and judicial and regulatory functions at the federal, state, or local levels." },
+];
+
+const filterCategories = [
+  { name: "All", icon: LayoutGrid },
+  { name: "Legal", icon: Scale },
+  { name: "Product", icon: Package },
+  { name: "Collaboration", icon: Users },
+  { name: "Marketing", icon: Megaphone },
+  { name: "Technology", icon: Cpu },
+  { name: "Finance", icon: Landmark },
+  { name: "Healthcare", icon: Stethoscope },
 ];
 
 const DiscoverPage = () => {
+  const router = useRouter();
+  const [activeFilter, setActiveFilter] = useState("All");
+  const [showAllRecommended, setShowAllRecommended] = useState(false);
+
+  const recommendedSectors = sectors.slice(0, 6);
+  const displayedRecommendedSectors = showAllRecommended ? sectors : recommendedSectors;
+
+
+  // Placeholder filtering logic
+  const filteredSectors = activeFilter === "All"
+    ? sectors
+    : sectors.filter(sector => sector.title.toLowerCase().includes(activeFilter.toLowerCase()) || sector.tags?.includes(activeFilter));
+
+
   return (
-    <div className="container mx-auto p-4 md:p-8">
-      <div className="mb-8 text-center">
-        <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">
-          Discover Sectors
+    <div className="container mx-auto p-4 md:p-6 min-h-screen">
+      <header className="mb-8">
+        <h1 className="text-3xl md:text-4xl font-bold text-foreground">
+          Explore Sectors
         </h1>
-        <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-          Explore different business sectors within the AnonyCollab community. Click on Manufacturing for more details.
-        </p>
-      </div>
+      </header>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-        {sectors.map((sector) => {
-          const CardContentWrapper = sector.link ? Link : 'div'; // Use Link if link exists, otherwise div
-          const cardContentProps = sector.link ? { href: sector.link, passHref: true } : {};
-
-          return (
-            <CardContentWrapper key={sector.code} {...cardContentProps}>
-              <Card
+      {/* Filter Bar */}
+      <div className="mb-8">
+        <ScrollArea className="w-full whitespace-nowrap rounded-md">
+          <div className="flex space-x-2 pb-2">
+            {filterCategories.map((category) => (
+              <Button
+                key={category.name}
+                variant={activeFilter === category.name ? "default" : "outline"}
                 className={cn(
-                  "overflow-hidden shadow-md hover:shadow-lg transition-shadow duration-200 flex flex-col h-full group", // Add group class
-                  sector.link && "cursor-pointer" // Add cursor pointer if it's a link
+                  "h-9 rounded-md px-3 text-sm",
+                  activeFilter === category.name && "bg-primary text-primary-foreground"
                 )}
+                onClick={() => setActiveFilter(category.name)}
               >
-                <CardHeader className="p-4 border-b bg-muted/30">
-                  <CardTitle className="text-lg font-semibold text-foreground truncate">
-                    {sector.title}
-                  </CardTitle>
-                  <p className="text-xs text-muted-foreground">NAICS: {sector.code}</p>
-                </CardHeader>
-                <CardContent className="p-0 flex-grow">
-                  <div className="aspect-video relative w-full">
-                    <Image
-                      src={`https://picsum.photos/seed/${sector.code}/400/225`} // Placeholder image based on code
-                      alt={sector.title}
-                      fill // Use fill instead of layout="fill" objectFit="cover"
-                      sizes="(max-width: 640px) 100vw, (max-width: 768px) 50vw, (max-width: 1024px) 33vw, 25vw" // Add sizes prop
-                      className="object-cover transition-transform duration-300 group-hover:scale-105" // Use object-cover
-                      data-ai-hint={sector.hint} // Add hint for image generation
-                    />
-                  </div>
-                   {/* Optional: Add a short description or link here */}
-                   {/* <p className="p-4 text-sm text-muted-foreground">
-                     Find collaborators and resources in the {sector.title} sector.
-                   </p> */}
-                </CardContent>
-                 {/* Optional Footer for actions */}
-                 {/* <CardFooter className="p-4">
-                   <Button variant="link" className="p-0 h-auto text-primary">View Posts</Button>
-                 </CardFooter> */}
-              </Card>
-            </CardContentWrapper>
-          );
-        })}
+                <category.icon className="mr-2 h-4 w-4" />
+                {category.name}
+              </Button>
+            ))}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
       </div>
+
+      {/* Recommended Sectors Section */}
+      <section className="mb-10">
+        <h2 className="text-2xl font-semibold text-foreground mb-4">Recommended Sectors</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+          {displayedRecommendedSectors.map((sector) => (
+            <Card key={sector.code + "-rec"} className="p-3.5 shadow-sm hover:shadow-md transition-shadow bg-card">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-start gap-3 flex-grow min-w-0">
+                  <Image
+                    src={`https://placehold.co/48x48.png?text=${sector.title.charAt(0)}`}
+                    alt={sector.title}
+                    width={40}
+                    height={40}
+                    className="rounded-md object-cover mt-0.5 flex-shrink-0"
+                    data-ai-hint={sector.hint}
+                  />
+                  <div className="flex-grow overflow-hidden">
+                    <h3 className="font-semibold text-base text-foreground truncate">{sector.title}</h3>
+                    <p className="text-xs text-muted-foreground">NAICS: {sector.code}</p>
+                    <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                      {sector.description || `Explore opportunities in the ${sector.title} sector.`}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  size="sm"
+                  className="bg-accent hover:bg-accent/90 text-accent-foreground flex-shrink-0 self-center px-4 py-2"
+                  onClick={() => sector.link && router.push(sector.link)}
+                  aria-label={sector.link ? `View details for ${sector.title}` : `Explore ${sector.title}`}
+                >
+                  {sector.link ? "Details" : "Explore"}
+                </Button>
+              </div>
+            </Card>
+          ))}
+        </div>
+        {!showAllRecommended && sectors.length > recommendedSectors.length && (
+          <div className="mt-6 text-center">
+            <Button variant="outline" onClick={() => setShowAllRecommended(true)}>
+              Show more <ArrowRight className="ml-2 h-4 w-4" />
+            </Button>
+          </div>
+        )}
+      </section>
+
+      {/* All Sectors Section (or could be context-specific like "More like [filter]") */}
+      <section>
+        <h2 className="text-2xl font-semibold text-foreground mb-4">
+          {activeFilter === "All" ? "All Sectors" : `More in ${activeFilter}`}
+        </h2>
+        {filteredSectors.length > 0 ? (
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredSectors.map((sector) => (
+             <Card key={sector.code + "-all"} className="p-3.5 shadow-sm hover:shadow-md transition-shadow bg-card">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-start gap-3 flex-grow min-w-0">
+                    <Image
+                       src={`https://placehold.co/48x48.png?text=${sector.title.charAt(0)}`}
+                       alt={sector.title}
+                       width={40}
+                       height={40}
+                       className="rounded-md object-cover mt-0.5 flex-shrink-0"
+                       data-ai-hint={sector.hint}
+                    />
+                    <div className="flex-grow overflow-hidden">
+                      <h3 className="font-semibold text-base text-foreground truncate">{sector.title}</h3>
+                      <p className="text-xs text-muted-foreground">NAICS: {sector.code}</p>
+                       <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                        {sector.description || `Explore opportunities in the ${sector.title} sector.`}
+                       </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    className="bg-accent hover:bg-accent/90 text-accent-foreground flex-shrink-0 self-center px-4 py-2"
+                    onClick={() => sector.link && router.push(sector.link)}
+                    aria-label={sector.link ? `View details for ${sector.title}` : `Explore ${sector.title}`}
+                  >
+                     {sector.link ? "Details" : "Explore"}
+                  </Button>
+                </div>
+             </Card>
+            ))}
+          </div>
+        ) : (
+          <p className="text-muted-foreground text-center py-8">No sectors found matching your filter.</p>
+        )}
+      </section>
     </div>
   );
 };
