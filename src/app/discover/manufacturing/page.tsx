@@ -1,4 +1,9 @@
-// src/app/discover/manufacturing/page.tsx
+
+// This file is no longer primarily used for displaying manufacturing sector details.
+// The dynamic route /discover/[sectorCode] (specifically /discover/31-33) handles it.
+// This file can be safely removed or repurposed.
+// For now, I'll leave its content as is but it won't be the primary page for manufacturing.
+
 import React from 'react';
 import {
   Accordion,

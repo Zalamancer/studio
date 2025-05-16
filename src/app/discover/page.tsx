@@ -62,8 +62,8 @@ const DiscoverPage = () => {
     : sectors.filter(sector => sector.title.toLowerCase().includes(activeFilter.toLowerCase()) || sector.description.toLowerCase().includes(activeFilter.toLowerCase()));
 
   const handleSectorClick = (sectorCode: string) => {
-    // Manufacturing (31-33) has a specific detailed page for now
-    const path = sectorCode === "31-33" ? `/discover/manufacturing` : `/discover/${sectorCode}`;
+    // Consistently navigate to the dynamic sector detail page
+    const path = `/discover/${sectorCode}`;
     router.push(path);
   };
 
