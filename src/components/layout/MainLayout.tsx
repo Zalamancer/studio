@@ -1,5 +1,5 @@
-
-"use client"; // This layout uses client-side hooks and state
+// src/components/layout/MainLayout.tsx
+"use client";
 
 import React, { useState } from 'react';
 import Link from 'next/link';
@@ -11,7 +11,7 @@ import {
   NavigationMenuLink,
 } from "@/components/ui/navigation-menu";
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Import Avatar
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -27,51 +27,76 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"; // Import Dropdown components
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react"; // Changed LineChart to Compass
-import { auth } from '@/lib/firebase/config'; // Import auth from config
-import { signOut } from '@/lib/firebase/auth'; // Import signOut
+} from "@/components/ui/dropdown-menu";
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react";
+import { auth } from '@/lib/firebase/config';
+import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import { CreatePostForm } from '@/components/CreatePostForm';
-import type { NewPostData, Post } from '@/types/post';
+import { CreatePostForm, type CreatePostFormData } from '@/components/CreatePostForm'; // Import CreatePostFormData type
+import type { NewPostData } from '@/types/post'; // Keep NewPostData for service layer
 import { addPostToFirestore } from '@/services/postService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { ThemeToggle } from '@/components/ThemeToggle'; // Import ThemeToggle
-import { cn } from '@/lib/utils'; // Import cn for class merging
-import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'; // Import NotificationDropdown
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { cn } from '@/lib/utils';
+import { NotificationDropdown } from '@/components/notifications/NotificationDropdown';
 
-// Navigation items definition (moved here for clarity)
 const navItems = [
   { title: "Board", href: "/", icon: Home },
-  { title: "Discover", href: "/discover", icon: Compass }, // Updated title and icon
+  { title: "Discover", href: "/discover", icon: Compass },
   { title: "Connect", href: "/connect", icon: Network },
   { title: "Contracts", href: "/contracts", icon: FileText },
-  // Subscription is moved to the profile dropdown
 ];
 
-// Available tags (can be fetched or defined globally if needed elsewhere)
 export const availableTags = [
     "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
-// Helper to get initials for Avatar
-const getInitials = (email: string | null | undefined): string => {
-    if (!email) return '?';
-    // Prefer display name's first char if available, otherwise email
-    const currentUser = auth.currentUser; // Use imported auth object
-    if (currentUser?.displayName) return currentUser.displayName.charAt(0).toUpperCase();
-    return email.substring(0, 1).toUpperCase();
+// Define the list of sectors for the form
+const formSectors = [
+  "Agriculture, Forestry, Fishing and Hunting",
+  "Mining, Quarrying, and Oil and Gas Extraction",
+  "Utilities",
+  "Construction",
+  "Manufacturing",
+  "Wholesale Trade",
+  "Retail Trade",
+  "Transportation and Warehousing",
+  "Information",
+  "Finance and Insurance",
+  "Real Estate and Rental and Leasing",
+  "Professional, Scientific, and Technical Services",
+  "Management of Companies and Enterprises",
+  "Administrative and Support and Waste Management and Remediation Services",
+  "Educational Services",
+  "Health Care and Social Assistance",
+  "Arts, Entertainment, and Recreation",
+  "Accommodation and Food Services",
+  "Other Services (except Public Administration)",
+  "Public Administration"
+];
+
+const getInitials = (displayNameOrEmail: string | null | undefined): string => {
+    if (!displayNameOrEmail) return '?';
+    const name = displayNameOrEmail; // Use directly
+    if (name.includes('@') && !displayNameOrEmail) { // Fallback to email initial if display name is email-like
+        return name.charAt(0).toUpperCase();
+    }
+    const parts = name.split(' ').filter(Boolean);
+    if (parts.length > 1) {
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+    return name.charAt(0).toUpperCase();
 };
 
 
 export default function MainLayout({ children }: { children: React.ReactNode }) {
-  const { user } = useAuth(); // Get user state
+  const { user } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const pathname = usePathname(); // Get current path for active link styling
+  const pathname = usePathname();
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  const queryClient = useQueryClient(); // Get query client instance
+  const queryClient = useQueryClient();
 
   const handleLogout = async () => {
     try {
@@ -80,7 +105,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         title: "Logged Out",
         description: "You have been successfully logged out.",
       });
-      router.push('/login'); // Redirect to login after logout
+      router.push('/login');
     } catch (error) {
       console.error("Logout Error:", error);
       toast({
@@ -91,22 +116,17 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     }
   };
 
-  // Add Post Mutation
   const addPostMutation = useMutation({
       mutationFn: addPostToFirestore,
       onSuccess: () => {
-          // Invalidate queries first to refetch data in the background
           queryClient.invalidateQueries({ queryKey: ['posts'] }).then(() => {
-              // Show success toast
               toast({
                   title: "Post Created",
                   description: "Your post has been added to the board.",
               });
-              // Close the dialog
               setIsCreatePostOpen(false);
           }).catch(err => {
               console.error("Error during post-success operations (invalidate/toast/close):", err);
-               // Still attempt to close the dialog even if other steps failed
                setIsCreatePostOpen(false);
           });
        },
@@ -117,13 +137,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
             title: "Post Failed",
             description: `Could not add your post: ${error.message}. Check console and Firestore rules.`,
           });
-          // Optionally keep the dialog open on error
-          // setIsCreatePostOpen(true);
       },
   });
 
-  // Handle adding a post (passed to CreatePostForm)
-  const handleAddPost = (formData: Omit<Post, 'id' | 'createdAt' | 'userId' | 'sector' | 'businessType' | 'safetyIndicator' | 'ratingScore' | 'stockGraphData'>) => {
+  const handleAddPost = (formData: CreatePostFormData) => { // formData type now includes sector
     if (!user) {
         toast({
             variant: "destructive",
@@ -133,30 +150,29 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         return;
     }
 
-    const newPostData: NewPostData = {
+    // NewPostData is the type expected by addPostToFirestore service
+    const newPostDataForService: NewPostData = {
         question: formData.question,
         description: formData.description,
         tags: formData.tags || [],
-        userId: user.uid, // Associate post with the logged-in user
-        // createdAt is handled by serverTimestamp in the service
-        sector: "Tech", // Placeholder - Should ideally come from user profile or form
-        businessType: "Startup", // Placeholder
-        safetyIndicator: "Medium", // Placeholder
-        ratingScore: Math.floor(Math.random() * 5) + 1, // Placeholder
-        stockGraphData: [], // Placeholder
+        sector: formData.sector, // Use sector from the form data
+        userId: user.uid,
+        // Placeholders for other required fields in Post type, not yet collected by this form
+        businessType: "Startup", // Example placeholder
+        safetyIndicator: "Medium", // Example placeholder
+        ratingScore: Math.floor(Math.random() * 3) + 3, // Example placeholder (3-5)
+        // naicsCode and stockGraphData are optional in the Post type or handled differently
     };
-    addPostMutation.mutate(newPostData);
+    addPostMutation.mutate(newPostDataForService);
   };
 
 
   return (
     <div className="flex flex-col min-h-screen bg-background">
-      {/* --- Header --- */}
       <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
         <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
           <div className="mr-4 hidden md:flex">
             <Link href="/" className="mr-6 flex items-center space-x-2">
-              {/* Optional: Add Logo here */}
               <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
                 AnonyCollab
               </span>
@@ -177,9 +193,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
               ))}
             </nav>
           </div>
-           {/* Mobile Menu Trigger (Optional) */}
            <div className="flex flex-1 items-center justify-between space-x-2 md:justify-end">
-             {/* Create Post Button - only if user is logged in */}
              {user && (
                 <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
                   <DialogTrigger asChild>
@@ -195,10 +209,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                          Share your question or need with the community. Keep it anonymous.
                        </DialogDescription>
                      </DialogHeader>
-                     {isCreatePostOpen && ( // Conditionally render form only when dialog is open
+                     {isCreatePostOpen && (
                         <CreatePostForm
                            onSubmit={handleAddPost}
                            availableTags={availableTags}
+                           availableSectors={formSectors} // Pass sectors to the form
                            isSubmitting={addPostMutation.isPending}
                         />
                      )}
@@ -206,20 +221,16 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </Dialog>
              )}
 
-            {/* --- User Actions Area --- */}
             {user ? (
               <div className="flex items-center gap-2">
-                {/* Notification Dropdown */}
                 <NotificationDropdown userId={user.uid} />
-
-                {/* User Profile Dropdown */}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                      <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
                        <Avatar className="h-8 w-8">
                          <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName ?? "User"} />
                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                           {getInitials(user.email ?? user.displayName)}
+                           {getInitials(user.displayName || user.email)}
                          </AvatarFallback>
                        </Avatar>
                      </Button>
@@ -234,26 +245,24 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {/* Apply cursor-pointer to interactive items and active state styling */}
-                    <DropdownMenuItem asChild className={cn(pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
-                      <Link href={`/profile/${user.uid}`} className="cursor-pointer w-full">
+                    <DropdownMenuItem asChild className={cn("cursor-pointer", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                      <Link href={`/profile/${user.uid}`} className="w-full">
                         <User className="mr-2 h-4 w-4" />
                         <span>Profile</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild className={cn(pathname === "/subscription" && "bg-accent text-accent-foreground")}>
-                       <Link href="/subscription" className="cursor-pointer w-full">
+                    <DropdownMenuItem asChild className={cn("cursor-pointer", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                       <Link href="/subscription" className="w-full">
                         <CreditCard className="mr-2 h-4 w-4" />
                         <span>Subscription</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild className={cn(pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
-                       <Link href="/settings/profile" className="cursor-pointer w-full"> {/* Link to settings */}
+                    <DropdownMenuItem asChild className={cn("cursor-pointer", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
+                       <Link href="/settings/profile" className="w-full">
                         <Settings className="mr-2 h-4 w-4" />
                         <span>Settings</span>
                       </Link>
                     </DropdownMenuItem>
-                    {/* ThemeToggle is already a DropdownMenuItem and handles its own cursor */}
                     <ThemeToggle />
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
@@ -264,7 +273,6 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                 </DropdownMenu>
               </div>
             ) : (
-              // Show Login/Signup buttons if not logged in
               <div className="flex items-center gap-2">
                  <Button variant="outline" size="sm" asChild>
                    <Link href="/login">Login</Link>
@@ -274,19 +282,15 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                  </Button>
               </div>
             )}
-            {/* --- End User Actions Area --- */}
-
            </div>
         </div>
       </header>
 
-      {/* --- Main Content Area --- */}
       <main className="flex-1">
-        {children} {/* The content of the specific page will be rendered here */}
+        {children}
       </main>
 
-      {/* --- Footer --- */}
-      <footer className="py-4 border-t mt-auto"> {/* Use mt-auto to push footer down */}
+      <footer className="py-4 border-t mt-auto">
           <div className="container mx-auto text-center text-sm text-muted-foreground">
               © {new Date().getFullYear()} AnonyCollab. All rights reserved.
           </div>
