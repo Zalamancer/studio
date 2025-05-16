@@ -1,9 +1,10 @@
+
 // src/lib/firebase/config.ts
 import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 // Add other Firebase services like Firestore, Storage, etc., if needed
 import { getFirestore } from "firebase/firestore"; // Ensure Firestore is imported
-// import { getStorage } from "firebase/storage";
+import { getStorage } from "firebase/storage"; // Import getStorage
 
 // Your web app's Firebase configuration
 // For Firebase JS SDK v7.20.0 and later, measurementId is optional
@@ -28,6 +29,7 @@ if (!getApps().length) {
 
 const auth = getAuth(app);
 const db = getFirestore(app); // Initialize Firestore
-// const storage = getStorage(app); // Uncomment if using Storage
+const storage = getStorage(app); // Initialize Firebase Storage
 
-export { app, auth, db /*, storage */ }; // Export initialized services including db
+export { app, auth, db, storage }; // Export initialized services including db and storage
+
