@@ -1,3 +1,4 @@
+
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -29,11 +30,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react"; // Changed LineChart to Compass
-import { signOut } from '@/lib/firebase/auth'; // Import auth and signOut
-import { auth } from '@/lib/firebase/config'; // Import auth from config
+import { signOut } from '@/lib/firebase/auth';
+import { auth } from '@/lib/firebase/config';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import { CreatePostForm, type CreatePostFormData, type SectorWithSubSectors } from '@/components/CreatePostForm';
+import { CreatePostForm, type CreatePostFormData, type SectorWithSubSectors, type SubSector, type Industry } from '@/components/CreatePostForm';
 import type { NewPostData } from '@/types/post';
 import { addPostToFirestore } from '@/services/postService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
@@ -53,30 +54,62 @@ export const availableTags = [
 ];
 
 // Define the detailed sector data structure including industries
+// Updated for Sector 11: Agriculture, Forestry, Fishing and Hunting
 const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Agriculture, Forestry, Fishing and Hunting",
     code: "11",
     subSectors: [
       {
-        name: "Crop Production", code: "111", industries: [
+        name: "Crop Production",
+        code: "111",
+        industries: [
           { name: "Oilseed and Grain Farming", code: "1111" },
           { name: "Vegetable and Melon Farming", code: "1112" },
           { name: "Fruit and Tree Nut Farming", code: "1113" },
           { name: "Greenhouse, Nursery, and Floriculture Production", code: "1114" },
           { name: "Other Crop Farming", code: "1119" },
-        ]
+        ],
       },
       {
-        name: "Animal Production and Aquaculture", code: "112", industries: [
+        name: "Animal Production and Aquaculture",
+        code: "112",
+        industries: [
           { name: "Cattle Ranching and Farming", code: "1121" },
           { name: "Hog and Pig Farming", code: "1122" },
-        ]
+          { name: "Poultry and Egg Production", code: "1123" },
+          { name: "Sheep and Goat Farming", code: "1124" },
+          { name: "Aquaculture", code: "1125" },
+          { name: "Other Animal Production", code: "1129" },
+        ],
       },
-      { name: "Forestry and Logging", code: "113", industries: [] },
-      { name: "Fishing, Hunting and Trapping", code: "114", industries: [] },
-      { name: "Support Activities for Agriculture and Forestry", code: "115", industries: [] },
-    ]
+      {
+        name: "Forestry and Logging",
+        code: "113",
+        industries: [
+          { name: "Timber Tract Operations", code: "1131" },
+          { name: "Forest Nurseries and Gathering of Forest Products", code: "1132" },
+          { name: "Logging", code: "1133" },
+        ],
+      },
+      {
+        name: "Fishing, Hunting and Trapping",
+        code: "114",
+        industries: [
+          { name: "Fishing", code: "1141" },
+          { name: "Hunting and Trapping", code: "1142" },
+        ],
+      },
+      {
+        name: "Support Activities for Agriculture and Forestry",
+        code: "115",
+        industries: [
+          { name: "Support Activities for Crop Production", code: "1151" },
+          { name: "Support Activities for Animal Production", code: "1152" },
+          { name: "Support Activities for Forestry", code: "1153" },
+        ],
+      },
+    ],
   },
   { name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21", subSectors: [] },
   { name: "Utilities", code: "22", subSectors: [] },
@@ -90,10 +123,153 @@ const detailedSectorsData: SectorWithSubSectors[] = [
           { name: "Animal Food Manufacturing", code: "3111" },
           { name: "Grain and Oilseed Milling", code: "3112" },
           { name: "Sugar and Confectionery Product Manufacturing", code: "3113" },
+          { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "3114" },
+          { name: "Dairy Product Manufacturing", code: "3115" },
+          { name: "Animal Slaughtering and Processing", code: "3116" },
+          { name: "Seafood Product Preparation and Packaging", code: "3117" },
+          { name: "Bakeries and Tortilla Manufacturing", code: "3118" },
+          { name: "Other Food Manufacturing", code: "3119" },
         ]
       },
-      { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [] },
-      { name: "Textile Mills", code: "313", industries: [] },
+      { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [
+          { name: "Beverage Manufacturing", code: "3121" },
+          { name: "Tobacco Manufacturing", code: "3122" },
+        ]
+      },
+      { name: "Textile Mills", code: "313", industries: [
+          { name: "Fiber, Yarn, and Thread Mills", code: "3131" },
+          { name: "Fabric Mills", code: "3132" },
+          { name: "Textile and Fabric Finishing and Fabric Coating Mills", code: "3133" },
+        ]
+      },
+       { name: "Textile Product Mills", code: "314", industries: [
+          { name: "Textile Furnishings Mills", code: "3141" },
+          { name: "Other Textile Product Mills", code: "3149" },
+        ]
+      },
+      { name: "Apparel Manufacturing", code: "315", industries: [
+          { name: "Apparel Knitting Mills", code: "3151" },
+          { name: "Cut and Sew Apparel Manufacturing", code: "3152" },
+          { name: "Apparel Accessories and Other Apparel Manufacturing", code: "3159" },
+        ]
+      },
+      { name: "Leather and Allied Product Manufacturing", code: "316", industries: [
+          { name: "Leather and Hide Tanning and Finishing", code: "3161" },
+          { name: "Footwear Manufacturing", code: "3162" },
+          { name: "Other Leather and Allied Product Manufacturing", code: "3169" },
+        ]
+      },
+      { name: "Wood Product Manufacturing", code: "321", industries: [
+          { name: "Sawmills and Wood Preservation", code: "3211" },
+          { name: "Veneer, Plywood, and Engineered Wood Product Manufacturing", code: "3212" },
+          { name: "Other Wood Product Manufacturing", code: "3219" },
+        ]
+      },
+      { name: "Paper Manufacturing", code: "322", industries: [
+          { name: "Pulp, Paper, and Paperboard Mills", code: "3221" },
+          { name: "Converted Paper Product Manufacturing", code: "3222" },
+        ]
+      },
+      { name: "Printing and Related Support Activities", code: "323", industries: [
+          { name: "Printing and Related Support Activities", code: "3231" },
+        ]
+      },
+      { name: "Petroleum and Coal Products Manufacturing", code: "324", industries: [
+          { name: "Petroleum Refineries", code: "32411" }, // Example direct industry if 3241 is too broad
+          { name: "Asphalt Paving, Roofing, and Saturated Materials Manufacturing", code: "32412" },
+          { name: "Other Petroleum and Coal Products Manufacturing", code: "32419" },
+        ]
+      },
+      { name: "Chemical Manufacturing", code: "325", industries: [
+          { name: "Basic Chemical Manufacturing", code: "3251" },
+          { name: "Resin, Synthetic Rubber, and Artificial and Synthetic Fibers and Filaments Manufacturing", code: "3252" },
+          { name: "Pesticide, Fertilizer, and Other Agricultural Chemical Manufacturing", code: "3253" },
+          { name: "Pharmaceutical and Medicine Manufacturing", code: "3254" },
+          { name: "Paint, Coating, and Adhesive Manufacturing", code: "3255" },
+          { name: "Soap, Cleaning Compound, and Toilet Preparation Manufacturing", code: "3256" },
+          { name: "Other Chemical Product and Preparation Manufacturing", code: "3259" },
+        ]
+      },
+      { name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [
+          { name: "Plastics Product Manufacturing", code: "3261" },
+          { name: "Rubber Product Manufacturing", code: "3262" },
+        ]
+      },
+      { name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [
+          { name: "Clay Product and Refractory Manufacturing", code: "3271" },
+          { name: "Glass and Glass Product Manufacturing", code: "3272" },
+          { name: "Cement and Concrete Product Manufacturing", code: "3273" },
+          { name: "Lime and Gypsum Product Manufacturing", code: "3274" },
+          { name: "Other Nonmetallic Mineral Product Manufacturing", code: "3279" },
+        ]
+      },
+      { name: "Primary Metal Manufacturing", code: "331", industries: [
+          { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "3311" },
+          { name: "Steel Product Manufacturing from Purchased Steel", code: "3312" },
+          { name: "Alumina and Aluminum Production and Processing", code: "3313" },
+          { name: "Nonferrous Metal (except Aluminum) Production and Processing", code: "3314" },
+          { name: "Foundries", code: "3315" },
+        ]
+      },
+      { name: "Fabricated Metal Product Manufacturing", code: "332", industries: [
+          { name: "Forging and Stamping", code: "3321" },
+          { name: "Cutlery and Handtool Manufacturing", code: "3322" },
+          { name: "Architectural and Structural Metals Manufacturing", code: "3323" },
+          { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "3324" },
+          { name: "Hardware Manufacturing", code: "3325" },
+          { name: "Spring and Wire Product Manufacturing", code: "3326" },
+          { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "3327" },
+          { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "3328" },
+          { name: "Other Fabricated Metal Product Manufacturing", code: "3329" },
+        ]
+      },
+      { name: "Machinery Manufacturing", code: "333", industries: [
+          { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" },
+          { name: "Industrial Machinery Manufacturing", code: "3332" }, // Corrected, was 33324
+          { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333" },
+          { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334" },
+          { name: "Metalworking Machinery Manufacturing", code: "3335" },
+          { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336" },
+          { name: "Other General Purpose Machinery Manufacturing", code: "3339" },
+        ]
+      },
+      { name: "Computer and Electronic Product Manufacturing", code: "334", industries: [
+          { name: "Computer and Peripheral Equipment Manufacturing", code: "3341" },
+          { name: "Communications Equipment Manufacturing", code: "3342" },
+          { name: "Audio and Video Equipment Manufacturing", code: "3343" },
+          { name: "Semiconductor and Other Electronic Component Manufacturing", code: "3344" },
+          { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "3345" },
+          { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "3346" },
+        ]
+      },
+      { name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [
+          { name: "Electric Lighting Equipment Manufacturing", code: "3351" }, // Corrected, was 33513
+          { name: "Household Appliance Manufacturing", code: "3352" },
+          { name: "Electrical Equipment Manufacturing", code: "3353" },
+          { name: "Other Electrical Equipment and Component Manufacturing", code: "3359" },
+        ]
+      },
+      { name: "Transportation Equipment Manufacturing", code: "336", industries: [
+          { name: "Motor Vehicle Manufacturing", code: "3361" },
+          { name: "Motor Vehicle Body and Trailer Manufacturing", code: "3362" },
+          { name: "Motor Vehicle Parts Manufacturing", code: "3363" },
+          { name: "Aerospace Product and Parts Manufacturing", code: "3364" },
+          { name: "Railroad Rolling Stock Manufacturing", code: "3365" },
+          { name: "Ship and Boat Building", code: "3366" },
+          { name: "Other Transportation Equipment Manufacturing", code: "3369" },
+        ]
+      },
+      { name: "Furniture and Related Product Manufacturing", code: "337", industries: [
+          { name: "Household and Institutional Furniture and Kitchen Cabinet Manufacturing", code: "3371" },
+          { name: "Office Furniture (including Fixtures) Manufacturing", code: "3372" },
+          { name: "Other Furniture Related Product Manufacturing", code: "3379" },
+        ]
+      },
+      { name: "Miscellaneous Manufacturing", code: "339", industries: [
+          { name: "Medical Equipment and Supplies Manufacturing", code: "3391" },
+          { name: "Other Miscellaneous Manufacturing", code: "3399" },
+        ]
+      },
     ]
   },
   { name: "Wholesale Trade", code: "42", subSectors: [] },
@@ -118,13 +294,17 @@ const getInitials = (displayNameOrEmail: string | null | undefined): string => {
     if (!displayNameOrEmail) return '?';
     const name = displayNameOrEmail;
     if (name.includes('@') && !name.includes(' ')) {
+        // For emails without spaces, take the first letter
         return name.charAt(0).toUpperCase();
     }
-    const parts = name.split(' ').filter(Boolean);
-    if (parts.length > 1) {
-        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    const parts = name.split(' ').filter(Boolean); // Split by space and remove empty strings
+    if (parts.length === 0) return '?';
+    if (parts.length === 1) {
+        // Single name part, take its first letter
+        return parts[0].charAt(0).toUpperCase();
     }
-    return name.charAt(0).toUpperCase();
+    // Multiple name parts, take first letter of first and last part
+    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
 
@@ -138,7 +318,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
 
   const handleLogout = async () => {
     try {
-      await signOut(); // Use signOut from auth.ts
+      await signOut();
       toast({
         title: "Logged Out",
         description: "You have been successfully logged out.",
@@ -162,10 +342,10 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                   title: "Post Created",
                   description: "Your post has been added to the board.",
               });
-              setIsCreatePostOpen(false); // Close dialog on success
+              setIsCreatePostOpen(false);
           }).catch(err => {
               console.error("Error during post-success operations (invalidate/toast/close):", err);
-               setIsCreatePostOpen(false); // Still close dialog on error here
+               setIsCreatePostOpen(false);
           });
        },
       onError: (error: Error) => {
@@ -199,11 +379,11 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
         industry: industryDetails?.name || formData.industry,
-        naicsCode: formData.industry || formData.subSector || formData.sector, // Most specific code
+        naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Startup", // Placeholder, consider adding to form
-        safetyIndicator: "Medium", // Placeholder
-        ratingScore: Math.floor(Math.random() * 3) + 3, // Placeholder
+        businessType: "Startup",
+        safetyIndicator: "Medium",
+        ratingScore: Math.floor(Math.random() * 3) + 3,
     };
     addPostMutation.mutate(newPostDataForService);
   };
@@ -251,7 +431,7 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                          Share your question or need with the community. Keep it anonymous.
                        </DialogDescription>
                      </DialogHeader>
-                     {isCreatePostOpen && ( // Conditionally render to reset form state on open
+                     {isCreatePostOpen && (
                         <CreatePostForm
                            onSubmit={handleAddPost}
                            availableTags={availableTags}
@@ -340,3 +520,4 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     </div>
   );
 }
+
