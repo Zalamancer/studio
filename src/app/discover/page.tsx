@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation'; // Keep useRouter import
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, ArrowRight, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, Bank, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion } from 'lucide-react'; // Added more icons
+import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, ArrowRight, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion } from 'lucide-react'; // Added more icons
 
 const sectors = [
   { code: "11", title: "Agriculture, Forestry, Fishing and Hunting", hint: "farming crops", description: "Activities related to growing crops, raising animals, harvesting timber, and fishing.", icon: Trees },
@@ -22,7 +22,7 @@ const sectors = [
   { code: "44-45", title: "Retail Trade", hint: "shopping mall", description: "Retailing merchandise, generally without transformation, and rendering services incidental to the sale of merchandise.", icon: ShoppingCart },
   { code: "48-49", title: "Transportation and Warehousing", hint: "trucks highway", description: "Providing transportation of passengers and cargo, warehousing and storing goods, and support activities.", icon: Plane },
   { code: "51", title: "Information", hint: "data center", description: "Producing and distributing information and cultural products, providing the means to transmit or distribute these products, and processing data.", icon: Code },
-  { code: "52", title: "Finance and Insurance", hint: "stock market", description: "Financial transactions (e.g., raising funds by taking deposits, issuing securities) and/or facilitating financial transactions.", icon: Bank },
+  { code: "52", title: "Finance and Insurance", hint: "stock market", description: "Financial transactions (e.g., raising funds by taking deposits, issuing securities) and/or facilitating financial transactions.", icon: DollarSign },
   { code: "53", title: "Real Estate and Rental and Leasing", hint: "modern house", description: "Renting, leasing, or otherwise allowing the use of tangible or intangible assets, and related services.", icon: HomeIcon },
   { code: "54", title: "Professional, Scientific, and Technical Services", hint: "scientist laboratory", description: "Performing professional, scientific, and technical activities for others, requiring a high degree of expertise and training.", icon: Briefcase },
   { code: "55", title: "Management of Companies and Enterprises", hint: "office boardroom", description: "Holding the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions.", icon: Users },
@@ -191,5 +191,4 @@ const DiscoverPage = () => {
 };
 
 export default DiscoverPage;
-
     
