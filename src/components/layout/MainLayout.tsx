@@ -1,3 +1,4 @@
+
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -29,14 +30,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react"; // Changed LineChart to Compass
-import { signOut, auth } from '@/lib/firebase/auth'; // Import auth and signOut
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell } from "lucide-react";
+import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import { CreatePostForm, type CreatePostFormData, type SectorWithSubSectors, type SubSector, type Industry } from '@/components/CreatePostForm';
 import type { NewPostData } from '@/types/post';
 import { addPostToFirestore } from '@/services/postService';
-import { uploadPostImage } from '@/services/storageService'; // Import storage service
+import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { cn } from '@/lib/utils';
@@ -53,7 +54,6 @@ export const availableTags = [
     "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
-// Define the detailed sector data structure including industries
 export const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Agriculture, Forestry, Fishing and Hunting",
@@ -62,41 +62,86 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     subSectors: [
       {
         name: "Crop Production", code: "111", industries: [
-          { name: "Oilseed and Grain Farming", code: "1111" },
-          { name: "Vegetable and Melon Farming", code: "1112" },
-          { name: "Fruit and Tree Nut Farming", code: "1113" },
-          { name: "Greenhouse, Nursery, and Floriculture Production", code: "1114" },
-          { name: "Other Crop Farming", code: "1119" },
+          { name: "Soybean Farming", code: "111110" },
+          { name: "Oilseed (except Soybean) Farming", code: "111120" },
+          { name: "Dry Pea and Bean Farming", code: "111130" },
+          { name: "Wheat Farming", code: "111140" },
+          { name: "Corn Farming", code: "111150" },
+          { name: "Rice Farming", code: "111160" },
+          { name: "Oilseed and Grain Combination Farming", code: "111191" },
+          { name: "All Other Grain Farming", code: "111199" },
+          { name: "Potato Farming", code: "111211" },
+          { name: "Other Vegetable (except Potato) and Melon Farming", code: "111219" },
+          { name: "Orange Groves", code: "111310" },
+          { name: "Citrus (except Orange) Groves", code: "111320" },
+          { name: "Apple Orchards", code: "111331" },
+          { name: "Grape Vineyards", code: "111332" },
+          { name: "Strawberry Farming", code: "111333" },
+          { name: "Berry (except Strawberry) Farming", code: "111334" },
+          { name: "Tree Nut Farming", code: "111335" },
+          { name: "Fruit and Tree Nut Combination Farming", code: "111336" },
+          { name: "Other Noncitrus Fruit Farming", code: "111339" },
+          { name: "Mushroom Production", code: "111411" },
+          { name: "Other Food Crops Grown Under Cover", code: "111419" },
+          { name: "Nursery and Tree Production", code: "111421" },
+          { name: "Floriculture Production", code: "111422" },
+          { name: "Tobacco Farming", code: "111910" },
+          { name: "Cotton Farming", code: "111920" },
+          { name: "Sugarcane Farming", code: "111930" },
+          { name: "Hay Farming", code: "111940" },
+          { name: "Sugar Beet Farming", code: "111991" },
+          { name: "Peanut Farming", code: "111992" },
+          { name: "All Other Miscellaneous Crop Farming", code: "111998" },
         ]
       },
       {
         name: "Animal Production and Aquaculture", code: "112", industries: [
-          { name: "Cattle Ranching and Farming", code: "1121" },
-          { name: "Hog and Pig Farming", code: "1122" },
-          { name: "Poultry and Egg Production", code: "1123" },
-          { name: "Sheep and Goat Farming", code: "1124" },
-          { name: "Aquaculture", code: "1125" },
-          { name: "Other Animal Production", code: "1129" },
+          { name: "Beef Cattle Ranching and Farming", code: "112111" },
+          { name: "Cattle Feedlots", code: "112112" },
+          { name: "Dairy Cattle and Milk Production", code: "112120" },
+          { name: "Dual-Purpose Cattle Ranching and Farming", code: "112130" },
+          { name: "Hog and Pig Farming", code: "112210" },
+          { name: "Chicken Egg Production", code: "112310" },
+          { name: "Broilers and Other Meat Type Chicken Production", code: "112320" },
+          { name: "Turkey Production", code: "112330" },
+          { name: "Poultry Hatcheries", code: "112340" },
+          { name: "Other Poultry Production", code: "112390" },
+          { name: "Sheep Farming", code: "112410" },
+          { name: "Goat Farming", code: "112420" },
+          { name: "Finfish Farming and Fish Hatcheries", code: "112511" },
+          { name: "Shellfish Farming", code: "112512" },
+          { name: "Other Aquaculture", code: "112519" },
+          { name: "Apiculture", code: "112910" },
+          { name: "Horses and Other Equine Production", code: "112920" },
+          { name: "Fur-Bearing Animal and Rabbit Production", code: "112930" },
+          { name: "All Other Animal Production", code: "112990" },
         ]
       },
       {
         name: "Forestry and Logging", code: "113", industries: [
-          { name: "Timber Tract Operations", code: "1131" },
-          { name: "Forest Nurseries and Gathering of Forest Products", code: "1132" },
-          { name: "Logging", code: "1133" },
+          { name: "Timber Tract Operations", code: "113110" },
+          { name: "Forest Nurseries and Gathering of Forest Products", code: "113210" },
+          { name: "Logging", code: "113310" },
         ]
       },
       {
         name: "Fishing, Hunting and Trapping", code: "114", industries: [
-          { name: "Fishing", code: "1141" },
-          { name: "Hunting and Trapping", code: "1142" },
+          { name: "Finfish Fishing", code: "114111" },
+          { name: "Shellfish Fishing", code: "114112" },
+          { name: "Other Marine Fishing", code: "114119" },
+          { name: "Hunting and Trapping", code: "114210" },
         ]
       },
       {
         name: "Support Activities for Agriculture and Forestry", code: "115", industries: [
-          { name: "Support Activities for Crop Production", code: "1151" },
-          { name: "Support Activities for Animal Production", code: "1152" },
-          { name: "Support Activities for Forestry", code: "1153" },
+          { name: "Cotton Ginning", code: "115111" },
+          { name: "Soil Preparation, Planting, and Cultivating", code: "115112" },
+          { name: "Crop Harvesting, Primarily by Machine", code: "115113" },
+          { name: "Postharvest Crop Activities (except Cotton Ginning)", code: "115114" },
+          { name: "Farm Labor Contractors and Crew Leaders", code: "115115" },
+          { name: "Farm Management Services", code: "115116" },
+          { name: "Support Activities for Animal Production", code: "115210" },
+          { name: "Support Activities for Forestry", code: "115310" },
         ]
       },
     ],
@@ -332,17 +377,14 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
 const getInitials = (displayNameOrEmail: string | null | undefined): string => {
     if (!displayNameOrEmail) return '?';
     const name = displayNameOrEmail;
-    // Handle cases where displayName might be an email
-    if (name.includes('@') && !name.includes(' ')) { // Likely an email without spaces
+    if (name.includes('@') && !name.includes(' ')) {
         return name.charAt(0).toUpperCase();
     }
-    // Split by space for display names like "John Doe" or just "John"
-    const parts = name.split(' ').filter(Boolean); // Filter out empty strings if there are multiple spaces
+    const parts = name.split(' ').filter(Boolean);
     if (parts.length === 0) return '?';
-    if (parts.length === 1) { // Single name like "John" or "Company"
+    if (parts.length === 1) {
         return parts[0].charAt(0).toUpperCase();
     }
-    // Multiple parts like "John Doe", take first char of first and last
     return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
 };
 
@@ -374,38 +416,38 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
   };
 
   const addPostMutation = useMutation({
-    mutationFn: async (newPostDataWithImage: NewPostData & { imageFile?: File | null, imageUrls?: string[] }) => {
+    mutationFn: async (newPostDataWithImage: NewPostData & { imageFile?: File | null}) => {
       if (!user) {
         throw new Error("User not authenticated to create post.");
       }
 
-      let finalImageUrls: string[] = newPostDataWithImage.imageUrls || [];
+      let uploadedImageUrl: string | null = null;
 
       if (newPostDataWithImage.imageFile) {
+        console.log("[MainLayout] Attempting to upload image:", newPostDataWithImage.imageFile.name);
         try {
-          console.log("Uploading image:", newPostDataWithImage.imageFile.name);
-          const uploadedUrl = await uploadPostImage(newPostDataWithImage.imageFile, user.uid);
-          finalImageUrls = [uploadedUrl]; // Replace or add to existing logic for multiple images
-          console.log("Image uploaded, URL:", uploadedUrl);
+            uploadedImageUrl = await uploadPostImage(newPostDataWithImage.imageFile, user.uid);
+            console.log("[MainLayout] Image uploaded successfully, URL:", uploadedImageUrl);
+            if (!uploadedImageUrl) {
+                console.error("[MainLayout] uploadPostImage returned null/undefined without throwing an error.");
+                throw new Error("Image upload succeeded but returned no URL.");
+            }
         } catch (uploadError) {
-          console.error("Image upload failed:", uploadError);
-          toast({
-            variant: "destructive",
-            title: "Image Upload Failed",
-            description: (uploadError as Error).message || "Could not upload the image.",
-          });
-          // Decide if post creation should proceed without image or fail
-          throw uploadError; // Re-throw to stop post creation if image is critical
+            console.error("[MainLayout] Image upload failed in mutationFn:", uploadError);
+            throw uploadError;
         }
+      } else {
+          console.log("[MainLayout] No image file to upload.");
       }
       
-      // Prepare data for Firestore, ensuring imageUrls is correctly set
       const { imageFile, ...postDataForFirestore } = newPostDataWithImage;
-      postDataForFirestore.imageUrls = finalImageUrls; // Use the processed imageUrls
-
+      postDataForFirestore.imageUrls = uploadedImageUrl ? [uploadedImageUrl] : [];
+      console.log("[MainLayout] Data for Firestore:", JSON.stringify(postDataForFirestore, null, 2));
+      
       return addPostToFirestore(postDataForFirestore as NewPostData);
     },
-    onSuccess: () => {
+    onSuccess: (data, variables) => {
+      console.log("[MainLayout] addPostMutation onSuccess. Data:", data, "Variables:", variables);
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       toast({
@@ -414,19 +456,19 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
       });
       setIsCreatePostOpen(false);
     },
-    onError: (error: Error) => {
-      console.error("Add Post Mutation failed:", error);
-      // No need to show another toast if image upload already showed one
-      if (!error.message.includes("Could not upload the image")) {
-        toast({
-          variant: "destructive",
-          title: "Post Failed",
-          description: `Could not add your post: ${error.message}. Check console and Firestore rules.`,
-        });
-      }
-      // Do not close dialog here if image upload failed, let user try again or cancel
-      // setIsCreatePostOpen(false); // Only close on general post failure, not image upload failure if user might want to retry image
+    onError: (error: Error, variables) => {
+      console.error("[MainLayout] addPostMutation onError. Error:", error, "Variables:", variables);
+      toast({
+        variant: "destructive",
+        title: "Post Failed",
+        description: `Could not add your post: ${error.message}. Check console for details.`,
+      });
+      setIsCreatePostOpen(false);
     },
+    onSettled: (data, error, variables) => {
+        console.log("[MainLayout] addPostMutation onSettled. Data:", data, "Error:", error, "Variables:", variables);
+        // Additional logic if needed after mutation settles, dialog should be closed by success/error
+    }
   });
 
   const handleAddPost = (formData: CreatePostFormData) => {
@@ -450,13 +492,13 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
         industry: industryDetails?.name || formData.industry,
-        naicsCode: formData.industry || formData.subSector || formData.sector, // Most specific code
+        naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Startup", // Example, consider making this a form field
-        safetyIndicator: "Medium", // Example
-        ratingScore: Math.floor(Math.random() * 3) + 3, // Example
+        businessType: "Startup",
+        safetyIndicator: "Medium",
+        ratingScore: Math.floor(Math.random() * 3) + 3,
         imageFile: formData.imageFile,
-        imageUrls: [], // Initialize as empty, will be populated if imageFile exists
+        imageUrls: [],
     };
     addPostMutation.mutate(newPostDataForService);
   };
@@ -595,3 +637,4 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
     </div>
   );
 }
+

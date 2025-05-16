@@ -23,20 +23,24 @@ export const uploadPostImage = async (file: File, userId: string): Promise<strin
   const imageRef = ref(storage, storagePath);
 
   try {
-    console.log(`Uploading image to: ${storagePath}`);
+    console.log(`[StorageService] Uploading image to: ${storagePath}`);
     const snapshot = await uploadBytes(imageRef, file);
-    console.log('Uploaded a blob or file!', snapshot);
+    console.log('[StorageService] Uploaded a blob or file!', snapshot);
 
     const downloadURL = await getDownloadURL(snapshot.ref);
-    console.log('File available at', downloadURL);
+    console.log('[StorageService] File available at', downloadURL);
+    if (!downloadURL) {
+        throw new Error("Failed to get download URL after upload.");
+    }
     return downloadURL;
   } catch (error: any) {
-    console.error("Error uploading image to Firebase Storage:", error);
+    console.error("[StorageService] Error uploading image to Firebase Storage:", error);
     if (error.code === 'storage/unauthorized') {
       throw new Error('Permission denied. Check Firebase Storage security rules.');
     } else if (error.code === 'storage/canceled') {
       throw new Error('Upload canceled.');
     }
-    throw new Error(`Image upload failed: ${error.message}`);
+    // Re-throw a more specific error or the original one
+    throw new Error(`Image upload failed: ${error.message || 'Unknown storage error'}`);
   }
 };

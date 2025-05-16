@@ -1,3 +1,4 @@
+
 // src/services/postService.ts
 import { db } from '@/lib/firebase/config';
 import {
@@ -8,75 +9,75 @@ import {
   orderBy,
   Timestamp,
   limit,
-  serverTimestamp, // Use serverTimestamp for consistency
-  deleteDoc, // Import deleteDoc
-  doc, // Import doc to get a document reference
-  where // Import where for filtering
+  serverTimestamp,
+  deleteDoc,
+  doc,
+  where
 } from 'firebase/firestore';
 import type { Post, NewPostData } from '@/types/post';
 
 const postsCollectionRef = collection(db, 'posts');
 
-// Function to add a new post to Firestore
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
-    // Create a new object for Firestore, filtering out any undefined properties
     const dataForFirestore: { [key: string]: any } = {};
-    Object.keys(postData).forEach(keyStr => {
-      const key = keyStr as keyof NewPostData;
-      const value = postData[key];
-      if (value !== undefined) {
-        // Special handling for imageUrls: ensure it's an array
-        if (key === 'imageUrls') {
-          dataForFirestore[key] = Array.isArray(value) ? value : (value ? [value] : []);
-        } else {
-          dataForFirestore[key] = value;
+    // Iterate over postData and copy defined values
+    for (const key in postData) {
+        if (Object.prototype.hasOwnProperty.call(postData, key)) {
+            const value = postData[key as keyof NewPostData];
+            if (value !== undefined) {
+                dataForFirestore[key] = value;
+            }
         }
-      }
-    });
-
-    // Add server timestamp for createdAt, overriding any client-sent value for consistency
-    dataForFirestore.createdAt = serverTimestamp();
-
-    // Ensure imageUrls is at least an empty array if not provided
-    if (dataForFirestore.imageUrls === undefined) {
-        dataForFirestore.imageUrls = [];
     }
 
+    // Specifically ensure imageUrls is an array, even if empty.
+    if (dataForFirestore.imageUrls === undefined) {
+        dataForFirestore.imageUrls = [];
+    } else if (!Array.isArray(dataForFirestore.imageUrls)) {
+        if (typeof dataForFirestore.imageUrls === 'string') {
+            dataForFirestore.imageUrls = [dataForFirestore.imageUrls];
+        } else {
+            console.warn(`Invalid imageUrls type found in postData for Firestore: ${typeof dataForFirestore.imageUrls}. Defaulting to empty array.`);
+            dataForFirestore.imageUrls = [];
+        }
+    }
+
+    dataForFirestore.createdAt = serverTimestamp();
 
     const docRef = await addDoc(postsCollectionRef, dataForFirestore);
     console.log("Post added successfully with ID: ", docRef.id);
     return docRef.id;
   } catch (error: any) {
     console.error('Error adding post to Firestore:', error);
-    // Log more details about the error
     console.error("Firestore Error Code:", error.code);
     console.error("Firestore Error Message:", error.message);
-    // Consider checking specific error codes (e.g., 'permission-denied')
     if (error.code === 'permission-denied') {
         console.error("Firestore permission denied. Check your security rules.");
         throw new Error('Permission denied. You might need to adjust Firestore security rules.');
     }
-    throw new Error(`Failed to add post: ${error.message}`); // Re-throw with more context
+    if (error.message.includes("Unsupported field value: undefined")) {
+        console.error("Attempted to write undefined field to Firestore. Payload:", postData);
+         throw new Error(`Failed to add post: Firestore received an undefined field value. ${error.message}`);
+    }
+    throw new Error(`Failed to add post: ${error.message}`);
   }
 };
 
-// Function to fetch posts from Firestore
 export const getPostsFromFirestore = async (): Promise<Post[]> => {
   try {
-    // Query posts, order by creation date descending, limit to e.g., 50 latest
     const q = query(postsCollectionRef, orderBy('createdAt', 'desc'), limit(50));
     const querySnapshot = await getDocs(q);
-    const posts = querySnapshot.docs.map((doc) => {
-       const data = doc.data();
-       const createdAt = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now(); // Fallback if needed
+    const posts = querySnapshot.docs.map((docSnap) => { // Changed doc to docSnap to avoid conflict
+       const data = docSnap.data();
+       const createdAt = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now();
 
        return {
-            id: doc.id,
+            id: docSnap.id, // Use docSnap here
             ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls'>),
-            imageUrls: data.imageUrls || [], // Ensure imageUrls is an array, default to empty
+            imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
             createdAt: createdAt,
-       };
+       } as Post;
     });
     console.log(`Fetched ${posts.length} posts from Firestore.`);
     return posts;
@@ -91,8 +92,6 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
   }
 };
 
-
-// Function to delete a post from Firestore
 export const deletePostFromFirestore = async (postId: string): Promise<void> => {
     try {
         const postDocRef = doc(db, 'posts', postId);
@@ -110,8 +109,6 @@ export const deletePostFromFirestore = async (postId: string): Promise<void> => 
     }
 };
 
-
-// Function to fetch posts created by a specific user
 export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
   if (!userId) {
     console.warn("getPostsByUserId called with invalid userId.");
@@ -131,16 +128,16 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
     const querySnapshot = await getDocs(q);
     console.log(`Query snapshot received. Found ${querySnapshot.docs.length} posts for user ${userId}.`);
 
-    const posts = querySnapshot.docs.map((docSnap) => {
+    const posts = querySnapshot.docs.map((docSnap) => { // Changed doc to docSnap
       const data = docSnap.data();
       const createdAt = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now();
 
       return {
-        id: docSnap.id,
+        id: docSnap.id, // Use docSnap here
         ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls'>),
-        imageUrls: data.imageUrls || [], // Ensure imageUrls is an array
+        imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
         createdAt: createdAt,
-      };
+      } as Post;
     });
 
     console.log(`Successfully mapped ${posts.length} posts for user ${userId}`);
