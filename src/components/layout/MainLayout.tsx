@@ -59,8 +59,8 @@ export const availableTags = [
 const getInitials = (email: string | null | undefined): string => {
     if (!email) return '?';
     // Prefer display name's first char if available, otherwise email
-    const name = auth.currentUser?.displayName; // Use imported auth object
-    if (name) return name.charAt(0).toUpperCase();
+    const currentUser = auth.currentUser; // Use imported auth object
+    if (currentUser?.displayName) return currentUser.displayName.charAt(0).toUpperCase();
     return email.substring(0, 1).toUpperCase();
 };
 
@@ -234,26 +234,26 @@ export default function MainLayout({ children }: { children: React.ReactNode }) 
                       </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator />
-                    {/* Apply cursor-pointer to interactive items */}
-                    <DropdownMenuItem asChild className="cursor-pointer">
-                      <Link href={`/profile/${user.uid}`}>
+                    {/* Apply cursor-pointer to interactive items and active state styling */}
+                    <DropdownMenuItem asChild className={cn(pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                      <Link href={`/profile/${user.uid}`} className="cursor-pointer w-full">
                         <User className="mr-2 h-4 w-4" />
                         <span>Profile</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild className="cursor-pointer">
-                       <Link href="/subscription">
+                    <DropdownMenuItem asChild className={cn(pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                       <Link href="/subscription" className="cursor-pointer w-full">
                         <CreditCard className="mr-2 h-4 w-4" />
                         <span>Subscription</span>
                       </Link>
                     </DropdownMenuItem>
-                    <DropdownMenuItem asChild className="cursor-pointer">
-                       <Link href="/settings/profile"> {/* Link to settings */}
+                    <DropdownMenuItem asChild className={cn(pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
+                       <Link href="/settings/profile" className="cursor-pointer w-full"> {/* Link to settings */}
                         <Settings className="mr-2 h-4 w-4" />
                         <span>Settings</span>
                       </Link>
                     </DropdownMenuItem>
-                    {/* Add Theme Toggle Item - keep cursor-pointer */}
+                    {/* ThemeToggle is already a DropdownMenuItem and handles its own cursor */}
                     <ThemeToggle />
                     <DropdownMenuSeparator />
                     <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">

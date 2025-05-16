@@ -71,7 +71,7 @@ const ProfileSettingsPage = () => {
                 // --- Placeholder: Replace with actual profile fetching ---
                 // const profileData = await getUserProfile(user.uid);
                 // Mock data:
-                await new Promise(res => setTimeout(res, 500)); // Simulate fetch delay
+                // Removed artificial 500ms delay: await new Promise(res => setTimeout(res, 500)); 
                 const profileData = {
                     companyName: user.displayName || "Example Corp",
                     industry: "Tech", // Replace with actual fetched data
@@ -100,7 +100,7 @@ const ProfileSettingsPage = () => {
         }
     };
     fetchProfile();
-   }, [user, toast]); // Add toast to dependency array if used inside effect directly
+   }, [user, toast, isFetchingProfile]); // Added isFetchingProfile to dep array to avoid potential race conditions if user changes rapidly, though unlikely.
 
 
   // Handle file selection
