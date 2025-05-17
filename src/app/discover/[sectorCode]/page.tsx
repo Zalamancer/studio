@@ -29,12 +29,10 @@ import Whiteboard from '@/components/whiteboard/Whiteboard'; // Import the White
 
 // Helper to find sector data
 const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
-    if (code === "31-33") {
-        return detailedSectorsData.find(s => s.code === "31-33") || null;
-    }
+    if (!code) return null;
+    // Handle the combined manufacturing code specifically if needed, or ensure detailedSectorsData has "31-33"
     const sector = detailedSectorsData.find(s => s.code === code);
-    if (sector) return sector;
-    return null;
+    return sector || null;
 };
 
 
@@ -49,7 +47,7 @@ const SectorDetailPage = () => {
   const [selectedSubSector, setSelectedSubSector] = useState<string | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
 
-  const sectorData = useMemo(() => {
+  const currentSectorData = useMemo(() => {
     if (!sectorCode) return null;
     return getSectorDataByCode(sectorCode);
   }, [sectorCode]);
@@ -62,26 +60,25 @@ const SectorDetailPage = () => {
   });
 
   const isFavorited = useMemo(() => {
-    if (!sectorData || !sectorData.code) return false;
-    return favoriteSectorCodes.includes(sectorData.code);
-  }, [favoriteSectorCodes, sectorData]);
+    if (!currentSectorData || !currentSectorData.code) return false;
+    return favoriteSectorCodes.includes(currentSectorData.code);
+  }, [favoriteSectorCodes, currentSectorData]);
 
   // Mutation for toggling favorite status
   const toggleFavoriteMutation = useMutation({
     mutationFn: async () => {
-      if (!user || !sectorData || !sectorData.code) {
+      if (!user || !currentSectorData || !currentSectorData.code) {
         throw new Error("User not authenticated or sector data missing.");
       }
       if (isFavorited) {
-        await removeFavoriteSector(user.uid, sectorData.code);
-        toast({ title: "Sector Unfavorited", description: `${sectorData.name} removed from your favorites.` });
+        await removeFavoriteSector(user.uid, currentSectorData.code);
+        toast({ title: "Sector Unfavorited", description: `${currentSectorData.name} removed from your favorites.` });
       } else {
-        await addFavoriteSector(user.uid, sectorData.code);
-        toast({ title: "Sector Favorited!", description: `${sectorData.name} added to your favorites.` });
+        await addFavoriteSector(user.uid, currentSectorData.code);
+        toast({ title: "Sector Favorited!", description: `${currentSectorData.name} added to your favorites.` });
       }
     },
     onSuccess: () => {
-      // Invalidate queries to refetch favorite status on this page and on the main discover page
       queryClient.invalidateQueries({ queryKey: ['userFavoriteSectors', user?.uid] });
       queryClient.invalidateQueries({ queryKey: ['userFavoriteSectorsOnDiscoverPage', user?.uid] });
     },
@@ -95,7 +92,7 @@ const SectorDetailPage = () => {
       toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to favorite sectors." });
       return;
     }
-    if (!sectorData || !sectorData.code) return;
+    if (!currentSectorData || !currentSectorData.code) return;
     toggleFavoriteMutation.mutate();
   };
 
@@ -104,14 +101,14 @@ const SectorDetailPage = () => {
     isLoading: isLoadingPosts,
     error: postsError,
   } = useQuery<Post[]>({
-    queryKey: ['allPostsForSectorPage'],
+    queryKey: ['allPostsForSectorPage'], // Using a distinct query key
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 2,
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const handleSubSectorSelect = (subSectorCode: string | null) => {
     setSelectedSubSector(current => (current === subSectorCode ? null : subSectorCode));
-    setSelectedIndustry(null);
+    setSelectedIndustry(null); // Reset industry when sub-sector changes
   };
 
   const handleIndustrySelect = (industryCode: string | null) => {
@@ -124,12 +121,14 @@ const SectorDetailPage = () => {
   };
 
   const filteredPosts = useMemo(() => {
-    if (!sectorData || isLoadingPosts) return [];
+    if (!currentSectorData || isLoadingPosts) return [];
+
     let postsToFilter = allPosts.filter(post => {
-        const mainSectorCodeForFilter = sectorData.code;
+        const mainSectorCodeForFilter = currentSectorData.code;
         const postNaics = post.naicsCode || "";
+        
         let isInMainSector = false;
-        if (mainSectorCodeForFilter === "31-33") {
+        if (mainSectorCodeForFilter === "31-33") { // Special handling for Manufacturing
             isInMainSector = postNaics.startsWith("31") || postNaics.startsWith("32") || postNaics.startsWith("33");
         } else {
             isInMainSector = postNaics.startsWith(mainSectorCodeForFilter);
@@ -137,17 +136,18 @@ const SectorDetailPage = () => {
         return isInMainSector;
     });
 
-    if (selectedIndustry) {
+    if (selectedIndustry) { // If an industry is selected, filter by that industry's NAICS code
       return postsToFilter.filter(post => post.naicsCode === selectedIndustry);
     }
-    if (selectedSubSector) {
+    if (selectedSubSector) { // If a sub-sector is selected (but no industry), filter by that sub-sector
       return postsToFilter.filter(post =>
-        post.naicsCode === selectedSubSector ||
-        (post.naicsCode && post.naicsCode.startsWith(selectedSubSector))
+        post.naicsCode === selectedSubSector || // Exact match (if post is tagged at sub-sector level)
+        (post.naicsCode && post.naicsCode.startsWith(selectedSubSector)) // Or starts with (for industries within)
       );
     }
-    return postsToFilter;
-  }, [sectorData, selectedSubSector, selectedIndustry, allPosts, isLoadingPosts]);
+    return postsToFilter; // If no sub-sector or industry selected, return all posts for the main sector
+  }, [currentSectorData, selectedSubSector, selectedIndustry, allPosts, isLoadingPosts]);
+
 
   if (!sectorCode) {
     return (
@@ -158,7 +158,7 @@ const SectorDetailPage = () => {
     );
   }
 
-  if (!sectorData) {
+  if (!currentSectorData) {
     return (
       <div className="container mx-auto p-8">
         <Link href="/discover" className="inline-flex items-center text-primary hover:underline mb-6 text-sm">
@@ -186,7 +186,6 @@ const SectorDetailPage = () => {
     );
   }
 
-  const currentDisplaySectorData = detailedSectorsData.find(s => s.code === sectorCode);
 
   return (
     <div className="container mx-auto p-4 md:p-6">
@@ -197,9 +196,9 @@ const SectorDetailPage = () => {
         <div className="flex justify-between items-start">
             <div>
                 <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-1">
-                {sectorData.name} ({sectorData.code})
+                {currentSectorData.name} ({currentSectorData.code})
                 </h1>
-                <p className="text-md text-muted-foreground max-w-3xl">{sectorData.description || "Detailed description for this sector is being compiled."}</p>
+                <p className="text-md text-muted-foreground max-w-3xl">{currentSectorData.description || "Detailed description for this sector is being compiled."}</p>
             </div>
             <Button
                 variant={isFavorited ? "default" : "outline"}
@@ -225,9 +224,9 @@ const SectorDetailPage = () => {
             <CardHeader>
               <CardTitle className="text-xl">Filter by Industry</CardTitle>
               <CardDescription>
-                {currentDisplaySectorData?.subSectors?.length > 0
+                {currentSectorData?.subSectors?.length > 0
                   ? "Select sub-sectors and industries to narrow down posts."
-                  : `No detailed industry filters available for ${sectorData.name}.`}
+                  : `No detailed industry filters available for ${currentSectorData.name}.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -236,9 +235,9 @@ const SectorDetailPage = () => {
                         <FilterX className="h-4 w-4 mr-2" /> Clear All Filters
                     </Button>
                 )}
-                {currentDisplaySectorData?.subSectors?.length > 0 ? (
+                {currentSectorData?.subSectors?.length > 0 ? (
                   <Accordion type="single" collapsible className="w-full space-y-1.5">
-                    {currentDisplaySectorData.subSectors.map((subsector) => (
+                    {currentSectorData.subSectors.map((subsector) => (
                       <AccordionItem key={subsector.code} value={`subsector-${subsector.code}`}>
                         <AccordionTrigger
                           onClick={() => handleSubSectorSelect(subsector.code)}
@@ -281,18 +280,18 @@ const SectorDetailPage = () => {
           </Card>
         </div>
 
-        <div className="lg:col-span-2 space-y-6"> {/* Added space-y-6 for spacing */}
+        <div className="lg:col-span-2 space-y-6">
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">
-                Posts in {selectedIndustry ? currentDisplaySectorData?.subSectors.flatMap(ss => ss.industries).find(ind => ind.code === selectedIndustry)?.name ?? 'Selected Industry'
-                           : selectedSubSector ? currentDisplaySectorData?.subSectors.find(ss => ss.code === selectedSubSector)?.name ?? 'Selected Sub-Sector'
-                           : sectorData.name}
+                Posts in {selectedIndustry ? currentSectorData?.subSectors.flatMap(ss => ss.industries).find(ind => ind.code === selectedIndustry)?.name ?? 'Selected Industry'
+                           : selectedSubSector ? currentSectorData?.subSectors.find(ss => ss.code === selectedSubSector)?.name ?? 'Selected Sub-Sector'
+                           : currentSectorData.name}
               </CardTitle>
               <CardDescription>
                 {selectedIndustry ? `Showing posts related to industry NAICS ${selectedIndustry}.`
                 : selectedSubSector ? `Showing posts related to sub-sector NAICS ${selectedSubSector}.`
-                : `Showing all posts for ${sectorData.name}.`}
+                : `Showing all posts for ${currentSectorData.name}.`}
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -334,8 +333,8 @@ const SectorDetailPage = () => {
             </CardContent>
           </Card>
 
-          {/* Whiteboard Section */}
-          <Whiteboard />
+          {/* Whiteboard Section - Pass currentSectorData */}
+          <Whiteboard sectorData={currentSectorData} />
         </div>
       </div>
     </div>
