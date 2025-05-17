@@ -1,3 +1,4 @@
+
 // src/app/profile/[userId]/page.tsx
 "use client";
 
@@ -52,7 +53,7 @@ const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string
     <div className="flex items-center">
       {[...Array(fullStars)].map((_, i) => <Star key={`full-${i}`} className={cn(size, "text-yellow-400 fill-yellow-400")} />)}
       {halfStar === 1 && <Star key="half" className={cn(size, "text-yellow-400")} />} {/* Simplification: show as empty for half for now, or use a half-star icon */}
-      {[...Array(emptyStars)].map((_, i) => <Star key={`empty-${i}`} className={cn(size, "text-yellow-400")} />)}
+      {[...Array(emptyStars)].map((_, i) => <Star key={`empty-${i}`} className={cn(size, "text-gray-300")} />)} {/* Changed to gray-300 for empty stars */}
     </div>
   );
 };
@@ -313,5 +314,4 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
-
-```
+    
