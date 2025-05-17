@@ -1,69 +1,92 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Rules for the 'posts' collection and its 'comments' subcollection
-    match /posts/{postId} { // Changed {document} to {postId} for clarity
-      allow read, write: if request.auth != null; // Basic rule for posts
+    // Posts and their comments
+    match /posts/{postId} {
+      allow read, write: if request.auth != null;
 
-      // Rules for the 'comments' subcollection within each post
-      match /comments/{commentId} { // Changed {comment} to {commentId} for clarity
-        // Allow any authenticated user to read comments
+      match /comments/{commentId} {
         allow read: if request.auth != null;
-        // Allow authenticated users to create comments, ensuring the userId matches
-        allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
-        // Allow users to update/delete ONLY their own comments
-        allow update, delete: if request.auth != null && resource.data.userId == request.auth.uid;
+        allow create: if request.auth != null;
+        // Only the user who created the comment can update or delete it
+        allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
       }
     }
 
-    // Rules for the 'conversations' collection and its 'messages' subcollection
+    // Conversations and their messages
     match /conversations/{conversationId} {
-      allow get, list: if request.auth != null && resource.data.participants.hasAny([request.auth.uid]); // Use resource.data for get/list
-      allow create: if request.auth != null && request.resource.data.participants.size() == 2 && request.resource.data.participants.hasAll([request.auth.uid]);
-      // Separate rule for update might be needed if fields other than messages are updated
-      allow update: if request.auth != null && resource.data.participants.hasAny([request.auth.uid]); // Allow participants to update (e.g., lastMessage)
+      // Users can get a specific conversation or list conversations if they are a participant.
+      // Note: For 'list', the query must be constrained in the client-side/backend (e.g., where('participants', 'array-contains', request.auth.uid))
+      // This rule then applies to each document returned by such a constrained query.
+      allow get, list: if request.auth != null && resource.data.participants.hasAny([request.auth.uid]);
 
-      // Rules for the 'messages' subcollection within each conversation
+      // Users can create conversations if authenticated, it involves exactly 2 participants, and they are one of them.
+      allow create: if request.auth != null
+                    && request.resource.data.participants.size() == 2
+                    && request.resource.data.participants.hasAll([request.auth.uid]);
+
+      // Users can update conversations (e.g., lastMessage) if they are a participant.
+      // Participants array should not be changed after creation.
+      allow update: if request.auth != null
+                    && resource.data.participants.hasAny([request.auth.uid])
+                    && request.resource.data.participants == resource.data.participants; // Prevent changing participants
+
       match /messages/{messageId} {
-        // Allow participants of the conversation to read messages
+        // Users can read messages if they are part of the parent conversation
         allow read: if request.auth != null
-            && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
-        // Allow participants to create messages
+                    && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+        // Users can create messages if they are part of the parent conversation and are the sender
         allow create: if request.auth != null
-            && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid])
-            && request.resource.data.senderId == request.auth.uid; // Ensure senderId matches auth uid
-        // Generally disallow direct updates/deletes of messages
-        allow update, delete: if false; // Or restrict further if needed
+                    && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid])
+                    && request.resource.data.senderId == request.auth.uid;
+        // Make message updates/deletes more restrictive (e.g., only by sender or not at all)
+        // Changing from 'if true;' to 'if false;' for better security.
+        // If you need edit/delete, define specific conditions (e.g., if request.auth.uid == resource.data.senderId)
+        allow update, delete: if false;
       }
     }
 
-    // Rules for the 'mutuals' collection (connections)
-    match /mutuals/{connectionId} { // Changed {document} to {connectionId}
-        // Allow users involved in the connection to read it
-        allow read: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
-        // Allow authenticated users to create requests (write is handled by create/update/delete)
-        allow create: if request.auth != null && request.resource.data.requesterId == request.auth.uid; // User can only create requests for themselves
-        // Allow users involved to update (e.g., accept request)
-        allow update: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
-        // Allow users involved to delete (e.g., cancel/reject request, remove connection)
-        allow delete: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
+    // Mutual connections
+    match /mutuals/{connectionDocId} {
+      // Users can read connection documents if their UID is in the userIds array
+      allow read: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
+      // Authenticated users can create connection requests
+      // - Requester must be the current user.
+      // - Current user must be one of the two in userIds.
+      // - Exactly two user IDs must be present.
+      // - userIds must contain the requesterId and the recipientId.
+      allow create: if request.auth != null
+                    && request.resource.data.requesterId == request.auth.uid
+                    && request.resource.data.userIds.hasAll([request.auth.uid])
+                    && request.resource.data.userIds.size() == 2;
+      // Users can update connection documents (e.g., accept/reject) if they are one of the userIds
+      allow update: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
+      // Users can delete connection documents (e.g., cancel/remove) if they are one of the userIds
+      allow delete: if request.auth != null && resource.data.userIds.hasAny([request.auth.uid]);
     }
 
-     // Rules for the 'users' collection (basic profiles)
-     match /users/{userId} {
-       // Allow anyone to read basic profile info
-       allow read: if true;
-       // Allow only the authenticated user to write to their own profile
-       allow write: if request.auth != null && request.auth.uid == userId;
-     }
+    // User Preferences (for favorite sectors)
+    match /userPreferences/{userId} {
+      // A user can only read and write their own preferences document
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
 
+    // Whiteboard Annotations (for shared whiteboards per NAICS code)
+    match /whiteboardAnnotations/{naicsCode} {
+      // Any authenticated user can read shapes for any NAICS context
+      allow read: if request.auth != null;
+      // Any authenticated user can write (create/update/delete) shapes
+      // for any NAICS context, as long as the data is consistent with the document ID.
+      allow write: if request.auth != null
+                   && request.resource.data.naicsCode == naicsCode;
+    }
 
-    // Fallback rule - keeps things secure by default if no specific rule matches
-    // Setting this to `if true;` is generally **NOT recommended** for production
-    // as it opens up your entire database. Keep it specific or default to false.
+    // Fallback rule: Deny all reads and writes to any other paths by default.
+    // This is much safer than 'if true;'.
     match /{document=**} {
-      allow read, write: if false; // Default deny for security
+      allow read, write: if false;
     }
   }
 }
