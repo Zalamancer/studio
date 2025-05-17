@@ -1,5 +1,7 @@
 // src/services/notificationService.ts
-'use server';
+// REMOVED 'use server'; to make createNotification client-callable if needed by commentService
+// However, getNotificationsForUser might still be better as a server component/action if not directly invoked by client mutation flows.
+// For simplicity, removing 'use server;' from the top for now.
 
 import { db } from '@/lib/firebase/config';
 import {
@@ -28,15 +30,14 @@ export const createNotification = async (notificationData: Omit<NewNotificationD
   }
 
   try {
-    // Fetch sender's basic profile info
     const senderProfile = await getUserProfileBasic(notificationData.senderId);
 
     const fullNotificationData: NewNotificationData & { timestamp: Timestamp, isRead: boolean } = {
       ...notificationData,
-      senderName: senderProfile?.displayName || `@${notificationData.senderId}`, // Use @ fallback
+      senderName: senderProfile?.displayName || `@${notificationData.senderId}`,
       senderAvatar: senderProfile?.avatarUrl,
       timestamp: serverTimestamp() as Timestamp,
-      isRead: false, // Notifications start as unread
+      isRead: false,
     };
 
     const docRef = await addDoc(notificationsCollectionRef, fullNotificationData);
@@ -44,7 +45,6 @@ export const createNotification = async (notificationData: Omit<NewNotificationD
     return docRef.id;
   } catch (error: any) {
     console.error(`Error creating notification for user ${notificationData.userId}:`, error);
-    // Handle specific errors like permission denied if necessary
     if (error.code === 'permission-denied') {
       console.error("Firestore permission denied creating notification. Check rules for 'notifications' collection.");
       throw new Error('Permission denied. Check Firestore security rules.');
@@ -80,7 +80,7 @@ export const getNotificationsForUser = async (userId: string, count = 50): Promi
         id: docSnap.id,
         ...data,
         timestamp: timestampMillis,
-      } as ClientNotification; // Assert type after conversion
+      } as ClientNotification;
     });
 
     console.log(`Successfully mapped ${notifications.length} client notifications for user ${userId}`);
@@ -126,22 +126,19 @@ export const markAllNotificationsAsRead = async (userId: string): Promise<void> 
   }
   console.log(`Marking all unread notifications as read for user ${userId}`);
   try {
-    // Query for unread notifications for the user
     const q = query(
       notificationsCollectionRef,
       where('userId', '==', userId),
       where('isRead', '==', false)
-      // No limit needed, update all matching
     );
 
     const querySnapshot = await getDocs(q);
 
     if (querySnapshot.empty) {
       console.log(`No unread notifications found for user ${userId}.`);
-      return; // Nothing to mark
+      return;
     }
 
-    // Use a batch to update all documents atomically
     const batch = writeBatch(db);
     querySnapshot.docs.forEach((docSnap) => {
       batch.update(docSnap.ref, { isRead: true });
