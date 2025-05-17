@@ -1,41 +1,41 @@
-
 // src/app/profile/[userId]/page.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone, Loader2, AlertTriangle, Lock, Star, MessageSquare } from 'lucide-react';
+import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone, Loader2, AlertTriangle, Lock, Star, MessageSquare, Edit3, Trash2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea'; // Import Textarea
-import { Label } from '@/components/ui/label'; // Import Label
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getConnectionStatus } from '@/services/connectionService';
 import type { ConnectionStatus } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
-
-interface MockReview {
-  id: string;
-  reviewerName: string;
-  reviewerAvatar?: string;
-  rating: number;
-  comment: string;
-  date: string;
-}
+import { addReview, getReviewsForProfile, updateReview, deleteReview } from '@/services/reviewService';
+import type { ClientReview, NewReviewData, UpdateReviewData } from '@/types/review';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 // Placeholder function to get user data (replace with actual data fetching)
 const getBusinessProfileData = (userId: string) => {
-  // In a real app, fetch this data from Firestore or your backend
-  // based on the userId
   console.log(`Fetching profile data for userId: ${userId}`);
-  // Return mock data for now, including rating info and reviews
   return {
     companyName: `Business ${userId.substring(0, 6)}`,
     industry: "Tech",
@@ -48,19 +48,13 @@ const getBusinessProfileData = (userId: string) => {
     verified: Math.random() > 0.5,
     tags: ["Software", "SaaS", "Collaboration Tools", "B2B Solutions", "Innovation"],
     userId: userId,
-    averageRating: 0, // Initialize with 0 for profiles with no ratings yet
-    ratingCount: 0,   // Initialize with 0
-    reviews: [ // Add some mock reviews
-      { id: 'review1', reviewerName: 'Alice B.', reviewerAvatar: `https://picsum.photos/seed/alice/40`, rating: 5, comment: "Amazing service and very collaborative!", date: "November 10, 2023" },
-      { id: 'review2', reviewerName: 'Bob C.', reviewerAvatar: `https://picsum.photos/seed/bob/40`, rating: 4, comment: "Good experience, would recommend for specific projects.", date: "October 28, 2023" },
-    ] as MockReview[],
+    // averageRating and ratingCount will now be derived from fetched reviews
   };
 };
 
-// Helper to render stars
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
-  const halfStar = rating % 1 >= 0.5 ? 1 : 0; // Simplification, full star for .5 or more
+  const halfStar = rating % 1 >= 0.5 ? 1 : 0;
   const emptyStars = totalStars - fullStars - halfStar;
 
   return (
@@ -72,6 +66,13 @@ const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string
   );
 };
 
+const getInitials = (name: string | undefined | null): string => {
+  if (!name) return '?';
+  const names = name.split(' ');
+  if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
+  return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
+};
+
 
 const BusinessProfilePage = () => {
   const params = useParams();
@@ -79,32 +80,112 @@ const BusinessProfilePage = () => {
   const { user: currentUser, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
 
   const [userRating, setUserRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
-  const [reviewComment, setReviewComment] = useState(''); // State for review comment
+  const [reviewComment, setReviewComment] = useState('');
+  const [editingReview, setEditingReview] = useState<ClientReview | null>(null);
 
-  // Fetch profile data (could be from a service in a real app)
   const profileData = profileUserId ? getBusinessProfileData(profileUserId) : null;
 
-
-  const {
-    data: connectionStatus,
-    isLoading: isLoadingStatus,
-    error: statusError,
-  } = useQuery<ConnectionStatus | null, Error>({
+  const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
-      if (!currentUser?.uid || !profileUserId || currentUser.uid === profileUserId) {
-        return 'self';
-      }
+      if (!currentUser?.uid || !profileUserId || currentUser.uid === profileUserId) return 'self';
       return getConnectionStatus(currentUser.uid, profileUserId);
     },
     enabled: !!currentUser?.uid && !!profileUserId && currentUser.uid !== profileUserId,
-    staleTime: 1000 * 60 * 1,
   });
 
-  if (authLoading) {
+  const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
+    queryKey: ['reviews', profileUserId],
+    queryFn: () => profileUserId ? getReviewsForProfile(profileUserId) : Promise.resolve([]),
+    enabled: !!profileUserId,
+  });
+
+  const currentUserReview = useMemo(() => {
+    if (!currentUser) return null;
+    return reviews.find(r => r.reviewerId === currentUser.uid);
+  }, [reviews, currentUser]);
+
+  useEffect(() => {
+    if (currentUserReview) {
+      setUserRating(currentUserReview.rating);
+      setReviewComment(currentUserReview.comment);
+      setEditingReview(currentUserReview);
+    } else {
+      setUserRating(0);
+      setReviewComment('');
+      setEditingReview(null);
+    }
+  }, [currentUserReview]);
+
+  const averageRating = useMemo(() => {
+    if (!reviews || reviews.length === 0) return 0;
+    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+    return totalRating / reviews.length;
+  }, [reviews]);
+  const ratingCount = reviews.length;
+
+  const addOrUpdateReviewMutation = useMutation({
+    mutationFn: async (data: { rating: number; comment: string }) => {
+      if (!currentUser || !profileUserId) throw new Error("User or profile ID missing.");
+      if (editingReview) { // Update existing review
+        const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
+        await updateReview(editingReview.id, currentUser.uid, updateData);
+        return "Review updated successfully!";
+      } else { // Add new review
+        const newReviewData: NewReviewData = {
+          targetUserId: profileUserId,
+          reviewerId: currentUser.uid,
+          reviewerName: currentUser.displayName || "Anonymous User",
+          reviewerAvatar: currentUser.photoURL || undefined,
+          rating: data.rating,
+          comment: data.comment,
+        };
+        await addReview(newReviewData);
+        return "Review submitted successfully!";
+      }
+    },
+    onSuccess: (message) => {
+      toast({ title: "Success", description: message });
+      queryClient.invalidateQueries({ queryKey: ['reviews', profileUserId] });
+      // Resetting form fields is handled by useEffect based on currentUserReview
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Error", description: error.message || "Could not submit review." });
+    },
+  });
+
+  const deleteReviewMutation = useMutation({
+    mutationFn: (reviewId: string) => {
+      if (!currentUser) throw new Error("User not authenticated.");
+      return deleteReview(reviewId, currentUser.uid);
+    },
+    onSuccess: () => {
+      toast({ title: "Review Deleted" });
+      queryClient.invalidateQueries({ queryKey: ['reviews', profileUserId] });
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Error", description: error.message || "Could not delete review." });
+    },
+  });
+
+  const handleRateProfileSubmit = () => {
+    if (userRating === 0) {
+      toast({ variant: "destructive", title: "Rating Required", description: "Please select a star rating." });
+      return;
+    }
+    addOrUpdateReviewMutation.mutate({ rating: userRating, comment: reviewComment });
+  };
+
+  const handleDeleteReview = (reviewId: string) => {
+    deleteReviewMutation.mutate(reviewId);
+  };
+
+
+  if (authLoading || (profileUserId && isLoadingReviews && !reviews.length)) { // Show loading if fetching initial reviews
      return (
        <div className="container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -160,34 +241,6 @@ const BusinessProfilePage = () => {
 
   const isOwnProfile = currentUser?.uid === profileData.userId;
 
-  const handleRateProfile = () => { // Removed rating param, will use userRating state
-    if (userRating === 0) {
-      toast({
-        variant: "destructive",
-        title: "Rating Required",
-        description: "Please select a star rating before submitting.",
-      });
-      return;
-    }
-    // In a real app, you'd call a service to submit the rating and comment to the backend.
-    console.log(`User ${currentUser?.uid} rated profile ${profileUserId} with ${userRating} stars. Comment: "${reviewComment}"`);
-    toast({
-      title: "Review Submitted (Mock)",
-      description: `You submitted a rating of ${userRating} stars and your comment for ${profileData.companyName}.`,
-    });
-    // Optionally reset form after mock submission
-    // setUserRating(0);
-    // setReviewComment('');
-  };
-
-  const getInitials = (name: string | undefined | null): string => {
-    if (!name) return '?';
-    const names = name.split(' ');
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
-  };
-
-
   return (
     <div className="container mx-auto p-4 md:p-8 max-w-4xl">
       <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -218,17 +271,16 @@ const BusinessProfilePage = () => {
                 </div>
             </div>
             <div className="flex flex-col items-center md:items-end gap-2 ml-auto mt-4 md:mt-0 w-full md:w-auto">
-                 {/* Always render the average rating section */}
                  <div className="text-center md:text-right">
                     <p className="text-sm text-muted-foreground">Average Rating</p>
                     <div className="flex items-center gap-1 justify-center md:justify-end">
-                        <StarDisplay rating={profileData.averageRating || 0} size="h-5 w-5" />
+                        <StarDisplay rating={averageRating} size="h-5 w-5" />
                         <span className="text-lg font-semibold text-primary ml-1">
-                            {(profileData.averageRating || 0).toFixed(1)}
+                            {averageRating.toFixed(1)}
                         </span>
                     </div>
                     <p className="text-xs text-muted-foreground">
-                        ({profileData.ratingCount || 0} ratings)
+                        ({ratingCount} ratings)
                     </p>
                  </div>
                  {currentUser && !isOwnProfile && (
@@ -283,12 +335,13 @@ const BusinessProfilePage = () => {
              )}
           </div>
 
-          {/* Rating Submission Section */}
           {currentUser && !isOwnProfile && (
             <>
               <Separator />
               <div>
-                <h3 className="text-lg font-semibold text-foreground mb-3">Rate this Business</h3>
+                <h3 className="text-lg font-semibold text-foreground mb-3">
+                  {editingReview ? "Update Your Review" : "Rate this Business"}
+                </h3>
                 <div className="flex items-center gap-2 mb-3">
                   {[1, 2, 3, 4, 5].map((star) => (
                     <Star
@@ -304,7 +357,9 @@ const BusinessProfilePage = () => {
                   ))}
                 </div>
                 <div className="space-y-2 mb-4">
-                    <Label htmlFor="reviewComment" className="text-sm font-medium">Add a comment (optional)</Label>
+                    <Label htmlFor="reviewComment" className="text-sm font-medium">
+                      {editingReview ? "Your comment" : "Add a comment (optional)"}
+                    </Label>
                     <Textarea
                         id="reviewComment"
                         placeholder="Share your experience with this business..."
@@ -312,28 +367,34 @@ const BusinessProfilePage = () => {
                         onChange={(e) => setReviewComment(e.target.value)}
                         rows={3}
                         className="resize-y"
+                        disabled={addOrUpdateReviewMutation.isPending}
                     />
                 </div>
-                <Button onClick={handleRateProfile} size="sm" disabled={userRating === 0}>
-                   Submit Review
+                <Button 
+                  onClick={handleRateProfileSubmit} 
+                  size="sm" 
+                  disabled={userRating === 0 || addOrUpdateReviewMutation.isPending}
+                >
+                   {addOrUpdateReviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                   {editingReview ? "Update Review" : "Submit Review"}
                 </Button>
-                 <p className="text-xs text-muted-foreground mt-2">
-                    {/* Placeholder for "You previously rated X stars" - needs backend integration */}
-                 </p>
               </div>
             </>
           )}
 
           <Separator />
 
-          {/* Reviews Display Section */}
           <div>
             <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-primary" /> Customer Reviews
+                <MessageSquare className="h-5 w-5 text-primary" /> Customer Reviews ({ratingCount})
             </h3>
-            {profileData.reviews && profileData.reviews.length > 0 ? (
+            {isLoadingReviews ? (
+                 <div className="flex justify-center items-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+            ) : reviewsError ? (
+                <p className="text-sm text-destructive text-center py-4">Error loading reviews: {reviewsError.message}</p>
+            ) : reviews.length > 0 ? (
                 <div className="space-y-6">
-                    {profileData.reviews.map((review) => (
+                    {reviews.map((review) => (
                         <Card key={review.id} className="bg-muted/50 p-4 shadow-sm border-border">
                            <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
                                 <div className="flex items-center gap-3">
@@ -345,7 +406,7 @@ const BusinessProfilePage = () => {
                                     </Avatar>
                                     <div>
                                         <p className="text-sm font-medium text-foreground">{review.reviewerName}</p>
-                                        <p className="text-xs text-muted-foreground">{review.date}</p>
+                                        <p className="text-xs text-muted-foreground">{new Date(review.createdAt).toLocaleDateString()}</p>
                                     </div>
                                 </div>
                                 <StarDisplay rating={review.rating} size="h-4 w-4" />
@@ -353,6 +414,36 @@ const BusinessProfilePage = () => {
                            <CardContent className="p-0 pt-2">
                                 <p className="text-sm text-muted-foreground leading-relaxed">{review.comment}</p>
                            </CardContent>
+                           {currentUser?.uid === review.reviewerId && (
+                               <CardFooter className="p-0 pt-3 flex justify-end gap-2">
+                                   {/* <Button variant="ghost" size="xs" onClick={() => { /* Handle Edit * / setEditingReview(review); setUserRating(review.rating); setReviewComment(review.comment); }}>
+                                       <Edit3 className="h-3 w-3 mr-1"/> Edit
+                                   </Button> */}
+                                   <AlertDialog>
+                                       <AlertDialogTrigger asChild>
+                                           <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>
+                                               {deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : <Trash2 className="h-3 w-3 mr-1"/>}
+                                               Delete
+                                           </Button>
+                                       </AlertDialogTrigger>
+                                       <AlertDialogContent>
+                                           <AlertDialogHeader>
+                                               <AlertDialogTitle>Delete Your Review?</AlertDialogTitle>
+                                               <AlertDialogDescription>
+                                                   Are you sure you want to delete your review? This action cannot be undone.
+                                               </AlertDialogDescription>
+                                           </AlertDialogHeader>
+                                           <AlertDialogFooter>
+                                               <AlertDialogCancel disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>Cancel</AlertDialogCancel>
+                                               <AlertDialogAction onClick={() => handleDeleteReview(review.id)} className="bg-destructive hover:bg-destructive/90" disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>
+                                                   {deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                                                   Delete
+                                               </AlertDialogAction>
+                                           </AlertDialogFooter>
+                                       </AlertDialogContent>
+                                   </AlertDialog>
+                               </CardFooter>
+                           )}
                         </Card>
                     ))}
                 </div>
