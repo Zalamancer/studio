@@ -34,13 +34,11 @@ const getBusinessProfileData = (userId: string) => {
     contactEmail: `contact@business-${userId.substring(0, 4)}.com`,
     contactPhone: "+1 (555) 123-4567",
     verified: Math.random() > 0.5,
-    rating: Math.random() * 2.5 + 2.5, // Random rating between 2.5 and 5.0
-    ratingCount: Math.floor(Math.random() * 200) + 10, // Random rating count
     tags: ["Software", "SaaS", "Collaboration Tools", "B2B Solutions", "Innovation"],
     userId: userId,
-    // Add mock averageRating and ratingCount
-    averageRating: parseFloat((Math.random() * (5 - 3) + 3).toFixed(1)), // Mock average rating (3.0 - 5.0)
-    ratingCount: Math.floor(Math.random() * 150) + 20, // Mock rating count
+    // Initialize with 0 for profiles with no ratings yet
+    averageRating: 0,
+    ratingCount: 0,
   };
 };
 
@@ -70,15 +68,9 @@ const BusinessProfilePage = () => {
   const [userRating, setUserRating] = useState(0);
   const [hoverRating, setHoverRating] = useState(0);
 
-  if (!profileUserId) {
-    return (
-      <div className="container mx-auto p-4 text-center">
-        <p className="text-destructive">User ID not found.</p>
-      </div>
-    );
-  }
+  // Fetch profile data (could be from a service in a real app)
+  const profileData = profileUserId ? getBusinessProfileData(profileUserId) : null;
 
-  const profileData = getBusinessProfileData(profileUserId);
 
   const {
     data: connectionStatus,
@@ -95,27 +87,6 @@ const BusinessProfilePage = () => {
     enabled: !!currentUser?.uid && !!profileUserId && currentUser.uid !== profileUserId,
     staleTime: 1000 * 60 * 1,
   });
-
-  if (!profileData) {
-    return (
-      <div className="container mx-auto p-4 text-center">
-        <p className="text-muted-foreground">Business profile not found for this user.</p>
-      </div>
-    );
-  }
-
-  const isOwnProfile = currentUser?.uid === profileData.userId;
-
-  const handleRateProfile = (rating: number) => {
-    setUserRating(rating);
-    // In a real app, you'd call a service to submit the rating to the backend.
-    console.log(`User ${currentUser?.uid} rated profile ${profileUserId} with ${rating} stars.`);
-    toast({
-      title: "Rating Submitted (Mock)",
-      description: `You submitted a rating of ${rating} stars for ${profileData.companyName}.`,
-    });
-  };
-
 
   if (authLoading) {
      return (
@@ -151,6 +122,39 @@ const BusinessProfilePage = () => {
      );
   }
 
+  if (!profileUserId) {
+    return (
+      <div className="container mx-auto p-4 text-center">
+        <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
+        <p className="text-destructive-foreground font-semibold">User ID not found.</p>
+        <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
+      </div>
+    );
+  }
+
+  if (!profileData) {
+    return (
+      <div className="container mx-auto p-4 text-center">
+        <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
+        <p className="text-muted-foreground font-semibold">Business profile not found for this user.</p>
+         <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
+      </div>
+    );
+  }
+
+  const isOwnProfile = currentUser?.uid === profileData.userId;
+
+  const handleRateProfile = (rating: number) => {
+    setUserRating(rating);
+    // In a real app, you'd call a service to submit the rating to the backend.
+    console.log(`User ${currentUser?.uid} rated profile ${profileUserId} with ${rating} stars.`);
+    toast({
+      title: "Rating Submitted (Mock)",
+      description: `You submitted a rating of ${rating} stars for ${profileData.companyName}.`,
+    });
+  };
+
+
   return (
     <div className="container mx-auto p-4 md:p-8 max-w-4xl">
       <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -181,16 +185,19 @@ const BusinessProfilePage = () => {
                 </div>
             </div>
             <div className="flex flex-col items-center md:items-end gap-2 ml-auto mt-4 md:mt-0 w-full md:w-auto">
-                 {profileData.averageRating && profileData.ratingCount && (
-                     <div className="text-center md:text-right">
-                        <p className="text-sm text-muted-foreground">Average Rating</p>
-                        <div className="flex items-center gap-1 justify-center md:justify-end">
-                            <StarDisplay rating={profileData.averageRating} size="h-5 w-5" />
-                            <span className="text-lg font-semibold text-primary ml-1">{profileData.averageRating.toFixed(1)}</span>
-                        </div>
-                        <p className="text-xs text-muted-foreground">({profileData.ratingCount} ratings)</p>
-                     </div>
-                 )}
+                 {/* Always render the average rating section */}
+                 <div className="text-center md:text-right">
+                    <p className="text-sm text-muted-foreground">Average Rating</p>
+                    <div className="flex items-center gap-1 justify-center md:justify-end">
+                        <StarDisplay rating={profileData.averageRating} size="h-5 w-5" />
+                        <span className="text-lg font-semibold text-primary ml-1">
+                            {profileData.averageRating !== undefined ? profileData.averageRating.toFixed(1) : 'N/A'}
+                        </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                        ({profileData.ratingCount !== undefined ? profileData.ratingCount : '0'} ratings)
+                    </p>
+                 </div>
                  {currentUser && !isOwnProfile && (
                     <ConnectionButton
                       targetUserId={profileData.userId}
@@ -279,12 +286,12 @@ const BusinessProfilePage = () => {
 
            <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {profileData.companyName}</h3>
-              {isLoadingStatus ? (
+              {isLoadingStatus && !isOwnProfile ? ( // Show loading only if connection status is relevant and loading
                   <div className="flex items-center justify-center p-6">
                       <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
                       <p className="text-muted-foreground">Checking connection status...</p>
                   </div>
-              ) : statusError ? (
+              ) : statusError && !isOwnProfile ? ( // Show error only if connection status is relevant and errored
                    <div className="flex items-center justify-center p-6 text-destructive gap-2">
                       <AlertTriangle className="h-5 w-5" />
                       <p>Could not load connection status.</p>
@@ -306,3 +313,5 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
+
+```
