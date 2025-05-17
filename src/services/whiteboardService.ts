@@ -21,22 +21,22 @@ service cloud.firestore {
   match /databases/{database}/documents {
     // ... your other rules ...
 
-    match /whiteboardAnnotations/{docId} { // Using docId as wildcard name for clarity
+    match /whiteboardAnnotations/{naicsCodeDocId} { // Use a distinct wildcard name
       allow read: if request.auth != null;
       // Allow write if user is authenticated AND the 'naicsCode' field
       // in the document data being written matches the document's ID.
       allow write: if request.auth != null
-                   && request.resource.data.naicsCode == docId;
+                   && request.resource.data.naicsCode == naicsCodeDocId; // Compare with the wildcard
     }
   }
 }
 */
 
 interface WhiteboardDocData {
-  naicsCode: string;
+  naicsCode: string; // This must match the document ID for the rule to pass
   shapes: Shape[];
   lastUpdatedAt: Timestamp;
-  lastUpdatedBy: string;
+  lastUpdatedBy: string; // UID of the user who last saved
 }
 
 export const getShapesForNaics = async (naicsCode: string): Promise<Shape[]> => {
@@ -51,28 +51,28 @@ export const getShapesForNaics = async (naicsCode: string): Promise<Shape[]> => 
     if (docSnap.exists()) {
       const data = docSnap.data() as WhiteboardDocData;
       console.log(`[Service] Shapes found for ${naicsCode}:`, data.shapes?.length || 0);
+      // Ensure shapes have default values for optional fields if missing, to prevent client errors
       return (data.shapes || []).map(s => ({
-        ...s,
-        id: s.id || `shape-${Math.random().toString(36).substr(2, 9)}`, // Ensure ID exists
-        type: s.type || 'rectangle', // Ensure type exists
-        text: typeof s.text === 'string' ? s.text : "",
+        id: s.id || `shape-${Math.random().toString(36).substr(2, 9)}`,
+        type: s.type || 'rectangle',
+        text: typeof s.text === 'string' ? s.text : "", // Ensure text is a string
         x: typeof s.x === 'number' ? s.x : 0,
         y: typeof s.y === 'number' ? s.y : 0,
         width: typeof s.width === 'number' ? s.width : 150,
         height: typeof s.height === 'number' ? s.height : 80,
-        parentId: typeof s.parentId === 'string' ? s.parentId : null,
-        isFixed: s.isFixed === true,
-        nodeType: s.nodeType,
-        code: s.code,
-        createdBy: s.createdBy,
-        lastEditedBy: s.lastEditedBy,
+        parentId: typeof s.parentId === 'string' || s.parentId === null ? s.parentId : null,
+        isFixed: s.isFixed === true, // Default to false if undefined
+        nodeType: s.nodeType, // Can be undefined
+        code: s.code, // Can be undefined
+        createdBy: s.createdBy, // Can be undefined
+        lastEditedBy: s.lastEditedBy, // Can be undefined
       }));
     }
-    console.log(`[Service] No whiteboard document found for ${naicsCode}.`);
+    console.log(`[Service] No whiteboard document found for ${naicsCode}. Returning empty array.`);
     return [];
   } catch (error) {
     console.error(`[Service] Error fetching shapes for NAICS ${naicsCode}:`, error);
-    return [];
+    return []; // Return empty on error to prevent UI crashes
   }
 };
 
@@ -80,20 +80,21 @@ export const saveShapesForNaics = async (naicsCode: string, shapesInput: Shape[]
   if (!naicsCode) throw new Error("NAICS code is required to save whiteboard shapes.");
   if (!userId) throw new Error("User ID is required to save whiteboard shapes.");
   
-  const shapesForSaving = shapesInput || []; // Ensure shapesInput is not null/undefined
+  const shapesForSaving = shapesInput || [];
 
+  // Clean shapes to ensure all required fields are present and correctly typed,
+  // and optional fields are handled (e.g., not undefined).
   const cleanedShapes: Shape[] = shapesForSaving.map(s => {
-    // Create a new object to avoid mutating the original shape objects from the state directly
-    const newShape: Partial<Shape> = {
-      id: s.id,
-      type: s.type,
+    const newShape: Shape = {
+      id: s.id || `shape-${Date.now()}-${Math.random().toString(16).slice(2)}`, // Ensure ID
+      type: s.type || 'rectangle',
       text: typeof s.text === 'string' ? s.text : "",
       x: typeof s.x === 'number' ? s.x : 0,
       y: typeof s.y === 'number' ? s.y : 0,
-      width: typeof s.width === 'number' ? s.width : 150, // Default user shape width
-      height: typeof s.height === 'number' ? s.height : 80, // Default user shape height
-      parentId: typeof s.parentId === 'string' || s.parentId === null ? s.parentId : null, // Ensure string or null
-      isFixed: s.isFixed === true, // Ensure boolean (false if undefined)
+      width: typeof s.width === 'number' && s.width > 0 ? s.width : 150,
+      height: typeof s.height === 'number' && s.height > 0 ? s.height : 80,
+      parentId: typeof s.parentId === 'string' ? s.parentId : null, // Ensure string or null
+      isFixed: s.isFixed === true, // Ensures boolean, defaults to false if undefined
     };
 
     // Conditionally add optional properties only if they have a meaningful value
@@ -102,44 +103,47 @@ export const saveShapesForNaics = async (naicsCode: string, shapesInput: Shape[]
     if (s.createdBy !== undefined) newShape.createdBy = s.createdBy;
     if (s.lastEditedBy !== undefined) newShape.lastEditedBy = s.lastEditedBy;
     
-    return newShape as Shape;
+    return newShape;
   });
 
-  // Data to be saved to Firestore. Crucially, dataToSave.naicsCode must match the docId.
+  // Data to be saved to Firestore.
+  // CRITICAL: dataToSave.naicsCode must match the `naicsCode` used for the document ID for security rules.
   const dataToSave: WhiteboardDocData = {
-    naicsCode: naicsCode, // This field is checked by the security rule
+    naicsCode: naicsCode, // This field is checked by your security rule
     shapes: cleanedShapes,
     lastUpdatedAt: serverTimestamp() as Timestamp,
     lastUpdatedBy: userId,
   };
 
-  const docRef = doc(db, WHITEBOARD_COLLECTION, naicsCode);
+  const docRef = doc(db, WHITEBOARD_COLLECTION, naicsCode); // Document ID is the naicsCode
 
   console.log(`[Service] Attempting to save shapes for NAICS: ${naicsCode} by user: ${userId}`);
   console.log(`[Service] Document Reference Path: ${docRef.path}`);
   // Log the specific fields checked by the rule and the document ID for easy comparison
-  console.log("[Service] Data for security rule check:", 
-    { 
-      rule_docId: naicsCode, // This is the {docId} in your rule match /whiteboardAnnotations/{docId}
-      rule_request_resource_data_naicsCode: dataToSave.naicsCode // This is request.resource.data.naicsCode
+  console.log(
+    "%c[Service] saveShapesForNaics - CRITICAL CHECK:",
+    "color: blue; font-weight: bold;",
+    {
+      docIdBeingWritten: naicsCode, // This is the actual document ID ({naicsCodeDocId} in rule)
+      naicsCodeFieldInData: dataToSave.naicsCode, // This is request.resource.data.naicsCode
+      userIdAttemptingWrite: userId,
+      numberOfShapesInPayload: dataToSave.shapes.length,
     }
   );
-   // For very detailed debugging, you can log the entire object:
-   // console.log("[Service] Full data object being sent to Firestore:", JSON.stringify(dataToSave, null, 2));
+  // console.log("[Service] Full data object being sent to Firestore:", JSON.stringify(dataToSave, null, 2));
 
 
   try {
+    // Using setDoc will create the document if it doesn't exist, or overwrite it if it does.
     await setDoc(docRef, dataToSave);
     console.log(`[Service] Shapes for NAICS ${naicsCode} saved successfully by ${userId}.`);
   } catch (error: any) {
-    console.error(`[Service] Error saving shapes for NAICS ${naicsCode} by user ${userId}:`, error);
-    console.error("[Service] Firestore error details:", error.code, error.message, error.details);
+    console.error(`[Service] Error saving shapes for NAICS ${naicsCode} by user ${userId}. Firestore error details:`, error.code, error.message, error.details);
     if (error.code === 'permission-denied' || (error.message && error.message.includes('PERMISSION_DENIED'))) {
-      console.error("[Service] Firestore permission denied. Verify rules and data consistency (naicsCode field in data must match document ID).");
+      console.error("[Service] Firestore permission denied. Verify rules and that 'naicsCode' field in data matches document ID used for write.");
     } else if (error.code === 'invalid-argument') {
       console.error("[Service] Firestore invalid argument. Data might be malformed (e.g., undefined values for non-optional fields). Data being sent:", dataToSave);
     }
     throw new Error(`Failed to save whiteboard shapes: ${error.message || 'Unknown Firestore error'}`);
   }
 };
-
