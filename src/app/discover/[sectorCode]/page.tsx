@@ -2,7 +2,7 @@
 // src/app/discover/[sectorCode]/page.tsx
 "use client";
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, FilterX, Star, Tag, Loader2, AlertTriangle, Info } from 'lucide-react';
@@ -25,12 +25,10 @@ import { detailedSectorsData, type SectorWithSubSectors, type SubSector, type In
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserFavoriteSectors, addFavoriteSector, removeFavoriteSector } from '@/services/userPreferenceService';
 import { useToast } from '@/hooks/use-toast';
-import Whiteboard from '@/components/whiteboard/Whiteboard'; // Import the Whiteboard component
+import Whiteboard from '@/components/whiteboard/Whiteboard';
 
-// Helper to find sector data
 const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
     if (!code) return null;
-    // Handle the combined manufacturing code specifically if needed, or ensure detailedSectorsData has "31-33"
     const sector = detailedSectorsData.find(s => s.code === code);
     return sector || null;
 };
@@ -52,11 +50,10 @@ const SectorDetailPage = () => {
     return getSectorDataByCode(sectorCode);
   }, [sectorCode]);
 
-  // Fetch user's favorite sectors
   const { data: favoriteSectorCodes = [], isLoading: isLoadingFavorites } = useQuery<string[]>({
     queryKey: ['userFavoriteSectors', user?.uid],
     queryFn: () => user ? getUserFavoriteSectors(user.uid) : Promise.resolve([]),
-    enabled: !!user, // Only fetch if user is logged in
+    enabled: !!user,
   });
 
   const isFavorited = useMemo(() => {
@@ -64,7 +61,6 @@ const SectorDetailPage = () => {
     return favoriteSectorCodes.includes(currentSectorData.code);
   }, [favoriteSectorCodes, currentSectorData]);
 
-  // Mutation for toggling favorite status
   const toggleFavoriteMutation = useMutation({
     mutationFn: async () => {
       if (!user || !currentSectorData || !currentSectorData.code) {
@@ -101,14 +97,14 @@ const SectorDetailPage = () => {
     isLoading: isLoadingPosts,
     error: postsError,
   } = useQuery<Post[]>({
-    queryKey: ['allPostsForSectorPage'], // Using a distinct query key
+    queryKey: ['allPostsForSectorPage'],
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 2, // 2 minutes
+    staleTime: 1000 * 60 * 2,
   });
 
   const handleSubSectorSelect = (subSectorCode: string | null) => {
     setSelectedSubSector(current => (current === subSectorCode ? null : subSectorCode));
-    setSelectedIndustry(null); // Reset industry when sub-sector changes
+    setSelectedIndustry(null);
   };
 
   const handleIndustrySelect = (industryCode: string | null) => {
@@ -120,6 +116,29 @@ const SectorDetailPage = () => {
     setSelectedIndustry(null);
   };
 
+  const handleWhiteboardNodeClick = useCallback((node: { code: string; type: string; text: string }) => {
+    console.log(`[SectorDetailPage] handleWhiteboardNodeClick called with node:`, node);
+    if (node.type === 'sector') {
+        console.log(`[SectorDetailPage] Clearing filters for sector ${node.code}`);
+        setSelectedSubSector(null);
+        setSelectedIndustry(null);
+        toast({ title: "Filter Applied", description: `Showing all for ${node.text}` });
+    } else if (node.type === 'subsector') {
+        console.log(`[SectorDetailPage] Setting subSector to ${node.code}, industry to null`);
+        setSelectedSubSector(node.code);
+        setSelectedIndustry(null);
+        toast({ title: "Filter Applied", description: `Showing posts for sub-sector: ${node.text}` });
+    } else if (node.type === 'industry') {
+        const parentSubSector = currentSectorData?.subSectors.find(ss => ss.industries.some(ind => ind.code === node.code));
+        const parentSubSectorCode = parentSubSector?.code || null;
+        console.log(`[SectorDetailPage] Setting subSector to ${parentSubSectorCode}, industry to ${node.code}`);
+        if (parentSubSectorCode) setSelectedSubSector(parentSubSectorCode);
+        setSelectedIndustry(node.code);
+        toast({ title: "Filter Applied", description: `Showing posts for industry: ${node.text}` });
+    }
+  }, [currentSectorData, setSelectedSubSector, setSelectedIndustry, toast]);
+
+
   const filteredPosts = useMemo(() => {
     if (!currentSectorData || isLoadingPosts) return [];
 
@@ -128,7 +147,7 @@ const SectorDetailPage = () => {
         const postNaics = post.naicsCode || "";
         
         let isInMainSector = false;
-        if (mainSectorCodeForFilter === "31-33") { // Special handling for Manufacturing
+        if (mainSectorCodeForFilter === "31-33") {
             isInMainSector = postNaics.startsWith("31") || postNaics.startsWith("32") || postNaics.startsWith("33");
         } else {
             isInMainSector = postNaics.startsWith(mainSectorCodeForFilter);
@@ -136,16 +155,16 @@ const SectorDetailPage = () => {
         return isInMainSector;
     });
 
-    if (selectedIndustry) { // If an industry is selected, filter by that industry's NAICS code
+    if (selectedIndustry) {
       return postsToFilter.filter(post => post.naicsCode === selectedIndustry);
     }
-    if (selectedSubSector) { // If a sub-sector is selected (but no industry), filter by that sub-sector
+    if (selectedSubSector) {
       return postsToFilter.filter(post =>
-        post.naicsCode === selectedSubSector || // Exact match (if post is tagged at sub-sector level)
-        (post.naicsCode && post.naicsCode.startsWith(selectedSubSector)) // Or starts with (for industries within)
+        post.naicsCode === selectedSubSector ||
+        (post.naicsCode && post.naicsCode.startsWith(selectedSubSector))
       );
     }
-    return postsToFilter; // If no sub-sector or industry selected, return all posts for the main sector
+    return postsToFilter;
   }, [currentSectorData, selectedSubSector, selectedIndustry, allPosts, isLoadingPosts]);
 
 
@@ -333,8 +352,10 @@ const SectorDetailPage = () => {
             </CardContent>
           </Card>
 
-          {/* Whiteboard Section - Pass currentSectorData */}
-          <Whiteboard sectorData={currentSectorData} />
+          <Whiteboard
+            onNodeClick={handleWhiteboardNodeClick}
+            sectorData={currentSectorData}
+          />
         </div>
       </div>
     </div>
@@ -342,3 +363,4 @@ const SectorDetailPage = () => {
 };
 
 export default SectorDetailPage;
+

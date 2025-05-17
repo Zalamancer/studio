@@ -19,123 +19,133 @@ interface Shape {
   parentId: string | null;
   isFixed?: boolean;
   nodeType?: 'sector' | 'subsector' | 'industry';
+  code?: string; // NAICS code
 }
 
 interface WhiteboardProps {
   sectorData?: SectorWithSubSectors | null;
+  onNodeClick?: (node: { code: string; type: string; text: string }) => void;
 }
 
 const NODE_WIDTH = 180;
-const NODE_HEIGHT = 70; // Increased for better text visibility
-const HORIZONTAL_SPACING = 120; // Increased for more space between sub-sector blocks
-const VERTICAL_SPACING = 100;   // Space between sector and first level of sub-sectors
-const VERTICAL_SPACING_INDUSTRY_START = 50; // Space from sub-sector to its first industry
-const VERTICAL_SPACING_INDUSTRY_ITEM = 25;  // Space between vertically stacked industries
-const CANVAS_PADDING = 60; // Padding around the entire content on the canvas
+const NODE_HEIGHT = 70;
+const HORIZONTAL_SPACING = 120;
+const VERTICAL_SPACING = 100;
+const VERTICAL_SPACING_INDUSTRY_START = 50;
+const VERTICAL_SPACING_INDUSTRY_ITEM = 25;
+const CANVAS_PADDING = 60;
 
-const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
+const Whiteboard: React.FC<WhiteboardProps> = (props) => {
+  const { sectorData } = props;
   const [shapes, setShapes] = useState<Shape[]>([]);
   const [hoveredShapeId, setHoveredShapeId] = useState<string | null>(null);
-  const whiteboardViewportRef = useRef<HTMLDivElement>(null); // Renamed for clarity
-  const canvasRef = useRef<HTMLDivElement>(null); // New ref for the inner canvas
+  const whiteboardViewportRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const layoutNodes = useCallback(() => {
     if (!sectorData || !canvasRef.current) {
-      setShapes([]); // Clear shapes if no sector data
+      setShapes([]);
       if (canvasRef.current) {
         canvasRef.current.style.width = '100%';
-        canvasRef.current.style.height = '600px'; // Reset to min height
+        canvasRef.current.style.height = '600px';
       }
       return;
     }
 
     const newShapes: Shape[] = [];
     let maxContentX = 0;
-    let maxContentY = 0;
+    let maxContentY = CANVAS_PADDING; // Start Y with padding
 
-    // 1. Sector Node (initial Y, X will be adjusted later)
+    // 1. Sector Node
     const sectorId = `sector-${sectorData.code}`;
     const sectorShape: Shape = {
       id: sectorId,
       type: 'rectangle',
       text: `${sectorData.name} (${sectorData.code})`,
-      x: CANVAS_PADDING, // Temporary X
+      x: CANVAS_PADDING, // Temporary X, will be re-centered
       y: CANVAS_PADDING,
-      width: NODE_WIDTH + 40, // Sector node can be wider
+      width: NODE_WIDTH + 40,
       height: NODE_HEIGHT,
       parentId: null,
       isFixed: true,
       nodeType: 'sector',
+      code: sectorData.code,
     };
     newShapes.push(sectorShape);
     maxContentY = Math.max(maxContentY, sectorShape.y + sectorShape.height);
-    maxContentX = Math.max(maxContentX, sectorShape.x + sectorShape.width);
-
 
     // 2. Sub-sectors and Industries
-    let currentSubSectorX = CANVAS_PADDING;
+    let currentGlobalXForSubSector = CANVAS_PADDING;
     const subSectorY = sectorShape.y + sectorShape.height + VERTICAL_SPACING;
 
     const subSectors = sectorData.subSectors || [];
-    subSectors.forEach((sub) => {
-      const subSectorId = `subsector-${sub.code}-${newShapes.length}`; // Ensure unique ID
+    let totalSubSectorsBlockWidth = 0;
+
+    subSectors.forEach((sub, subIndex) => {
+      let subSectorBlockWidth = NODE_WIDTH; // Width of this sub-sector and its industries
+
+      const subSectorId = `subsector-${sub.code}-${subIndex}`;
       const subSectorShape: Shape = {
         id: subSectorId,
         type: 'rectangle',
         text: `${sub.name} (${sub.code})`,
-        x: currentSubSectorX,
+        x: currentGlobalXForSubSector,
         y: subSectorY,
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
         parentId: sectorId,
         isFixed: true,
         nodeType: 'subsector',
+        code: sub.code,
       };
       newShapes.push(subSectorShape);
       maxContentY = Math.max(maxContentY, subSectorShape.y + subSectorShape.height);
 
-      let currentIndustryY = subSectorShape.y + NODE_HEIGHT + VERTICAL_SPACING_INDUSTRY_START;
+      let currentIndustryY = subSectorShape.y + subSectorShape.height + VERTICAL_SPACING_INDUSTRY_START;
       const industries = sub.industries || [];
-      industries.forEach((ind) => {
-        const industryId = `industry-${ind.code}-${subSectorId}-${newShapes.length}`;
+      industries.forEach((ind, indIndex) => {
+        const industryId = `industry-${ind.code}-${subSectorId}-${indIndex}`;
         const industryShape: Shape = {
           id: industryId,
           type: 'rectangle',
           text: `${ind.name} (${ind.code})`,
-          x: subSectorShape.x + (NODE_WIDTH / 2) - (NODE_WIDTH / 2), // Centered under sub-sector
+          x: subSectorShape.x, // Centered under sub-sector
           y: currentIndustryY,
           width: NODE_WIDTH,
           height: NODE_HEIGHT,
           parentId: subSectorId,
           isFixed: true,
           nodeType: 'industry',
+          code: ind.code,
         };
         newShapes.push(industryShape);
         currentIndustryY += NODE_HEIGHT + VERTICAL_SPACING_INDUSTRY_ITEM;
         maxContentY = Math.max(maxContentY, industryShape.y + industryShape.height);
       });
-      currentSubSectorX += NODE_WIDTH + HORIZONTAL_SPACING;
+      
+      totalSubSectorsBlockWidth = currentGlobalXForSubSector + subSectorBlockWidth;
+      currentGlobalXForSubSector += subSectorBlockWidth + HORIZONTAL_SPACING;
     });
-    maxContentX = Math.max(maxContentX, currentSubSectorX - (subSectors.length > 0 ? HORIZONTAL_SPACING : 0));
 
-
-    // 3. Re-center Sector Node based on calculated content width of sub-sectors
-    const subSectorsTotalWidth = currentSubSectorX - CANVAS_PADDING - (subSectors.length > 0 ? HORIZONTAL_SPACING : 0);
-    sectorShape.x = CANVAS_PADDING + (subSectorsTotalWidth / 2) - (sectorShape.width / 2);
+    if (subSectors.length > 0) {
+      totalSubSectorsBlockWidth -= HORIZONTAL_SPACING; // Remove last spacing
+    } else {
+      totalSubSectorsBlockWidth = sectorShape.width;
+    }
+    
+    // Center the main sector node above the sub-sector block
+    sectorShape.x = CANVAS_PADDING + (totalSubSectorsBlockWidth / 2) - (sectorShape.width / 2);
     sectorShape.x = Math.max(CANVAS_PADDING, sectorShape.x); // Ensure it doesn't go left of padding
-    maxContentX = Math.max(maxContentX, sectorShape.x + sectorShape.width);
 
-
+    maxContentX = Math.max(CANVAS_PADDING + totalSubSectorsBlockWidth, sectorShape.x + sectorShape.width);
+    
     setShapes(newShapes);
 
-    // 4. Set Canvas Dimensions
     if (canvasRef.current) {
       canvasRef.current.style.width = `${maxContentX + CANVAS_PADDING}px`;
       canvasRef.current.style.height = `${Math.max(600, maxContentY + CANVAS_PADDING)}px`;
     }
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sectorData]); // Removed whiteboardViewportRef.current?.offsetWidth from deps as it caused loops
+  }, [sectorData]);
 
   useEffect(() => {
     layoutNodes();
@@ -145,7 +155,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
 
 
   const addShape = (type: 'rectangle' | 'circle', parentId: string | null = null, isSister = false) => {
-    if (sectorData) return; // Don't allow adding shapes if sectorData is present
+    if (sectorData) return;
     const newId = `shape-${Date.now()}`;
     let newX = 50;
     let newY = 50;
@@ -172,16 +182,17 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
 
     setShapes(prevShapes => [
       ...prevShapes,
-      { id: newId, type, text: 'New Shape', x: newX, y: newY, width: NODE_WIDTH, height: NODE_HEIGHT, parentId: newParentId },
+      { id: newId, type, text: 'New Shape', x: newX, y: newY, width: NODE_WIDTH, height: NODE_HEIGHT, parentId: newParentId, code: `user-${newId}` },
     ]);
   };
 
   const updateShapeText = (id: string, text: string) => {
+    if (sectorData) return;
     setShapes(prevShapes => prevShapes.map(shape => (shape.id === id ? { ...shape, text } : shape)));
   };
 
   const deleteShape = (idToDelete: string) => {
-    if (sectorData) return; // Don't allow deleting shapes if sectorData is present
+    if (sectorData) return;
     setShapes(prevShapes => {
       const shapesToDelete = new Set<string>([idToDelete]);
       let currentLevelIds = [idToDelete];
@@ -201,7 +212,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
 
   const clearAllUserShapes = () => {
     if (sectorData) return;
-    setShapes([]); // Clear all shapes if not in sector display mode
+    setShapes([]);
   };
 
   const getShapeCenter = (shape: Shape, side: 'top' | 'bottom' | 'left' | 'right') => {
@@ -222,13 +233,13 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
         {!sectorData && (
             <div className="flex items-center gap-2">
               <Button variant="outline" size="sm" onClick={() => addShape('rectangle')}>
-                <Square className="h-4 w-4 mr-1" /> Add Root Rectangle
+                <Square className="h-4 w-4 mr-1" /> Add Root Rect
               </Button>
               <Button variant="outline" size="sm" onClick={() => addShape('circle')}>
-                <CircleIcon className="h-4 w-4 mr-1" /> Add Root Circle
+                <CircleIcon className="h-4 w-4 mr-1" /> Add Root Circ
               </Button>
               <Button variant="outline" size="sm" onClick={clearAllUserShapes} className="text-destructive hover:text-destructive">
-                <Eraser className="h-4 w-4 mr-1" /> Clear Shapes
+                <Eraser className="h-4 w-4 mr-1" /> Clear All
               </Button>
             </div>
         )}
@@ -237,9 +248,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
         <div
           ref={whiteboardViewportRef}
           className="relative w-full border rounded-md bg-muted/20 overflow-auto"
-          style={{ minHeight: '600px', maxHeight: '80vh' }} // Added maxHeight for viewport
+          style={{ minHeight: '600px', maxHeight: '80vh' }}
         >
-            <div ref={canvasRef} className="relative"> {/* Inner Canvas for shapes and SVG */}
+            <div ref={canvasRef} className="relative">
                 <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 0 }}>
                     {shapes.map(shape => {
                     if (shape.parentId) {
@@ -249,11 +260,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
                         const childPoint = getShapeCenter(shape, 'top');
                         
                         const verticalDistance = childPoint.y - parentPoint.y;
-                        const curveFactor = Math.max(20, verticalDistance / 3.5); // Adjusted curve factor
-                        const controlPoint1Y = parentPoint.y + curveFactor;
-                        const controlPoint2Y = childPoint.y - curveFactor;
-
-                        const pathData = `M ${parentPoint.x} ${parentPoint.y} C ${parentPoint.x} ${controlPoint1Y}, ${childPoint.x} ${controlPoint2Y}, ${childPoint.x} ${childPoint.y}`;
+                        const curveFactor = Math.max(20, verticalDistance / 3.5);
+                        const pathData = `M ${parentPoint.x} ${parentPoint.y} C ${parentPoint.x} ${parentPoint.y + curveFactor}, ${childPoint.x} ${childPoint.y - curveFactor}, ${childPoint.x} ${childPoint.y}`;
                         
                         return (
                             <path
@@ -273,16 +281,32 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
                 {shapes.map((shape) => (
                     <div
                     key={shape.id}
+                    onClick={() => {
+                      console.log('[Whiteboard] Shape div clicked. Shape ID:', shape.id, 'IsFixed:', shape.isFixed, 'Has onNodeClick prop:', !!props.onNodeClick);
+                      if (shape.isFixed && props.onNodeClick && shape.code && shape.nodeType) {
+                        console.log('[Whiteboard] Calling onNodeClick with:', { code: shape.code, type: shape.nodeType, text: shape.text });
+                        props.onNodeClick({
+                          code: shape.code,
+                          type: shape.nodeType as string, // Ensure type consistency
+                          text: shape.text,
+                        });
+                      } else if (shape.isFixed) {
+                        console.log('[Whiteboard] onNodeClick not called for fixed shape. Conditions:', {
+                          isFixed: shape.isFixed,
+                          hasOnNodeClick: !!props.onNodeClick,
+                          code: shape.code,
+                          nodeType: shape.nodeType,
+                        });
+                      }
+                    }}
                     className={cn(
-                        "absolute flex flex-col items-center justify-center p-2 text-center text-xs", // Base style for all shapes
-                        shape.isFixed 
-                        ? cn( 
-                            "border-2 rounded-md shadow-lg select-none",
-                            shape.nodeType === 'sector' && "bg-primary text-primary-foreground font-semibold border-primary-foreground/50",
-                            shape.nodeType === 'subsector' && "bg-secondary text-secondary-foreground border-secondary-foreground/40",
-                            shape.nodeType === 'industry' && "bg-card text-card-foreground border-border" // Changed industry to use card style
-                            )
-                        : "border-2 border-primary bg-background/90 cursor-grab shadow-md rounded-md", 
+                        "absolute flex flex-col items-center justify-center p-2 text-center text-xs border-2 shadow-md rounded-md",
+                        shape.isFixed && "cursor-pointer select-none",
+                        !shape.isFixed && "cursor-grab",
+                        shape.nodeType === 'sector' && "bg-primary text-primary-foreground font-semibold border-primary-foreground/50 shadow-xl",
+                        shape.nodeType === 'subsector' && "bg-secondary text-secondary-foreground border-secondary-foreground/40 shadow-lg",
+                        shape.nodeType === 'industry' && "bg-card text-card-foreground border-border",
+                        !shape.isFixed && "bg-background/90 border-primary",
                         shape.type === 'circle' && !shape.isFixed && "!rounded-full"
                     )}
                     style={{
@@ -299,7 +323,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
                         <span className="px-1 break-words">{shape.text}</span>
                     ) : (
                         <>
-                        <textarea // Changed from Textarea to textarea for direct DOM manipulation if needed, but ShadCN Textarea is fine
+                        <textarea
                             value={shape.text}
                             onChange={(e) => updateShapeText(shape.id, e.target.value)}
                             placeholder={shape.type === 'rectangle' ? 'Type...' : 'Type...'}
@@ -310,18 +334,18 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
                             variant="ghost"
                             size="icon"
                             className="absolute -top-2 -right-2 h-5 w-5 text-destructive/70 hover:text-destructive hover:bg-destructive/10 rounded-full p-0.5"
-                            onClick={() => deleteShape(shape.id)}
+                            onClick={(e) => { e.stopPropagation(); deleteShape(shape.id);}} // Stop propagation
                             >
                             <Trash2 className="h-3 w-3" />
                             <span className="sr-only">Delete shape</span>
                         </Button>
                         {hoveredShapeId === shape.id && (
                             <div className="absolute -bottom-3 left-1/2 -translate-x-1/2 flex gap-1 p-0.5 bg-background/80 border rounded-md shadow-sm">
-                            <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-primary/80 hover:text-primary" onClick={() => addShape('rectangle', shape.id)}>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-primary/80 hover:text-primary" onClick={(e) => {e.stopPropagation(); addShape('rectangle', shape.id)}}>
                                 <PlusCircle className="h-3.5 w-3.5" />
                                 <span className="sr-only">Add Child</span>
                             </Button>
-                            <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-primary/80 hover:text-primary" onClick={() => addShape('rectangle', shape.id, true)}>
+                            <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-primary/80 hover:text-primary" onClick={(e) => {e.stopPropagation(); addShape('rectangle', shape.id, true)}}>
                                 <GitFork className="h-3.5 w-3.5" />
                                 <span className="sr-only">Add Sister</span>
                             </Button>
@@ -339,3 +363,4 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData }) => {
 };
 
 export default Whiteboard;
+
