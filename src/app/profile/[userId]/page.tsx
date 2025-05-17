@@ -13,6 +13,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea'; // Import Textarea
+import { Label } from '@/components/ui/label'; // Import Label
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery } from '@tanstack/react-query';
 import { getConnectionStatus } from '@/services/connectionService';
@@ -366,12 +367,12 @@ const BusinessProfilePage = () => {
 
            <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {profileData.companyName}</h3>
-              {isLoadingStatus && !isOwnProfile ? ( 
+              {isLoadingStatus && !isOwnProfile ? (
                   <div className="flex items-center justify-center p-6">
                       <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
                       <p className="text-muted-foreground">Checking connection status...</p>
                   </div>
-              ) : statusError && !isOwnProfile ? ( 
+              ) : statusError && !isOwnProfile ? (
                    <div className="flex items-center justify-center p-6 text-destructive gap-2 border rounded-lg bg-destructive/10">
                       <AlertTriangle className="h-5 w-5" />
                       <p>Could not load connection status.</p>
