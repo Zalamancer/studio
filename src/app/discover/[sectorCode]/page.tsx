@@ -27,7 +27,7 @@ import { getUserFavoriteSectors, addFavoriteSector, removeFavoriteSector } from 
 import { useToast } from '@/hooks/use-toast';
 import Whiteboard from '@/components/whiteboard/Whiteboard';
 
-interface FocusNodeDetails {
+export interface FocusNodeDetails { // Ensure this is exported or defined where Whiteboard can see it if it's a direct prop type
   code: string;
   type: 'sector' | 'subsector' | 'industry';
   name: string;
@@ -35,6 +35,11 @@ interface FocusNodeDetails {
 
 const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
     if (!code) return null;
+    // For "31-33", find the specific Manufacturing sector object
+    if (code === "31-33") {
+        return detailedSectorsData.find(s => s.code === "31-33") || null;
+    }
+    // For other codes, attempt a direct match
     const sector = detailedSectorsData.find(s => s.code === code);
     return sector || null;
 };
@@ -50,20 +55,25 @@ const SectorDetailPage = () => {
 
   const [selectedSubSector, setSelectedSubSector] = useState<string | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
-  const [focusNodeDetails, setFocusNodeDetails] = useState<FocusNodeDetails | null>(null);
-
+  
+  // Initialize focusNodeDetails with the main sector of the page
   const currentSectorData = useMemo(() => {
     if (!sectorCode) return null;
     return getSectorDataByCode(sectorCode);
   }, [sectorCode]);
+
+  const [focusNodeDetails, setFocusNodeDetails] = useState<FocusNodeDetails | null>(null);
 
   useEffect(() => {
     if (currentSectorData) {
       setFocusNodeDetails({
         code: currentSectorData.code,
         type: 'sector',
-        name: currentSectorData.name,
+        name: currentSectorData.name, // Use the clean name from currentSectorData
       });
+      // Reset filters when the main sector page loads or changes
+      setSelectedSubSector(null);
+      setSelectedIndustry(null);
     } else {
       setFocusNodeDetails(null);
     }
@@ -117,21 +127,46 @@ const SectorDetailPage = () => {
     isLoading: isLoadingPosts,
     error: postsError,
   } = useQuery<Post[]>({
-    queryKey: ['allPostsForSectorPage'],
+    queryKey: ['allPostsForSectorPage'], // Consider more specific query key if data varies by sector
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 2,
+    staleTime: 1000 * 60 * 2, // 2 minutes
   });
 
   const handleSubSectorSelect = (subSectorCode: string | null) => {
-    setSelectedSubSector(current => (current === subSectorCode ? null : subSectorCode));
-    setSelectedIndustry(null);
-    // Optionally update whiteboard focus if filters drive whiteboard
-    // For now, whiteboard drives filters
+    const newSubSectorCode = selectedSubSector === subSectorCode ? null : subSectorCode;
+    setSelectedSubSector(newSubSectorCode);
+    setSelectedIndustry(null); // Reset industry filter when sub-sector changes
+    
+    // Update whiteboard focus
+    if (newSubSectorCode && currentSectorData) {
+      const sub = currentSectorData.subSectors.find(s => s.code === newSubSectorCode);
+      if (sub) {
+        setFocusNodeDetails({ code: sub.code, type: 'subsector', name: sub.name });
+      }
+    } else if (currentSectorData) { // If sub-sector is cleared, focus back on main sector
+      setFocusNodeDetails({ code: currentSectorData.code, type: 'sector', name: currentSectorData.name });
+    }
   };
-
+  
   const handleIndustrySelect = (industryCode: string | null) => {
-    setSelectedIndustry(current => (current === industryCode ? null : industryCode));
-    // Optionally update whiteboard focus
+    const newIndustryCode = selectedIndustry === industryCode ? null : industryCode;
+    setSelectedIndustry(newIndustryCode);
+
+    // Update whiteboard focus
+    if (newIndustryCode && currentSectorData && selectedSubSector) {
+        const sub = currentSectorData.subSectors.find(s => s.code === selectedSubSector);
+        const ind = sub?.industries.find(i => i.code === newIndustryCode);
+        if (ind) {
+            setFocusNodeDetails({ code: ind.code, type: 'industry', name: ind.name });
+        }
+    } else if (selectedSubSector && currentSectorData) { // If industry is cleared, focus on selected sub-sector
+        const sub = currentSectorData.subSectors.find(s => s.code === selectedSubSector);
+        if (sub) {
+            setFocusNodeDetails({ code: sub.code, type: 'subsector', name: sub.name });
+        }
+    } else if (currentSectorData) { // Fallback to main sector
+        setFocusNodeDetails({ code: currentSectorData.code, type: 'sector', name: currentSectorData.name });
+    }
   };
 
   const clearFilters = () => {
@@ -142,29 +177,54 @@ const SectorDetailPage = () => {
     }
   };
 
-  const handleWhiteboardNodeClick = useCallback((node: { code: string; type: string; text: string }) => {
-    console.log(`[SectorDetailPage] Whiteboard node clicked:`, node);
+  const handleWhiteboardNodeClick = useCallback((clickedNodeInfo: { code: string; type: 'sector' | 'subsector' | 'industry'; text: string }) => {
+    console.log(`[SectorDetailPage] Whiteboard node clicked. Raw text from WB: "${clickedNodeInfo.text}", Code: ${clickedNodeInfo.code}, Type: ${clickedNodeInfo.type}`);
     
-    const nodeType = node.type as 'sector' | 'subsector' | 'industry'; // Cast for type safety
+    let originalName = clickedNodeInfo.text; // Fallback
+    let nodeType = clickedNodeInfo.type;
 
-    setFocusNodeDetails({ code: node.code, type: nodeType, name: node.text });
+    if (currentSectorData) {
+        if (nodeType === 'sector' && currentSectorData.code === clickedNodeInfo.code) {
+            originalName = currentSectorData.name;
+        } else if (nodeType === 'subsector') {
+            const sub = currentSectorData.subSectors.find(s => s.code === clickedNodeInfo.code);
+            if (sub) originalName = sub.name;
+        } else if (nodeType === 'industry') {
+            let foundIndustry = null;
+            for (const sub of currentSectorData.subSectors) {
+                const industry = sub.industries.find(ind => ind.code === clickedNodeInfo.code);
+                if (industry) {
+                    foundIndustry = industry;
+                    break;
+                }
+            }
+            if (foundIndustry) originalName = foundIndustry.name;
+        }
+    }
+    
+    console.log(`[SectorDetailPage] Setting focusNodeDetails. Name: "${originalName}", Code: ${clickedNodeInfo.code}, Type: ${nodeType}`);
+    setFocusNodeDetails({ code: clickedNodeInfo.code, type: nodeType, name: originalName });
 
     if (nodeType === 'sector') {
         setSelectedSubSector(null);
         setSelectedIndustry(null);
-        toast({ title: "Filter Applied", description: `Showing all for ${node.text}` });
+        toast({ title: "Filter Applied", description: `Showing all for ${originalName}` });
     } else if (nodeType === 'subsector') {
-        setSelectedSubSector(node.code);
+        setSelectedSubSector(clickedNodeInfo.code);
         setSelectedIndustry(null);
-        toast({ title: "Filter Applied", description: `Showing posts for sub-sector: ${node.text}` });
+        toast({ title: "Filter Applied", description: `Showing posts for sub-sector: ${originalName}` });
     } else if (nodeType === 'industry') {
-        const parentSubSector = currentSectorData?.subSectors.find(ss => ss.industries.some(ind => ind.code === node.code));
+        const parentSubSector = currentSectorData?.subSectors.find(ss => ss.industries.some(ind => ind.code === clickedNodeInfo.code));
         const parentSubSectorCode = parentSubSector?.code || null;
-        if (parentSubSectorCode) setSelectedSubSector(parentSubSectorCode);
-        setSelectedIndustry(node.code);
-        toast({ title: "Filter Applied", description: `Showing posts for industry: ${node.text}` });
+        // Ensure parent sub-sector filter is also active for consistency
+        if (parentSubSectorCode) {
+            setSelectedSubSector(parentSubSectorCode);
+        }
+        setSelectedIndustry(clickedNodeInfo.code);
+        toast({ title: "Filter Applied", description: `Showing posts for industry: ${originalName}` });
     }
-  }, [currentSectorData, toast]);
+  }, [currentSectorData, toast, setSelectedSubSector, setSelectedIndustry]);
+
 
   const handleResetWhiteboardFocus = () => {
     if (currentSectorData) {
@@ -173,7 +233,7 @@ const SectorDetailPage = () => {
         type: 'sector',
         name: currentSectorData.name,
       });
-      // Optionally reset accordion filters too
+      // Optionally reset accordion filters too if desired, though whiteboard clicks already manage this.
       // setSelectedSubSector(null);
       // setSelectedIndustry(null);
       toast({ title: "Whiteboard View Reset", description: `Showing full map for ${currentSectorData.name}` });
@@ -189,7 +249,7 @@ const SectorDetailPage = () => {
         const postNaics = post.naicsCode || "";
         
         let isInMainSector = false;
-        if (mainSectorCodeForFilter === "31-33") {
+        if (mainSectorCodeForFilter === "31-33") { // Special handling for Manufacturing
             isInMainSector = postNaics.startsWith("31") || postNaics.startsWith("32") || postNaics.startsWith("33");
         } else {
             isInMainSector = postNaics.startsWith(mainSectorCodeForFilter);
@@ -198,9 +258,13 @@ const SectorDetailPage = () => {
     });
 
     if (selectedIndustry) {
+      // If an industry is selected, filter by exact industry NAICS code
       return postsToFilter.filter(post => post.naicsCode === selectedIndustry);
     }
     if (selectedSubSector) {
+      // If a sub-sector is selected (but no industry), filter by posts whose NAICS code
+      // either exactly matches the sub-sector code OR starts with the sub-sector code
+      // (meaning the post is in an industry within that sub-sector)
       return postsToFilter.filter(post =>
         post.naicsCode === selectedSubSector || // Exact match for sub-sector code
         (post.naicsCode && currentSectorData.subSectors // Check if industry NAICS code belongs to the selected sub-sector
@@ -208,6 +272,7 @@ const SectorDetailPage = () => {
           ?.industries.some(ind => ind.code === post.naicsCode))
       );
     }
+    // If no sub-sector or industry is selected, return all posts belonging to the main sector
     return postsToFilter;
   }, [currentSectorData, selectedSubSector, selectedIndustry, allPosts, isLoadingPosts]);
 
@@ -279,7 +344,7 @@ const SectorDetailPage = () => {
                     )}
                     {isFavorited ? "Favorited" : "Favorite Sector"}
                 </Button>
-                {focusNodeDetails && focusNodeDetails.type !== 'sector' && (
+                {focusNodeDetails && focusNodeDetails.code !== currentSectorData.code && (
                     <Button
                         variant="outline"
                         size="sm"
@@ -311,7 +376,7 @@ const SectorDetailPage = () => {
                     </Button>
                 )}
                 {currentSectorData?.subSectors?.length > 0 ? (
-                  <Accordion type="single" collapsible className="w-full space-y-1.5">
+                  <Accordion type="single" collapsible className="w-full space-y-1.5" value={selectedSubSector ? `subsector-${selectedSubSector}` : undefined}>
                     {currentSectorData.subSectors.map((subsector) => (
                       <AccordionItem key={subsector.code} value={`subsector-${subsector.code}`}>
                         <AccordionTrigger
@@ -325,7 +390,7 @@ const SectorDetailPage = () => {
                         </AccordionTrigger>
                         <AccordionContent className="px-1 pt-2 pb-1 border-none">
                           {subsector.industries?.length > 0 && (
-                            <Accordion type="single" collapsible className="w-full space-y-1 pl-3 border-l-2 ml-2">
+                            <Accordion type="single" collapsible className="w-full space-y-1 pl-3 border-l-2 ml-2" value={selectedIndustry ? `industry-${selectedIndustry}` : undefined}>
                               {subsector.industries.map((industry) => (
                                 <AccordionItem key={industry.code} value={`industry-${industry.code}`} className="border-b-0">
                                   <AccordionTrigger
@@ -362,9 +427,12 @@ const SectorDetailPage = () => {
                 Posts in {focusNodeDetails?.name || currentSectorData.name}
               </CardTitle>
               <CardDescription>
-                {selectedIndustry ? `Showing posts related to industry NAICS ${selectedIndustry}.`
-                : selectedSubSector ? `Showing posts related to sub-sector NAICS ${selectedSubSector}.`
-                : `Showing all posts for ${currentSectorData.name}.`}
+                {selectedIndustry && currentSectorData.subSectors.flatMap(ss => ss.industries).find(ind => ind.code === selectedIndustry)
+                    ? `Showing posts related to industry: ${currentSectorData.subSectors.flatMap(ss => ss.industries).find(ind => ind.code === selectedIndustry)?.name} (${selectedIndustry})`
+                    : selectedSubSector && currentSectorData.subSectors.find(ss => ss.code === selectedSubSector)
+                    ? `Showing posts related to sub-sector: ${currentSectorData.subSectors.find(ss => ss.code === selectedSubSector)?.name} (${selectedSubSector})`
+                    : `Showing all posts for ${currentSectorData.name}`
+                }
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -410,7 +478,6 @@ const SectorDetailPage = () => {
             sectorData={currentSectorData}
             focusNodeDetails={focusNodeDetails}
             onNodeClick={handleWhiteboardNodeClick}
-            // onFocusReset={handleResetWhiteboardFocus} // This would go here if button was on whiteboard
           />
         </div>
       </div>
