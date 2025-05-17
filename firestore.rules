@@ -12,6 +12,15 @@ service cloud.firestore {
         allow create: if request.auth != null;
         // Only the user who created the comment can update or delete it
         allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+
+        // Rules for subcomments nested under comments
+        match /subcomments/{subCommentId} {
+          allow read: if request.auth != null; // Allow any authenticated user to read subcomments
+          allow create: if request.auth != null; // Allow any authenticated user to create subcomments
+                                              // (ensure userId in data is set to request.auth.uid by client)
+          // Only the user who created the subcomment can update or delete it
+          allow update, delete: if request.auth != null && request.auth.uid == resource.data.userId;
+        }
       }
     }
 
@@ -31,7 +40,7 @@ service cloud.firestore {
         allow create: if request.auth != null
                     && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid])
                     && request.resource.data.senderId == request.auth.uid;
-        allow update, delete: if false; // Ensuring this is consistently false for safety
+        allow update, delete: if false;
       }
     }
 
@@ -51,26 +60,21 @@ service cloud.firestore {
     }
 
     // Whiteboard Annotations (for shared whiteboards per NAICS code)
-    match /whiteboardAnnotations/{naicsCode} {
+    match /whiteboardAnnotations/{naicsDocId} {
       allow read: if request.auth != null;
       allow write: if request.auth != null
-                   && request.resource.data.naicsCode == naicsCode;
+                   && request.resource.data.naicsCode == naicsDocId;
     }
 
-    // Notifications
+    // Notifications collection
     match /notifications/{notificationId} {
-      // Allow a user to read notifications intended for them
       allow read: if request.auth != null && resource.data.userId == request.auth.uid;
-      // Allow any authenticated user to create a notification
-      // (senderId will be set by the app, userId is the recipient)
       allow create: if request.auth != null;
-      // Allow a user to update (e.g., mark as read) their own notifications
       allow update: if request.auth != null && resource.data.userId == request.auth.uid;
-      // Typically, users don't delete notifications directly, but you can allow it if needed:
-      allow delete: if request.auth != null && resource.data.userId == request.auth.uid; // Or if false;
+      allow delete: if request.auth != null && resource.data.userId == request.auth.uid;
     }
 
-    // Fallback rule: Deny all other access
+    // Fallback rule: Deny by default for any other path
     match /{document=**} {
       allow read, write: if false;
     }
