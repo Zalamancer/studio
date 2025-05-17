@@ -25,6 +25,7 @@ import { detailedSectorsData, type SectorWithSubSectors, type SubSector, type In
 import { useAuth } from '@/contexts/AuthContext';
 import { getUserFavoriteSectors, addFavoriteSector, removeFavoriteSector } from '@/services/userPreferenceService';
 import { useToast } from '@/hooks/use-toast';
+import Whiteboard from '@/components/whiteboard/Whiteboard'; // Import the Whiteboard component
 
 // Helper to find sector data
 const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
@@ -280,7 +281,7 @@ const SectorDetailPage = () => {
           </Card>
         </div>
 
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-6"> {/* Added space-y-6 for spacing */}
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">
@@ -332,6 +333,9 @@ const SectorDetailPage = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Whiteboard Section */}
+          <Whiteboard />
         </div>
       </div>
     </div>
