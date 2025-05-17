@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FilterX, Star, Loader2, AlertTriangle, Info, Eye } from 'lucide-react'; // Added Eye
+import { ArrowLeft, FilterX, Star, Loader2, AlertTriangle, Info, Eye, Tag } from 'lucide-react'; // Added Eye and Tag
 import {
   Accordion,
   AccordionContent,
@@ -419,3 +419,4 @@ const SectorDetailPage = () => {
 };
 
 export default SectorDetailPage;
+
