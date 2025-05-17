@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FilterX, Star, Tag, Loader2, AlertTriangle, Info } from 'lucide-react';
+import { ArrowLeft, FilterX, Star, Loader2, AlertTriangle, Info, Eye } from 'lucide-react'; // Added Eye
 import {
   Accordion,
   AccordionContent,
@@ -27,6 +27,12 @@ import { getUserFavoriteSectors, addFavoriteSector, removeFavoriteSector } from 
 import { useToast } from '@/hooks/use-toast';
 import Whiteboard from '@/components/whiteboard/Whiteboard';
 
+interface FocusNodeDetails {
+  code: string;
+  type: 'sector' | 'subsector' | 'industry';
+  name: string;
+}
+
 const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
     if (!code) return null;
     const sector = detailedSectorsData.find(s => s.code === code);
@@ -44,11 +50,25 @@ const SectorDetailPage = () => {
 
   const [selectedSubSector, setSelectedSubSector] = useState<string | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
+  const [focusNodeDetails, setFocusNodeDetails] = useState<FocusNodeDetails | null>(null);
 
   const currentSectorData = useMemo(() => {
     if (!sectorCode) return null;
     return getSectorDataByCode(sectorCode);
   }, [sectorCode]);
+
+  useEffect(() => {
+    if (currentSectorData) {
+      setFocusNodeDetails({
+        code: currentSectorData.code,
+        type: 'sector',
+        name: currentSectorData.name,
+      });
+    } else {
+      setFocusNodeDetails(null);
+    }
+  }, [currentSectorData]);
+
 
   const { data: favoriteSectorCodes = [], isLoading: isLoadingFavorites } = useQuery<string[]>({
     queryKey: ['userFavoriteSectors', user?.uid],
@@ -105,38 +125,60 @@ const SectorDetailPage = () => {
   const handleSubSectorSelect = (subSectorCode: string | null) => {
     setSelectedSubSector(current => (current === subSectorCode ? null : subSectorCode));
     setSelectedIndustry(null);
+    // Optionally update whiteboard focus if filters drive whiteboard
+    // For now, whiteboard drives filters
   };
 
   const handleIndustrySelect = (industryCode: string | null) => {
     setSelectedIndustry(current => (current === industryCode ? null : industryCode));
+    // Optionally update whiteboard focus
   };
 
   const clearFilters = () => {
     setSelectedSubSector(null);
     setSelectedIndustry(null);
+    if (currentSectorData) {
+      setFocusNodeDetails({ code: currentSectorData.code, type: 'sector', name: currentSectorData.name });
+    }
   };
 
   const handleWhiteboardNodeClick = useCallback((node: { code: string; type: string; text: string }) => {
-    console.log(`[SectorDetailPage] handleWhiteboardNodeClick called with node:`, node);
-    if (node.type === 'sector') {
-        console.log(`[SectorDetailPage] Clearing filters for sector ${node.code}`);
+    console.log(`[SectorDetailPage] Whiteboard node clicked:`, node);
+    
+    const nodeType = node.type as 'sector' | 'subsector' | 'industry'; // Cast for type safety
+
+    setFocusNodeDetails({ code: node.code, type: nodeType, name: node.text });
+
+    if (nodeType === 'sector') {
         setSelectedSubSector(null);
         setSelectedIndustry(null);
         toast({ title: "Filter Applied", description: `Showing all for ${node.text}` });
-    } else if (node.type === 'subsector') {
-        console.log(`[SectorDetailPage] Setting subSector to ${node.code}, industry to null`);
+    } else if (nodeType === 'subsector') {
         setSelectedSubSector(node.code);
         setSelectedIndustry(null);
         toast({ title: "Filter Applied", description: `Showing posts for sub-sector: ${node.text}` });
-    } else if (node.type === 'industry') {
+    } else if (nodeType === 'industry') {
         const parentSubSector = currentSectorData?.subSectors.find(ss => ss.industries.some(ind => ind.code === node.code));
         const parentSubSectorCode = parentSubSector?.code || null;
-        console.log(`[SectorDetailPage] Setting subSector to ${parentSubSectorCode}, industry to ${node.code}`);
         if (parentSubSectorCode) setSelectedSubSector(parentSubSectorCode);
         setSelectedIndustry(node.code);
         toast({ title: "Filter Applied", description: `Showing posts for industry: ${node.text}` });
     }
-  }, [currentSectorData, setSelectedSubSector, setSelectedIndustry, toast]);
+  }, [currentSectorData, toast]);
+
+  const handleResetWhiteboardFocus = () => {
+    if (currentSectorData) {
+      setFocusNodeDetails({
+        code: currentSectorData.code,
+        type: 'sector',
+        name: currentSectorData.name,
+      });
+      // Optionally reset accordion filters too
+      // setSelectedSubSector(null);
+      // setSelectedIndustry(null);
+      toast({ title: "Whiteboard View Reset", description: `Showing full map for ${currentSectorData.name}` });
+    }
+  };
 
 
   const filteredPosts = useMemo(() => {
@@ -160,8 +202,10 @@ const SectorDetailPage = () => {
     }
     if (selectedSubSector) {
       return postsToFilter.filter(post =>
-        post.naicsCode === selectedSubSector ||
-        (post.naicsCode && post.naicsCode.startsWith(selectedSubSector))
+        post.naicsCode === selectedSubSector || // Exact match for sub-sector code
+        (post.naicsCode && currentSectorData.subSectors // Check if industry NAICS code belongs to the selected sub-sector
+          .find(ss => ss.code === selectedSubSector)
+          ?.industries.some(ind => ind.code === post.naicsCode))
       );
     }
     return postsToFilter;
@@ -219,21 +263,33 @@ const SectorDetailPage = () => {
                 </h1>
                 <p className="text-md text-muted-foreground max-w-3xl">{currentSectorData.description || "Detailed description for this sector is being compiled."}</p>
             </div>
-            <Button
-                variant={isFavorited ? "default" : "outline"}
-                size="sm"
-                onClick={handleToggleFavorite}
-                className="mt-2 ml-4 flex-shrink-0"
-                disabled={!user || isLoadingFavorites || toggleFavoriteMutation.isPending}
-                aria-pressed={isFavorited}
-            >
-                {isLoadingFavorites || toggleFavoriteMutation.isPending ? (
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin"/>
-                ) : (
-                    <Star className={cn("h-4 w-4 mr-2", isFavorited && "fill-yellow-400 text-yellow-500")}/>
+             <div className="flex flex-col items-end gap-2 ml-4 flex-shrink-0">
+                <Button
+                    variant={isFavorited ? "default" : "outline"}
+                    size="sm"
+                    onClick={handleToggleFavorite}
+                    className="w-full"
+                    disabled={!user || isLoadingFavorites || toggleFavoriteMutation.isPending}
+                    aria-pressed={isFavorited}
+                >
+                    {isLoadingFavorites || toggleFavoriteMutation.isPending ? (
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin"/>
+                    ) : (
+                        <Star className={cn("h-4 w-4 mr-2", isFavorited && "fill-yellow-400 text-yellow-500")}/>
+                    )}
+                    {isFavorited ? "Favorited" : "Favorite Sector"}
+                </Button>
+                {focusNodeDetails && focusNodeDetails.type !== 'sector' && (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleResetWhiteboardFocus}
+                        className="w-full text-xs"
+                    >
+                        <Eye className="h-3 w-3 mr-1.5" /> View Full Sector Map
+                    </Button>
                 )}
-                {isFavorited ? "Favorited" : "Favorite Sector"}
-            </Button>
+            </div>
         </div>
       </div>
 
@@ -303,9 +359,7 @@ const SectorDetailPage = () => {
           <Card>
             <CardHeader>
               <CardTitle className="text-xl">
-                Posts in {selectedIndustry ? currentSectorData?.subSectors.flatMap(ss => ss.industries).find(ind => ind.code === selectedIndustry)?.name ?? 'Selected Industry'
-                           : selectedSubSector ? currentSectorData?.subSectors.find(ss => ss.code === selectedSubSector)?.name ?? 'Selected Sub-Sector'
-                           : currentSectorData.name}
+                Posts in {focusNodeDetails?.name || currentSectorData.name}
               </CardTitle>
               <CardDescription>
                 {selectedIndustry ? `Showing posts related to industry NAICS ${selectedIndustry}.`
@@ -353,8 +407,10 @@ const SectorDetailPage = () => {
           </Card>
 
           <Whiteboard
-            onNodeClick={handleWhiteboardNodeClick}
             sectorData={currentSectorData}
+            focusNodeDetails={focusNodeDetails}
+            onNodeClick={handleWhiteboardNodeClick}
+            // onFocusReset={handleResetWhiteboardFocus} // This would go here if button was on whiteboard
           />
         </div>
       </div>
@@ -363,4 +419,3 @@ const SectorDetailPage = () => {
 };
 
 export default SectorDetailPage;
-
