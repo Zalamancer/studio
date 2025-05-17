@@ -4,7 +4,7 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Square, Circle as CircleIcon, Eraser, PlusCircle, GitFork, Trash2, Move } from 'lucide-react'; // Added Move Icon
+import { Square, Circle as CircleIcon, Eraser, PlusCircle, GitFork, Trash2, Move } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 
@@ -30,13 +30,13 @@ interface WhiteboardProps {
 const NODE_WIDTH = 180;
 const NODE_HEIGHT = 70;
 const HORIZONTAL_SPACING = 120;
-const VERTICAL_SPACING = 120; 
+const VERTICAL_SPACING = 100;
 const VERTICAL_SPACING_INDUSTRY_START = 50;
 const VERTICAL_SPACING_INDUSTRY_ITEM = 25;
 const CANVAS_PADDING = 60;
 
-const MIN_ZOOM = 0.1;
-const MAX_ZOOM = 3.0;
+const MIN_ZOOM = 0.25; // Adjusted to 25%
+const MAX_ZOOM = 5.0;  // Adjusted to 500%
 const ZOOM_SENSITIVITY = 0.001;
 
 
@@ -47,43 +47,42 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
   
   const whiteboardViewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
-  const [canvasDimensions, setCanvasDimensions] = useState({ width: 800, height: 600 }); // Default dimensions
+  const [canvasDimensions, setCanvasDimensions] = useState({ width: 800, height: 600 });
 
   const [scale, setScale] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
-  const [panStart, setPanStart] = useState({ x: 0, y: 0 }); // Stores mouse position at pan start
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
 
   const layoutNodes = useCallback(() => {
     console.log("[Whiteboard] layoutNodes called. SectorData present:", !!sectorData);
     if (!sectorData) {
       setShapes([]);
-      // Reset canvas to viewport size if no sector data
       if (whiteboardViewportRef.current) {
         setCanvasDimensions({ 
           width: whiteboardViewportRef.current.clientWidth, 
           height: whiteboardViewportRef.current.clientHeight 
         });
       } else {
-        setCanvasDimensions({ width: 800, height: 600 }); // Fallback
+        setCanvasDimensions({ width: 800, height: 600 });
       }
       setPan({ x: 0, y: 0 }); 
-      setScale(1); 
+      setScale(1);
       return;
     }
 
     const newShapes: Shape[] = [];
-    let maxContentX = CANVAS_PADDING; // Start with padding
-    let maxContentY = CANVAS_PADDING; // Start with padding
+    let maxContentX = CANVAS_PADDING;
+    let maxContentY = CANVAS_PADDING;
 
     const sectorId = `sector-${sectorData.code}`;
     const sectorShape: Shape = {
       id: sectorId,
       type: 'rectangle',
       text: `${sectorData.name} (${sectorData.code})`,
-      x: CANVAS_PADDING, // Initial X, will be re-centered
+      x: CANVAS_PADDING, 
       y: CANVAS_PADDING,
-      width: NODE_WIDTH + 40, 
+      width: NODE_WIDTH + 20, 
       height: NODE_HEIGHT,
       parentId: null,
       isFixed: true,
@@ -95,7 +94,7 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
 
     let currentSubSectorX = CANVAS_PADDING;
     const subSectors = sectorData.subSectors || [];
-    let subSectorBlockMaxY = sectorShape.y + NODE_HEIGHT; // Track max Y for subsector block
+    let subSectorBlockMaxY = sectorShape.y + sectorShape.height;
 
     subSectors.forEach((sub, subIndex) => {
       const subSectorId = `subsector-${sub.code}-${subIndex}`;
@@ -104,7 +103,7 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
         type: 'rectangle',
         text: `${sub.name} (${sub.code})`,
         x: currentSubSectorX,
-        y: sectorShape.y + NODE_HEIGHT + VERTICAL_SPACING,
+        y: sectorShape.y + sectorShape.height + VERTICAL_SPACING,
         width: NODE_WIDTH,
         height: NODE_HEIGHT,
         parentId: sectorId,
@@ -116,7 +115,7 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
       maxContentX = Math.max(maxContentX, subSectorShape.x + subSectorShape.width);
       subSectorBlockMaxY = Math.max(subSectorBlockMaxY, subSectorShape.y + subSectorShape.height);
 
-      let currentIndustryY = subSectorShape.y + NODE_HEIGHT + VERTICAL_SPACING_INDUSTRY_START;
+      let currentIndustryY = subSectorShape.y + subSectorShape.height + VERTICAL_SPACING_INDUSTRY_START;
       const industries = sub.industries || [];
       industries.forEach((ind, indIndex) => {
         const industryId = `industry-${ind.code}-${subSectorId}-${indIndex}`;
@@ -124,7 +123,7 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
           id: industryId,
           type: 'rectangle',
           text: `${ind.name} (${ind.code})`,
-          x: subSectorShape.x + (NODE_WIDTH / 2) - (NODE_WIDTH / 2), 
+          x: subSectorShape.x + (subSectorShape.width / 2) - (NODE_WIDTH / 2), 
           y: currentIndustryY,
           width: NODE_WIDTH,
           height: NODE_HEIGHT,
@@ -140,40 +139,32 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
       currentSubSectorX += NODE_WIDTH + HORIZONTAL_SPACING;
     });
     
-    if (subSectors.length > 0) {
-      // Adjust maxContentX based on the actual extent of sub-sectors
-      maxContentX = Math.max(maxContentX, currentSubSectorX - HORIZONTAL_SPACING);
-    } else {
-      maxContentX = Math.max(maxContentX, sectorShape.x + sectorShape.width);
-    }
+    const totalSubSectorsWidth = Math.max(0, (subSectors.length * NODE_WIDTH) + (Math.max(0, subSectors.length - 1) * HORIZONTAL_SPACING));
+    sectorShape.x = CANVAS_PADDING + Math.max(0, (totalSubSectorsWidth / 2) - (sectorShape.width / 2));
+    maxContentX = Math.max(maxContentX, sectorShape.x + sectorShape.width, currentSubSectorX - (subSectors.length > 0 ? HORIZONTAL_SPACING : 0));
     
     maxContentY = Math.max(maxContentY, subSectorBlockMaxY);
     
-    const subSectorsTotalWidth = (subSectors.length * NODE_WIDTH) + (Math.max(0, subSectors.length - 1) * HORIZONTAL_SPACING);
-    sectorShape.x = CANVAS_PADDING + (subSectorsTotalWidth / 2) - (sectorShape.width / 2);
-    sectorShape.x = Math.max(CANVAS_PADDING, sectorShape.x); // Ensure it doesn't go left of padding
-    maxContentX = Math.max(maxContentX, sectorShape.x + sectorShape.width);
-
     setShapes(newShapes);
     const finalCanvasWidth = maxContentX + CANVAS_PADDING;
-    const finalCanvasHeight = Math.max(600, maxContentY + CANVAS_PADDING + VERTICAL_SPACING);
+    const finalCanvasHeight = Math.max(600, maxContentY + CANVAS_PADDING + VERTICAL_SPACING_INDUSTRY_ITEM);
     setCanvasDimensions({ width: finalCanvasWidth, height: finalCanvasHeight });
 
-    // Initial pan to center content (roughly) & reset zoom
     if (whiteboardViewportRef.current) {
       const viewportWidth = whiteboardViewportRef.current.clientWidth;
       const viewportHeight = whiteboardViewportRef.current.clientHeight;
-      // For scale = 1
       setPan({
-        x: (viewportWidth - finalCanvasWidth) / 2,
-        y: Math.max(CANVAS_PADDING, (viewportHeight - finalCanvasHeight) / 2 + CANVAS_PADDING / 2) 
+        x: (viewportWidth - finalCanvasWidth * scale) / 2,
+        y: Math.max(CANVAS_PADDING, (viewportHeight - finalCanvasHeight * scale) / 2 + (CANVAS_PADDING * scale) / 2) 
       });
-      setScale(1); // Reset scale to 1 when layoutNodes is called
+      // setScale(1); // Reset scale on re-layout, or adjust based on content fit
     }
-  }, [sectorData]); 
+  }, [sectorData, scale]); 
 
   useEffect(() => {
-    layoutNodes();
+    if (sectorData) {
+      layoutNodes();
+    }
     const currentRef = whiteboardViewportRef.current;
     if (currentRef) {
         currentRef.addEventListener('wheel', handleWheel as unknown as EventListener, { passive: false });
@@ -185,15 +176,15 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
         }
         window.removeEventListener('resize', layoutNodes);
     };
-  }, [layoutNodes]); // layoutNodes is the primary dependency for re-layout
+  }, [sectorData, layoutNodes]); // Add layoutNodes to dependency
 
 
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || e.target !== whiteboardViewportRef.current) return; 
-    e.preventDefault(); // Prevent text selection or other default behaviors
+    if (e.button !== 0) return; // Only allow left mouse button for panning
+    e.preventDefault(); 
     setIsPanning(true);
     setPanStart({
-      x: e.clientX - pan.x, // Store initial mouse position relative to current pan
+      x: e.clientX - pan.x, 
       y: e.clientY - pan.y,
     });
     if (whiteboardViewportRef.current) {
@@ -219,18 +210,16 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
   }, [isPanning]);
 
   const handleWheel = useCallback((e: WheelEvent) => {
-    e.preventDefault(); // Prevent page scroll
+    e.preventDefault();
     if (!whiteboardViewportRef.current) return;
 
     const rect = whiteboardViewportRef.current.getBoundingClientRect();
-    const mouseX = e.clientX - rect.left; // Mouse position relative to viewport
+    const mouseX = e.clientX - rect.left;
     const mouseY = e.clientY - rect.top;
 
     const zoomFactor = 1 - (e.deltaY * ZOOM_SENSITIVITY);
     const newScale = Math.min(Math.max(scale * zoomFactor, MIN_ZOOM), MAX_ZOOM);
-
-    // New pan = mousePos - (mousePos - oldPan) * (newScale / oldScale)
-    // This keeps the point under the mouse stationary
+    
     const newPanX = mouseX - (mouseX - pan.x) * (newScale / scale);
     const newPanY = mouseY - (mouseY - pan.y) * (newScale / scale);
     
@@ -243,13 +232,33 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
     if (sectorData) return; 
     const newId = `shape-${Date.now()}`;
     
-    // Adjust new shape position based on current pan and scale for user-added shapes
-    const newX = (50 - pan.x) / scale;
-    const newY = (50 - pan.y) / scale;
+    let newX = (50 - pan.x) / scale; // Default for root nodes
+    let newY = (50 - pan.y) / scale;
+
+    if (parentId) {
+        const parentNode = shapes.find(s => s.id === parentId);
+        if (parentNode) {
+            if (isSister) { // Add as sister
+                newX = (parentNode.x + parentNode.width + HORIZONTAL_SPACING - pan.x) / scale;
+                newY = (parentNode.y - pan.y) / scale;
+            } else { // Add as child
+                newX = (parentNode.x + (parentNode.width / 2) - (NODE_WIDTH / 2) - pan.x) / scale;
+                newY = (parentNode.y + parentNode.height + VERTICAL_SPACING - pan.y) / scale;
+            }
+        }
+    } else {
+        // Stacking logic for new root nodes
+        if (shapes.filter(s => s.parentId === null).length > 0) {
+            const lastRootNode = shapes.filter(s => s.parentId === null).pop();
+            if (lastRootNode) {
+                 newY = (lastRootNode.y + lastRootNode.height + VERTICAL_SPACING_INDUSTRY_ITEM - pan.y) / scale;
+            }
+        }
+    }
 
     setShapes(prevShapes => [
       ...prevShapes,
-      { id: newId, type, text: 'New Shape', x: newX, y: newY, width: NODE_WIDTH, height: NODE_HEIGHT, parentId: null, code: `user-${newId}` },
+      { id: newId, type, text: 'New Shape', x: newX * scale + pan.x, y: newY * scale + pan.y, width: NODE_WIDTH, height: NODE_HEIGHT, parentId, code: `user-${newId}` },
     ]);
   };
 
@@ -260,7 +269,12 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
 
   const deleteShape = (idToDelete: string) => {
     if (sectorData) return;
-    setShapes(prevShapes => prevShapes.filter(shape => shape.id !== idToDelete && shape.parentId !== idToDelete));
+    const getDescendants = (id: string): string[] => {
+        let children = shapes.filter(s => s.parentId === id).map(s => s.id);
+        return children.concat(...children.map(getDescendants));
+    };
+    const idsToDelete = [idToDelete, ...getDescendants(idToDelete)];
+    setShapes(prevShapes => prevShapes.filter(shape => !idsToDelete.includes(shape.id)));
   };
   
   const clearAllUserShapes = () => {
@@ -278,7 +292,7 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
   };
   
   const resetView = () => {
-    layoutNodes(); // This will re-center and reset zoom/pan
+    layoutNodes(); 
   };
 
   return (
@@ -312,7 +326,6 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUpOrLeave}
           onMouseLeave={handleMouseUpOrLeave}
-          // onWheel is handled by useEffect due to passive event listener requirements
         >
             <div 
               ref={canvasRef} 
@@ -334,8 +347,9 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
                           
                           const verticalDistance = childPoint.y - parentPoint.y;
                           const curveFactor = Math.max(20, verticalDistance / 3.5); 
+                          const midY = parentPoint.y + verticalDistance / 2;
                           
-                          const pathData = `M ${parentPoint.x} ${parentPoint.y} C ${parentPoint.x} ${parentPoint.y + curveFactor}, ${childPoint.x} ${childPoint.y - curveFactor}, ${childPoint.x} ${childPoint.y}`;
+                          const pathData = `M ${parentPoint.x} ${parentPoint.y} C ${parentPoint.x} ${parentPoint.y + curveFactor}, ${childPoint.x} ${midY - curveFactor / 2}, ${childPoint.x} ${childPoint.y}`;
                           
                           return (
                               <path
@@ -373,7 +387,7 @@ const Whiteboard: React.FC<WhiteboardProps> = (props) => {
                           !shape.isFixed && "cursor-default",
                           shape.nodeType === 'sector' && "bg-primary text-primary-foreground font-semibold border-primary-foreground/50 shadow-xl",
                           shape.nodeType === 'subsector' && "bg-secondary text-secondary-foreground border-secondary-foreground/40 shadow-lg",
-                          shape.nodeType === 'industry' && "bg-card text-card-foreground border-border",
+                          shape.nodeType === 'industry' && "bg-card text-card-foreground border-border", // Changed industry style
                           !shape.isFixed && "bg-background/90 border-primary",
                           shape.type === 'circle' && !shape.isFixed && "!rounded-full"
                       )}
