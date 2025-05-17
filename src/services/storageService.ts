@@ -39,8 +39,11 @@ export const uploadPostImage = async (file: File, userId: string): Promise<strin
       throw new Error('Permission denied. Check Firebase Storage security rules.');
     } else if (error.code === 'storage/canceled') {
       throw new Error('Upload canceled.');
+    } else if (error.code === 'storage/retry-limit-exceeded') {
+      // Provide a more specific message for this common network-related error
+      throw new Error('Image upload failed: Maximum retry time exceeded. Please check your internet connection or try again with a smaller file.');
     }
-    // Re-throw a more specific error or the original one
+    // Re-throw a more specific error or the original one for other cases
     throw new Error(`Image upload failed: ${error.message || 'Unknown storage error'}`);
   }
 };
