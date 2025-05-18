@@ -26,7 +26,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getUserFavoriteSectors, addFavoriteSector, removeFavoriteSector } from '@/services/userPreferenceService';
 import { useToast } from '@/hooks/use-toast';
 import Whiteboard from '@/components/whiteboard/Whiteboard';
-import DocumentEditorPlaceholder from '@/components/document-editor/DocumentEditor'; // Import the new editor
+// DocumentEditorPlaceholder is now rendered within Whiteboard.tsx when a user shape is clicked
+// So, it's no longer directly imported or used here.
+// import DocumentEditorPlaceholder from '@/components/document-editor/DocumentEditor';
 
 export interface FocusNodeDetails {
   code: string;
@@ -36,12 +38,8 @@ export interface FocusNodeDetails {
 
 const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
     if (!code) return null;
-    // For "31-33", find the specific Manufacturing sector object
-    if (code === "31-33") {
-        return detailedSectorsData.find(s => s.code === "31-33") || null;
-    }
-    // For other codes, attempt a direct match
     const sector = detailedSectorsData.find(s => s.code === code);
+    console.log(`[SectorDetailPage] getSectorDataByCode for '${code}': Found:`, !!sector, sector);
     return sector || null;
 };
 
@@ -72,13 +70,13 @@ const SectorDetailPage = () => {
         type: 'sector',
         name: currentSectorData.name,
       });
-      setSelectedSubSector(null);
+      setSelectedSubSector(null); // Reset filters when main sector changes
       setSelectedIndustry(null);
     } else {
       console.log(`[SectorDetailPage] currentSectorData is null/undefined. Current sectorCode param: ${sectorCode}`);
-      setFocusNodeDetails(null);
+      setFocusNodeDetails(null); // Clear focus if sector data is not found
     }
-  }, [currentSectorData, sectorCode]);
+  }, [currentSectorData]);
 
 
   const { data: favoriteSectorCodes = [], isLoading: isLoadingFavorites } = useQuery<string[]>({
@@ -128,10 +126,10 @@ const SectorDetailPage = () => {
     isLoading: isLoadingPosts,
     error: postsError,
   } = useQuery<Post[]>({
-    queryKey: ['allPostsForSectorPage', sectorCode], // Added sectorCode to queryKey for better caching if needed
-    queryFn: getPostsFromFirestore, // This fetches ALL posts, filtering happens client-side
-    staleTime: 1000 * 60 * 2, // 2 minutes
-    enabled: !!sectorCode, // Only fetch if sectorCode is present
+    queryKey: ['allPostsForSectorPage', sectorCode], 
+    queryFn: getPostsFromFirestore,
+    staleTime: 1000 * 60 * 2, 
+    enabled: !!sectorCode, 
   });
 
   const handleSubSectorSelect = (subSectorCode: string | null) => {
@@ -180,7 +178,7 @@ const SectorDetailPage = () => {
   const handleWhiteboardNodeClick = useCallback((clickedNodeInfo: { code: string; type: 'sector' | 'subsector' | 'industry'; text: string }) => {
     console.log(`[SectorDetailPage] Whiteboard node clicked. Raw text from WB: "${clickedNodeInfo.text}", Code: ${clickedNodeInfo.code}, Type: ${clickedNodeInfo.type}`);
     
-    let nodeNameForFocus = clickedNodeInfo.text; // Fallback
+    let nodeNameForFocus = clickedNodeInfo.text; 
     let nodeTypeForFocus = clickedNodeInfo.type;
 
     if (currentSectorData) {
@@ -202,7 +200,7 @@ const SectorDetailPage = () => {
         }
     }
     
-    console.log(`[SectorDetailPage] Setting focusNodeDetails. Name: "${nodeNameForFocus}", Code: ${clickedNodeInfo.code}, Type: ${nodeTypeForFocus}`);
+    console.log(`[SectorDetailPage] Setting focusNodeDetails from Whiteboard click. Name: "${nodeNameForFocus}", Code: ${clickedNodeInfo.code}, Type: ${nodeTypeForFocus}`);
     setFocusNodeDetails({ code: clickedNodeInfo.code, type: nodeTypeForFocus, name: nodeNameForFocus });
 
     if (nodeTypeForFocus === 'sector') {
@@ -228,6 +226,7 @@ const SectorDetailPage = () => {
 
   const handleResetWhiteboardFocus = () => {
     if (currentSectorData) {
+      console.log("[SectorDetailPage] Resetting whiteboard focus to main sector:", currentSectorData.name);
       setFocusNodeDetails({
         code: currentSectorData.code,
         type: 'sector',
@@ -241,7 +240,6 @@ const SectorDetailPage = () => {
   const filteredPosts = useMemo(() => {
     if (isLoadingPosts || !currentSectorData) return [];
     if (!Array.isArray(allPosts)) return [];
-
 
     let postsToFilter = allPosts.filter(post => {
         const mainSectorCodeForFilter = currentSectorData.code;
@@ -308,6 +306,8 @@ const SectorDetailPage = () => {
     );
   }
 
+  const pageTitle = focusNodeDetails?.name || currentSectorData.name;
+  const pageCode = focusNodeDetails?.code || currentSectorData.code;
 
   return (
     <div className="container mx-auto p-4 md:p-6">
@@ -318,7 +318,8 @@ const SectorDetailPage = () => {
         <div className="flex justify-between items-start">
             <div>
                 <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-1">
-                {currentSectorData.name} ({currentSectorData.code})
+                    {currentSectorData.name} 
+                    <span className="text-2xl text-muted-foreground ml-2">({currentSectorData.code})</span>
                 </h1>
                 <p className="text-md text-muted-foreground max-w-3xl">{currentSectorData.description || "Detailed description for this sector is being compiled."}</p>
             </div>
@@ -469,12 +470,12 @@ const SectorDetailPage = () => {
           </Card>
 
           <Whiteboard
-            sectorData={currentSectorData}
-            focusNodeDetails={focusNodeDetails}
+            sectorData={currentSectorData} // Pass the main sector data
+            focusNodeDetails={focusNodeDetails} // Pass the current focus for the whiteboard
             onNodeClick={handleWhiteboardNodeClick}
           />
           
-          <DocumentEditorPlaceholder />
+          {/* DocumentEditorPlaceholder is now rendered by Whiteboard.tsx conditionally */}
         </div>
       </div>
     </div>
@@ -482,3 +483,5 @@ const SectorDetailPage = () => {
 };
 
 export default SectorDetailPage;
+
+    
