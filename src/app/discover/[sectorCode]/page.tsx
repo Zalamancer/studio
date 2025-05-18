@@ -5,7 +5,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, FilterX, Star, Loader2, AlertTriangle, Info, Eye, Tag } from 'lucide-react'; // Added Eye and Tag
+import { ArrowLeft, FilterX, Star, Loader2, AlertTriangle, Info, Eye, Tag } from 'lucide-react';
 import {
   Accordion,
   AccordionContent,
@@ -26,8 +26,9 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getUserFavoriteSectors, addFavoriteSector, removeFavoriteSector } from '@/services/userPreferenceService';
 import { useToast } from '@/hooks/use-toast';
 import Whiteboard from '@/components/whiteboard/Whiteboard';
+import DocumentEditorPlaceholder from '@/components/document-editor/DocumentEditor'; // Import the new editor
 
-export interface FocusNodeDetails { // Ensure this is exported or defined where Whiteboard can see it if it's a direct prop type
+export interface FocusNodeDetails {
   code: string;
   type: 'sector' | 'subsector' | 'industry';
   name: string;
@@ -56,7 +57,6 @@ const SectorDetailPage = () => {
   const [selectedSubSector, setSelectedSubSector] = useState<string | null>(null);
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null);
   
-  // Initialize focusNodeDetails with the main sector of the page
   const currentSectorData = useMemo(() => {
     if (!sectorCode) return null;
     return getSectorDataByCode(sectorCode);
@@ -66,18 +66,19 @@ const SectorDetailPage = () => {
 
   useEffect(() => {
     if (currentSectorData) {
+      console.log(`[SectorDetailPage] Main sector data changed or loaded. Setting initial focus to: ${currentSectorData.name} (${currentSectorData.code})`);
       setFocusNodeDetails({
         code: currentSectorData.code,
         type: 'sector',
-        name: currentSectorData.name, // Use the clean name from currentSectorData
+        name: currentSectorData.name,
       });
-      // Reset filters when the main sector page loads or changes
       setSelectedSubSector(null);
       setSelectedIndustry(null);
     } else {
+      console.log(`[SectorDetailPage] currentSectorData is null/undefined. Current sectorCode param: ${sectorCode}`);
       setFocusNodeDetails(null);
     }
-  }, [currentSectorData]);
+  }, [currentSectorData, sectorCode]);
 
 
   const { data: favoriteSectorCodes = [], isLoading: isLoadingFavorites } = useQuery<string[]>({
@@ -127,23 +128,23 @@ const SectorDetailPage = () => {
     isLoading: isLoadingPosts,
     error: postsError,
   } = useQuery<Post[]>({
-    queryKey: ['allPostsForSectorPage'], // Consider more specific query key if data varies by sector
-    queryFn: getPostsFromFirestore,
+    queryKey: ['allPostsForSectorPage', sectorCode], // Added sectorCode to queryKey for better caching if needed
+    queryFn: getPostsFromFirestore, // This fetches ALL posts, filtering happens client-side
     staleTime: 1000 * 60 * 2, // 2 minutes
+    enabled: !!sectorCode, // Only fetch if sectorCode is present
   });
 
   const handleSubSectorSelect = (subSectorCode: string | null) => {
     const newSubSectorCode = selectedSubSector === subSectorCode ? null : subSectorCode;
     setSelectedSubSector(newSubSectorCode);
-    setSelectedIndustry(null); // Reset industry filter when sub-sector changes
+    setSelectedIndustry(null); 
     
-    // Update whiteboard focus
     if (newSubSectorCode && currentSectorData) {
       const sub = currentSectorData.subSectors.find(s => s.code === newSubSectorCode);
       if (sub) {
         setFocusNodeDetails({ code: sub.code, type: 'subsector', name: sub.name });
       }
-    } else if (currentSectorData) { // If sub-sector is cleared, focus back on main sector
+    } else if (currentSectorData) { 
       setFocusNodeDetails({ code: currentSectorData.code, type: 'sector', name: currentSectorData.name });
     }
   };
@@ -152,19 +153,18 @@ const SectorDetailPage = () => {
     const newIndustryCode = selectedIndustry === industryCode ? null : industryCode;
     setSelectedIndustry(newIndustryCode);
 
-    // Update whiteboard focus
     if (newIndustryCode && currentSectorData && selectedSubSector) {
         const sub = currentSectorData.subSectors.find(s => s.code === selectedSubSector);
         const ind = sub?.industries.find(i => i.code === newIndustryCode);
         if (ind) {
             setFocusNodeDetails({ code: ind.code, type: 'industry', name: ind.name });
         }
-    } else if (selectedSubSector && currentSectorData) { // If industry is cleared, focus on selected sub-sector
+    } else if (selectedSubSector && currentSectorData) { 
         const sub = currentSectorData.subSectors.find(s => s.code === selectedSubSector);
         if (sub) {
             setFocusNodeDetails({ code: sub.code, type: 'subsector', name: sub.name });
         }
-    } else if (currentSectorData) { // Fallback to main sector
+    } else if (currentSectorData) { 
         setFocusNodeDetails({ code: currentSectorData.code, type: 'sector', name: currentSectorData.name });
     }
   };
@@ -180,16 +180,16 @@ const SectorDetailPage = () => {
   const handleWhiteboardNodeClick = useCallback((clickedNodeInfo: { code: string; type: 'sector' | 'subsector' | 'industry'; text: string }) => {
     console.log(`[SectorDetailPage] Whiteboard node clicked. Raw text from WB: "${clickedNodeInfo.text}", Code: ${clickedNodeInfo.code}, Type: ${clickedNodeInfo.type}`);
     
-    let originalName = clickedNodeInfo.text; // Fallback
-    let nodeType = clickedNodeInfo.type;
+    let nodeNameForFocus = clickedNodeInfo.text; // Fallback
+    let nodeTypeForFocus = clickedNodeInfo.type;
 
     if (currentSectorData) {
-        if (nodeType === 'sector' && currentSectorData.code === clickedNodeInfo.code) {
-            originalName = currentSectorData.name;
-        } else if (nodeType === 'subsector') {
+        if (nodeTypeForFocus === 'sector' && currentSectorData.code === clickedNodeInfo.code) {
+            nodeNameForFocus = currentSectorData.name;
+        } else if (nodeTypeForFocus === 'subsector') {
             const sub = currentSectorData.subSectors.find(s => s.code === clickedNodeInfo.code);
-            if (sub) originalName = sub.name;
-        } else if (nodeType === 'industry') {
+            if (sub) nodeNameForFocus = sub.name;
+        } else if (nodeTypeForFocus === 'industry') {
             let foundIndustry = null;
             for (const sub of currentSectorData.subSectors) {
                 const industry = sub.industries.find(ind => ind.code === clickedNodeInfo.code);
@@ -198,30 +198,30 @@ const SectorDetailPage = () => {
                     break;
                 }
             }
-            if (foundIndustry) originalName = foundIndustry.name;
+            if (foundIndustry) nodeNameForFocus = foundIndustry.name;
         }
     }
     
-    console.log(`[SectorDetailPage] Setting focusNodeDetails. Name: "${originalName}", Code: ${clickedNodeInfo.code}, Type: ${nodeType}`);
-    setFocusNodeDetails({ code: clickedNodeInfo.code, type: nodeType, name: originalName });
+    console.log(`[SectorDetailPage] Setting focusNodeDetails. Name: "${nodeNameForFocus}", Code: ${clickedNodeInfo.code}, Type: ${nodeTypeForFocus}`);
+    setFocusNodeDetails({ code: clickedNodeInfo.code, type: nodeTypeForFocus, name: nodeNameForFocus });
 
-    if (nodeType === 'sector') {
+    if (nodeTypeForFocus === 'sector') {
         setSelectedSubSector(null);
         setSelectedIndustry(null);
-        toast({ title: "Filter Applied", description: `Showing all for ${originalName}` });
-    } else if (nodeType === 'subsector') {
+        toast({ title: "Filter Applied", description: `Showing all for ${nodeNameForFocus}` });
+    } else if (nodeTypeForFocus === 'subsector') {
         setSelectedSubSector(clickedNodeInfo.code);
         setSelectedIndustry(null);
-        toast({ title: "Filter Applied", description: `Showing posts for sub-sector: ${originalName}` });
-    } else if (nodeType === 'industry') {
+        toast({ title: "Filter Applied", description: `Showing posts for sub-sector: ${nodeNameForFocus}` });
+    } else if (nodeTypeForFocus === 'industry') {
         const parentSubSector = currentSectorData?.subSectors.find(ss => ss.industries.some(ind => ind.code === clickedNodeInfo.code));
         const parentSubSectorCode = parentSubSector?.code || null;
-        // Ensure parent sub-sector filter is also active for consistency
+        
         if (parentSubSectorCode) {
             setSelectedSubSector(parentSubSectorCode);
         }
         setSelectedIndustry(clickedNodeInfo.code);
-        toast({ title: "Filter Applied", description: `Showing posts for industry: ${originalName}` });
+        toast({ title: "Filter Applied", description: `Showing posts for industry: ${nodeNameForFocus}` });
     }
   }, [currentSectorData, toast, setSelectedSubSector, setSelectedIndustry]);
 
@@ -233,23 +233,22 @@ const SectorDetailPage = () => {
         type: 'sector',
         name: currentSectorData.name,
       });
-      // Optionally reset accordion filters too if desired, though whiteboard clicks already manage this.
-      // setSelectedSubSector(null);
-      // setSelectedIndustry(null);
       toast({ title: "Whiteboard View Reset", description: `Showing full map for ${currentSectorData.name}` });
     }
   };
 
 
   const filteredPosts = useMemo(() => {
-    if (!currentSectorData || isLoadingPosts) return [];
+    if (isLoadingPosts || !currentSectorData) return [];
+    if (!Array.isArray(allPosts)) return [];
+
 
     let postsToFilter = allPosts.filter(post => {
         const mainSectorCodeForFilter = currentSectorData.code;
         const postNaics = post.naicsCode || "";
         
         let isInMainSector = false;
-        if (mainSectorCodeForFilter === "31-33") { // Special handling for Manufacturing
+        if (mainSectorCodeForFilter === "31-33") { 
             isInMainSector = postNaics.startsWith("31") || postNaics.startsWith("32") || postNaics.startsWith("33");
         } else {
             isInMainSector = postNaics.startsWith(mainSectorCodeForFilter);
@@ -258,21 +257,16 @@ const SectorDetailPage = () => {
     });
 
     if (selectedIndustry) {
-      // If an industry is selected, filter by exact industry NAICS code
       return postsToFilter.filter(post => post.naicsCode === selectedIndustry);
     }
     if (selectedSubSector) {
-      // If a sub-sector is selected (but no industry), filter by posts whose NAICS code
-      // either exactly matches the sub-sector code OR starts with the sub-sector code
-      // (meaning the post is in an industry within that sub-sector)
       return postsToFilter.filter(post =>
-        post.naicsCode === selectedSubSector || // Exact match for sub-sector code
-        (post.naicsCode && currentSectorData.subSectors // Check if industry NAICS code belongs to the selected sub-sector
+        post.naicsCode === selectedSubSector || 
+        (post.naicsCode && currentSectorData.subSectors
           .find(ss => ss.code === selectedSubSector)
           ?.industries.some(ind => ind.code === post.naicsCode))
       );
     }
-    // If no sub-sector or industry is selected, return all posts belonging to the main sector
     return postsToFilter;
   }, [currentSectorData, selectedSubSector, selectedIndustry, allPosts, isLoadingPosts]);
 
@@ -344,7 +338,7 @@ const SectorDetailPage = () => {
                     )}
                     {isFavorited ? "Favorited" : "Favorite Sector"}
                 </Button>
-                {focusNodeDetails && focusNodeDetails.code !== currentSectorData.code && (
+                {focusNodeDetails && currentSectorData && focusNodeDetails.code !== currentSectorData.code && (
                     <Button
                         variant="outline"
                         size="sm"
@@ -479,6 +473,8 @@ const SectorDetailPage = () => {
             focusNodeDetails={focusNodeDetails}
             onNodeClick={handleWhiteboardNodeClick}
           />
+          
+          <DocumentEditorPlaceholder />
         </div>
       </div>
     </div>
@@ -486,4 +482,3 @@ const SectorDetailPage = () => {
 };
 
 export default SectorDetailPage;
-
