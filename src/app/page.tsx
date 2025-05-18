@@ -41,7 +41,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from '@/components/ui/separator'; // Import Separator
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover for suggestions
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles, AtSign, Tag } from "lucide-react"; // Added AtSign icon, Tag
+import { Loader2, Trash2, HandHelping, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles, AtSign, Tag, Compass } from "lucide-react"; // Added AtSign icon, Tag, Compass
 import { useToast } from "@/hooks/use-toast";
 import type { Post, NewPostData } from '@/types/post'; // Correctly import types
 import { useAuth } from '@/contexts/AuthContext';
@@ -49,7 +49,6 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore'; // Import Timestamp
-// Removed: import { autocompletePostDescription } from '@/ai/flows/autocomplete-post-description'; // Import the AI flow
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
 import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService'; // Import comment/subcomment/like services
@@ -93,51 +92,49 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
         queryKey: ['mentionProfiles', mentionedUserIds],
         queryFn: async () => {
             const profiles = new Map<string, UserProfileBasic | null>();
-            if (!mentionedUserIds || mentionedUserIds.length === 0) return profiles;
+            // Ensure mentionedUserIds are actual UIDs before fetching
+            const validUids = mentionedUserIds.filter(id => id && /^[a-zA-Z0-9]{20,}$/.test(id));
+            if (validUids.length === 0) return profiles;
 
             await Promise.all(
-                mentionedUserIds.map(async (userId) => {
+                validUids.map(async (userId) => {
                     const profile = await getUserProfileBasic(userId);
                     profiles.set(userId, profile);
                 })
             );
             return profiles;
         },
-        enabled: mentionedUserIds && mentionedUserIds.length > 0,
+        enabled: mentionedUserIds && mentionedUserIds.some(id => id && /^[a-zA-Z0-9]{20,}$/.test(id)), // Only run if there are valid-looking UIDs
         staleTime: Infinity,
     });
 
-    if (!mentionedUserIds || mentionedUserIds.length === 0 || isLoadingMentions) {
+    if (isLoadingMentions) {
+        // Optionally return a loading state or the plain text
         return <>{text}</>;
     }
 
-    // Regex to find @ followed by alphanumeric characters, underscores, or hyphens (common for UIDs)
-    // It also tries to match display names if they are directly after @
-    const parts = text.split(/(@[a-zA-Z0-9_.-]+(?: [a-zA-Z0-9_.-]+)*)/g);
-
+    // Regex to find @ followed by alphanumeric characters, underscores, dots, or hyphens, and potentially multiple words
+    const parts = text.split(/(@[a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g);
 
     return (
         <>
             {parts.map((part, index) => {
                 if (part.startsWith('@')) {
-                    const potentialIdentifier = part.substring(1);
+                    const potentialDisplayName = part.substring(1).trim();
                     let profileToLink: UserProfileBasic | null | undefined = null;
 
-                    // First, check if potentialIdentifier is a direct UID match
-                    if (mentionedUserIds.includes(potentialIdentifier)) {
-                        profileToLink = mentionProfilesMap.get(potentialIdentifier);
-                    }
-                    // If not a UID match, check if it's a display name from the map
-                    if (!profileToLink) {
-                        for (const [uid, profile] of mentionProfilesMap.entries()) {
-                            if (profile && profile.displayName === potentialIdentifier && mentionedUserIds.includes(uid)) {
+                    // Iterate through the fetched profiles to find a match by displayName
+                    if (mentionProfilesMap.size > 0) {
+                        for (const profile of mentionProfilesMap.values()) {
+                            if (profile && profile.displayName === potentialDisplayName) {
                                 profileToLink = profile;
                                 break;
                             }
                         }
                     }
 
-                    if (profileToLink) {
+                    if (profileToLink && profileToLink.userId && /^[a-zA-Z0-9]{20,}$/.test(profileToLink.userId)) {
+                        // If a profile is found and its userId looks like a UID, create a link
                         return (
                             <Link
                                 key={`${profileToLink.userId}-${index}`}
@@ -147,6 +144,10 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
                                 @{profileToLink.displayName || generateAnonymousName(profileToLink.userId)}
                             </Link>
                         );
+                    } else {
+                        // If no profile is found, or if the found profile's userId is not a valid UID,
+                        // render the mention as plain text.
+                        return <span key={index} className="text-foreground">{part}</span>;
                     }
                 }
                 return <React.Fragment key={index}>{part}</React.Fragment>;
@@ -293,6 +294,9 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                          </p>
                     </Link>
                     <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                        <p className="text-xs text-muted-foreground">
+                            {new Date(subComment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </p>
                         {user && (
                            <Button
                                 variant="ghost"
@@ -313,9 +317,6 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
                                 {subComment.likeCount && subComment.likeCount > 0 ? <span className="text-xs ml-0.5">({subComment.likeCount})</span> : ''}
                             </Button>
                         )}
-                        <p className="text-xs text-muted-foreground">
-                            {new Date(subComment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                        </p>
                         {isOwnSubComment && (
                             <AlertDialog>
                                 <AlertDialogTrigger asChild>
@@ -478,11 +479,11 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         e.preventDefault();
         if (!user || !newReply.trim() || isSubmittingReply) return;
         setIsSubmittingReply(true);
-        const mentionedUserIds = extractMentions(newReply.trim());
+        const mentionedUserUids = extractMentionedUids(newReply.trim(), Array.from(userProfilesMap.values()).filter(Boolean) as UserProfileBasic[]);
         const replyData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'> = {
             userId: user.uid,
             text: newReply.trim(),
-            mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [],
+            mentionedUserIds: mentionedUserUids,
         };
         try {
             const newSubCommentId = await addSubCommentToComment(postId, comment.id, replyData);
@@ -499,9 +500,9 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
             if (comment.userId !== user.uid) {
                 queryClient.invalidateQueries({ queryKey: ['notifications', comment.userId] });
             }
-            mentionedUserIds.forEach(mentionedId => {
-                 if (mentionedId !== user.uid && mentionedId !== comment.userId) { // Don't double-notify original commenter if they were also mentioned
-                    queryClient.invalidateQueries({ queryKey: ['notifications', mentionedId] });
+            mentionedUserUids.forEach(mentionedUid => {
+                 if (mentionedUid !== user.uid && mentionedUid !== comment.userId) { // Don't double-notify original commenter if they were also mentioned
+                    queryClient.invalidateQueries({ queryKey: ['notifications', mentionedUid] });
                  }
             });
         } catch (error: any) {
@@ -523,7 +524,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         const textBeforeCursor = value.substring(0, cursorPosition);
         const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
-        if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
+        if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
             const currentQuery = textBeforeCursor.substring(lastAtIndex + 1);
             if (!/\s/.test(currentQuery)) { // No space within the query itself
                 setMentionQuery(currentQuery);
@@ -650,6 +651,9 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                              </p>
                          </Link>
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
+                             <p className="text-xs text-muted-foreground">
+                                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
                             {user && (
                                 <Button
                                      variant="ghost"
@@ -670,9 +674,6 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                                      {comment.likeCount && comment.likeCount > 0 ? <span className="text-xs ml-0.5">({comment.likeCount})</span> : ''}
                                  </Button>
                             )}
-                            <p className="text-xs text-muted-foreground">
-                                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
                             {isOwnComment && (
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
@@ -823,16 +824,13 @@ function BoardPageContent() {
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  // Removed AI Autocomplete states
-  // const [isAutocompleting, setIsAutocompleting] = useState(false);
-  // const [autocompleteSuggestion, setAutocompleteSuggestion] = useState<string | null>(null);
-  // const autocompleteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // State for new comment mentions
   const [newCommentMentionQuery, setNewCommentMentionQuery] = useState('');
   const [showNewCommentSuggestions, setShowNewCommentSuggestions] = useState(false);
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
+  const [selectedMentionedUsers, setSelectedMentionedUsers] = useState<UserProfileBasic[]>([]);
 
 
   useEffect(() => {
@@ -1005,9 +1003,9 @@ function BoardPageContent() {
         const textBeforeCursor = value.substring(0, cursorPosition);
         const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
-        if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
+        if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
             const currentQuery = textBeforeCursor.substring(lastAtIndex + 1);
-            if (!/\s/.test(currentQuery)) {
+             if (!/\s/.test(currentQuery)) { // No space within the query itself
                 setNewCommentMentionQuery(currentQuery);
                 setShowNewCommentSuggestions(true);
                 return;
@@ -1029,6 +1027,14 @@ function BoardPageContent() {
             const textAfterCursor = currentValue.substring(cursorPosition);
             const newText = `${textBeforeMention}@${profile.displayName} ${textAfterCursor}`;
             setNewComment(newText);
+
+             // Add to selected mentioned users for UID tracking
+            setSelectedMentionedUsers(prev => {
+                if (!prev.find(u => u.userId === profile.userId)) {
+                    return [...prev, profile];
+                }
+                return prev;
+            });
 
             const newCursorPosition = textBeforeMention.length + `@${profile.displayName} `.length;
             setTimeout(() => {
@@ -1060,31 +1066,46 @@ function BoardPageContent() {
     e.preventDefault();
     if (!user || !selectedPost || !newComment.trim() || isSubmittingComment) return;
     setIsSubmittingComment(true);
-    const mentionedUserIds = extractMentions(newComment.trim());
+
+    // Use the UIDs from selectedMentionedUsers if populated, otherwise fallback to regex extraction
+    // This is a simplification; a robust solution would better manage the list of actual UIDs from selections.
+    let finalMentionedUids: string[] = [];
+    if (selectedMentionedUsers.length > 0) {
+        const textMentions = extractDisplayNamesFromText(newComment.trim()); // Get @DisplayNames from text
+        finalMentionedUids = selectedMentionedUsers
+            .filter(selectedUser => textMentions.includes(selectedUser.displayName)) // Keep only UIDs of users still mentioned in text
+            .map(user => user.userId);
+    } else {
+        // Fallback if popover wasn't used or mentions were typed manually and no robust resolution is in place
+        // This part is less reliable for getting UIDs from display names.
+        // For now, we'll assume extractMentionsFromText might return display names or UIDs if typed as @UID.
+        finalMentionedUids = extractMentionedUids(newComment.trim(), Array.from(newCommentMentionProfilesMap.values()).filter(Boolean) as UserProfileBasic[]);
+    }
+
+
     const commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'> = {
       userId: user.uid,
       text: newComment.trim(),
-      mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [],
+      mentionedUserIds: finalMentionedUids,
     };
     try {
       const newCommentId = await addCommentToPost(selectedPost.id, commentData);
       console.log(`Comment ${newCommentId} added to post ${selectedPost.id}`);
       await queryClient.invalidateQueries({ queryKey: ['comments', selectedPost.id] });
 
-      // Notify post author (if different from commenter)
       if (selectedPost.userId !== user.uid) {
         queryClient.invalidateQueries({ queryKey: ['notifications', selectedPost.userId] });
       }
-      // Notify mentioned users (if different from commenter and post author if already notified)
-      mentionedUserIds.forEach(mentionedId => {
-        if (mentionedId !== user.uid && mentionedId !== selectedPost.userId) {
-          queryClient.invalidateQueries({ queryKey: ['notifications', mentionedId] });
+      finalMentionedUids.forEach(mentionedUid => {
+        if (mentionedUid !== user.uid && mentionedUid !== selectedPost.userId) {
+          queryClient.invalidateQueries({ queryKey: ['notifications', mentionedUid] });
         }
       });
 
       setNewComment('');
       setNewCommentMentionQuery('');
       setShowNewCommentSuggestions(false);
+      setSelectedMentionedUsers([]); // Clear selected users after submit
       toast({ title: "Comment Added" });
     } catch (error: any) {
       console.error("Error submitting comment:", error);
@@ -1100,26 +1121,8 @@ function BoardPageContent() {
 
   const handleCommentDeleted = () => refetchComments();
 
-   // Removed AI Autocomplete functionality
-   // const triggerAutocomplete = useCallback(async (title: string, currentDesc: string) => {
-   // ...
-   // }, [toast]);
 
-  // const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    // const currentText = e.target.value;
-    // if (descriptionRef.current) descriptionRef.current.value = currentText;
-
-    // if (autocompleteTimeoutRef.current) {
-    //   clearTimeout(autocompleteTimeoutRef.current);
-    // }
-    // autocompleteTimeoutRef.current = setTimeout(() => {
-    //   if (selectedPost?.question && currentText.length > 10 && currentText.length < 300) {
-    //   }
-    // }, 1500);
-  // };
-
-
-  if (authLoading || (isLoadingPosts && !posts?.length && user)) { // Show loading if auth is loading OR if posts are loading AND user is present
+  if (authLoading || (isLoadingPosts && !posts?.length && user)) { 
     return (
       <div className="container mx-auto p-4 pt-6 text-center">
         <div className="flex justify-center items-center h-64">
@@ -1481,22 +1484,30 @@ function BoardPageContent() {
 
 export default BoardPageContent;
 
-// Helper to extract potential UIDs or DisplayNames from text, assuming @UID or @DisplayName format
-const extractMentions = (text: string): string[] => {
-    const mentionRegex = /@([a-zA-Z0-9_.\- ]+)/g; // Allow spaces, dots, hyphens in display names
+// Helper to extract display names from text, assuming @DisplayName format
+const extractDisplayNamesFromText = (text: string): string[] => {
+    const mentionRegex = /@([a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g; // Allows spaces, dots, hyphens in display names
     const matches = text.matchAll(mentionRegex);
-    const userIdentifiers = new Set<string>();
+    const displayNames = new Set<string>();
     for (const match of matches) {
         if (match[1]) {
-            // Here, match[1] could be a UID or a multi-word display name.
-            // The notification service will need to resolve display names to UIDs if necessary.
-            // For now, we store what was typed.
-            userIdentifiers.add(match[1].trim());
+            displayNames.add(match[1].trim());
         }
     }
-    console.log(`[page.tsx] extractMentions from text "${text.substring(0,30)}...": Found identifiers:`, Array.from(userIdentifiers));
-    return Array.from(userIdentifiers);
+    console.log(`[page.tsx] extractDisplayNamesFromText from text "${text.substring(0,30)}...": Found display names:`, Array.from(displayNames));
+    return Array.from(displayNames);
 };
 
-
-    
+// Helper to map display names found in text to UIDs using the profiles map
+const extractMentionedUids = (text: string, profilesToSearch: UserProfileBasic[]): string[] => {
+    const textualMentions = extractDisplayNamesFromText(text);
+    const uids = new Set<string>();
+    textualMentions.forEach(displayName => {
+        const foundProfile = profilesToSearch.find(p => p.displayName === displayName);
+        if (foundProfile) {
+            uids.add(foundProfile.userId);
+        }
+    });
+    console.log(`[page.tsx] extractMentionedUids - Textual: ${textualMentions.join(', ')}, Profiles: ${profilesToSearch.length}, Resolved UIDs: ${Array.from(uids).join(', ')}`);
+    return Array.from(uids);
+};
