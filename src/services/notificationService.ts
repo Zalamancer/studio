@@ -18,40 +18,40 @@ import {
 } from 'firebase/firestore';
 import type { NewNotificationData, ClientNotification } from '@/types/notification';
 import { getUserProfileBasic } from './connectionService'; // To fetch sender details
-// Removed: import { generateAnonymousName } from '@/lib/pseudonymUtils'; // No longer needed
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 const notificationsCollectionRef = collection(db, 'notifications');
 
 // Function to create a new notification
 export const createNotification = async (notificationData: Omit<NewNotificationData, 'senderName' | 'senderAvatar'>): Promise<string> => {
-  console.log('[notificationService] createNotification: Called with data:', notificationData);
+  console.log('[notificationService] createNotification: Called with data:', JSON.stringify(notificationData, null, 2));
   if (!notificationData.userId || !notificationData.senderId || !notificationData.type) {
-    console.error('[notificationService] createNotification: Missing required fields (userId, senderId, type).', notificationData);
+    console.error('[notificationService] createNotification: Missing required fields (userId, senderId, type). Data:', notificationData);
     throw new Error('User ID, Sender ID, and Type are required to create a notification.');
   }
 
   try {
     const senderProfile = await getUserProfileBasic(notificationData.senderId);
-    console.log('[notificationService] createNotification: Fetched senderProfile:', senderProfile);
+    console.log('[notificationService] createNotification: Fetched senderProfile for senderId', notificationData.senderId, ':', JSON.stringify(senderProfile, null, 2));
 
     const fullNotificationData: NewNotificationData & { timestamp: Timestamp, isRead: boolean } = {
       ...notificationData,
-      senderName: senderProfile?.displayName || `@${notificationData.senderId}`, // Use @UID fallback
-      senderAvatar: senderProfile?.avatarUrl,
-      postQuestion: notificationData.postQuestion || null, // Ensure null if undefined
+      senderName: senderProfile?.displayName || generateAnonymousName(notificationData.senderId),
+      senderAvatar: senderProfile?.avatarUrl || null, // Ensure null if undefined or empty
+      postQuestion: notificationData.postQuestion || null,
       commentId: notificationData.commentId || null,
       subCommentId: notificationData.subCommentId || null,
       textSnippet: notificationData.textSnippet || null,
       timestamp: serverTimestamp() as Timestamp,
       isRead: false,
     };
-    console.log('[notificationService] createNotification: fullNotificationData to be written:', fullNotificationData);
+    console.log('[notificationService] createNotification: fullNotificationData to be written:', JSON.stringify(fullNotificationData, null, 2));
 
     const docRef = await addDoc(notificationsCollectionRef, fullNotificationData);
     console.log(`[notificationService] Notification CREATED successfully for user ${notificationData.userId} with ID: ${docRef.id}`);
     return docRef.id;
   } catch (error: any) {
-    console.error(`[notificationService] FAILED to create notification for user ${notificationData.userId}:`, error);
+    console.error(`[notificationService] FAILED to create notification for user ${notificationData.userId}. Error:`, error.message, error);
     console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
     if (error.code === 'permission-denied') {
       console.error("[notificationService] Firestore permission denied creating notification. Check rules for 'notifications' collection.");
@@ -97,11 +97,11 @@ export const getNotificationsForUser = async (userId: string, count = 50): Promi
   } catch (error: any) {
     console.error(`[notificationService] Error fetching notifications for user ${userId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error("[notificationService] Firestore permission denied fetching notifications. Check rules for reading 'notifications'.");
+      console.error("Firestore permission denied fetching notifications. Check rules for reading 'notifications'.");
       throw new Error('Permission denied fetching notifications. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      console.error("[notificationService] Firestore query for notifications requires an index. Create an index on 'userId' (==) and 'timestamp' (desc) in the Firebase console.");
+      console.error("Firestore query for notifications requires an index. Create an index on 'userId' (==) and 'timestamp' (desc) in the Firebase console.");
       throw new Error("Firestore query requires an index for notifications. Please create it in the Firebase console.");
     }
     throw new Error(`Failed to fetch notifications: ${error.message}`);
