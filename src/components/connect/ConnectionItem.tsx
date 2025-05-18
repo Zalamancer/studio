@@ -1,3 +1,4 @@
+// src/components/connect/ConnectionItem.tsx
 'use client';
 
 import React, { useState } from 'react';
@@ -7,10 +8,11 @@ import { Loader2, MessageSquare, UserX } from 'lucide-react';
 import type { Connection } from '@/types/connection';
 import { removeConnection } from '@/services/connectionService';
 import { useToast } from '@/hooks/use-toast';
-import { formatDistanceToNow } from 'date-fns'; // For displaying time ago
+import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation'; // For navigating to chat
-import { findOrCreateConversation } from '@/services/messagingService'; // Import messaging service
+import { useRouter } from 'next/navigation';
+import { findOrCreateConversation } from '@/services/messagingService';
+// Removed: import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -26,14 +28,17 @@ import {
 interface ConnectionItemProps {
   connection: Connection;
   currentUserId: string;
-  onAction: () => void; // Callback after action is successful
+  onAction: () => void;
 }
 
-const getInitials = (name: string | undefined | null): string => {
-  if (!name) return '?';
-  const names = name.split(' ');
-  if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-  return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
+const getInitials = (displayNameOrUid: string | undefined | null): string => {
+    if (!displayNameOrUid) return '?';
+    if (displayNameOrUid.startsWith('@')) { // Handle "@UID" format
+        return displayNameOrUid.length > 1 ? displayNameOrUid.charAt(1).toUpperCase() : '?';
+    }
+    const names = displayNameOrUid.split(' ');
+    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
+    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
 };
 
 export const ConnectionItem: React.FC<ConnectionItemProps> = ({
@@ -45,13 +50,15 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
   const router = useRouter();
   const [isLoadingRemove, setIsLoadingRemove] = useState(false);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
+  const displayName = connection.otherUserDisplayName || `@${connection.otherUserId}`;
+
 
   const handleRemove = async () => {
     setIsLoadingRemove(true);
     try {
       await removeConnection(connection.connectionId, currentUserId);
-      toast({ title: "Connection Removed", description: `You are no longer connected with ${connection.otherUserDisplayName}.` });
-      onAction(); // Trigger refetch in parent
+      toast({ title: "Connection Removed", description: `You are no longer connected with ${displayName}.` });
+      onAction();
     } catch (error: any) {
       console.error("Error removing connection:", error);
       toast({ variant: "destructive", title: "Error", description: `Could not remove connection: ${error.message}` });
@@ -63,10 +70,7 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
   const handleStartChat = async () => {
     setIsLoadingChat(true);
     try {
-      // Find or create a general conversation (no specific postId)
-      // NOTE: Adjust findOrCreateConversation if it strictly requires postId
-      // You might need a variation or handle null postId gracefully
-      const conversationId = await findOrCreateConversation(currentUserId, connection.otherUserId, 'general_connection'); // Use a placeholder like 'general_connection' or adapt service
+      const conversationId = await findOrCreateConversation(currentUserId, connection.otherUserId, 'general_connection');
        if (conversationId) {
            router.push(`/contracts?conversationId=${conversationId}`);
        } else {
@@ -91,13 +95,13 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
        <div className="flex items-center gap-3 flex-grow min-w-0">
           <Link href={`/profile/${connection.otherUserId}`} passHref>
              <Avatar className="h-10 w-10 cursor-pointer">
-                <AvatarImage src={connection.otherUserAvatarUrl} alt={connection.otherUserDisplayName} />
-                <AvatarFallback className="bg-primary text-primary-foreground">{getInitials(connection.otherUserDisplayName)}</AvatarFallback>
+                <AvatarImage src={connection.otherUserAvatarUrl} alt={displayName} />
+                <AvatarFallback className="bg-primary text-primary-foreground">{getInitials(displayName)}</AvatarFallback>
              </Avatar>
           </Link>
           <div className="flex-grow min-w-0">
              <Link href={`/profile/${connection.otherUserId}`} passHref>
-                 <p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">{connection.otherUserDisplayName}</p>
+                 <p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">{displayName}</p>
              </Link>
              <p className="text-xs text-muted-foreground">Connected {timeAgo}</p>
           </div>
@@ -108,7 +112,7 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
            variant="outline"
            onClick={handleStartChat}
            disabled={isLoadingChat || isLoadingRemove}
-           aria-label={`Message ${connection.otherUserDisplayName}`}
+           aria-label={`Message ${displayName}`}
          >
            {isLoadingChat ? <Loader2 className="h-4 w-4 animate-spin" /> : <MessageSquare className="h-4 w-4" />}
            <span className="hidden sm:inline ml-1">Message</span>
@@ -119,7 +123,7 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
                size="sm"
                variant="destructive"
                disabled={isLoadingRemove || isLoadingChat}
-               aria-label={`Remove connection with ${connection.otherUserDisplayName}`}
+               aria-label={`Remove connection with ${displayName}`}
              >
                {isLoadingRemove ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserX className="h-4 w-4" />}
                 <span className="hidden sm:inline ml-1">Remove</span>
@@ -129,7 +133,7 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
              <AlertDialogHeader>
                <AlertDialogTitle>Remove Connection?</AlertDialogTitle>
                <AlertDialogDescription>
-                 Are you sure you want to remove your connection with {connection.otherUserDisplayName}? This action cannot be undone.
+                 Are you sure you want to remove your connection with {displayName}? This action cannot be undone.
                </AlertDialogDescription>
              </AlertDialogHeader>
              <AlertDialogFooter>

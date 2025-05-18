@@ -1,7 +1,5 @@
 // src/services/connectionService.ts
-'use server';
-
-import { db } from '@/lib/firebase/config';
+import { db, auth } from '@/lib/firebase/config';
 import {
   collection,
   query,
@@ -15,13 +13,41 @@ import {
   serverTimestamp,
   orderBy,
   limit,
-  or, // Import 'or' for combined queries
-  getDoc, // Import getDoc for fetching single user profile
+  // or, // Not used, can be removed
+  getDoc,
+  collectionGroup, // For querying users collection
 } from 'firebase/firestore';
-import type { MutualConnection, ConnectionStatus, Connection, ConnectionRequest, UserProfileBasic } from '@/types/connection';
+import type { MutualConnection, ConnectionStatus, Connection, ConnectionRequest, UserProfileBasic, UserProfileData } from '@/types/connection';
+// Removed: import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Re-adding for direct use if needed for now
 
 const mutualsCollectionRef = collection(db, 'mutuals');
-const usersCollectionRef = collection(db, 'users'); // Assuming a 'users' collection for basic profiles
+const usersCollectionRef = collection(db, 'users');
+
+// --- Pseudonym Generation (moved here temporarily if utils file is problematic) ---
+// In a larger app, keep this in a dedicated utils file.
+const ADJECTIVES = ["Agile", "Bright", "Calm", "Desert", "Eager", "Forest", "Giant", "Hidden", "Island", "Jade", "Keen", "Lunar", "Mystic", "Noble", "Ocean", "Prairie", "Quiet", "River", "Solar", "Terra", "Urban", "Vivid", "Wild", "Xeric", "Yellow", "Zenith"];
+const NOUNS = ["Fox", "Wolf", "Bear", "Eagle", "Hawk", "Lion", "Tiger", "Puma", "Jaguar", "Shark", "Whale", "Badger", "Coyote", "Falcon", "Panther", "Stallion", "Comet", "Planet", "Nebula", "Quasar", "Cipher", "Matrix", "Vector", "Pixel", "Byte", "Glitch"];
+
+const simpleHash = (str: string, max: number): number => {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    const char = str.charCodeAt(i);
+    hash = (hash << 5) - hash + char;
+    hash |= 0; // Convert to 32bit integer
+  }
+  return Math.abs(hash) % max;
+};
+
+export const generateAnonymousName = (userId: string): string => {
+  if (!userId) return "AnonUser";
+  const adjIndex = simpleHash(userId, ADJECTIVES.length);
+  // Offset noun hash slightly to avoid always picking same index for adj/noun if lists are same length
+  const nounIndex = simpleHash(userId.split("").reverse().join(""), NOUNS.length);
+  const numericSuffix = (simpleHash(userId.substring(0, 5), 900) + 100).toString(); // 3-digit number (100-999)
+  return `${ADJECTIVES[adjIndex]}${NOUNS[nounIndex]}${numericSuffix}`;
+};
+// --- End Pseudonym Generation ---
+
 
 // Helper to generate a consistent connection ID
 const getConnectionDocId = (userId1: string, userId2: string): string => {
@@ -30,98 +56,104 @@ const getConnectionDocId = (userId1: string, userId2: string): string => {
 
 // --- Send Connection Request ---
 export const sendConnectionRequest = async (requesterId: string, recipientId: string): Promise<void> => {
+  const clientAuthUid = auth.currentUser?.uid;
+
+  console.log(`%c[connectionService] sendConnectionRequest - Called with:`, "color: blue; font-weight:bold;", { requesterId, recipientId, clientAuthUid });
+
+  if (!clientAuthUid) {
+    const errorMsg = "User not authenticated. Cannot send connection request.";
+    console.error(`%c[connectionService] sendConnectionRequest - ERROR: ${errorMsg}`, "color: red; font-weight:bold;");
+    throw new Error(errorMsg);
+  }
+
+  if (requesterId !== clientAuthUid) {
+    const errorMsg = `Requester ID parameter ('${requesterId}') does not match authenticated user UID ('${clientAuthUid}'). Aborting.`;
+    console.error(`%c[connectionService] sendConnectionRequest - ERROR: ${errorMsg}`, "color: red; font-weight:bold;");
+    throw new Error(errorMsg);
+  }
+
   if (requesterId === recipientId) {
-    throw new Error("Cannot send connection request to yourself.");
+    const errorMsg = "Cannot send connection request to yourself.";
+    console.error(`%c[connectionService] sendConnectionRequest - ERROR: ${errorMsg}`, "color: red; font-weight:bold;");
+    throw new Error(errorMsg);
   }
 
   const connectionId = getConnectionDocId(requesterId, recipientId);
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
 
-  console.log(`Sending connection request from ${requesterId} to ${recipientId}. Connection ID: ${connectionId}`);
+  const sortedUserIds = [requesterId, recipientId].sort();
+  const newConnectionData: Omit<MutualConnection, 'id'> = {
+    userIds: sortedUserIds,
+    status: 'pending',
+    requesterId: requesterId,
+    requestedAt: serverTimestamp() as Timestamp,
+  };
+
+  console.log(`%c[connectionService] sendConnectionRequest - Rule Check Values:`, "color: green; font-weight:bold;", {
+    '1. request.auth != null:': !!clientAuthUid,
+    'DATA.requesterId': newConnectionData.requesterId,
+    'request.auth.uid': clientAuthUid,
+    '2. request.resource.data.requesterId == request.auth.uid:': newConnectionData.requesterId === clientAuthUid,
+    'DATA.userIds': newConnectionData.userIds,
+    '3. request.resource.data.userIds.hasAll([request.auth.uid]):': newConnectionData.userIds.includes(clientAuthUid)
+  });
+
+  if (!auth.currentUser) {
+      const errorMsg = "User authentication lost immediately before Firestore write. Aborting.";
+      console.error(`%c[connectionService] sendConnectionRequest - FATAL ERROR: ${errorMsg}`, "color: red; font-weight:bold;");
+      throw new Error(errorMsg);
+  }
+  console.log(`%c[connectionService] Final auth check passed. Attempting to write with connectionId: ${connectionId}. Data:`, "color: darkorange;", newConnectionData);
+
 
   try {
-    const connectionDocSnap = await getDoc(connectionDocRef); // Use getDoc for single doc check
+    const connectionDocSnap = await getDoc(connectionDocRef);
 
     if (connectionDocSnap.exists()) {
-        const existingStatus = connectionDocSnap.data().status;
-        if (existingStatus === 'connected') {
-            console.log("Connection already exists.");
-            throw new Error("Already connected.");
-        } else if (existingStatus === 'pending') {
-            // Check who sent the existing pending request
-            const existingRequester = connectionDocSnap.data().requesterId;
-            if (existingRequester === requesterId) {
-                console.log("You already sent a request.");
-                throw new Error("Connection request already sent by you.");
-            } else {
-                 console.log("Other user already sent you a request.");
-                 throw new Error("This user already sent you a connection request. Please check your pending requests.");
-            }
+      const existingStatus = connectionDocSnap.data().status;
+      if (existingStatus === 'connected') {
+        throw new Error("Already connected.");
+      } else if (existingStatus === 'pending') {
+        const existingRequester = connectionDocSnap.data().requesterId;
+        if (existingRequester === requesterId) {
+          throw new Error("Connection request already sent by you.");
+        } else {
+          throw new Error("This user already sent you a connection request. Please check your pending requests.");
         }
-      // Handle other statuses if needed (e.g., blocked)
+      }
     }
 
-    // Ensure userIds are sorted before storing
-    const sortedUserIds = [requesterId, recipientId].sort();
-
-    const newConnection: Omit<MutualConnection, 'id'> = {
-      userIds: sortedUserIds,
-      status: 'pending',
-      requesterId: requesterId,
-      requestedAt: serverTimestamp() as Timestamp,
-      // connectedAt will be set on acceptance
-    };
-
-    await setDoc(connectionDocRef, newConnection);
-    console.log(`Connection request sent successfully: ${connectionId}`);
-
+    await setDoc(connectionDocRef, newConnectionData);
+    console.log(`[connectionService] Connection request sent successfully: ${connectionId}`);
   } catch (error: any) {
-    console.error(`Error sending connection request (${connectionId}):`, error);
+    console.error(`[connectionService] Error sending connection request (${connectionId}):`, error);
     if (error.code === 'permission-denied') {
+      console.error(`%c[connectionService] PERMISSION_DENIED details at time of error:`, "color: red; font-weight:bold;");
+      console.error(`  - auth.currentUser?.uid (at error): '${auth.currentUser?.uid || 'NULL'}'`);
+      console.error(`  - param requesterId (at error):   '${requesterId}'`);
+      console.error(`  - Data that was attempted for write (newConnectionData variable):`, newConnectionData);
       throw new Error('Permission denied. Check Firestore rules for creating mutuals documents.');
     }
-    throw new Error(`${error.message}`); // Propagate existing error messages
+    throw new Error(`${error.message || 'Failed to send connection request.'}`);
   }
 };
 
 // --- Accept Connection Request ---
 export const acceptConnectionRequest = async (connectionId: string, acceptorId: string): Promise<void> => {
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
-
-  console.log(`Accepting connection request: ${connectionId} by user ${acceptorId}`);
-
+  console.log(`[connectionService] Accepting connection request: ${connectionId} by user ${acceptorId}`);
   try {
-    const connectionDocSnap = await getDoc(connectionDocRef); // Use getDoc
-
-    if (!connectionDocSnap.exists()) {
-      throw new Error("Connection request not found.");
-    }
-
+    const connectionDocSnap = await getDoc(connectionDocRef);
+    if (!connectionDocSnap.exists()) throw new Error("Connection request not found.");
     const connectionData = connectionDocSnap.data() as MutualConnection;
-
-    // Ensure the acceptor is the recipient, not the original requester
-    if (connectionData.requesterId === acceptorId) {
-      throw new Error("Cannot accept your own connection request.");
-    }
-    // Ensure the acceptor is part of the userIds array
-     if (!connectionData.userIds.includes(acceptorId)) {
-        throw new Error("Acceptor is not part of this connection request.");
-    }
-    if (connectionData.status !== 'pending') {
-      throw new Error("Connection request is not pending.");
-    }
-
-    await updateDoc(connectionDocRef, {
-      status: 'connected',
-      connectedAt: serverTimestamp(),
-    });
-    console.log(`Connection request accepted successfully: ${connectionId}`);
-
+    if (connectionData.requesterId === acceptorId) throw new Error("Cannot accept your own connection request.");
+    if (!connectionData.userIds.includes(acceptorId)) throw new Error("Acceptor is not part of this connection request.");
+    if (connectionData.status !== 'pending') throw new Error("Connection request is not pending.");
+    await updateDoc(connectionDocRef, { status: 'connected', connectedAt: serverTimestamp() });
+    console.log(`[connectionService] Connection request accepted successfully: ${connectionId}`);
   } catch (error: any) {
-    console.error(`Error accepting connection request (${connectionId}):`, error);
-    if (error.code === 'permission-denied') {
-      throw new Error('Permission denied. Check Firestore rules for updating mutuals documents.');
-    }
+    console.error(`[connectionService] Error accepting connection request (${connectionId}):`, error);
+    if (error.code === 'permission-denied') throw new Error('Permission denied. Check Firestore rules for updating mutuals documents.');
     throw new Error(`Failed to accept connection request: ${error.message}`);
   }
 };
@@ -129,159 +161,94 @@ export const acceptConnectionRequest = async (connectionId: string, acceptorId: 
 // --- Reject/Cancel Connection Request ---
 export const rejectOrCancelConnectionRequest = async (connectionId: string, userId: string): Promise<void> => {
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
-
-  console.log(`Rejecting/Cancelling connection request: ${connectionId} by user ${userId}`);
-
+  console.log(`[connectionService] Rejecting/Cancelling connection request: ${connectionId} by user ${userId}`);
   try {
-    const connectionDocSnap = await getDoc(connectionDocRef); // Use getDoc
-
-    if (!connectionDocSnap.exists()) {
-      throw new Error("Connection request not found.");
-    }
+    const connectionDocSnap = await getDoc(connectionDocRef);
+    if (!connectionDocSnap.exists()) throw new Error("Connection request not found.");
     const connectionData = connectionDocSnap.data() as MutualConnection;
-
-    // Ensure the user is part of the connection
-    if (!connectionData.userIds.includes(userId)) {
-        throw new Error("User not part of this connection request.");
-    }
-    if (connectionData.status !== 'pending') {
-        throw new Error("Cannot reject/cancel a non-pending request.");
-    }
-
+    if (!connectionData.userIds.includes(userId)) throw new Error("User not part of this connection request.");
+    if (connectionData.status !== 'pending') throw new Error("Cannot reject/cancel a non-pending request.");
     await deleteDoc(connectionDocRef);
-    console.log(`Connection request rejected/cancelled successfully: ${connectionId}`);
-
+    console.log(`[connectionService] Connection request rejected/cancelled successfully: ${connectionId}`);
   } catch (error: any) {
-    console.error(`Error rejecting/cancelling connection request (${connectionId}):`, error);
-    if (error.code === 'permission-denied') {
-      throw new Error('Permission denied. Check Firestore rules for deleting mutuals documents.');
-    }
+    console.error(`[connectionService] Error rejecting/cancelling connection request (${connectionId}):`, error);
+    if (error.code === 'permission-denied') throw new Error('Permission denied. Check Firestore rules for deleting mutuals documents.');
     throw new Error(`Failed to reject/cancel connection request: ${error.message}`);
   }
 };
 
 // --- Remove Connection ---
 export const removeConnection = async (connectionId: string, userId: string): Promise<void> => {
-    const connectionDocRef = doc(mutualsCollectionRef, connectionId);
-
-    console.log(`Removing connection: ${connectionId} by user ${userId}`);
-
-    try {
-        const connectionDocSnap = await getDoc(connectionDocRef); // Use getDoc
-
-        if (!connectionDocSnap.exists()) {
-          throw new Error("Connection not found.");
-        }
-        const connectionData = connectionDocSnap.data() as MutualConnection;
-
-        // Ensure the user is part of the connection
-        if (!connectionData.userIds.includes(userId)) {
-            throw new Error("User not part of this connection.");
-        }
-        if (connectionData.status !== 'connected') {
-            throw new Error("Cannot remove a non-connected relationship.");
-        }
-
-        await deleteDoc(connectionDocRef);
-        console.log(`Connection removed successfully: ${connectionId}`);
-
-    } catch (error: any) {
-      console.error(`Error removing connection (${connectionId}):`, error);
-      if (error.code === 'permission-denied') {
-        throw new Error('Permission denied. Check Firestore rules for deleting mutuals documents.');
-      }
-      throw new Error(`Failed to remove connection: ${error.message}`);
-    }
+  const connectionDocRef = doc(mutualsCollectionRef, connectionId);
+  console.log(`[connectionService] Removing connection: ${connectionId} by user ${userId}`);
+  try {
+    const connectionDocSnap = await getDoc(connectionDocRef);
+    if (!connectionDocSnap.exists()) throw new Error("Connection not found.");
+    const connectionData = connectionDocSnap.data() as MutualConnection;
+    if (!connectionData.userIds.includes(userId)) throw new Error("User not part of this connection.");
+    if (connectionData.status !== 'connected') throw new Error("Cannot remove a non-connected relationship.");
+    await deleteDoc(connectionDocRef);
+    console.log(`[connectionService] Connection removed successfully: ${connectionId}`);
+  } catch (error: any) {
+    console.error(`[connectionService] Error removing connection (${connectionId}):`, error);
+    if (error.code === 'permission-denied') throw new Error('Permission denied. Check Firestore rules for deleting mutuals documents.');
+    throw new Error(`Failed to remove connection: ${error.message}`);
+  }
 };
-
 
 // --- Get Connection Status Between Two Users ---
 export const getConnectionStatus = async (userId1: string, userId2: string): Promise<ConnectionStatus | null> => {
-  if (!userId1 || !userId2) return 'not_connected'; // Handle null/undefined IDs
-  if (userId1 === userId2) return 'self'; // Cannot connect with self
-
+  if (!userId1 || !userId2) return 'not_connected';
+  if (userId1 === userId2) return 'self';
   const connectionId = getConnectionDocId(userId1, userId2);
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
-
   try {
-    const docSnap = await getDoc(connectionDocRef); // Use getDoc
-
-    if (!docSnap.exists()) {
-      return 'not_connected';
-    }
-
+    const docSnap = await getDoc(connectionDocRef);
+    if (!docSnap.exists()) return 'not_connected';
     const data = docSnap.data() as MutualConnection;
-
-    // Basic validation of the data
-    if (!data || !data.status || !data.requesterId || !data.userIds) {
-        console.warn(`Incomplete connection data found for ID: ${connectionId}`);
-        return 'not_connected'; // Treat incomplete data as not connected
-    }
-
-    if (data.status === 'connected') {
-      return 'connected';
-    } else if (data.status === 'pending') {
-      // Check who sent the request
-      return data.requesterId === userId1 ? 'pending_sent' : 'pending_received';
-    } else if (data.status === 'blocked') {
-        return 'blocked'; // Add handling for blocked status if needed
-    }
-
-    return 'not_connected'; // Default fallback
-
+    if (!data || !data.status || !data.requesterId || !data.userIds) return 'not_connected';
+    if (data.status === 'connected') return 'connected';
+    if (data.status === 'pending') return data.requesterId === userId1 ? 'pending_sent' : 'pending_received';
+    if (data.status === 'blocked') return 'blocked';
+    return 'not_connected';
   } catch (error: any) {
-    console.error(`Error fetching connection status between ${userId1} and ${userId2}:`, error);
-    // Don't throw, return null to indicate error fetching status
+    console.error(`[connectionService] Error fetching connection status between ${userId1} and ${userId2}:`, error);
     return null;
   }
 };
 
-
 // --- Fetch Basic User Profile ---
-// NOTE: Assumes you have a 'users' collection storing basic info
-// Adjust the fields (e.g., 'companyName', 'avatarUrl') based on your actual user profile structure
 const fetchUserProfileBasic = async (userId: string): Promise<UserProfileBasic | null> => {
-    if (!userId) return null;
-    console.log(`Fetching basic profile for userId: ${userId}`);
-    try {
-        const userDocRef = doc(db, 'users', userId); // Use specific collection name
-        const userSnap = await getDoc(userDocRef);
-
-        if (userSnap.exists()) {
-            const userData = userSnap.data();
-             // Adapt these field names based on your actual user profile structure
-             const profile: UserProfileBasic = {
-                userId: userId,
-                // Use companyName or displayName, otherwise fallback to @userId format
-                displayName: userData.companyName || userData.displayName || `@${userId}`, // Fallback with @
-                avatarUrl: userData.avatarUrl || userData.photoURL || undefined, // Check both fields
-             };
-             console.log(`Profile found for ${userId}:`, profile);
-             return profile;
-        }
-        console.warn(`Basic profile document not found for userId: ${userId}`);
-        // Return a fallback structure even if profile doc is missing
-        return { userId: userId, displayName: `@${userId}` }; // Fallback with @
-    } catch (error: any) {
-        console.error(`Error fetching basic profile for ${userId}:`, error);
-        if (error.code === 'permission-denied') {
-             console.error(`Permission denied fetching profile for ${userId}. Check rules for 'users' collection.`);
-             // Optionally throw a specific error or return null
-             // throw new Error(`Permission denied fetching profile for ${userId}`);
-        }
-        return null; // Return null on error to allow main function to continue
+  if (!userId) return null;
+  console.log(`[connectionService] fetchUserProfileBasic: Fetching basic profile for userId: ${userId}`);
+  try {
+    const userDocRef = doc(usersCollectionRef, userId);
+    const userSnap = await getDoc(userDocRef);
+    if (userSnap.exists()) {
+      const userData = userSnap.data();
+      const profile: UserProfileBasic = {
+        userId: userId,
+        displayName: userData.displayName || userData.companyName || generateAnonymousName(userId),
+        avatarUrl: userData.avatarUrl || userData.photoURL || undefined,
+      };
+      console.log(`[connectionService] fetchUserProfileBasic: Profile found for ${userId}:`, profile);
+      return profile;
     }
+    console.warn(`[connectionService] fetchUserProfileBasic: Profile document not found for userId: ${userId}. Using generated name.`);
+    return { userId: userId, displayName: generateAnonymousName(userId) };
+  } catch (error: any) {
+    console.error(`[connectionService] fetchUserProfileBasic: Error fetching profile for ${userId}:`, error);
+    return { userId: userId, displayName: generateAnonymousName(userId) }; // Fallback on error
+  }
 };
-
 
 // --- Get Pending Connection Requests Received by User ---
 export const getPendingRequests = async (userId: string): Promise<ConnectionRequest[]> => {
+  console.log(`[connectionService] Fetching pending requests for user: ${userId}`);
   if (!userId) {
-    console.warn("getPendingRequests called with invalid userId.");
+    console.warn("[connectionService] getPendingRequests called with invalid userId.");
     return [];
   }
-  console.log(`Fetching pending requests for user ${userId}`);
-
   try {
     const q = query(
       mutualsCollectionRef,
@@ -290,68 +257,37 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
       orderBy('requestedAt', 'desc'),
       limit(50)
     );
-
-    console.log("Executing Firestore query for pending requests...");
     const querySnapshot = await getDocs(q);
-    console.log(`Query snapshot received. Found ${querySnapshot.docs.length} potential pending request documents.`);
-
     const requestsPromises = querySnapshot.docs
-      .filter(doc => {
-          const data = doc.data();
-          // Explicitly filter where the current user is the recipient (not the requester)
-          const isRecipient = data.requesterId !== userId && data.userIds.includes(userId);
-           if (!isRecipient) {
-               console.log(`Filtering out doc ${doc.id}: User ${userId} is the requester or not included.`);
-           }
-          return isRecipient;
+      .filter(docSnap => {
+        const data = docSnap.data();
+        return data.requesterId !== userId && data.userIds.includes(userId);
       })
       .map(async (docSnap) => {
         const data = docSnap.data() as Omit<MutualConnection, 'id'>;
-        console.log(`Processing pending request doc ${docSnap.id} from requester ${data.requesterId}`);
-
-         // Validate timestamp
-        const requestedAtMillis = data.requestedAt instanceof Timestamp
-            ? data.requestedAt.toMillis()
-            : null; // Use null for invalid/missing timestamp
-
-         if (requestedAtMillis === null) {
-             console.warn(`Invalid or missing requestedAt timestamp for doc ${docSnap.id}`);
-             // Decide whether to skip or use a fallback. Skipping is safer.
-             return null;
-         }
-
-
-        const requesterProfile = await fetchUserProfileBasic(data.requesterId); // Fetch requester's basic info
-        if (!requesterProfile) {
-             console.warn(`Could not fetch profile for requester ${data.requesterId} (doc ${docSnap.id}). Using fallback.`);
-             // Decide if you want to show requests even without profile info
-             // return null; // Option: skip if profile fetch fails
-        }
-
-        const requestItem: ConnectionRequest = {
+        const requestedAtMillis = data.requestedAt instanceof Timestamp ? data.requestedAt.toMillis() : null;
+        if (requestedAtMillis === null) return null;
+        const requesterProfile = await fetchUserProfileBasic(data.requesterId);
+        return {
           connectionId: docSnap.id,
           requesterId: data.requesterId,
-          requesterDisplayName: requesterProfile?.displayName || `@${data.requesterId}`, // Use fallback with @
+          requesterDisplayName: requesterProfile?.displayName || generateAnonymousName(data.requesterId),
           requesterAvatarUrl: requesterProfile?.avatarUrl,
-          requestedAt: requestedAtMillis, // Use milliseconds
-        };
-        console.log(`Successfully mapped pending request:`, requestItem);
-        return requestItem;
+          requestedAt: requestedAtMillis,
+        } as ConnectionRequest;
       });
-
     const requests = (await Promise.all(requestsPromises)).filter(req => req !== null) as ConnectionRequest[];
-    console.log(`Successfully processed ${requests.length} pending requests for user ${userId}`);
+    console.log(`[connectionService] Successfully processed ${requests.length} pending requests for user ${userId}`);
     return requests;
-
   } catch (error: any) {
-    console.error(`Error fetching pending requests for user ${userId}:`, error);
+    console.error(`[connectionService] Error fetching pending requests for user ${userId}:`, error);
     if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied fetching pending requests. Check rules for 'mutuals' collection.");
-        throw new Error('Permission denied fetching pending requests. Check Firestore rules.');
+      console.error("[connectionService] Firestore permission denied fetching pending requests. Check rules for 'mutuals' collection.");
+      throw new Error('Permission denied fetching pending requests. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.error("Firestore query for pending requests requires an index. Create a composite index on 'userIds' (array-contains), 'status' (==), and 'requestedAt' (desc) in the Firebase console for the 'mutuals' collection.");
-        throw new Error("Firestore query requires an index for pending requests. Please create it in the Firebase console.");
+      console.error("[connectionService] Firestore query for pending requests requires an index. Create a composite index on 'userIds' (array-contains), 'status' (==), and 'requestedAt' (desc) in the Firebase console for the 'mutuals' collection.");
+      throw new Error("Firestore query requires an index for pending requests. Please create it in the Firebase console.");
     }
     throw new Error(`Failed to fetch pending requests: ${error.message}`);
   }
@@ -359,86 +295,165 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
 
 // --- Get List of Connected Users (Mutuals) ---
 export const getConnections = async (userId: string): Promise<Connection[]> => {
-    if (!userId) {
-        console.warn("getConnections called with invalid userId.");
-        return [];
+  console.log(`[connectionService] Fetching connections for user: ${userId}`);
+  if (!userId) {
+    console.warn("[connectionService] getConnections called with invalid userId.");
+    return [];
+  }
+  try {
+    const q = query(
+      mutualsCollectionRef,
+      where('userIds', 'array-contains', userId),
+      where('status', '==', 'connected'),
+      orderBy('connectedAt', 'desc'),
+      limit(100)
+    );
+    const querySnapshot = await getDocs(q);
+    const connectionsPromises = querySnapshot.docs.map(async (docSnap) => {
+      const data = docSnap.data() as Omit<MutualConnection, 'id'>;
+      const otherUserId = data.userIds.find(id => id !== userId);
+      if (!otherUserId) return null;
+      const connectedAtMillis = data.connectedAt instanceof Timestamp ? data.connectedAt.toMillis() : null;
+      if (connectedAtMillis === null) return null;
+      const otherUserProfile = await fetchUserProfileBasic(otherUserId);
+      return {
+        connectionId: docSnap.id,
+        otherUserId: otherUserId,
+        otherUserDisplayName: otherUserProfile?.displayName || generateAnonymousName(otherUserId),
+        otherUserAvatarUrl: otherUserProfile?.avatarUrl,
+        connectedAt: connectedAtMillis,
+      } as Connection;
+    });
+    const connections = (await Promise.all(connectionsPromises)).filter(conn => conn !== null) as Connection[];
+    console.log(`[connectionService] Successfully processed ${connections.length} connections for user ${userId}`);
+    return connections;
+  } catch (error: any) {
+    console.error(`[connectionService] Error fetching connections for user ${userId}:`, error);
+    if (error.code === 'permission-denied') {
+      console.error("[connectionService] Firestore permission denied fetching connections. Check rules for 'mutuals' collection.");
+      throw new Error('Permission denied fetching connections. Check Firestore rules.');
     }
-    console.log(`Fetching connections for user ${userId}`);
-
-    try {
-        const q = query(
-          mutualsCollectionRef,
-          where('userIds', 'array-contains', userId),
-          where('status', '==', 'connected'),
-          orderBy('connectedAt', 'desc'), // Order by connection time
-          limit(100) // Limit results
-        );
-
-        console.log("Executing Firestore query for connections...");
-        const querySnapshot = await getDocs(q);
-        console.log(`Query snapshot received. Found ${querySnapshot.docs.length} connection documents.`);
-
-        const connectionsPromises = querySnapshot.docs.map(async (docSnap) => {
-            const data = docSnap.data() as Omit<MutualConnection, 'id'>;
-            const otherUserId = data.userIds.find(id => id !== userId);
-
-            if (!otherUserId) {
-                 console.warn(`Could not find other user ID in connection doc ${docSnap.id}. Data:`, data);
-                 return null;
-            }
-            console.log(`Processing connection doc ${docSnap.id} with other user ${otherUserId}`);
-
-            // Validate timestamp
-            const connectedAtMillis = data.connectedAt instanceof Timestamp
-                ? data.connectedAt.toMillis()
-                : null; // Use null for invalid/missing timestamp
-
-             if (connectedAtMillis === null) {
-                console.warn(`Invalid or missing connectedAt timestamp for doc ${docSnap.id}`);
-                // Decide whether to skip or use a fallback. Skipping is safer.
-                return null;
-            }
-
-
-            const otherUserProfile = await fetchUserProfileBasic(otherUserId);
-            if (!otherUserProfile) {
-                console.warn(`Could not fetch profile for other user ${otherUserId} (doc ${docSnap.id}). Using fallback.`);
-                 // Decide if you want to show connections even without profile info
-                // return null; // Option: skip if profile fetch fails
-            }
-
-            const connectionItem: Connection = {
-                connectionId: docSnap.id,
-                otherUserId: otherUserId,
-                otherUserDisplayName: otherUserProfile?.displayName || `@${otherUserId}`, // Use fallback with @
-                otherUserAvatarUrl: otherUserProfile?.avatarUrl,
-                connectedAt: connectedAtMillis, // Use milliseconds
-            };
-            console.log(`Successfully mapped connection:`, connectionItem);
-            return connectionItem;
-        });
-
-        const connections = (await Promise.all(connectionsPromises)).filter(conn => conn !== null) as Connection[];
-        console.log(`Successfully processed ${connections.length} connections for user ${userId}`);
-        return connections;
-
-    } catch (error: any) {
-      console.error(`Error fetching connections for user ${userId}:`, error);
-      if (error.code === 'permission-denied') {
-          console.error("Firestore permission denied fetching connections. Check rules for 'mutuals' collection.");
-          throw new Error('Permission denied fetching connections. Check Firestore rules.');
-      }
-      if (error.code === 'failed-precondition' && error.message.includes('index')) {
-          console.error("Firestore query for connections requires an index. Create a composite index on 'userIds' (array-contains), 'status' (==), and 'connectedAt' (desc) in the Firebase console for the 'mutuals' collection.");
-          throw new Error("Firestore query requires an index for connections. Please create it in the Firebase console.");
-      }
-      throw new Error(`Failed to fetch connections: ${error.message}`);
+    if (error.code === 'failed-precondition' && error.message.includes('index')) {
+      console.error("[connectionService] Firestore query for connections requires an index. Create a composite index on 'userIds' (array-contains), 'status' (==), and 'connectedAt' (desc) in the Firebase console for the 'mutuals' collection.");
+      throw new Error("Firestore query requires an index for connections. Please create it in the Firebase console.");
     }
+    throw new Error(`Failed to fetch connections: ${error.message}`);
+  }
 };
-
 
 // --- Get Basic User Profile Info (callable directly) ---
 export const getUserProfileBasic = async (userId: string): Promise<UserProfileBasic | null> => {
-    // This just wraps the internal helper function
-    return fetchUserProfileBasic(userId);
-}
+  return fetchUserProfileBasic(userId);
+};
+
+// --- Initialize User Profile Document ---
+export const initializeUserProfile = async (userData: UserProfileData): Promise<void> => {
+  console.log(`%c[connectionService] initializeUserProfile: Called with userData:`, "color: orange", userData);
+  if (!userData || !userData.uid) {
+    console.error('%c[connectionService] initializeUserProfile: ERROR - UID is missing in userData. Aborting.', "color: red; font-weight:bold;");
+    return;
+  }
+
+  const userDocRef = doc(usersCollectionRef, userData.uid);
+
+  try {
+    const docSnap = await getDoc(userDocRef);
+    const dataToWrite: { [key: string]: any } = {
+      uid: userData.uid,
+      email: userData.email || null,
+      lastLoginAt: serverTimestamp(),
+    };
+
+    let finalDisplayName = generateAnonymousName(userData.uid); // Start with generated name
+
+    if (userData.displayName && userData.displayName.trim() !== '') {
+      finalDisplayName = userData.displayName;
+    } else if (userData.companyName && userData.companyName.trim() !== '') {
+      finalDisplayName = userData.companyName;
+    }
+    dataToWrite.displayName = finalDisplayName;
+
+    if (userData.photoURL) dataToWrite.avatarUrl = userData.photoURL;
+    if (userData.companyName && userData.companyName.trim() !== '') dataToWrite.companyName = userData.companyName;
+    if (userData.industry && userData.industry.trim() !== '') dataToWrite.industry = userData.industry;
+
+
+    if (!docSnap.exists()) {
+      console.log(`%c[connectionService] initializeUserProfile: Creating new profile for UID ${userData.uid}.`, "color: green;");
+      dataToWrite.createdAt = serverTimestamp();
+      console.log(`%c[connectionService] Data to write (CREATE) for UID ${userData.uid}:`, "color: green;", dataToWrite);
+      await setDoc(userDocRef, dataToWrite);
+      console.log(`%c[connectionService] User profile CREATED successfully for UID ${userData.uid}.`, "color: green; font-weight:bold;");
+    } else {
+      console.log(`%c[connectionService] initializeUserProfile: Updating existing profile for UID ${userData.uid}.`, "color: blue;");
+      const existingData = docSnap.data();
+      const updatePayload: { [key: string]: any } = { lastLoginAt: serverTimestamp() };
+
+      // Only update displayName if new one is more specific or if existing one is a generated name
+      if ( (userData.displayName && userData.displayName.trim() !== '') || (userData.companyName && userData.companyName.trim() !== '') ) {
+         updatePayload.displayName = finalDisplayName;
+      } else if (existingData.displayName) {
+         updatePayload.displayName = existingData.displayName; // Keep existing if no new name provided
+      } else {
+         updatePayload.displayName = finalDisplayName; // Generate if none existed
+      }
+
+      if (userData.email) updatePayload.email = userData.email;
+      if (userData.photoURL) updatePayload.avatarUrl = userData.photoURL;
+      if (userData.companyName && userData.companyName.trim() !== '') updatePayload.companyName = userData.companyName;
+      if (userData.industry && userData.industry.trim() !== '') updatePayload.industry = userData.industry;
+
+
+      console.log(`%c[connectionService] Data to merge (UPDATE) for UID ${userData.uid}:`, "color: blue;", updatePayload);
+      await setDoc(userDocRef, updatePayload, { merge: true });
+      console.log(`%c[connectionService] User profile UPDATED successfully for UID ${userData.uid}.`, "color: blue; font-weight:bold;");
+    }
+  } catch (error: any) {
+    console.error(`%c[connectionService] Firestore Error on setDoc for UID ${userData.uid}:`, "color: red; font-weight:bold;", error);
+    console.error(`  Error Code: ${error.code}`);
+    console.error(`  Error Message: ${error.message}`);
+    throw new Error(`Failed to initialize user profile: ${error.message}`);
+  }
+};
+
+// --- Fetch Suggestible Users (for @mentions) ---
+export const getSuggestibleUsers = async (searchPrefix?: string, limitCount: number = 10): Promise<UserProfileBasic[]> => {
+  console.log(`[connectionService] getSuggestibleUsers called. Prefix: '${searchPrefix}', Limit: ${limitCount}`);
+  try {
+    let q;
+    const trimmedPrefix = searchPrefix?.trim();
+
+    if (trimmedPrefix) {
+      q = query(
+        usersCollectionRef,
+        where('displayName', '>=', trimmedPrefix),
+        where('displayName', '<=', trimmedPrefix + '\uf8ff'),
+        orderBy('displayName'),
+        limit(limitCount)
+      );
+    } else {
+      q = query(usersCollectionRef, orderBy('displayName'), limit(limitCount));
+    }
+
+    const querySnapshot = await getDocs(q);
+    const users = querySnapshot.docs.map(docSnap => {
+      const data = docSnap.data();
+      return {
+        userId: docSnap.id,
+        displayName: data.displayName || data.companyName || generateAnonymousName(docSnap.id),
+        avatarUrl: data.avatarUrl || data.photoURL,
+      } as UserProfileBasic;
+    });
+    console.log(`[connectionService] getSuggestibleUsers: Found ${users.length} users for prefix "${trimmedPrefix}".`);
+    return users;
+  } catch (error: any) {
+    console.error('[connectionService] Error fetching suggestible users:', error);
+    if (error.code === 'permission-denied') {
+      throw new Error('Permission denied fetching users. Check Firestore rules for listing users.');
+    }
+    if (error.code === 'failed-precondition' && error.message.includes('index')) {
+      throw new Error('Query for suggestible users requires an index. Please create it in Firebase (e.g., on displayName).');
+    }
+    return [];
+  }
+};

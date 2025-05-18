@@ -7,10 +7,10 @@ import {
   getConversationsForUser,
   getMessagesForConversation,
   sendMessage,
-  getPostDetails, // Import getPostDetails
-  getUserDetails, // Import getUserDetails
+  getPostDetails,
+  getUserDetails,
 } from '@/services/messagingService';
-import type { ClientConversation, SerializableMessage, NewMessageData } from '@/types/messaging'; // Use ClientConversation & SerializableMessage
+import type { ClientConversation, SerializableMessage, NewMessageData } from '@/types/messaging';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,37 +18,35 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, User, Users, AlertTriangle, Eye, Building } from 'lucide-react'; // Added AlertTriangle, Eye, Building
-// Timestamp import no longer needed here as we work with numbers
+import { Loader2, Send, User, Users, AlertTriangle, Eye, Building } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useSearchParams } from 'next/navigation'; // Import useSearchParams
-import Link from 'next/link'; // Import Link for navigation
+import { useSearchParams } from 'next/navigation';
+import Link from 'next/link';
+// Removed: import { generateAnonymousName } from '@/lib/pseudonymUtils'; // No longer needed
 
 interface MessagingInterfaceProps {
   currentUserId: string;
-  initialConversationId?: string | null; // Optional initial conversation to select
-  highlightPostId?: string | null; // Optional post to highlight
+  initialConversationId?: string | null;
+  highlightPostId?: string | null;
 }
 
-// Helper function to get the initials from a name or email
-const getInitials = (displayName: string | undefined | null): string => {
-    if (!displayName) return '?';
-    // If starts with @, use the next char or default to '?'
-    if (displayName.startsWith('@')) {
-        return displayName.length > 1 ? displayName.charAt(1).toUpperCase() : '?';
+const getInitials = (displayNameOrUid: string | undefined | null): string => {
+    if (!displayNameOrUid) return '?';
+    if (displayNameOrUid.startsWith('@')) { // Handle "@UID" format
+        return displayNameOrUid.length > 1 ? displayNameOrUid.charAt(1).toUpperCase() : '?';
     }
-    // Use first letter of the name
-    return displayName.charAt(0).toUpperCase();
+    const names = displayNameOrUid.split(' ');
+    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
+    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
 };
 
-// --- Conversation List Item ---
 interface ConversationListItemProps {
-  conversation: ClientConversation; // Use ClientConversation
+  conversation: ClientConversation;
   isSelected: boolean;
   currentUserId: string;
   onSelect: (conversationId: string) => void;
-  postQuestion?: string | null; // Optional post question for context
-  highlight?: boolean; // Flag to highlight this item
+  postQuestion?: string | null;
+  highlight?: boolean;
 }
 
 const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
@@ -56,27 +54,24 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
   isSelected,
   currentUserId,
   onSelect,
-  postQuestion, // Receive post question
-  highlight, // Receive highlight flag
+  postQuestion,
+  highlight,
 }) => {
     const queryClient = useQueryClient();
-    // Determine the other participant's ID
     const otherParticipantId = conversation.participants.find(p => p !== currentUserId);
 
-    // --- Fetch Other Participant's Details ---
     const { data: otherParticipantDetails, isLoading: isLoadingDetails } = useQuery({
         queryKey: ['userDetails', otherParticipantId],
         queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : null,
         enabled: !!otherParticipantId,
-        staleTime: Infinity, // Cache user details indefinitely as they rarely change quickly
+        staleTime: Infinity,
     });
 
     const participantName = isLoadingDetails
         ? 'Loading...'
-        : otherParticipantDetails?.name || `@${otherParticipantId || 'Unknown'}`; // Use @ fallback
+        : otherParticipantDetails?.name || `@${otherParticipantId || 'Unknown'}`;
     const initials = getInitials(participantName);
 
-    // Format timestamp (now a number)
     const formattedTime = conversation.lastMessageTimestamp
         ? new Date(conversation.lastMessageTimestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
         : '';
@@ -97,7 +92,6 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
          </Avatar>
         <div className="flex-grow overflow-hidden">
           <p className="text-sm font-medium text-foreground truncate">{participantName}</p>
-          {/* Display Post Question if available */}
           {postQuestion && (
               <p className="text-xs text-primary truncate font-medium mt-0.5">
                   Re: {postQuestion}
@@ -111,14 +105,13 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
           <span className="text-xs text-muted-foreground self-start pt-1">{formattedTime}</span>
         )}
       </button>
-        {/* "View Post Details" button - only shown if postId exists */}
-       {conversation.postId && conversation.postId !== 'general_connection' && ( // Exclude general chats
-           <Link href={`/?postId=${conversation.postId}`} // Link back to home page, potentially highlighting the post
+       {conversation.postId && conversation.postId !== 'general_connection' && (
+           <Link href={`/?postId=${conversation.postId}`}
                  className={cn(
                      "absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity",
                      "bg-secondary text-secondary-foreground hover:bg-secondary/80",
                      "p-1 rounded-md",
-                     "focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-ring" // Ensure visibility on focus
+                     "focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-ring"
                  )}
                  title="View Post Details"
                  aria-label="View Post Details"
@@ -131,18 +124,15 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
 });
 ConversationListItem.displayName = 'ConversationListItem';
 
-
-// --- Message Bubble ---
 interface MessageBubbleProps {
-  message: SerializableMessage; // Use SerializableMessage
+  message: SerializableMessage;
   isOwnMessage: boolean;
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwnMessage }) => {
-  // Format the timestamp (which is now a number)
   const timestamp = message.timestamp
     ? new Date(message.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    : 'Sending...'; // Or handle invalid timestamp
+    : 'Sending...';
 
   return (
     <div className={cn("flex mb-3", isOwnMessage ? "justify-end" : "justify-start")}>
@@ -165,8 +155,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwn
 });
 MessageBubble.displayName = 'MessageBubble';
 
-
-// --- Main Messaging Interface Component ---
 export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     currentUserId,
     initialConversationId,
@@ -176,24 +164,22 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const [newMessage, setNewMessage] = useState('');
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const messagesEndRef = useRef<HTMLDivElement>(null); // Ref for scrolling to bottom
+  const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // --- Query: Fetch Conversations ---
   const {
       data: conversations = [],
       isLoading: isLoadingConversations,
-      error: conversationsError, // Capture the error object
-      isError: isConversationsError // Boolean flag for error state
-    } = useQuery<ClientConversation[], Error>({ // Expect ClientConversation[] now
+      error: conversationsError,
+      isError: isConversationsError
+    } = useQuery<ClientConversation[], Error>({
     queryKey: ['conversations', currentUserId],
-    queryFn: () => getConversationsForUser(currentUserId), // Service returns ClientConversation[]
-    enabled: !!currentUserId, // Only run if userId is available
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    queryFn: () => getConversationsForUser(currentUserId),
+    enabled: !!currentUserId,
+    staleTime: 1000 * 60 * 5,
     refetchOnWindowFocus: true,
-    retry: 1, // Retry only once on error
+    retry: 1,
   });
 
-  // Log error if conversations fetch fails
   useEffect(() => {
       if (isConversationsError && conversationsError) {
           console.error("Error fetching conversations in UI:", conversationsError);
@@ -206,9 +192,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       }
   }, [isConversationsError, conversationsError, toast]);
 
-  // --- Query: Fetch Post Details for each conversation's postId ---
    const postDetailsQueries = useQuery({
-     queryKey: ['postDetails', conversations.map(c => c.postId).filter(Boolean)], // Key depends on postIds
+     queryKey: ['postDetails', conversations.map(c => c.postId).filter(Boolean)],
      queryFn: async () => {
        const postIds = conversations.map(c => c.postId).filter((id): id is string => !!id && id !== 'general_connection');
        const detailsMap = new Map<string, { question: string } | null>();
@@ -218,37 +203,30 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        }));
        return detailsMap;
      },
-     enabled: conversations.length > 0 && conversations.some(c => c.postId && c.postId !== 'general_connection'), // Only run if there are conversations with postIds
-     staleTime: 1000 * 60 * 10, // Cache post details for 10 minutes
+     enabled: conversations.length > 0 && conversations.some(c => c.postId && c.postId !== 'general_connection'),
+     staleTime: 1000 * 60 * 10,
    });
 
    const postDetailsMap = postDetailsQueries.data;
 
-
-  // --- Query: Fetch Messages for Selected Conversation ---
    const {
       data: messages = [],
       isLoading: isLoadingMessages,
       error: messagesError
-   } = useQuery<SerializableMessage[]>({ // Expect SerializableMessage[]
+   } = useQuery<SerializableMessage[]>({
        queryKey: ['messages', selectedConversationId],
-       queryFn: () => getMessagesForConversation(selectedConversationId!), // Service fn returns SerializableMessage[]
-       enabled: !!selectedConversationId, // Only fetch if a conversation is selected
-       staleTime: 1000 * 15, // 15 seconds (messages might update more often)
-       refetchInterval: 1000 * 30, // Refetch every 30 seconds
+       queryFn: () => getMessagesForConversation(selectedConversationId!),
+       enabled: !!selectedConversationId,
+       staleTime: 1000 * 15,
+       refetchInterval: 1000 * 30,
    });
 
-  // --- Mutation: Send Message ---
   const sendMessageMutation = useMutation({
     mutationFn: sendMessage,
     onSuccess: () => {
-        setNewMessage(''); // Clear input field
-        // Invalidate messages for the current conversation to refetch
+        setNewMessage('');
         queryClient.invalidateQueries({ queryKey: ['messages', selectedConversationId] });
-        // Optionally invalidate conversations to update last message preview
         queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
-        // Invalidate post details if necessary, although less likely to change frequently
-        // queryClient.invalidateQueries({ queryKey: ['postDetails'] });
     },
     onError: (error: Error) => {
         toast({
@@ -259,55 +237,43 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     },
   });
 
-  // --- Scroll to bottom when messages load or new message arrives ---
    useEffect(() => {
-       // Use timeout to ensure DOM is updated before scrolling
        const timer = setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-       }, 100); // Adjust delay if needed
+       }, 100);
        return () => clearTimeout(timer);
    }, [messages]);
 
-  // --- Handle Sending Message ---
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
     if (!newMessage.trim() || !selectedConversationId || sendMessageMutation.isPending) {
         return;
     }
-
     const messageData: NewMessageData = {
         conversationId: selectedConversationId,
         senderId: currentUserId,
         text: newMessage.trim(),
-        // No timestamp needed here, service layer adds serverTimestamp
     };
     sendMessageMutation.mutate(messageData);
   };
 
-   // --- Select conversation based on initialConversationId or default to first ---
    useEffect(() => {
      if (!isLoadingConversations && !isConversationsError && conversations && conversations.length > 0) {
          if (initialConversationId && conversations.some(c => c.id === initialConversationId)) {
-             // If a valid initial ID is provided and exists, select it
              if (selectedConversationId !== initialConversationId) {
                 setSelectedConversationId(initialConversationId);
              }
          } else if (!selectedConversationId) {
-             // Otherwise, if no conversation is selected, select the first one
              setSelectedConversationId(conversations[0].id);
          }
      } else if (!isLoadingConversations && !selectedConversationId) {
-         // Handle case with no conversations or still loading
          setSelectedConversationId(null);
      }
-     // Ensure this runs only when conversations load or initialConversationId changes
    }, [conversations, selectedConversationId, isLoadingConversations, isConversationsError, initialConversationId]);
 
-
-  // --- Derive Selected Conversation Details ---
    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
    const otherParticipantId = selectedConversation?.participants.find(p => p !== currentUserId);
-   // Fetch other participant details for the header
+
    const { data: headerParticipantDetails, isLoading: isLoadingHeaderDetails } = useQuery({
        queryKey: ['userDetails', otherParticipantId],
        queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : null,
@@ -317,17 +283,15 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
    const otherParticipantName = isLoadingHeaderDetails
        ? 'Loading...'
-       : headerParticipantDetails?.name || `@${otherParticipantId || 'Select Conversation'}`; // Use @ fallback
+       : headerParticipantDetails?.name || `@${otherParticipantId || 'Select Conversation'}`;
    const otherParticipantInitials = getInitials(otherParticipantName);
    const otherParticipantAvatar = headerParticipantDetails?.avatar;
    const selectedPostQuestion = selectedConversation?.postId && selectedConversation.postId !== 'general_connection'
         ? postDetailsMap?.get(selectedConversation.postId)?.question
         : null;
 
-
   return (
     <div className="flex h-full border rounded-lg overflow-hidden bg-card">
-      {/* Conversation List Sidebar */}
       <div className="w-1/3 border-r flex flex-col">
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
@@ -346,7 +310,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                       </div>
                   </div>
               ))
-             ) : isConversationsError ? ( // Check the isError flag
+             ) : isConversationsError ? (
                  <div className="p-4 text-center text-destructive">
                      <AlertTriangle className="mx-auto h-8 w-8 mb-2" />
                      <p className="text-sm font-medium">Error Loading Conversations</p>
@@ -361,9 +325,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 <p className="p-4 text-sm text-muted-foreground text-center">No conversations yet.</p>
             ) : (
               conversations.map((conv) => {
-                 // Get the post question from the map
                  const postQuestion = conv.postId && conv.postId !== 'general_connection' ? postDetailsMap?.get(conv.postId)?.question : null;
-                 // Determine if this conversation should be highlighted based on URL params
                  const shouldHighlight = highlightPostId === conv.postId && initialConversationId === conv.id;
                  return (
                      <ConversationListItem
@@ -372,8 +334,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                          isSelected={selectedConversationId === conv.id}
                          currentUserId={currentUserId}
                          onSelect={setSelectedConversationId}
-                         postQuestion={postQuestion} // Pass the question
-                         highlight={shouldHighlight} // Pass highlight flag
+                         postQuestion={postQuestion}
+                         highlight={shouldHighlight}
                      />
                  );
              })
@@ -382,11 +344,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         </ScrollArea>
       </div>
 
-      {/* Message Area */}
       <div className="w-2/3 flex flex-col">
         {selectedConversationId ? (
           <>
-            {/* Message Header */}
             <div className="p-4 border-b flex items-center gap-3 bg-muted/50">
                <Avatar className="h-9 w-9">
                    <AvatarImage src={otherParticipantAvatar} alt={otherParticipantName} />
@@ -394,13 +354,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                </Avatar>
                <div className="flex-grow">
                   <h3 className="text-lg font-semibold text-foreground">{otherParticipantName}</h3>
-                  {/* Display post question in header if available */}
                   {selectedPostQuestion && (
                       <p className="text-xs text-muted-foreground mt-0.5">
                           Regarding: <span className="font-medium text-primary">{selectedPostQuestion}</span>
                       </p>
                    )}
-                   {/* Link to the other participant's profile */}
                     {otherParticipantId && (
                         <Link
                             href={`/profile/${otherParticipantId}`}
@@ -410,7 +368,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                         </Link>
                     )}
                </div>
-               {/* Optional: Link to post details from header */}
                {selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && (
                    <Link href={`/?postId=${selectedConversation.postId}`}
                          className={cn(
@@ -425,7 +382,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 )}
             </div>
 
-            {/* Message List */}
             <ScrollArea className="flex-grow p-4 bg-background">
                {isLoadingMessages ? (
                    <div className="flex justify-center items-center h-full">
@@ -446,10 +402,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                    />
                  ))
                )}
-               <div ref={messagesEndRef} /> {/* Anchor for scrolling */}
+               <div ref={messagesEndRef} />
             </ScrollArea>
 
-            {/* Message Input */}
             <div className="p-4 border-t bg-muted/50">
               <form onSubmit={handleSendMessage} className="flex items-center gap-2">
                 <Input
@@ -477,7 +432,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             </div>
           </>
         ) : (
-           // Placeholder when no conversation is selected OR if there was an error loading convos
           <div className="flex-grow flex flex-col items-center justify-center text-center p-4 bg-background">
              {isConversationsError ? (
                   <>

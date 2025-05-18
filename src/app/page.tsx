@@ -1,3 +1,4 @@
+
 // src/app/page.tsx
 "use client";
 
@@ -5,7 +6,7 @@ import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'
 import { useRouter } from 'next/navigation';
 import Link from 'next/link'; // Import Link
 import { Button } from '@/components/ui/button';
-import { Card, CardHeader, CardContent, CardTitle as UICardTitle } from "@/components/ui/card"; // Renamed CardTitle import
+import { Card, CardHeader, CardContent } from "@/components/ui/card"; // Renamed CardTitle import
 import { Badge } from "@/components/ui/badge";
 import {
   Carousel,
@@ -40,15 +41,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from '@/components/ui/separator'; // Import Separator
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover for suggestions
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, LineChart, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles, AtSign, Tag } from "lucide-react"; // Added AtSign icon, Tag
+import { Loader2, Trash2, HandHelping, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles, AtSign, Tag } from "lucide-react"; // Added AtSign icon, Tag
 import { useToast } from "@/hooks/use-toast";
 import type { Post, NewPostData } from '@/types/post'; // Correctly import types
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
+import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore'; // Import Timestamp
-import { autocompletePostDescription } from '@/ai/flows/autocomplete-post-description';
+// Removed: import { autocompletePostDescription } from '@/ai/flows/autocomplete-post-description'; // Import the AI flow
 import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
 import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
 import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService'; // Import comment/subcomment/like services
@@ -58,15 +59,33 @@ import type { UserProfileBasic } from '@/types/connection'; // Import UserProfil
 
 // Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
+
 
 // --- Helper: Get Initials ---
-const getInitials = (displayName: string | undefined | null): string => {
-    if (!displayName) return '?';
-    if (displayName.startsWith('@')) {
-        return displayName.length > 1 ? displayName.charAt(1).toUpperCase() : '?';
+const getInitials = (displayNameOrUid: string | undefined | null): string => {
+    if (!displayNameOrUid) return '?';
+    const nameToProcess = displayNameOrUid.startsWith('@') ? displayNameOrUid.substring(1) : displayNameOrUid;
+
+    // Check if the name looks like a generated pseudonym (e.g., "BlueWhale123")
+    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/; // Simplified regex for "AdjNounNum"
+    if (pseudonymRegex.test(nameToProcess)) {
+        // For "BlueWhale123", try to get "BW" or just "B"
+        const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
+        if (match && match[1] && match[2]) {
+            return match[1] + match[2];
+        } else if (match && match[1]) {
+            return match[1];
+        }
     }
-    return displayName.charAt(0).toUpperCase();
+
+    // For regular names or other formats
+    const names = nameToProcess.split(' ').filter(Boolean);
+    if (names.length === 0) return '?';
+    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
+    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
 };
+
 
 // --- Helper: Render Text with Mentions as Links ---
 const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: string, mentionedUserIds?: string[] }) => {
@@ -74,6 +93,8 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
         queryKey: ['mentionProfiles', mentionedUserIds],
         queryFn: async () => {
             const profiles = new Map<string, UserProfileBasic | null>();
+            if (!mentionedUserIds || mentionedUserIds.length === 0) return profiles;
+
             await Promise.all(
                 mentionedUserIds.map(async (userId) => {
                     const profile = await getUserProfileBasic(userId);
@@ -82,41 +103,53 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
             );
             return profiles;
         },
-        enabled: mentionedUserIds.length > 0,
-        staleTime: Infinity, 
+        enabled: mentionedUserIds && mentionedUserIds.length > 0,
+        staleTime: Infinity,
     });
 
-    if (mentionedUserIds.length === 0 || isLoadingMentions) {
-        return <>{text}</>; 
+    if (!mentionedUserIds || mentionedUserIds.length === 0 || isLoadingMentions) {
+        return <>{text}</>;
     }
 
-    const parts = text.split(/(@[a-zA-Z0-9_]+)/g);
+    // Regex to find @ followed by alphanumeric characters, underscores, or hyphens (common for UIDs)
+    // It also tries to match display names if they are directly after @
+    const parts = text.split(/(@[a-zA-Z0-9_.-]+(?: [a-zA-Z0-9_.-]+)*)/g);
+
 
     return (
         <>
             {parts.map((part, index) => {
                 if (part.startsWith('@')) {
-                    const potentialIdOrName = part.substring(1);
-                    const mentionedUserId = mentionedUserIds.find(id => {
-                         const profile = mentionProfilesMap.get(id);
-                         return id === potentialIdOrName || (profile?.displayName && profile.displayName === potentialIdOrName);
-                     });
+                    const potentialIdentifier = part.substring(1);
+                    let profileToLink: UserProfileBasic | null | undefined = null;
 
-                    if (mentionedUserId) {
-                        const profile = mentionProfilesMap.get(mentionedUserId);
-                        const displayName = profile?.displayName || potentialIdOrName;
+                    // First, check if potentialIdentifier is a direct UID match
+                    if (mentionedUserIds.includes(potentialIdentifier)) {
+                        profileToLink = mentionProfilesMap.get(potentialIdentifier);
+                    }
+                    // If not a UID match, check if it's a display name from the map
+                    if (!profileToLink) {
+                        for (const [uid, profile] of mentionProfilesMap.entries()) {
+                            if (profile && profile.displayName === potentialIdentifier && mentionedUserIds.includes(uid)) {
+                                profileToLink = profile;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (profileToLink) {
                         return (
                             <Link
-                                key={`${mentionedUserId}-${index}`}
-                                href={`/profile/${mentionedUserId}`}
+                                key={`${profileToLink.userId}-${index}`}
+                                href={`/profile/${profileToLink.userId}`}
                                 className="text-primary hover:underline font-medium"
                             >
-                                @{displayName}
+                                @{profileToLink.displayName || generateAnonymousName(profileToLink.userId)}
                             </Link>
                         );
                     }
                 }
-                return <React.Fragment key={index}>{part}</React.Fragment>; 
+                return <React.Fragment key={index}>{part}</React.Fragment>;
             })}
         </>
     );
@@ -128,8 +161,8 @@ TextWithMentions.displayName = 'TextWithMentions';
 const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void }) => {
    const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
-    : post.createdAt 
-    ? new Date(post.createdAt as any).toLocaleDateString() 
+    : post.createdAt
+    ? new Date(post.createdAt as any).toLocaleDateString() // Type assertion for safety
     : 'Date unavailable';
 
   return (
@@ -142,7 +175,7 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
       >
         <CardHeader className="p-4">
            <div className="flex flex-wrap gap-1 mb-2">
-                {post.tags?.map((tag, index) => ( 
+                {post.tags?.map((tag, index) => (
                  <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs cursor-default">
                    {tag}
                  </Badge>
@@ -152,11 +185,12 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
            {post.imageUrls && post.imageUrls.length > 0 && (
              <div className="mt-2 rounded-md overflow-hidden aspect-video relative">
                <Image
-                 src={post.imageUrls[0]} 
+                 src={post.imageUrls[0]} // Display first image, carousel is in detail view
                  alt={post.question}
-                 layout="fill"
-                 objectFit="cover"
-                 data-ai-hint="post image" 
+                 fill // Use fill instead of layout="fill" objectFit="cover"
+                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Example sizes, adjust as needed
+                 style={{ objectFit: 'cover' }} // Use style for objectFit
+                 data-ai-hint="post image" // Keep the hint
                />
              </div>
            )}
@@ -172,19 +206,20 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
       </Card>
   );
 });
-PostCard.displayName = 'PostCard'; 
+PostCard.displayName = 'PostCard';
 
 
 // Component for displaying a single subcomment (reply)
 const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentId, onDelete }: { subComment: ClientSubComment, currentUserId: string | null, postId: string, commentId: string, onDelete: () => void }) => {
     const { toast } = useToast();
     const queryClient = useQueryClient();
-    const { user } = useAuth(); 
+    const { user } = useAuth();
     const isOwnSubComment = subComment.userId === currentUserId;
     const [isLiking, setIsLiking] = useState(false);
     const hasLiked = !!(currentUserId && subComment.likedBy?.includes(currentUserId));
-
     const [isDeleting, setIsDeleting] = useState(false);
+    const displayName = subComment.userName || generateAnonymousName(subComment.userId);
+
 
     const handleDeleteClick = async () => {
         if (isDeleting) return;
@@ -192,7 +227,7 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
         try {
             await deleteSubCommentFromComment(postId, commentId, subComment.id);
             toast({ title: "Reply Deleted" });
-            onDelete(); 
+            onDelete();
         } catch (error: any) {
             console.error("Error deleting subcomment:", error);
             toast({
@@ -209,7 +244,7 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
         if (!user || isLiking) return;
         setIsLiking(true);
         const previousSubComments = queryClient.getQueryData<ClientSubComment[]>(['subComments', postId, commentId]);
-        
+
         queryClient.setQueryData<ClientSubComment[]>(['subComments', postId, commentId], (oldSubComments = []) =>
             oldSubComments.map(sc => {
                 if (sc.id === subComment.id) {
@@ -241,42 +276,42 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
     };
 
     return (
-        <div key={subComment.id} className="flex items-start gap-2 group"> 
+        <div key={subComment.id} className="flex items-start gap-2 group">
             <Link href={`/profile/${subComment.userId}`} passHref>
                 <Avatar className="h-6 w-6 mt-1 flex-shrink-0 cursor-pointer">
-                    <AvatarImage src={subComment.userAvatar} alt={subComment.userName} />
+                    <AvatarImage src={subComment.userAvatar} alt={displayName} />
                     <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
-                        {getInitials(subComment.userName)}
+                        {getInitials(displayName)}
                     </AvatarFallback>
                 </Avatar>
             </Link>
-            <div className="flex-grow bg-background p-2 rounded-md min-w-0 border border-border/50"> 
+            <div className="flex-grow bg-background p-2 rounded-md min-w-0 border border-border/50">
                 <div className="flex justify-between items-center mb-1">
                     <Link href={`/profile/${subComment.userId}`} passHref>
                          <p className="text-xs font-medium text-foreground truncate hover:underline cursor-pointer">
-                             {subComment.userName || `@${subComment.userId}`}
+                             {displayName}
                          </p>
                     </Link>
                     <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                         {user && ( 
+                        {user && (
                            <Button
-                              variant="ghost"
-                              size="xs"
-                              onClick={handleLikeClick}
-                              disabled={isLiking}
-                              className={cn(
-                                  "text-xs h-auto p-0.5 flex items-center gap-0.5",
-                                  hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
-                              )}
-                              aria-pressed={hasLiked}
-                           >
-                              {isLiking ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                  <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
-                              )}
-                              {subComment.likeCount && subComment.likeCount > 0 ? <span className="text-xs">({subComment.likeCount})</span> : ''}
-                           </Button>
+                                variant="ghost"
+                                size="xs"
+                                onClick={handleLikeClick}
+                                disabled={isLiking}
+                                className={cn(
+                                    "text-xs h-auto p-0.5 flex items-center gap-0.5",
+                                    hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
+                                )}
+                                aria-pressed={hasLiked}
+                            >
+                                {isLiking ? (
+                                    <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                    <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
+                                )}
+                                {subComment.likeCount && subComment.likeCount > 0 ? <span className="text-xs ml-0.5">({subComment.likeCount})</span> : ''}
+                            </Button>
                         )}
                         <p className="text-xs text-muted-foreground">
                             {new Date(subComment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -329,19 +364,20 @@ SubCommentItem.displayName = 'SubCommentItem';
 const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { comment: ClientComment, currentUserId: string | null, postId: string, onDelete: () => void }) => {
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const { user } = useAuth(); 
+    const { user } = useAuth();
     const isOwnComment = comment.userId === currentUserId;
-    const [showReplies, setShowReplies] = useState(false); 
-    const [newReply, setNewReply] = useState(''); 
-    const [isReplying, setIsReplying] = useState(false); 
+    const [showReplies, setShowReplies] = useState(false);
+    const [newReply, setNewReply] = useState('');
+    const [isReplying, setIsReplying] = useState(false);
     const [isSubmittingReply, setIsSubmittingReply] = useState(false);
-    const [isLiking, setIsLiking] = useState(false); 
+    const [isLiking, setIsLiking] = useState(false);
     const [mentionQuery, setMentionQuery] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const replyInputRef = useRef<HTMLInputElement>(null);
-    const suggestionsPopoverRef = useRef<HTMLDivElement>(null); 
+    const suggestionsPopoverRef = useRef<HTMLDivElement>(null);
     const hasLiked = !!(currentUserId && comment.likedBy?.includes(currentUserId));
     const [isDeleting, setIsDeleting] = useState(false);
+    const displayName = comment.userName || generateAnonymousName(comment.userId);
 
     const {
         data: subComments = [],
@@ -349,41 +385,75 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         error: subCommentsError,
         refetch: refetchSubComments,
     } = useQuery<ClientSubComment[]>({
-        queryKey: ['subComments', postId, comment.id], 
+        queryKey: ['subComments', postId, comment.id],
         queryFn: () => getSubCommentsForComment(postId, comment.id),
-        enabled: showReplies, 
-        staleTime: 1000 * 60 * 1, 
+        enabled: showReplies,
+        staleTime: 1000 * 60 * 1, // 1 minute
     });
-    
+
+    // Collect user IDs from the comment and its subcomments for profile fetching (suggestions)
     const userIdsToFetch = useMemo(() => {
         const ids = new Set<string>([comment.userId]);
         subComments.forEach(sc => ids.add(sc.userId));
-        return Array.from(ids).filter(id => id !== currentUserId); 
-    }, [comment.userId, subComments, currentUserId]);
+        // If the post author is different from the commenter or any sub-commenter, include them too.
+        const selectedPost = queryClient.getQueryData<Post>(['posts', postId]); // Or however you access post data
+        if (selectedPost && selectedPost.userId) ids.add(selectedPost.userId);
+
+        return Array.from(ids).filter(id => id !== currentUserId); // Exclude self for suggestions
+    }, [comment.userId, subComments, currentUserId, queryClient, postId]);
+
 
     const { data: userProfilesMap = new Map(), isLoading: isLoadingProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
-        queryKey: ['userProfilesForMentions', userIdsToFetch],
+        queryKey: ['userProfilesForMentions', comment.id, userIdsToFetch.join(',')], // Key depends on fetched IDs
         queryFn: async () => {
+            console.log(`[CommentItem ${comment.id}] userProfilesMap QueryFn: Fetching profiles for:`, userIdsToFetch);
             const profiles = new Map<string, UserProfileBasic | null>();
+            if (userIdsToFetch.length === 0) return profiles;
+
             await Promise.all(
                 userIdsToFetch.map(async (userId) => {
                     const profile = await getUserProfileBasic(userId);
-                    profiles.set(userId, profile);
+                    profiles.set(userId, profile || { userId, displayName: generateAnonymousName(userId) });
+                    console.log(`[CommentItem ${comment.id}] Fetched profile for ${userId}:`, profile);
                 })
             );
+            console.log(`[CommentItem ${comment.id}] userProfilesMap QueryFn: Final profiles map:`, profiles);
             return profiles;
         },
-        enabled: userIdsToFetch.length > 0 && isReplying, 
-        staleTime: Infinity,
+        enabled: userIdsToFetch.length > 0 && isReplying, // Only fetch if replying and there are users to fetch
+        staleTime: 1000 * 60 * 5, // Cache for 5 minutes
     });
-    
+
+    useEffect(() => {
+        if (isReplying && !isLoadingProfiles) {
+            console.log(`[CommentItem ${comment.id}] userProfilesMap for suggestions (when isReplying is true):`, userProfilesMap);
+        }
+    }, [isReplying, isLoadingProfiles, userProfilesMap, comment.id]);
+
+
     const filteredSuggestions = useMemo(() => {
-        if (!mentionQuery || isLoadingProfiles) return [];
+        console.log(`[CommentItem ${comment.id}] filteredSuggestions useMemo - Query: '${mentionQuery}', LoadingProfiles: ${isLoadingProfiles}, ProfilesMap size: ${userProfilesMap?.size || 0}`);
+        if (!showSuggestions) return [];
+        if (isLoadingProfiles) return [{ userId: 'loading', displayName: 'Loading users...' } as UserProfileBasic];
+        if (!userProfilesMap || userProfilesMap.size === 0) return [{ userId: 'no-users', displayName: 'No users found.' } as UserProfileBasic];
+
+
+        const profiles = Array.from(userProfilesMap.values()).filter((p): p is UserProfileBasic => !!p);
+
+        if (mentionQuery.trim() === '') {
+            const suggestions = profiles.slice(0, 5);
+            return suggestions.length > 0 ? suggestions : [{ userId: 'no-users', displayName: 'No users in this thread.' } as UserProfileBasic];
+        }
+
         const queryLower = mentionQuery.toLowerCase();
-        return Array.from(userProfilesMap.values())
-            .filter((profile): profile is UserProfileBasic => profile !== null && profile.displayName.toLowerCase().includes(queryLower))
-            .slice(0, 5); 
-    }, [mentionQuery, userProfilesMap, isLoadingProfiles]);
+        const suggestions = profiles.filter(profile =>
+            profile.displayName.toLowerCase().includes(queryLower)
+        ).slice(0, 5);
+        return suggestions.length > 0 ? suggestions : [{ userId: 'no-users', displayName: `No users matching "${mentionQuery}"` } as UserProfileBasic];
+
+    }, [mentionQuery, userProfilesMap, isLoadingProfiles, showSuggestions, comment.id]);
+
+
 
     const handleDeleteClick = async () => {
         if (isDeleting) return;
@@ -391,7 +461,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         try {
             await deleteCommentFromPost(postId, comment.id);
             toast({ title: "Comment Deleted" });
-            onDelete(); 
+            onDelete();
         } catch (error: any) {
             console.error("Error deleting comment:", error);
             toast({
@@ -403,29 +473,37 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
             setIsDeleting(false);
         }
     };
-    
+
     const handleReplySubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user || !newReply.trim() || isSubmittingReply) return;
         setIsSubmittingReply(true);
-        const mentionedUserIds = extractMentions(newReply.trim()); 
+        const mentionedUserIds = extractMentions(newReply.trim());
         const replyData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'> = {
             userId: user.uid,
             text: newReply.trim(),
-            mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [], 
+            mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [],
         };
         try {
-            await addSubCommentToComment(postId, comment.id, replyData);
+            const newSubCommentId = await addSubCommentToComment(postId, comment.id, replyData);
             toast({ title: "Reply Added" });
-            setNewReply(''); 
-            setIsReplying(false); 
-            setShowSuggestions(false); 
+            setNewReply('');
+            setIsReplying(false);
+            setShowSuggestions(false);
             if (!showReplies) {
-                setShowReplies(true); 
+                setShowReplies(true); // Auto-show replies if they were hidden
             } else {
-                refetchSubComments(); 
+                refetchSubComments(); // Otherwise, just refetch
             }
-            queryClient.invalidateQueries({ queryKey: ['notifications', comment.userId] });
+            // Invalidate notifications for original commenter and mentioned users
+            if (comment.userId !== user.uid) {
+                queryClient.invalidateQueries({ queryKey: ['notifications', comment.userId] });
+            }
+            mentionedUserIds.forEach(mentionedId => {
+                 if (mentionedId !== user.uid && mentionedId !== comment.userId) { // Don't double-notify original commenter if they were also mentioned
+                    queryClient.invalidateQueries({ queryKey: ['notifications', mentionedId] });
+                 }
+            });
         } catch (error: any) {
             console.error("Error adding reply:", error);
             toast({
@@ -434,35 +512,57 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                 description: `Could not add reply: ${error.message}`,
             });
         } finally {
-            setIsSubmittingReply(false); 
-        }
-    };
-    
-    const handleMentionInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setNewReply(value);
-        const lastAtIndex = value.lastIndexOf('@');
-        const lastSpaceIndex = value.lastIndexOf(' ');
-        if (lastAtIndex > -1 && lastAtIndex > lastSpaceIndex && value.indexOf(' ', lastAtIndex) === -1) {
-            const query = value.substring(lastAtIndex + 1);
-            setMentionQuery(query);
-            setShowSuggestions(true); 
-        } else {
-            setMentionQuery('');
-            setShowSuggestions(false); 
+            setIsSubmittingReply(false);
         }
     };
 
-    const handleSelectSuggestion = (profile: UserProfileBasic) => {
-        const lastAtIndex = newReply.lastIndexOf('@');
-        if (lastAtIndex > -1) {
-            const textBeforeMention = newReply.substring(0, lastAtIndex);
-            setNewReply(`${textBeforeMention}@${profile.displayName} `);
+    const handleMentionInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setNewReply(value);
+        const cursorPosition = e.target.selectionStart || 0;
+        const textBeforeCursor = value.substring(0, cursorPosition);
+        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+        if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
+            const currentQuery = textBeforeCursor.substring(lastAtIndex + 1);
+            if (!/\s/.test(currentQuery)) { // No space within the query itself
+                setMentionQuery(currentQuery);
+                setShowSuggestions(true);
+                 console.log(`[CommentItem ${comment.id}] Active mention query: '${currentQuery}'`);
+                return;
+            }
         }
-        setShowSuggestions(false); 
-        setMentionQuery(''); 
-        replyInputRef.current?.focus(); 
+        // If no valid mention pattern at cursor, hide suggestions
+        setMentionQuery('');
+        setShowSuggestions(false);
+         console.log(`[CommentItem ${comment.id}] No active mention query.`);
     };
+
+
+    const handleSelectSuggestion = (profile: UserProfileBasic) => {
+        if (!replyInputRef.current) return;
+        const currentValue = newReply;
+        const cursorPosition = replyInputRef.current.selectionStart || 0;
+        const textBeforeCursor = currentValue.substring(0, cursorPosition);
+        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+        if (lastAtIndex > -1) {
+            const textBeforeMention = currentValue.substring(0, lastAtIndex);
+            const textAfterCursor = currentValue.substring(cursorPosition);
+            const newText = `${textBeforeMention}@${profile.displayName} ${textAfterCursor}`; // Add space after display name
+            setNewReply(newText);
+
+            // Set cursor position after the inserted name + space
+            const newCursorPosition = textBeforeMention.length + `@${profile.displayName} `.length;
+            setTimeout(() => {
+                replyInputRef.current?.focus();
+                replyInputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+            }, 0);
+        }
+        setShowSuggestions(false);
+        setMentionQuery('');
+    };
+
 
      useEffect(() => {
          const handleClickOutside = (event: MouseEvent) => {
@@ -470,16 +570,21 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                  suggestionsPopoverRef.current &&
                  !suggestionsPopoverRef.current.contains(event.target as Node) &&
                  replyInputRef.current &&
-                 !replyInputRef.current.contains(event.target as Node) 
+                 !replyInputRef.current.contains(event.target as Node)
              ) {
-                 setShowSuggestions(false);
+                 if (showSuggestions) {
+                     console.log(`[CommentItem ${comment.id}] Click outside suggestion popover, closing.`);
+                     setShowSuggestions(false);
+                 }
              }
          };
-         document.addEventListener('mousedown', handleClickOutside);
+         if (showSuggestions) {
+            document.addEventListener('mousedown', handleClickOutside);
+         }
          return () => {
              document.removeEventListener('mousedown', handleClickOutside);
          };
-     }, []); 
+     }, [showSuggestions, comment.id]);
 
     const handleLikeClick = async () => {
         if (!user || isLiking) return;
@@ -520,50 +625,51 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         if (!isReplying) {
              setTimeout(() => replyInputRef.current?.focus(), 0);
         } else {
-            setShowSuggestions(false); 
+            setShowSuggestions(false);
+            setMentionQuery('');
         }
     };
     const handleSubCommentDeleted = () => refetchSubComments();
 
     return (
-        <div className="group border-b border-border/50 pb-4"> 
-            <div className="flex items-start gap-3 "> 
+        <div className="group border-b border-border/50 pb-4">
+            <div className="flex items-start gap-3 ">
                  <Link href={`/profile/${comment.userId}`} passHref>
                      <Avatar className="h-8 w-8 mt-1 flex-shrink-0 cursor-pointer">
-                         <AvatarImage src={comment.userAvatar} alt={comment.userName} />
+                         <AvatarImage src={comment.userAvatar} alt={displayName} />
                          <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-                             {getInitials(comment.userName)}
+                             {getInitials(displayName)}
                          </AvatarFallback>
                      </Avatar>
                  </Link>
-                <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0"> 
+                <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0">
                     <div className="flex justify-between items-center mb-1">
                          <Link href={`/profile/${comment.userId}`} passHref>
                              <p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">
-                                 {comment.userName || `@${comment.userId}`}
+                                 {displayName}
                              </p>
                          </Link>
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                            {user && ( 
+                            {user && (
                                 <Button
-                                    variant="ghost"
-                                    size="xs"
-                                    onClick={handleLikeClick}
-                                    disabled={isLiking}
-                                    className={cn(
-                                        "text-xs h-auto p-0.5 flex items-center gap-0.5", 
-                                        hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
-                                    )}
-                                    aria-pressed={hasLiked}
-                                >
-                                    {isLiking ? (
-                                        <Loader2 className="h-3 w-3 animate-spin" />
-                                    ) : (
-                                        <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
-                                    )}
-                                    {comment.likeCount && comment.likeCount > 0 ? <span className="text-xs">({comment.likeCount})</span> : ''}
-                                </Button>
-                             )}
+                                     variant="ghost"
+                                     size="xs"
+                                     onClick={handleLikeClick}
+                                     disabled={isLiking}
+                                     className={cn(
+                                         "text-xs h-auto p-0.5 flex items-center gap-0.5",
+                                         hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500"
+                                     )}
+                                     aria-pressed={hasLiked}
+                                 >
+                                     {isLiking ? (
+                                         <Loader2 className="h-3 w-3 animate-spin" />
+                                     ) : (
+                                         <Heart className={cn("h-3 w-3", hasLiked ? "fill-current" : "")} />
+                                     )}
+                                     {comment.likeCount && comment.likeCount > 0 ? <span className="text-xs ml-0.5">({comment.likeCount})</span> : ''}
+                                 </Button>
+                            )}
                             <p className="text-xs text-muted-foreground">
                                 {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </p>
@@ -608,91 +714,95 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                 </div>
             </div>
 
-            <div className="flex items-center gap-3 pl-11 mt-2"> 
-                 {user && ( 
+            <div className="flex items-center gap-3 pl-11 mt-2">
+                 {user && (
                     <Button variant="ghost" size="xs" onClick={toggleReplyForm} className="text-xs text-muted-foreground hover:text-primary h-auto p-1">
                         <CornerDownRight className="h-3 w-3 mr-1" /> Reply
                     </Button>
                  )}
                  <Button variant="ghost" size="xs" onClick={toggleShowReplies} className="text-xs text-muted-foreground hover:text-primary h-auto p-1">
-                     {showReplies ? 'Hide Replies' : `View Replies ${isLoadingSubComments ? '...' : subComments.length > 0 ? `(${subComments.length})` : ''}`}
+                     {isLoadingSubComments ? (
+                        <Loader2 className="h-3 w-3 mr-1 animate-spin"/>
+                     ) : showReplies ? (
+                        'Hide Replies'
+                     ) : (
+                        `View Replies ${subComments && subComments.length > 0 ? `(${subComments.length})` : ''}`
+                     )}
                  </Button>
             </div>
 
             {isReplying && user && (
-                <Popover open={showSuggestions} onOpenChange={setShowSuggestions}>
+                <Popover open={showSuggestions && filteredSuggestions.length > 0 && (filteredSuggestions[0]?.userId !== 'loading' && filteredSuggestions[0]?.userId !== 'no-users')} onOpenChange={setShowSuggestions}>
                     <PopoverTrigger asChild>
                         <form onSubmit={handleReplySubmit} className="flex items-center gap-2 pl-11 mt-2 relative">
                              <Input
                                 ref={replyInputRef}
                                 type="text"
-                                placeholder={`Replying to ${comment.userName || `@${comment.userId}`}... (@mention someone)`} 
+                                placeholder={`Replying to ${displayName}... (@mention someone)`}
                                 value={newReply}
-                                onChange={handleMentionInputChange} 
+                                onChange={handleMentionInputChange}
                                 disabled={isSubmittingReply}
                                 className="flex-grow h-8 text-sm"
                                 aria-label="New reply input"
-                                autoComplete="off" 
+                                autoComplete="off"
                              />
-                             <Button type="submit" size="sm" disabled={!newReply.trim() || isSubmittingReply}>
-                                 {isSubmittingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+                             <Button type="submit" size="icon" variant="ghost" className="h-8 w-8" disabled={!newReply.trim() || isSubmittingReply}>
+                                 {isSubmittingReply ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 text-primary" />}
                                  <span className="sr-only">Send Reply</span>
                              </Button>
                          </form>
                     </PopoverTrigger>
                     <PopoverContent
-                        ref={suggestionsPopoverRef} 
-                        className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" 
-                        side="top" 
+                        ref={suggestionsPopoverRef}
+                        className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
+                        side="top"
                         align="start"
-                        onOpenAutoFocus={(e) => e.preventDefault()} 
+                        onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus stealing
                     >
-                         {isLoadingProfiles ? (
-                            <div className="p-2 text-center text-xs text-muted-foreground">Loading users...</div>
-                         ) : filteredSuggestions.length > 0 ? (
-                             <div className="space-y-1">
-                                 {filteredSuggestions.map(profile => (
-                                     <Button
-                                         key={profile.userId}
-                                         variant="ghost"
-                                         size="sm"
-                                         className="w-full justify-start h-auto px-2 py-1 text-xs"
-                                         onClick={() => handleSelectSuggestion(profile)}
-                                     >
-                                         <Avatar className="h-5 w-5 mr-2">
-                                             <AvatarImage src={profile.avatarUrl} alt={profile.displayName} />
-                                             <AvatarFallback className="text-xs">{getInitials(profile.displayName)}</AvatarFallback>
-                                         </Avatar>
-                                         {profile.displayName}
-                                     </Button>
-                                 ))}
-                             </div>
-                         ) : mentionQuery ? ( 
-                             <div className="p-2 text-center text-xs text-muted-foreground">No users found.</div>
-                         ) : null}
+                         {filteredSuggestions.map(profile => (
+                             profile.userId === 'loading' || profile.userId === 'no-users' ? (
+                                <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
+                                    {profile.displayName}
+                                </div>
+                             ) : (
+                                <Button
+                                    key={profile.userId}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-start h-auto px-2 py-1 text-xs"
+                                    onClick={() => handleSelectSuggestion(profile)}
+                                >
+                                    <Avatar className="h-5 w-5 mr-2">
+                                        <AvatarImage src={profile.avatarUrl} alt={profile.displayName} />
+                                        <AvatarFallback className="text-xs">{getInitials(profile.displayName)}</AvatarFallback>
+                                    </Avatar>
+                                    {profile.displayName}
+                                </Button>
+                            )
+                         ))}
                     </PopoverContent>
                 </Popover>
             )}
 
             {showReplies && (
-                <div className="pl-11 mt-3 space-y-3 border-l-2 border-border ml-5"> 
+                <div className="pl-11 mt-3 space-y-3 border-l-2 border-border ml-5"> {/* Adjusted ml-5 for consistent indentation from avatar */}
                     {isLoadingSubComments ? (
                          <div className="flex items-center justify-center py-4">
                             <Loader2 className="h-4 w-4 animate-spin text-primary" />
                          </div>
                     ) : subCommentsError ? (
                         <p className="text-xs text-destructive pl-2">Error loading replies.</p>
-                    ) : subComments.length === 0 ? (
+                    ) : subComments && subComments.length === 0 ? (
                         <p className="text-xs text-muted-foreground pl-2">No replies yet.</p>
                     ) : (
-                        subComments.map((subComment) => (
+                        subComments && subComments.map((subComment) => (
                             <SubCommentItem
                                 key={subComment.id}
                                 subComment={subComment}
                                 currentUserId={currentUserId}
                                 postId={postId}
                                 commentId={comment.id}
-                                onDelete={handleSubCommentDeleted} 
+                                onDelete={handleSubCommentDeleted}
                             />
                         ))
                     )}
@@ -705,19 +815,26 @@ CommentItem.displayName = 'CommentItem';
 
 // --- Main Board Page Content Component Logic ---
 function BoardPageContent() {
-  const { user, loading: authLoading } = useAuth(); 
+  const { user, loading: authLoading } = useAuth();
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [newComment, setNewComment] = useState(''); 
-  const [isSubmittingComment, setIsSubmittingComment] = useState(false); 
+  const [newComment, setNewComment] = useState('');
+  const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const [isAutocompleting, setIsAutocompleting] = useState(false);
-  const [autocompleteSuggestion, setAutocompleteSuggestion] = useState<string | null>(null);
-  const descriptionRef = useRef<HTMLTextAreaElement>(null); 
-  const autocompleteTimeoutRef = useRef<NodeJS.Timeout | null>(null); 
-  
+  // Removed AI Autocomplete states
+  // const [isAutocompleting, setIsAutocompleting] = useState(false);
+  // const [autocompleteSuggestion, setAutocompleteSuggestion] = useState<string | null>(null);
+  // const autocompleteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // State for new comment mentions
+  const [newCommentMentionQuery, setNewCommentMentionQuery] = useState('');
+  const [showNewCommentSuggestions, setShowNewCommentSuggestions] = useState(false);
+  const newCommentInputRef = useRef<HTMLInputElement>(null);
+  const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
+
+
   useEffect(() => {
     if (!authLoading && !user) {
       router.push('/login');
@@ -727,9 +844,9 @@ function BoardPageContent() {
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 1, 
+    staleTime: 1000 * 60 * 1, // 1 minute
     refetchOnWindowFocus: true,
-    enabled: !!user, 
+    enabled: !!user, // Only fetch if user is loaded
   });
 
   const deletePostMutation = useMutation({
@@ -764,16 +881,16 @@ function BoardPageContent() {
     deletePostMutation.mutate(postId);
   };
 
-  const handleOfferHelp = async (postOwnerId: string, postId: string | undefined) => { 
+  const handleOfferHelp = async (postOwnerId: string, postId: string | undefined) => {
     if (!user) {
       toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to offer help." });
       return;
     }
     if (user.uid === postOwnerId) {
       toast({ variant: "default", title: "Action Info", description: "You cannot start a conversation with yourself." });
-      return; 
+      return;
     }
-    if (!postId) { 
+    if (!postId) {
       toast({ variant: "destructive", title: "Error", description: "Post ID is missing for conversation." });
       return;
     }
@@ -782,7 +899,7 @@ function BoardPageContent() {
       if (conversationId) {
         toast({ title: "Conversation Started", description: "Redirecting to Contracts..." });
         router.push(`/contracts?postId=${postId}&conversationId=${conversationId}`);
-        setSelectedPost(null); 
+        setSelectedPost(null); // Close sheet after initiating contact
       } else {
         throw new Error("Failed to get conversation ID.");
       }
@@ -812,13 +929,13 @@ function BoardPageContent() {
     let filtered = selectedTags.length === 0
       ? posts
       : posts.filter(post =>
-          Array.isArray(post.tags) && 
-          selectedTags.every(tag => post.tags.includes(tag)) 
+          Array.isArray(post.tags) &&
+          selectedTags.every(tag => post.tags.includes(tag))
         );
     return filtered.sort((a, b) => {
-      const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : 0;
-      const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : 0;
-      return timeB - timeA; 
+      const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : (typeof a.createdAt === 'number' ? a.createdAt : 0);
+      const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : (typeof b.createdAt === 'number' ? b.createdAt : 0);
+      return timeB - timeA; // Sort newest first
     });
   }, [posts, selectedTags]);
 
@@ -826,33 +943,148 @@ function BoardPageContent() {
     data: comments = [],
     isLoading: isLoadingComments,
     error: commentsError,
-    refetch: refetchComments, 
+    refetch: refetchComments,
   } = useQuery<ClientComment[]>({
-    queryKey: ['comments', selectedPost?.id], 
-    queryFn: () => getCommentsForPost(selectedPost!.id), 
-    enabled: !!selectedPost && !!selectedPost.id, 
-    staleTime: 1000 * 60 * 1, 
+    queryKey: ['comments', selectedPost?.id],
+    queryFn: () => selectedPost?.id ? getCommentsForPost(selectedPost.id) : Promise.resolve([]),
+    enabled: !!selectedPost && !!selectedPost.id,
+    staleTime: 1000 * 60 * 1, // 1 minute
     refetchOnWindowFocus: true,
   });
+
+  // Data for new comment @mentions
+   const userIdsForNewCommentMentions = useMemo(() => {
+        if (!selectedPost) return [];
+        const ids = new Set<string>([selectedPost.userId]);
+        comments.forEach(comment => ids.add(comment.userId));
+        return Array.from(ids).filter(id => id !== user?.uid); // Exclude self
+   }, [selectedPost, comments, user?.uid]);
+
+   const { data: newCommentMentionProfilesMap = new Map(), isLoading: isLoadingNewCommentMentionProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
+        queryKey: ['newCommentMentionProfiles', selectedPost?.id, userIdsForNewCommentMentions.join(',')],
+        queryFn: async () => {
+            const profiles = new Map<string, UserProfileBasic | null>();
+            if (userIdsForNewCommentMentions.length === 0) return profiles;
+            await Promise.all(
+                userIdsForNewCommentMentions.map(async (userId) => {
+                    const profile = await getUserProfileBasic(userId);
+                    profiles.set(userId, profile || { userId, displayName: generateAnonymousName(userId) });
+                })
+            );
+            return profiles;
+        },
+        enabled: userIdsForNewCommentMentions.length > 0 && showNewCommentSuggestions, // Only fetch if popover might show
+        staleTime: 1000 * 60 * 5, // 5 minutes
+   });
+
+   const filteredNewCommentSuggestions = useMemo(() => {
+        if (!showNewCommentSuggestions) return [];
+        if (isLoadingNewCommentMentionProfiles) return [{ userId: 'loading-nc', displayName: 'Loading users...' } as UserProfileBasic];
+        if (!newCommentMentionProfilesMap || newCommentMentionProfilesMap.size === 0) return [{ userId: 'no-users-nc', displayName: 'No users in this context.' } as UserProfileBasic];
+
+
+        const profiles = Array.from(newCommentMentionProfilesMap.values()).filter((p): p is UserProfileBasic => !!p);
+
+        if (newCommentMentionQuery.trim() === '') {
+            const suggestions = profiles.slice(0, 5);
+            return suggestions.length > 0 ? suggestions : [{ userId: 'no-users-nc', displayName: 'No users found in this context.' } as UserProfileBasic];
+        }
+        const queryLower = newCommentMentionQuery.toLowerCase();
+        const suggestions = profiles.filter(profile =>
+            profile.displayName.toLowerCase().includes(queryLower)
+        ).slice(0, 5);
+        return suggestions.length > 0 ? suggestions : [{ userId: 'no-match-nc', displayName: `No users matching "${newCommentMentionQuery}"` } as UserProfileBasic];
+   }, [newCommentMentionQuery, newCommentMentionProfilesMap, isLoadingNewCommentMentionProfiles, showNewCommentSuggestions]);
+
+
+  const handleNewCommentMentionInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setNewComment(value);
+
+        const cursorPosition = e.target.selectionStart || 0;
+        const textBeforeCursor = value.substring(0, cursorPosition);
+        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+        if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
+            const currentQuery = textBeforeCursor.substring(lastAtIndex + 1);
+            if (!/\s/.test(currentQuery)) {
+                setNewCommentMentionQuery(currentQuery);
+                setShowNewCommentSuggestions(true);
+                return;
+            }
+        }
+        setNewCommentMentionQuery('');
+        setShowNewCommentSuggestions(false);
+  };
+
+  const handleSelectNewCommentSuggestion = (profile: UserProfileBasic) => {
+        if (!newCommentInputRef.current) return;
+        const currentValue = newComment;
+        const cursorPosition = newCommentInputRef.current.selectionStart || 0;
+        const textBeforeCursor = currentValue.substring(0, cursorPosition);
+        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+        if (lastAtIndex > -1) {
+            const textBeforeMention = currentValue.substring(0, lastAtIndex);
+            const textAfterCursor = currentValue.substring(cursorPosition);
+            const newText = `${textBeforeMention}@${profile.displayName} ${textAfterCursor}`;
+            setNewComment(newText);
+
+            const newCursorPosition = textBeforeMention.length + `@${profile.displayName} `.length;
+            setTimeout(() => {
+                newCommentInputRef.current?.focus();
+                newCommentInputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+            }, 0);
+        }
+        setShowNewCommentSuggestions(false);
+        setNewCommentMentionQuery('');
+  };
+
+   useEffect(() => {
+       const handleClickOutside = (event: MouseEvent) => {
+           if (
+               newCommentSuggestionsPopoverRef.current &&
+               !newCommentSuggestionsPopoverRef.current.contains(event.target as Node) &&
+               newCommentInputRef.current &&
+               !newCommentInputRef.current.contains(event.target as Node)
+           ) {
+               if (showNewCommentSuggestions) setShowNewCommentSuggestions(false);
+           }
+       };
+       if (showNewCommentSuggestions) document.addEventListener('mousedown', handleClickOutside);
+       return () => document.removeEventListener('mousedown', handleClickOutside);
+   }, [showNewCommentSuggestions]);
+
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedPost || !newComment.trim() || isSubmittingComment) return;
-    setIsSubmittingComment(true); 
-    const mentionedUserIds = extractMentions(newComment.trim()); 
+    setIsSubmittingComment(true);
+    const mentionedUserIds = extractMentions(newComment.trim());
     const commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'> = {
       userId: user.uid,
       text: newComment.trim(),
-      mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [], 
+      mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [],
     };
     try {
       const newCommentId = await addCommentToPost(selectedPost.id, commentData);
       console.log(`Comment ${newCommentId} added to post ${selectedPost.id}`);
       await queryClient.invalidateQueries({ queryKey: ['comments', selectedPost.id] });
+
+      // Notify post author (if different from commenter)
+      if (selectedPost.userId !== user.uid) {
+        queryClient.invalidateQueries({ queryKey: ['notifications', selectedPost.userId] });
+      }
+      // Notify mentioned users (if different from commenter and post author if already notified)
       mentionedUserIds.forEach(mentionedId => {
-        queryClient.invalidateQueries({ queryKey: ['notifications', mentionedId] });
+        if (mentionedId !== user.uid && mentionedId !== selectedPost.userId) {
+          queryClient.invalidateQueries({ queryKey: ['notifications', mentionedId] });
+        }
       });
-      setNewComment(''); 
+
+      setNewComment('');
+      setNewCommentMentionQuery('');
+      setShowNewCommentSuggestions(false);
       toast({ title: "Comment Added" });
     } catch (error: any) {
       console.error("Error submitting comment:", error);
@@ -862,14 +1094,32 @@ function BoardPageContent() {
         description: `Could not add comment: ${error.message}. Check rules.`,
       });
     } finally {
-      setIsSubmittingComment(false); 
+      setIsSubmittingComment(false);
     }
   };
-  
-  const handleCommentDeleted = () => refetchComments();
-  const handleMentionInput = (text: string) => setNewComment(text);
 
-  if (authLoading || (isLoadingPosts && !posts?.length)) {
+  const handleCommentDeleted = () => refetchComments();
+
+   // Removed AI Autocomplete functionality
+   // const triggerAutocomplete = useCallback(async (title: string, currentDesc: string) => {
+   // ...
+   // }, [toast]);
+
+  // const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    // const currentText = e.target.value;
+    // if (descriptionRef.current) descriptionRef.current.value = currentText;
+
+    // if (autocompleteTimeoutRef.current) {
+    //   clearTimeout(autocompleteTimeoutRef.current);
+    // }
+    // autocompleteTimeoutRef.current = setTimeout(() => {
+    //   if (selectedPost?.question && currentText.length > 10 && currentText.length < 300) {
+    //   }
+    // }, 1500);
+  // };
+
+
+  if (authLoading || (isLoadingPosts && !posts?.length && user)) { // Show loading if auth is loading OR if posts are loading AND user is present
     return (
       <div className="container mx-auto p-4 pt-6 text-center">
         <div className="flex justify-center items-center h-64">
@@ -925,28 +1175,28 @@ function BoardPageContent() {
       </div>
 
       <div className="columns-1 sm:columns-2 md:columns-3 lg:columns-4 gap-4 space-y-4">
-        {isLoadingPosts && filteredPosts.length === 0 && ( 
+        {isLoadingPosts && filteredPosts.length === 0 && user && (
           <div className="col-span-full text-center py-10 flex justify-center items-center">
             <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
             <p className="text-muted-foreground">Loading posts...</p>
           </div>
         )}
-        {!isLoadingPosts && postsError && ( 
+        {!isLoadingPosts && postsError && user &&(
           <div className="col-span-full text-center py-10 text-destructive">
             <p>Error loading posts.</p>
           </div>
         )}
-        {!isLoadingPosts && !postsError && filteredPosts.length > 0 ? (
+        {!isLoadingPosts && !postsError && user && filteredPosts.length > 0 ? (
           filteredPosts.map((post) => (
             <PostCard key={post.id} post={post} onOpen={() => setSelectedPost(post)} />
           ))
         ) : (
-          !isLoadingPosts && !postsError && (
+          !isLoadingPosts && !postsError && user && (
             <div className="col-span-full text-center py-10">
               <p className="text-muted-foreground">
                 {selectedTags.length > 0
                   ? "No posts found matching the selected tags."
-                  : "No posts available yet. Be the first to create one!" 
+                  : "No posts available yet. Be the first to create one!"
                 }
               </p>
             </div>
@@ -955,11 +1205,11 @@ function BoardPageContent() {
       </div>
 
       <Sheet open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
-        <SheetContent className="sm:max-w-lg w-[90vw] p-0 flex flex-col" side="right"> 
+        <SheetContent className="sm:max-w-lg w-[90vw] p-0 flex flex-col" side="right">
           {selectedPost && (
             <>
-              <ScrollArea className="flex-grow"> 
-                <div className="p-6 pb-0"> 
+              <ScrollArea className="flex-grow">
+                <div className="p-6 pb-0">
                   <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
                     <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
                     <div className="flex flex-wrap items-center gap-2 pt-1">
@@ -982,8 +1232,9 @@ function BoardPageContent() {
                                 <Image
                                   src={url}
                                   alt={`Post image ${index + 1}`}
-                                  layout="fill"
-                                  objectFit="contain" 
+                                  fill
+                                  sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                  style={{ objectFit: 'contain' }}
                                   className="rounded-md"
                                   data-ai-hint="uploaded content"
                                 />
@@ -1001,7 +1252,7 @@ function BoardPageContent() {
                     </div>
                   )}
 
-                  <div className="space-y-4 text-sm mb-6"> 
+                  <div className="space-y-4 text-sm mb-6">
                     {selectedPost.description && (
                       <div>
                         <strong className="text-foreground">Details:</strong>
@@ -1010,29 +1261,30 @@ function BoardPageContent() {
                     )}
 
                     <div className="grid grid-cols-1 gap-y-2 mt-4 border-t pt-4">
-                      <div>
+                       <div>
                         <strong className="block text-foreground">Sector:</strong>
                         <span className="text-muted-foreground">{selectedPost.sector || 'N/A'}</span>
-                      </div>
-                      {selectedPost.subSector && (
+                       </div>
+                       {selectedPost.subSector && (
                         <div>
                           <strong className="block text-foreground">Sub-Sector:</strong>
                           <span className="text-muted-foreground">{selectedPost.subSector}</span>
                         </div>
-                      )}
-                      {selectedPost.industry && (
+                       )}
+                       {selectedPost.industry && (
                         <div>
                           <strong className="block text-foreground">Industry:</strong>
                           <span className="text-muted-foreground">{selectedPost.industry}</span>
                         </div>
-                      )}
-                      {selectedPost.naicsCode && (
+                       )}
+                       {selectedPost.naicsCode && (
                         <div>
                           <strong className="block text-foreground">NAICS Code:</strong>
-                          <span className="text-muted-foreground">{selectedPost.naicsCode}</span>
+                          <Badge variant="outline" className="text-xs ml-1"><Tag className="h-3 w-3 mr-1"/>{selectedPost.naicsCode}</Badge>
                         </div>
-                      )}
+                       )}
                     </div>
+
 
                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4">
                       <div>
@@ -1055,12 +1307,12 @@ function BoardPageContent() {
                         <span className="text-muted-foreground">{selectedPost.ratingScore ? `${selectedPost.ratingScore} / 5` : 'N/A'}</span>
                       </div>
                     </div>
-                    {user && selectedPost.userId !== user.uid && ( 
+                    {user && selectedPost.userId !== user.uid && (
                       <div className="mt-4 border-t pt-4">
                         <Link
-                          href={`/profile/${selectedPost.userId}`} 
+                          href={`/profile/${selectedPost.userId}`}
                           passHref
-                          legacyBehavior 
+                          legacyBehavior={false} // Use new Link behavior
                         >
                           <Button variant="link" size="sm" className="text-primary p-0 h-auto flex items-center gap-1">
                             <Building className="h-4 w-4" /> View Business Profile
@@ -1092,9 +1344,9 @@ function BoardPageContent() {
                           <CommentItem
                             key={comment.id}
                             comment={comment}
-                            currentUserId={user?.uid ?? null} 
-                            postId={selectedPost!.id} 
-                            onDelete={handleCommentDeleted} 
+                            currentUserId={user?.uid ?? null}
+                            postId={selectedPost!.id}
+                            onDelete={handleCommentDeleted}
                           />
                         ))}
                       </div>
@@ -1103,23 +1355,58 @@ function BoardPageContent() {
                 </div>
               </ScrollArea>
 
-              <SheetFooter className="p-6 border-t bg-background mt-auto sticky bottom-0"> 
+              <SheetFooter className="p-6 border-t bg-background mt-auto sticky bottom-0">
                 <div className="w-full space-y-4">
-                  <form onSubmit={handleCommentSubmit} className="flex items-center gap-2">
-                    <Input
-                      type="text"
-                      placeholder="Add a comment... (@mention someone)"
-                      value={newComment}
-                      onChange={(e) => handleMentionInput(e.target.value)} 
-                      disabled={!user || isSubmittingComment} 
-                      className="flex-grow"
-                      aria-label="New comment input"
-                    />
-                    <Button type="submit" size="icon" disabled={!newComment.trim() || !user || isSubmittingComment}>
-                      {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-                      <span className="sr-only">Send Comment</span>
-                    </Button>
-                  </form>
+                  <Popover open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && (filteredNewCommentSuggestions[0]?.userId !== 'loading-nc' && filteredNewCommentSuggestions[0]?.userId !== 'no-users-nc' && filteredNewCommentSuggestions[0]?.userId !== 'no-match-nc')} onOpenChange={setShowNewCommentSuggestions}>
+                      <PopoverTrigger asChild>
+                          <form onSubmit={handleCommentSubmit} className="flex items-center gap-2">
+                              <Input
+                                  ref={newCommentInputRef}
+                                  type="text"
+                                  placeholder="Add a comment... (@mention someone)"
+                                  value={newComment}
+                                  onChange={handleNewCommentMentionInputChange}
+                                  disabled={!user || isSubmittingComment}
+                                  className="flex-grow bg-card"
+                                  aria-label="New comment input"
+                                  autoComplete="off"
+                              />
+                              <Button type="submit" size="icon" variant="ghost" className="h-8 w-8" disabled={!newComment.trim() || !user || isSubmittingComment}>
+                                  {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 text-primary" />}
+                                  <span className="sr-only">Send Comment</span>
+                              </Button>
+                          </form>
+                      </PopoverTrigger>
+                      <PopoverContent
+                          ref={newCommentSuggestionsPopoverRef}
+                          className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
+                          side="top"
+                          align="start"
+                          onOpenAutoFocus={(e) => e.preventDefault()}
+                      >
+                          {filteredNewCommentSuggestions.map(profile => (
+                              profile.userId === 'loading-nc' || profile.userId === 'no-users-nc' || profile.userId === 'no-match-nc' ? (
+                                  <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
+                                      {profile.displayName}
+                                  </div>
+                              ) : (
+                                  <Button
+                                      key={profile.userId}
+                                      variant="ghost"
+                                      size="sm"
+                                      className="w-full justify-start h-auto px-2 py-1 text-xs"
+                                      onClick={() => handleSelectNewCommentSuggestion(profile)}
+                                  >
+                                      <Avatar className="h-5 w-5 mr-2">
+                                          <AvatarImage src={profile.avatarUrl} alt={profile.displayName} />
+                                          <AvatarFallback className="text-xs">{getInitials(profile.displayName)}</AvatarFallback>
+                                      </Avatar>
+                                      {profile.displayName}
+                                  </Button>
+                              )
+                          ))}
+                      </PopoverContent>
+                  </Popover>
                   <div className="flex justify-end gap-2">
                     {user && selectedPost.userId !== user.uid && (
                       <>
@@ -1127,11 +1414,13 @@ function BoardPageContent() {
                           variant="outline"
                           size="sm"
                           onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id)}
+                          disabled={deletePostMutation.isPending}
                         >
                           <HandHelping className="mr-2 h-4 w-4" /> Offer Help
                         </Button>
                         <ConnectionButton
                           targetUserId={selectedPost.userId}
+                          targetUserName={selectedPost.userName || generateAnonymousName(selectedPost.userId)}
                           size="sm"
                           variant="default"
                         />
@@ -1192,14 +1481,22 @@ function BoardPageContent() {
 
 export default BoardPageContent;
 
+// Helper to extract potential UIDs or DisplayNames from text, assuming @UID or @DisplayName format
 const extractMentions = (text: string): string[] => {
-    const mentionRegex = /@([a-zA-Z0-9_]+)/g;
+    const mentionRegex = /@([a-zA-Z0-9_.\- ]+)/g; // Allow spaces, dots, hyphens in display names
     const matches = text.matchAll(mentionRegex);
-    const userIdentifiers = new Set<string>(); 
+    const userIdentifiers = new Set<string>();
     for (const match of matches) {
         if (match[1]) {
-            userIdentifiers.add(match[1]);
+            // Here, match[1] could be a UID or a multi-word display name.
+            // The notification service will need to resolve display names to UIDs if necessary.
+            // For now, we store what was typed.
+            userIdentifiers.add(match[1].trim());
         }
     }
+    console.log(`[page.tsx] extractMentions from text "${text.substring(0,30)}...": Found identifiers:`, Array.from(userIdentifiers));
     return Array.from(userIdentifiers);
 };
+
+
+    

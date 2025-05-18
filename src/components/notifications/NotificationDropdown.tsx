@@ -12,12 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-  DropdownMenuGroup,
-  DropdownMenuSub,
-  DropdownMenuSubTrigger,
-  DropdownMenuPortal,
-  DropdownMenuSubContent
-} from '@/components/ui/dropdown-menu';
+} from '@/components/ui/dropdown-menu'; // Removed unused group/sub imports
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { getNotificationsForUser, markNotificationAsRead, markAllNotificationsAsRead } from '@/services/notificationService';
@@ -26,6 +21,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
+// Removed: import { generateAnonymousName } from '@/lib/pseudonymUtils'; // No longer needed
 
 interface NotificationDropdownProps {
   userId: string;
@@ -44,54 +40,53 @@ NotificationIcon.displayName = 'NotificationIcon';
 
 const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id: string) => void }> = React.memo(({ notification, onRead }) => {
     const timeAgo = formatDistanceToNow(notification.timestamp, { addSuffix: true });
+    const senderDisplayName = notification.senderName || `@${notification.senderId}`;
+
 
     const handleClick = () => {
         if (!notification.isRead) {
             onRead(notification.id);
         }
-        // Navigation logic is handled by the Link component now
     };
 
     let title = '';
     let description = '';
-    let linkHref: string = '/'; // Default link
+    let linkHref: string = '/';
 
     switch (notification.type) {
         case 'reply':
-            title = `${notification.senderName || 'Someone'} replied`;
+            title = `${senderDisplayName} replied`;
             description = notification.textSnippet || 'View reply';
-             linkHref = notification.postId ? `/?postId=${notification.postId}${notification.commentId ? `#comment-${notification.commentId}`: ''}${notification.subCommentId ? `&subCommentId=${notification.subCommentId}` : ''}` : '/'; // Link to post, potentially with comment/subcomment fragment
+            linkHref = notification.postId ? `/?postId=${notification.postId}${notification.commentId ? `#comment-${notification.commentId}`: ''}${notification.subCommentId ? `&subCommentId=${notification.subCommentId}` : ''}` : '/';
             break;
         case 'mention':
-            title = `${notification.senderName || 'Someone'} mentioned you`;
+            title = `${senderDisplayName} mentioned you`;
             description = notification.textSnippet || 'View mention';
-             linkHref = notification.postId ? `/?postId=${notification.postId}${notification.commentId ? `#comment-${notification.commentId}`: ''}${notification.subCommentId ? `&subCommentId=${notification.subCommentId}` : ''}` : '/';
+            linkHref = notification.postId ? `/?postId=${notification.postId}${notification.commentId ? `#comment-${notification.commentId}`: ''}${notification.subCommentId ? `&subCommentId=${notification.subCommentId}` : ''}` : '/';
             break;
         case 'connection_request':
-            title = `${notification.senderName || 'Someone'} wants to connect`;
+            title = `${senderDisplayName} wants to connect`;
             description = 'Review the connection request.';
-            linkHref = '/connect'; // Link to connect page
+            linkHref = '/connect';
             break;
         case 'connection_accepted':
-            title = `Connected with ${notification.senderName || 'Someone'}`;
+            title = `Connected with ${senderDisplayName}`;
             description = 'View their profile or start a chat.';
-             linkHref = notification.senderId ? `/profile/${notification.senderId}` : '/connect'; // Link to profile or connect page
+            linkHref = notification.senderId ? `/profile/${notification.senderId}` : '/connect';
             break;
         default:
             title = 'New Notification';
             description = 'You have a new notification.';
     }
 
-
-    // Use DropdownMenuItem for structure and wrap content in Link
      return (
        <DropdownMenuItem
-          asChild // Allow Link to control rendering and navigation
+          asChild
           className={cn(
-            "flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/50 rounded-md relative focus:bg-muted/60", // Added focus style
-            !notification.isRead && "bg-primary/5 font-medium" // Highlight unread
+            "flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/50 rounded-md relative focus:bg-muted/60",
+            !notification.isRead && "bg-primary/5 font-medium"
           )}
-          onClick={handleClick} // Still mark as read on click
+          onClick={handleClick}
           aria-label={`Notification: ${title}`}
        >
           <Link href={linkHref}>
@@ -119,27 +114,24 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
 
   const { data: notifications = [], isLoading, error } = useQuery<ClientNotification[]>({
     queryKey: ['notifications', userId],
-    queryFn: () => getNotificationsForUser(userId, 20), // Fetch latest 20
+    queryFn: () => getNotificationsForUser(userId, 20),
     enabled: !!userId,
-    refetchInterval: 1000 * 60, // Refetch every minute
-    staleTime: 1000 * 30, // 30 seconds stale time
+    refetchInterval: 1000 * 60,
+    staleTime: 1000 * 30,
   });
 
-  // Mutation to mark a single notification as read
   const markReadMutation = useMutation({
     mutationFn: markNotificationAsRead,
     onSuccess: (data, variables) => {
-      // Optimistically update the UI or invalidate
       queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
-       console.log(`Marked notification ${variables} as read`);
+       console.log(`[NotificationDropdown] Marked notification ${variables} as read`);
     },
     onError: (error: Error, variables) => {
-      console.error(`Failed to mark notification ${variables} as read:`, error);
+      console.error(`[NotificationDropdown] Failed to mark notification ${variables} as read:`, error);
       toast({ variant: "destructive", title: "Error", description: "Could not update notification status." });
     },
   });
 
-  // Mutation to mark all notifications as read
   const markAllReadMutation = useMutation({
     mutationFn: markAllNotificationsAsRead,
     onSuccess: () => {
@@ -147,13 +139,12 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
       toast({ title: "Notifications marked as read." });
     },
     onError: (error: Error) => {
-      console.error("Failed to mark all notifications as read:", error);
+      console.error("[NotificationDropdown] Failed to mark all notifications as read:", error);
       toast({ variant: "destructive", title: "Error", description: "Could not mark all notifications as read." });
     },
   });
 
   const handleMarkAsRead = (notificationId: string) => {
-    // Only mutate if it's not already read (optional optimization)
     const notification = notifications.find(n => n.id === notificationId);
     if (notification && !notification.isRead) {
         markReadMutation.mutate(notificationId);
@@ -176,7 +167,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
           {unreadCount > 0 && (
             <Badge
               variant="destructive"
-              className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs rounded-full" // Adjusted size and padding
+              className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs rounded-full"
             >
               {unreadCount > 9 ? '9+' : unreadCount}
             </Badge>
@@ -220,11 +211,6 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
             )}
           </div>
         </ScrollArea>
-        {/* Optional Footer */}
-        {/* <DropdownMenuSeparator />
-        <DropdownMenuItem className="justify-center text-sm text-primary cursor-pointer">
-          View All Notifications
-        </DropdownMenuItem> */}
       </DropdownMenuContent>
     </DropdownMenu>
   );

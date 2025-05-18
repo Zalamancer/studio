@@ -1,5 +1,5 @@
 // src/services/commentService.ts
-// REMOVED 'use server'; to make these functions client-callable by default
+// Client-callable by default (no 'use server;' at the top)
 
 import { db } from '@/lib/firebase/config';
 import {
@@ -20,76 +20,86 @@ import {
   increment, // For updating likeCount atomically
 } from 'firebase/firestore';
 import type { NewCommentData, ClientComment, NewSubCommentData, ClientSubComment } from '@/types/comment';
-import { getUserProfileBasic } from '@/services/connectionService'; // Import function to get basic user info
-import { createNotification } from './notificationService'; // Import notification service
+import { getUserProfileBasic } from '@/services/connectionService';
+import { createNotification } from './notificationService';
 import type { NewNotificationData } from '@/types/notification';
-import { getPostDetails } from './messagingService'; // Import to get post details for notification
+import { getPostDetails } from './messagingService';
+import { generateAnonymousName } from '@/lib/pseudonymUtils'; // For fallback names
 
-// Helper function to extract mentioned user IDs from text
+// Helper function to extract mentioned user UIDs from text
+// This assumes mentions are in the format @UID and UIDs are alphanumeric with underscores.
 const extractMentions = (text: string): string[] => {
-  const mentionRegex = /@([a-zA-Z0-9_]+)/g;
-  const mentions = text.match(mentionRegex);
-  if (!mentions) {
-    return [];
+  const mentionRegex = /@([a-zA-Z0-9_-]+)/g; // Adjusted to include hyphen, common in some UIDs
+  const matches = text.matchAll(mentionRegex);
+  const userIdentifiers = new Set<string>();
+  for (const match of matches) {
+    if (match[1]) {
+      userIdentifiers.add(match[1]);
+    }
   }
-  return mentions.map(mention => mention.substring(1));
+  console.log(`[commentService] extractMentions from text "${text.substring(0,30)}...": Found UIDs:`, Array.from(userIdentifiers));
+  return Array.from(userIdentifiers);
 };
 
 // --- Comment Functions ---
 
 export const addCommentToPost = async (postId: string, commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
-  if (!postId) {
-    throw new Error('Post ID is required to add a comment.');
-  }
-  if (!commentData.userId) {
-    throw new Error('User ID is required for the comment.');
-  }
-  if (!commentData.text || commentData.text.trim() === '') {
-    throw new Error('Comment text cannot be empty.');
-  }
+  console.log(`[commentService] addCommentToPost: Called for postId '${postId}' by userId '${commentData.userId}'. Comment text: "${commentData.text?.substring(0,50)}..."`);
+  if (!postId) throw new Error('Post ID is required to add a comment.');
+  if (!commentData.userId) throw new Error('User ID is required for the comment.');
+  if (!commentData.text || commentData.text.trim() === '') throw new Error('Comment text cannot be empty.');
 
   try {
     const postDocRef = doc(db, 'posts', postId);
     const commentsCollectionRef = collection(postDocRef, 'comments');
-    const mentionedUserIds = extractMentions(commentData.text);
+    const rawMentions = extractMentions(commentData.text); // These should be UIDs if input format is @UID
+    console.log(`[commentService] addCommentToPost: Extracted raw mentions (potential UIDs):`, rawMentions);
 
     const fullCommentData: NewCommentData & { timestamp: Timestamp } = {
-        ...commentData,
-        likeCount: 0,
-        likedBy: [],
-        mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [],
-        timestamp: serverTimestamp() as Timestamp,
+      ...commentData,
+      likeCount: 0,
+      likedBy: [],
+      mentionedUserIds: rawMentions, // Directly use extracted UIDs
+      timestamp: serverTimestamp() as Timestamp,
     };
 
     const docRef = await addDoc(commentsCollectionRef, fullCommentData);
     const newCommentId = docRef.id;
-    console.log(`Comment added successfully to post ${postId} with ID: ${newCommentId}`);
+    console.log(`[commentService] addCommentToPost: Comment added successfully to post ${postId} with ID: ${newCommentId}`);
 
-    if (mentionedUserIds.length > 0) {
-      const postDetails = await getPostDetails(postId);
-      for (const mentionedUserId of mentionedUserIds) {
-        if (mentionedUserId !== commentData.userId) {
-          const notification: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
-            userId: mentionedUserId,
-            type: 'mention',
-            senderId: commentData.userId,
-            postId: postId,
-            postQuestion: postDetails?.question,
-            commentId: newCommentId,
-            textSnippet: commentData.text.substring(0, 100),
-          };
-          try {
-             await createNotification(notification); // createNotification should also not be 'use server' if called from here
-             console.log(`Mention notification created for user ${mentionedUserId} regarding comment ${newCommentId}`);
-          } catch (notifyError) {
-              console.error(`Failed to create mention notification for user ${mentionedUserId}:`, notifyError);
-          }
+    const postDetails = await getPostDetails(postId); // Fetch post details once
+
+    // Notify post author (if different from commenter) - This seems missing, usually a good feature
+    // const postAuthorId = (await getDoc(postDocRef)).data()?.userId;
+    // if (postAuthorId && postAuthorId !== commentData.userId) { ... create 'reply' type notification ... }
+
+
+    // Notify mentioned users
+    if (rawMentions.length > 0) {
+      console.log(`[commentService] addCommentToPost: Processing ${rawMentions.length} mentions for notifications.`);
+      for (const mentionedRecipientUid of rawMentions) {
+        // Self-mentions will now trigger notifications due to previous change request
+        const notificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
+          userId: mentionedRecipientUid, // This is the UID of the user being mentioned
+          type: 'mention',
+          senderId: commentData.userId, // The user who made the comment
+          postId: postId,
+          postQuestion: postDetails?.question || null, // Ensure null if undefined
+          commentId: newCommentId,
+          textSnippet: commentData.text.substring(0, 100),
+        };
+        console.log(`[commentService] addCommentToPost: Attempting to create 'mention' notification for recipient UID '${mentionedRecipientUid}'. Payload:`, notificationPayload);
+        try {
+          await createNotification(notificationPayload);
+          console.log(`[commentService] addCommentToPost: Mention notification CREATED for recipient ${mentionedRecipientUid} regarding comment ${newCommentId}`);
+        } catch (notifyError: any) {
+          console.error(`[commentService] addCommentToPost: FAILED to create mention notification for recipient ${mentionedRecipientUid}. Error:`, notifyError.message, notifyError);
         }
       }
     }
     return newCommentId;
   } catch (error: any) {
-    console.error(`Error adding comment to post ${postId}:`, error);
+    console.error(`[commentService] addCommentToPost: Error adding comment to post ${postId}:`, error);
     if (error.code === 'permission-denied') {
       console.error("Firestore permission denied. Check security rules for writing to posts/{postId}/comments subcollection.");
       throw new Error('Permission denied. Check Firestore security rules.');
@@ -100,10 +110,10 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
 
 export const getCommentsForPost = async (postId: string): Promise<ClientComment[]> => {
   if (!postId) {
-    console.warn("getCommentsForPost called with invalid postId.");
+    console.warn("[commentService] getCommentsForPost called with invalid postId.");
     return [];
   }
-  console.log(`Fetching comments for post: ${postId}`);
+  console.log(`[commentService] Fetching comments for post: ${postId}`);
 
   try {
     const postDocRef = doc(db, 'posts', postId);
@@ -115,24 +125,21 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
     );
 
     const querySnapshot = await getDocs(q);
-    const userIds = Array.from(new Set(querySnapshot.docs.map(doc => doc.data().userId).filter(Boolean)));
+    const userIds = Array.from(new Set(querySnapshot.docs.map(docSnap => docSnap.data().userId).filter(Boolean)));
     const userProfilesMap = new Map<string, { displayName: string; avatarUrl?: string }>();
+
     await Promise.all(userIds.map(async (userId) => {
         const profile = await getUserProfileBasic(userId);
-        if (profile) {
-            userProfilesMap.set(userId, {
-                displayName: profile.displayName,
-                avatarUrl: profile.avatarUrl
-            });
-        } else {
-            userProfilesMap.set(userId, { displayName: `@${userId}` });
-        }
+        userProfilesMap.set(userId, {
+            displayName: profile?.displayName || generateAnonymousName(userId), // Fallback to generated name
+            avatarUrl: profile?.avatarUrl
+        });
     }));
 
     const comments = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) {
-        console.warn(`Document ${docSnap.id} has missing or invalid fields.`);
+        console.warn(`[commentService] Document ${docSnap.id} has missing or invalid fields.`);
         return null;
       }
       const timestampMillis = data.timestamp.toMillis();
@@ -142,7 +149,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
         userId: data.userId,
         text: data.text,
         timestamp: timestampMillis,
-        userName: userProfile?.displayName || `@${data.userId}`,
+        userName: userProfile?.displayName, // Will use the fetched/generated name
         userAvatar: userProfile?.avatarUrl,
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],
@@ -152,7 +159,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
 
     return comments;
   } catch (error: any) {
-    console.error(`Error fetching comments for post ${postId}:`, error);
+    console.error(`[commentService] Error fetching comments for post ${postId}:`, error);
     if (error.code === 'permission-denied') {
       throw new Error('Permission denied fetching comments. Check Firestore rules.');
     }
@@ -190,7 +197,7 @@ export const toggleLikeComment = async (postId: string, commentId: string, userI
             }
         });
     } catch (error: any) {
-        console.error(`Error toggling like for comment ${commentId}:`, error);
+        console.error(`[commentService] Error toggling like for comment ${commentId}:`, error);
         if (error.code === 'permission-denied') {
             throw new Error('Permission denied. Check Firestore security rules.');
         }
@@ -206,7 +213,7 @@ export const deleteCommentFromPost = async (postId: string, commentId: string): 
     const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
     await deleteDoc(commentDocRef);
   } catch (error: any) {
-    console.error(`Error deleting comment ${commentId} from post ${postId}:`, error);
+    console.error(`[commentService] Error deleting comment ${commentId} from post ${postId}:`, error);
     if (error.code === 'permission-denied') {
       throw new Error('Permission denied deleting comment. Ensure you own the comment or have appropriate permissions.');
     }
@@ -217,78 +224,89 @@ export const deleteCommentFromPost = async (postId: string, commentId: string): 
 // --- SubComment Functions ---
 
 export const addSubCommentToComment = async (postId: string, commentId: string, subCommentData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
-  if (!postId || !commentId) {
-    throw new Error('Post ID and Comment ID are required to add a subcomment.');
-  }
-  if (!subCommentData.userId) {
-    throw new Error('User ID is required for the subcomment.');
-  }
-  if (!subCommentData.text || subCommentData.text.trim() === '') {
-    throw new Error('Subcomment text cannot be empty.');
-  }
+  console.log(`[commentService] addSubCommentToComment: Called for postId '${postId}', commentId '${commentId}' by userId '${subCommentData.userId}'. Text: "${subCommentData.text?.substring(0,50)}..."`);
+  if (!postId || !commentId) throw new Error('Post ID and Comment ID are required to add a subcomment.');
+  if (!subCommentData.userId) throw new Error('User ID is required for the subcomment.');
+  if (!subCommentData.text || subCommentData.text.trim() === '') throw new Error('Subcomment text cannot be empty.');
 
   try {
     const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
     const subCommentsCollectionRef = collection(commentDocRef, 'subcomments');
-    const mentionedUserIds = extractMentions(subCommentData.text);
+    const rawMentions = extractMentions(subCommentData.text); // These should be UIDs
+    console.log(`[commentService] addSubCommentToComment: Extracted raw mentions (potential UIDs):`, rawMentions);
+
 
     const fullSubCommentData: NewSubCommentData & { timestamp: Timestamp } = {
         ...subCommentData,
         likeCount: 0,
         likedBy: [],
-        mentionedUserIds: mentionedUserIds.length > 0 ? mentionedUserIds : [],
+        mentionedUserIds: rawMentions,
         timestamp: serverTimestamp() as Timestamp,
     };
 
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
     const newSubCommentId = docRef.id;
+    console.log(`[commentService] addSubCommentToComment: Subcomment added successfully to comment ${commentId} with ID: ${newSubCommentId}`);
 
     const postDetails = await getPostDetails(postId);
     const commentSnap = await getDoc(commentDocRef);
     const originalCommenterId = commentSnap.data()?.userId;
 
+    // Notify original commenter about the reply (if not the same person)
     if (originalCommenterId && originalCommenterId !== subCommentData.userId) {
-        const replyNotification: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
+        const replyNotificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
             userId: originalCommenterId,
             type: 'reply',
             senderId: subCommentData.userId,
             postId: postId,
-            postQuestion: postDetails?.question,
+            postQuestion: postDetails?.question || null,
             commentId: commentId,
             subCommentId: newSubCommentId,
             textSnippet: subCommentData.text.substring(0, 100),
         };
-         try {
-             await createNotification(replyNotification);
-         } catch (notifyError) {
-             console.error(`Failed to create reply notification for user ${originalCommenterId}:`, notifyError);
-         }
+        console.log(`[commentService] addSubCommentToComment: Attempting to create 'reply' notification for original commenter '${originalCommenterId}'. Payload:`, replyNotificationPayload);
+        try {
+             await createNotification(replyNotificationPayload);
+             console.log(`[commentService] addSubCommentToComment: Reply notification CREATED for original commenter ${originalCommenterId}`);
+        } catch (notifyError: any) {
+             console.error(`[commentService] addSubCommentToComment: FAILED to create reply notification for original commenter ${originalCommenterId}. Error:`, notifyError.message, notifyError);
+        }
     }
 
-    if (mentionedUserIds.length > 0) {
-       for (const mentionedUserId of mentionedUserIds) {
-           if (mentionedUserId !== subCommentData.userId && mentionedUserId !== originalCommenterId) {
-               const mentionNotification: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
-                   userId: mentionedUserId,
+    // Notify mentioned users
+    if (rawMentions.length > 0) {
+       console.log(`[commentService] addSubCommentToComment: Processing ${rawMentions.length} mentions for notifications.`);
+       for (const mentionedRecipientUid of rawMentions) {
+           // Avoid sending a duplicate mention notification if the mentioned user is the original commenter AND they are not the sub-commenter
+           const isSelfMention = mentionedRecipientUid === subCommentData.userId;
+           const isMentioningOriginalCommenter = mentionedRecipientUid === originalCommenterId;
+
+           if (isSelfMention || (!isMentioningOriginalCommenter || (isMentioningOriginalCommenter && subCommentData.userId === originalCommenterId))) {
+               const mentionNotificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
+                   userId: mentionedRecipientUid,
                    type: 'mention',
                    senderId: subCommentData.userId,
                    postId: postId,
-                   postQuestion: postDetails?.question,
+                   postQuestion: postDetails?.question || null,
                    commentId: commentId,
                    subCommentId: newSubCommentId,
                    textSnippet: subCommentData.text.substring(0, 100),
                };
-                try {
-                   await createNotification(mentionNotification);
-                } catch (notifyError) {
-                    console.error(`Failed to create mention notification for user ${mentionedUserId}:`, notifyError);
-                }
+               console.log(`[commentService] addSubCommentToComment: Attempting to create 'mention' notification for recipient UID '${mentionedRecipientUid}'. Payload:`, mentionNotificationPayload);
+               try {
+                   await createNotification(mentionNotificationPayload);
+                   console.log(`[commentService] addSubCommentToComment: Mention notification CREATED for recipient ${mentionedRecipientUid} regarding subcomment ${newSubCommentId}`);
+               } catch (notifyError: any) {
+                   console.error(`[commentService] addSubCommentToComment: FAILED to create mention notification for recipient ${mentionedRecipientUid}. Error:`, notifyError.message, notifyError);
+               }
+           } else {
+                console.log(`[commentService] addSubCommentToComment: SKIPPING mention notification for original commenter '${mentionedRecipientUid}' as they received/will receive a 'reply' notification.`);
            }
        }
     }
     return newSubCommentId;
   } catch (error: any) {
-    console.error(`Error adding subcomment to comment ${commentId}:`, error);
+    console.error(`[commentService] addSubCommentToComment: Error adding subcomment to comment ${commentId}:`, error);
     if (error.code === 'permission-denied') {
       throw new Error('Permission denied. Check Firestore security rules.');
     }
@@ -298,7 +316,7 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
 
 export const getSubCommentsForComment = async (postId: string, commentId: string): Promise<ClientSubComment[]> => {
   if (!postId || !commentId) {
-    console.warn("getSubCommentsForComment called with invalid postId or commentId.");
+    console.warn("[commentService] getSubCommentsForComment called with invalid postId or commentId.");
     return [];
   }
   try {
@@ -311,18 +329,14 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
     );
 
     const querySnapshot = await getDocs(q);
-    const userIds = Array.from(new Set(querySnapshot.docs.map(doc => doc.data().userId).filter(Boolean)));
+    const userIds = Array.from(new Set(querySnapshot.docs.map(docSnap => docSnap.data().userId).filter(Boolean)));
     const userProfilesMap = new Map<string, { displayName: string; avatarUrl?: string }>();
     await Promise.all(userIds.map(async (userId) => {
         const profile = await getUserProfileBasic(userId);
-        if (profile) {
-            userProfilesMap.set(userId, {
-                displayName: profile.displayName,
-                avatarUrl: profile.avatarUrl
-            });
-        } else {
-             userProfilesMap.set(userId, { displayName: `@${userId}` });
-        }
+        userProfilesMap.set(userId, {
+            displayName: profile?.displayName || generateAnonymousName(userId), // Fallback to generated name
+            avatarUrl: profile?.avatarUrl
+        });
     }));
 
     const subComments = querySnapshot.docs.map((docSnap) => {
@@ -337,7 +351,7 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
         userId: data.userId,
         text: data.text,
         timestamp: timestampMillis,
-        userName: userProfile?.displayName || `@${data.userId}`,
+        userName: userProfile?.displayName, // Will use the fetched/generated name
         userAvatar: userProfile?.avatarUrl,
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],
@@ -347,7 +361,7 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
 
     return subComments;
   } catch (error: any) {
-    console.error(`Error fetching subcomments for comment ${commentId}:`, error);
+    console.error(`[commentService] Error fetching subcomments for comment ${commentId}:`, error);
     if (error.code === 'permission-denied') {
       throw new Error('Permission denied fetching subcomments. Check Firestore rules.');
     }
@@ -366,7 +380,7 @@ export const deleteSubCommentFromComment = async (postId: string, commentId: str
     const subCommentDocRef = doc(db, 'posts', postId, 'comments', commentId, 'subcomments', subCommentId);
     await deleteDoc(subCommentDocRef);
   } catch (error: any) {
-    console.error(`Error deleting subcomment ${subCommentId} from comment ${commentId}:`, error);
+    console.error(`[commentService] Error deleting subcomment ${subCommentId} from comment ${commentId}:`, error);
     if (error.code === 'permission-denied') {
       throw new Error('Permission denied deleting subcomment. Ensure you own the subcomment or have appropriate permissions.');
     }
@@ -401,7 +415,7 @@ export const toggleLikeSubComment = async (postId: string, commentId: string, su
             }
         });
     } catch (error: any) {
-        console.error(`Error toggling like for subcomment ${subCommentId}:`, error);
+        console.error(`[commentService] Error toggling like for subcomment ${subCommentId}:`, error);
         if (error.code === 'permission-denied') {
             throw new Error('Permission denied. Check Firestore security rules.');
         }
