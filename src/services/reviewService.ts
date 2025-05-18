@@ -1,7 +1,7 @@
 // src/services/reviewService.ts
-// Client-callable by default (no 'use server;' at the top)
+// Client-side service
 
-import { db, auth } from '@/lib/firebase/config'; // Import auth
+import { db, auth } from '@/lib/firebase/config';
 import {
   collection,
   addDoc,
@@ -18,33 +18,8 @@ import {
   getDoc,
 } from 'firebase/firestore';
 import type { Review, NewReviewData, UpdateReviewData, ClientReview } from '@/types/review';
-// Removed: import { getUserProfileBasic } from './connectionService'; // Not directly needed here anymore for sender details if passed in NewReviewData
 
 const REVIEWS_COLLECTION = 'reviews';
-
-/*
-Firestore Security Rules for /reviews/{reviewId} (Example):
-
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    // ... your existing rules ...
-
-    match /reviews/{reviewId} {
-      // Allow any authenticated user to read reviews
-      allow read: if request.auth != null;
-
-      // Allow authenticated user to create a review if they are the reviewerId
-      allow create: if request.auth != null
-                    && request.resource.data.reviewerId == request.auth.uid;
-
-      // Allow authenticated user to update/delete ONLY THEIR OWN review
-      allow update, delete: if request.auth != null
-                            && resource.data.reviewerId == request.auth.uid;
-    }
-  }
-}
-*/
 
 export const addReview = async (reviewData: NewReviewData): Promise<string> => {
   console.log("[reviewService] addReview: Called with data:", reviewData);
@@ -80,8 +55,8 @@ export const getReviewsForProfile = async (targetUserId: string): Promise<Client
     console.warn("[reviewService] getReviewsForProfile: No targetUserId provided.");
     return [];
   }
-  const clientAuthUid = auth.currentUser?.uid; // Get current user UID for logging
-  console.log(`[reviewService] getReviewsForProfile: Fetching for targetUserId: '${targetUserId}'. Client auth UID: '${clientAuthUid || 'NULL'}'`);
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[reviewService] getReviewsForProfile: Fetching for targetUserId: '${targetUserId}'. Client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
   try {
     const q = query(
@@ -105,12 +80,12 @@ export const getReviewsForProfile = async (targetUserId: string): Promise<Client
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
       });
     });
-    console.log(`[reviewService] getReviewsForProfile: Fetched ${reviews.length} reviews for profile ${targetUserId}`);
+    console.log(`%c[reviewService] getReviewsForProfile: Fetched ${reviews.length} reviews for profile ${targetUserId}`, "color: green;");
     return reviews;
   } catch (error: any) {
     console.error(`[reviewService] Error fetching reviews for profile ${targetUserId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error(`[reviewService] PERMISSION DENIED fetching reviews for target ${targetUserId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Check Firestore rules for reading 'reviews' collection.`);
+      console.error(`%c[reviewService] PERMISSION DENIED fetching reviews for target ${targetUserId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Firestore Rule for '/reviews/{reviewId}' should be 'allow read: if request.auth != null;'. VERIFY PUBLISHED RULES.`, "color: red; font-weight: bold;");
       throw new Error('Permission denied fetching reviews. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
