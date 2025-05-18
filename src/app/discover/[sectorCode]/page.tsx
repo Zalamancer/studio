@@ -26,9 +26,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getUserFavoriteSectors, addFavoriteSector, removeFavoriteSector } from '@/services/userPreferenceService';
 import { useToast } from '@/hooks/use-toast';
 import Whiteboard from '@/components/whiteboard/Whiteboard';
-// DocumentEditorPlaceholder is now rendered within Whiteboard.tsx when a user shape is clicked
-// So, it's no longer directly imported or used here.
-// import DocumentEditorPlaceholder from '@/components/document-editor/DocumentEditor';
 
 export interface FocusNodeDetails {
   code: string;
@@ -38,6 +35,7 @@ export interface FocusNodeDetails {
 
 const getSectorDataByCode = (code: string): SectorWithSubSectors | null => {
     if (!code) return null;
+    // Find in detailedSectorsData (imported from MainLayout)
     const sector = detailedSectorsData.find(s => s.code === code);
     console.log(`[SectorDetailPage] getSectorDataByCode for '${code}': Found:`, !!sector, sector);
     return sector || null;
@@ -49,7 +47,7 @@ const SectorDetailPage = () => {
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user } = useAuth(); // Get the authenticated user
   const sectorCode = params?.sectorCode as string | undefined;
 
   const [selectedSubSector, setSelectedSubSector] = useState<string | null>(null);
@@ -81,7 +79,10 @@ const SectorDetailPage = () => {
 
   const { data: favoriteSectorCodes = [], isLoading: isLoadingFavorites } = useQuery<string[]>({
     queryKey: ['userFavoriteSectors', user?.uid],
-    queryFn: () => user ? getUserFavoriteSectors(user.uid) : Promise.resolve([]),
+    queryFn: () => {
+        console.log(`%c[SectorDetailPage] useQuery (userFavoriteSectors): Fetching for user: ${user?.uid}`, "color: dodgerblue;");
+        return user ? getUserFavoriteSectors(user.uid) : Promise.resolve([]);
+    },
     enabled: !!user,
   });
 
@@ -93,8 +94,14 @@ const SectorDetailPage = () => {
   const toggleFavoriteMutation = useMutation({
     mutationFn: async () => {
       if (!user || !currentSectorData || !currentSectorData.code) {
+        toast({ variant: "destructive", title: "Error", description: "User not authenticated or sector data missing." });
         throw new Error("User not authenticated or sector data missing.");
       }
+      console.log(`%c[SectorDetailPage] toggleFavoriteMutation:
+        - User ID: ${user.uid}
+        - Sector Code: ${currentSectorData.code}
+        - Is Favorited (before action): ${isFavorited}`, "color: purple; font-weight: bold;");
+
       if (isFavorited) {
         await removeFavoriteSector(user.uid, currentSectorData.code);
         toast({ title: "Sector Unfavorited", description: `${currentSectorData.name} removed from your favorites.` });
@@ -106,8 +113,10 @@ const SectorDetailPage = () => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['userFavoriteSectors', user?.uid] });
       queryClient.invalidateQueries({ queryKey: ['userFavoriteSectorsOnDiscoverPage', user?.uid] });
+      console.log("%c[SectorDetailPage] toggleFavoriteMutation: onSuccess - Queries invalidated.", "color: green;");
     },
     onError: (error: Error) => {
+      console.error("%c[SectorDetailPage] toggleFavoriteMutation: onError - ", "color: red;", error);
       toast({ variant: "destructive", title: "Error Updating Favorite", description: error.message });
     },
   });
@@ -117,7 +126,10 @@ const SectorDetailPage = () => {
       toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to favorite sectors." });
       return;
     }
-    if (!currentSectorData || !currentSectorData.code) return;
+    if (!currentSectorData || !currentSectorData.code) {
+        toast({ variant: "destructive", title: "Error", description: "Sector data not available to favorite." });
+        return;
+    }
     toggleFavoriteMutation.mutate();
   };
 
@@ -470,12 +482,11 @@ const SectorDetailPage = () => {
           </Card>
 
           <Whiteboard
-            sectorData={currentSectorData} // Pass the main sector data
-            focusNodeDetails={focusNodeDetails} // Pass the current focus for the whiteboard
+            sectorData={currentSectorData}
+            focusNodeDetails={focusNodeDetails}
             onNodeClick={handleWhiteboardNodeClick}
           />
           
-          {/* DocumentEditorPlaceholder is now rendered by Whiteboard.tsx conditionally */}
         </div>
       </div>
     </div>
