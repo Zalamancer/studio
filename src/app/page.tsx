@@ -1,4 +1,3 @@
-
 // src/app/page.tsx
 "use client";
 
@@ -41,7 +40,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from '@/components/ui/separator'; // Import Separator
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Import Popover for suggestions
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles, AtSign, Tag, Compass } from "lucide-react"; // Added AtSign icon, Tag, Compass
+import { Loader2, Trash2, HandHelping, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, CornerDownRight, Heart, Sparkles, AtSign, Tag, Compass, UserCircle } from "lucide-react"; // Added AtSign icon, Tag, Compass, UserCircle
 import { useToast } from "@/hooks/use-toast";
 import type { Post, NewPostData } from '@/types/post'; // Correctly import types
 import { useAuth } from '@/contexts/AuthContext';
@@ -88,53 +87,68 @@ const getInitials = (displayNameOrUid: string | undefined | null): string => {
 
 // --- Helper: Render Text with Mentions as Links ---
 const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: string, mentionedUserIds?: string[] }) => {
-    const { data: mentionProfilesMap = new Map(), isLoading: isLoadingMentions } = useQuery<Map<string, UserProfileBasic | null>>({
+    console.log('[TextWithMentions] Props - Text:', text, 'Mentioned UIDs:', mentionedUserIds);
+    const { data: mentionProfilesMap = new Map<string, UserProfileBasic | null>(), isLoading: isLoadingMentions } = useQuery<Map<string, UserProfileBasic | null>>({
         queryKey: ['mentionProfiles', mentionedUserIds],
         queryFn: async () => {
             const profiles = new Map<string, UserProfileBasic | null>();
-            // Ensure mentionedUserIds are actual UIDs before fetching
             const validUids = mentionedUserIds.filter(id => id && /^[a-zA-Z0-9]{20,}$/.test(id));
+            console.log('[TextWithMentions] QueryFn - Valid UIDs to fetch profiles for:', validUids);
             if (validUids.length === 0) return profiles;
 
             await Promise.all(
                 validUids.map(async (userId) => {
                     const profile = await getUserProfileBasic(userId);
+                    console.log(`[TextWithMentions] QueryFn - Fetched profile for UID '${userId}':`, profile);
                     profiles.set(userId, profile);
                 })
             );
+            console.log('[TextWithMentions] QueryFn - Final mentionProfilesMap:', profiles);
             return profiles;
         },
-        enabled: mentionedUserIds && mentionedUserIds.some(id => id && /^[a-zA-Z0-9]{20,}$/.test(id)), // Only run if there are valid-looking UIDs
+        enabled: mentionedUserIds && mentionedUserIds.some(id => id && /^[a-zA-Z0-9]{20,}$/.test(id)),
         staleTime: Infinity,
     });
 
     if (isLoadingMentions) {
-        // Optionally return a loading state or the plain text
         return <>{text}</>;
     }
 
     // Regex to find @ followed by alphanumeric characters, underscores, dots, or hyphens, and potentially multiple words
     const parts = text.split(/(@[a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g);
+    console.log('[TextWithMentions] Split parts:', parts);
 
     return (
         <>
             {parts.map((part, index) => {
                 if (part.startsWith('@')) {
-                    const potentialDisplayName = part.substring(1).trim();
+                    const textualMention = part.substring(1).trim(); // e.g., "BlueWhale73" or "XprORzYxasQ..."
+                    console.log(`[TextWithMentions] Processing part: '${part}', textualMention: '${textualMention}'`);
                     let profileToLink: UserProfileBasic | null | undefined = null;
 
-                    // Iterate through the fetched profiles to find a match by displayName
-                    if (mentionProfilesMap.size > 0) {
+                    // Strategy 1: If textualMention itself is a UID and is in mentionedUserIds
+                    if (IS_UID_REGEX_PAGE.test(textualMention) && mentionedUserIds.includes(textualMention)) {
+                        profileToLink = mentionProfilesMap.get(textualMention);
+                        console.log(`[TextWithMentions] Attempt 1: textualMention '${textualMention}' IS a UID and in mentionedUserIds. Profile from map:`, profileToLink);
+                    }
+
+                    // Strategy 2: If not found by UID, try to find by displayName match (fallback)
+                    if (!profileToLink && mentionProfilesMap.size > 0) {
                         for (const profile of mentionProfilesMap.values()) {
-                            if (profile && profile.displayName === potentialDisplayName) {
+                            if (profile && profile.displayName === textualMention) {
                                 profileToLink = profile;
+                                console.log(`[TextWithMentions] Attempt 2: Matched textualMention '${textualMention}' by displayName. Profile:`, profileToLink);
                                 break;
                             }
                         }
                     }
+                     if (!profileToLink) {
+                        console.log(`[TextWithMentions] No profile found for textualMention: '${textualMention}'`);
+                    }
 
-                    if (profileToLink && profileToLink.userId && /^[a-zA-Z0-9]{20,}$/.test(profileToLink.userId)) {
-                        // If a profile is found and its userId looks like a UID, create a link
+
+                    if (profileToLink && profileToLink.userId && IS_UID_REGEX_PAGE.test(profileToLink.userId)) {
+                        console.log(`[TextWithMentions] Creating Link for profile:`, profileToLink);
                         return (
                             <Link
                                 key={`${profileToLink.userId}-${index}`}
@@ -145,8 +159,7 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
                             </Link>
                         );
                     } else {
-                        // If no profile is found, or if the found profile's userId is not a valid UID,
-                        // render the mention as plain text.
+                        console.log(`[TextWithMentions] Rendering part '${part}' as plain text. profileToLink:`, profileToLink);
                         return <span key={index} className="text-foreground">{part}</span>;
                     }
                 }
@@ -156,6 +169,8 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
     );
 });
 TextWithMentions.displayName = 'TextWithMentions';
+
+const IS_UID_REGEX_PAGE = /^[a-zA-Z0-9]{20,}$/;
 
 
 // Component for Post Card
@@ -397,8 +412,8 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         const ids = new Set<string>([comment.userId]);
         subComments.forEach(sc => ids.add(sc.userId));
         // If the post author is different from the commenter or any sub-commenter, include them too.
-        const selectedPost = queryClient.getQueryData<Post>(['posts', postId]); // Or however you access post data
-        if (selectedPost && selectedPost.userId) ids.add(selectedPost.userId);
+        const selectedPostInScope = queryClient.getQueryData<Post>(['posts', postId]); // Get selectedPost data if available
+        if (selectedPostInScope && selectedPostInScope.userId) ids.add(selectedPostInScope.userId);
 
         return Array.from(ids).filter(id => id !== currentUserId); // Exclude self for suggestions
     }, [comment.userId, subComments, currentUserId, queryClient, postId]);
@@ -1067,21 +1082,15 @@ function BoardPageContent() {
     if (!user || !selectedPost || !newComment.trim() || isSubmittingComment) return;
     setIsSubmittingComment(true);
 
-    // Use the UIDs from selectedMentionedUsers if populated, otherwise fallback to regex extraction
-    // This is a simplification; a robust solution would better manage the list of actual UIDs from selections.
     let finalMentionedUids: string[] = [];
     if (selectedMentionedUsers.length > 0) {
-        const textMentions = extractDisplayNamesFromText(newComment.trim()); // Get @DisplayNames from text
+        const textMentions = extractDisplayNamesFromText(newComment.trim()); 
         finalMentionedUids = selectedMentionedUsers
-            .filter(selectedUser => textMentions.includes(selectedUser.displayName)) // Keep only UIDs of users still mentioned in text
+            .filter(selectedUser => textMentions.includes(selectedUser.displayName)) 
             .map(user => user.userId);
     } else {
-        // Fallback if popover wasn't used or mentions were typed manually and no robust resolution is in place
-        // This part is less reliable for getting UIDs from display names.
-        // For now, we'll assume extractMentionsFromText might return display names or UIDs if typed as @UID.
         finalMentionedUids = extractMentionedUids(newComment.trim(), Array.from(newCommentMentionProfilesMap.values()).filter(Boolean) as UserProfileBasic[]);
     }
-
 
     const commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'> = {
       userId: user.uid,
@@ -1105,7 +1114,7 @@ function BoardPageContent() {
       setNewComment('');
       setNewCommentMentionQuery('');
       setShowNewCommentSuggestions(false);
-      setSelectedMentionedUsers([]); // Clear selected users after submit
+      setSelectedMentionedUsers([]); 
       toast({ title: "Comment Added" });
     } catch (error: any) {
       console.error("Error submitting comment:", error);
@@ -1315,7 +1324,7 @@ function BoardPageContent() {
                         <Link
                           href={`/profile/${selectedPost.userId}`}
                           passHref
-                          legacyBehavior={false} // Use new Link behavior
+                          legacyBehavior={false} 
                         >
                           <Button variant="link" size="sm" className="text-primary p-0 h-auto flex items-center gap-1">
                             <Building className="h-4 w-4" /> View Business Profile
