@@ -6,16 +6,17 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button'; // Ensure Button is imported
+import { Button } from '@/components/ui/button';
 import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone, Loader2, AlertTriangle, Lock, Star, MessageSquare, Edit3, Trash2 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator'; // Ensure Separator is imported
+import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
-import { Textarea } from '@/components/ui/textarea'; // Ensure Textarea is imported
-import { Label } from '@/components/ui/label'; // Ensure Label is imported
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnectionStatus, generateAnonymousName } from '@/services/connectionService'; // Added generateAnonymousName
+import { getConnectionStatus } from '@/services/connectionService';
+import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Corrected import path
 import type { ConnectionStatus } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
@@ -40,17 +41,20 @@ const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
 const getBusinessProfileData = (userId: string) => {
   console.log(`[BusinessProfilePage] getBusinessProfileData: Fetching profile data for userId: ${userId}`);
   return {
-    companyName: `Business ${userId.substring(0, 6)}`,
+    companyName: generateAnonymousName(userId), // Use generated name as default
     industry: "Tech",
     location: "San Francisco, CA",
     established: "2018",
     description: "Innovative tech solutions provider focused on B2B collaboration. We strive to connect businesses seamlessly and foster growth through shared opportunities.",
-    avatarUrl: `https://picsum.photos/seed/${userId}/100`,
-    contactEmail: `contact@business-${userId.substring(0, 4)}.com`,
+    avatarUrl: `https://picsum.photos/seed/${userId}/100`, // Consistent placeholder based on UID
+    contactEmail: `contact@${generateAnonymousName(userId).toLowerCase()}.anon`,
     contactPhone: "+1 (555) 123-4567",
     verified: Math.random() > 0.5,
     tags: ["Software", "SaaS", "Collaboration Tools", "B2B Solutions", "Innovation"],
     userId: userId,
+    averageRating: 0, // Initialized to 0
+    ratingCount: 0,   // Initialized to 0
+    reviews: [], // Start with no reviews for mock data
   };
 };
 
@@ -93,14 +97,14 @@ const BusinessProfilePage = () => {
   const isProfileIdActuallyValidUid = useMemo(() => {
     if (!profileUserIdFromParams) return false;
     const isValid = IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams);
-    console.log(`[BusinessProfilePage] isProfileIdActuallyValidUid for '${profileUserIdFromParams}': ${isValid}`);
+    console.log(`[BusinessProfilePage] isProfileIdValidUid for '${profileUserIdFromParams}': ${isValid}`);
     return isValid;
   }, [profileUserIdFromParams]);
 
   // Consistent profileUserId to use after validation
   const profileUserId = profileUserIdFromParams;
 
-  // Early return if profileUserId from URL is invalid
+
   if (profileUserId && !isProfileIdActuallyValidUid) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
@@ -116,21 +120,23 @@ const BusinessProfilePage = () => {
   }
 
   const profileData = useMemo(() => {
-    if (!profileUserId || !isProfileIdActuallyValidUid) return null;
+    if (!profileUserId) return null;
+    // If it's not a valid UID format, we might have already returned,
+    // but this check ensures getBusinessProfileData isn't called with a non-UID looking string.
+    // However, the early return for !isProfileIdActuallyValidUid should catch this.
     return getBusinessProfileData(profileUserId);
-  }, [profileUserId, isProfileIdActuallyValidUid]);
+  }, [profileUserId]);
 
-  // Direct check for query enabled state
+
   const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
-
-  console.log(`%c[BusinessProfilePage] Connection Status Query Params Check:
+  console.log(`[BusinessProfilePage] Connection Status Query Params Check:
     - currentUser?.uid: ${currentUser?.uid}
     - profileUserId: ${profileUserId}
     - IS_UID_REGEX_PROFILE_PAGE.test(profileUserId): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A (profileUserId is null/undefined)'}
     - currentUser.uid !== profileUserId: ${currentUser && profileUserId ? currentUser.uid !== profileUserId : 'N/A'}
-    - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`,
-    "color: orange; font-weight: bold;"
+    - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`
   );
+
 
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
@@ -140,21 +146,20 @@ const BusinessProfilePage = () => {
         console.log("[BusinessProfilePage] queryFn for connectionStatus: Pre-condition failed (no currentUser, no profileUserId, or self). Returning 'self'.");
         return 'self';
       }
-      // Extremely explicit check before calling the service
-      if (!IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
+      if (!IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) { // Double check inside queryFn
         console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.`);
         return 'not_connected';
       }
       console.log(`%c[BusinessProfilePage] queryFn for connectionStatus: Calling getConnectionStatus with currentUser.uid='${currentUser.uid}', profileUserId='${profileUserId}'`, "color: cornflowerblue; font-weight: bold;");
       return getConnectionStatus(currentUser.uid, profileUserId);
     },
-    enabled: connectionStatusQueryEnabled, // Using the direct boolean flag
+    enabled: connectionStatusQueryEnabled,
   });
 
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
-    queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]), // Check validity before fetching
-    enabled: !!profileUserId && isProfileIdActuallyValidUid,
+    queryFn: () => (profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) ? getReviewsForProfile(profileUserId) : Promise.resolve([]),
+    enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId),
   });
 
   const currentUserReview = useMemo(() => {
@@ -183,7 +188,7 @@ const BusinessProfilePage = () => {
 
   const addOrUpdateReviewMutation = useMutation({
     mutationFn: async (data: { rating: number; comment: string }) => {
-      if (!currentUser || !profileUserId || !isProfileIdActuallyValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
+      if (!currentUser || !profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) throw new Error("User, profile ID missing, or invalid profile ID.");
       if (editingReview) {
         const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
         await updateReview(editingReview.id, currentUser.uid, updateData);
@@ -261,20 +266,18 @@ const BusinessProfilePage = () => {
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
-        <p className="text-destructive-foreground font-semibold">User ID not found in URL.</p>
+        <p className="text-muted-foreground font-semibold">User ID not found in URL.</p>
         <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
   }
 
-  // This check for profileData (which depends on isProfileIdActuallyValidUid) should handle invalid UID cases
+
   if (!profileData) {
-    // The "Invalid Profile Identifier" message is already handled by the early return if !isProfileIdActuallyValidUid
-    // This !profileData condition would catch if getBusinessProfileData somehow returned null for a valid UID.
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
-        <p className="text-muted-foreground font-semibold">Business profile data could not be loaded.</p>
+        <p className="text-muted-foreground font-semibold">Business profile data could not be loaded for this user.</p>
          <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
@@ -326,7 +329,7 @@ const BusinessProfilePage = () => {
                  </div>
                  {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                     <ConnectionButton
-                      targetUserId={profileUserId}
+                      targetUserId={profileUserId} // This should be a valid UID
                       targetUserName={profileData.companyName}
                       size="default"
                       className="mt-2 w-full md:w-auto"
@@ -376,7 +379,7 @@ const BusinessProfilePage = () => {
              )}
           </div>
 
-          {currentUser && !isOwnProfile && isProfileIdActuallyValidUid && (
+          {currentUser && !isOwnProfile && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId || '') && (
             <>
               <Separator />
               <div>
@@ -517,7 +520,7 @@ const BusinessProfilePage = () => {
               ) : (
                  <div className="text-center p-6 border rounded-lg bg-destructive/10">
                      <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-3" />
-                     <p className="text-destructive-foreground font-medium">Cannot display posts due to invalid profile identifier.</p>
+                     <p className="text-destructive-foreground font-medium">Cannot display posts due to invalid profile identifier or other error.</p>
                   </div>
               )}
            </div>
@@ -528,5 +531,3 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
-
-    
