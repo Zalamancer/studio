@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 interface ConnectionButtonProps {
-  targetUserId: string; // Should always be a UID
+  targetUserId: string;
   targetUserName?: string;
   onStatusChange?: (newStatus: ConnectionStatus | null) => void;
   size?: 'sm' | 'default' | 'lg' | 'xs';
@@ -36,8 +36,7 @@ interface ConnectionButtonProps {
   className?: string;
 }
 
-// Helper to check if a string looks like a Firebase UID
-const IS_UID_REGEX = /^[a-zA-Z0-9]{20,}$/; // Basic check, Firebase UIDs are typically 28 chars
+const IS_UID_REGEX = /^[a-zA-Z0-9]{20,}$/;
 
 export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
   targetUserId: initialTargetUserId,
@@ -67,7 +66,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
       return;
     }
     if (!IS_UID_REGEX.test(initialTargetUserId)) {
-      console.error(`%c[ConnectionButton] CRITICAL WARNING: initialTargetUserId '${initialTargetUserId}' prop does NOT look like a Firebase UID. This component requires a UID for targetUserId. Connection features will be disabled for this target. Please check the parent component passing this prop.`, "color: red; font-size: 14px; font-weight: bold;");
+      console.warn(`%c[ConnectionButton] WARNING: initialTargetUserId '${initialTargetUserId}' prop does NOT look like a Firebase UID. This component requires a UID for targetUserId. Connection features will be disabled for this target. Please check the parent component passing this prop.`, "color: orange; font-size: 12px;");
       setIsValidTarget(false);
       setStatus('not_connected'); 
       setIsLoading(false);
@@ -109,22 +108,19 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
       }
     };
 
-    if (isValidTarget) { // Only fetch if target is confirmed valid
+    if (isValidTarget) { 
       fetchStatus();
     } else if (initialTargetUserId) { 
-        // If initialTargetUserId was provided but deemed invalid by the other effect, 
-        // we ensure isLoading is false and status is 'not_connected'
         console.log("[ConnectionButton] fetchStatus: Skipping because isValidTarget is false, though initialTargetUserId was provided.");
         setIsLoading(false);
         if (status !== 'not_connected') setStatus('not_connected');
     } else {
-        // If no initialTargetUserId at all
         setIsLoading(false);
         setStatus('not_connected');
     }
 
     return () => { isMounted = false; };
-  }, [currentAuthUserId, initialTargetUserId, isValidTarget, onStatusChange, status]); // Added status to dependency array to re-evaluate if it gets externally changed.
+  }, [currentAuthUserId, initialTargetUserId, isValidTarget, onStatusChange, status]); 
 
   const getConnectionDocIdForAction = (): string | null => {
     if (!currentAuthUserId || !initialTargetUserId || !isValidTarget) return null;
@@ -210,7 +206,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
 
 
   if (!initialTargetUserId && !isLoading) { 
-    return null; // If no target ID at all and not loading, don't render
+    return null; 
   }
 
   if (!isValidTarget && !isLoading) { 
@@ -288,7 +284,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
             </AlertDialogContent>
          </AlertDialog>
       );
-      return <>{buttonContent}</>;
+      return <>{buttonContent}</>; // This was missing, ensure button is returned
     default:
         buttonContent = <Button size={size} variant="outline" disabled> Error / Invalid State </Button>;
         break;
@@ -300,3 +296,6 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
     </Button>
   );
 };
+
+
+    
