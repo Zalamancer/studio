@@ -1,9 +1,10 @@
+
 'use client';
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
-import { Loader2, UserPlus, UserCheck, UserX, Ban, Hourglass } from 'lucide-react'; // Import icons
+import { Loader2, UserPlus, UserCheck, UserX, Ban, Hourglass } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import {
   getConnectionStatus,
@@ -27,17 +28,20 @@ import {
 } from "@/components/ui/alert-dialog";
 
 interface ConnectionButtonProps {
-  targetUserId: string;
-  targetUserName?: string; // Optional name for better toasts/dialogs
-  onStatusChange?: (newStatus: ConnectionStatus | null) => void; // Optional callback
-  size?: 'sm' | 'default' | 'lg'; // Button size
-  variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'link'; // Button variant
-  className?: string; // Additional styling
+  targetUserId: string; // Should always be a UID
+  targetUserName?: string;
+  onStatusChange?: (newStatus: ConnectionStatus | null) => void;
+  size?: 'sm' | 'default' | 'lg' | 'xs';
+  variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'link';
+  className?: string;
 }
 
+// Helper to check if a string looks like a Firebase UID
+const IS_UID_REGEX = /^[a-zA-Z0-9]{20,}$/; // Basic check, Firebase UIDs are typically 28 chars
+
 export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
-  targetUserId,
-  targetUserName = 'this user',
+  targetUserId: initialTargetUserId,
+  targetUserName: initialTargetUserName = 'this user',
   onStatusChange,
   size = 'sm',
   variant = 'default',
@@ -46,22 +50,45 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
   const { user } = useAuth();
   const { toast } = useToast();
   const [status, setStatus] = useState<ConnectionStatus | null>(null);
-  const [isLoading, setIsLoading] = useState<boolean>(true); // Start loading initially
-  const [isActing, setIsActing] = useState<boolean>(false); // Loading state for actions
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [isActing, setIsActing] = useState<boolean>(false);
+  const [isValidTarget, setIsValidTarget] = useState<boolean>(false);
 
-  const currentUserId = user?.uid;
-  const connectionId = currentUserId ? [currentUserId, targetUserId].sort().join('_') : null;
+  const currentAuthUserId = user?.uid;
 
-  // Fetch initial connection status
+  console.log(`%c[ConnectionButton] Render/Init - Props received: initialTargetUserId='${initialTargetUserId}', initialTargetUserName='${initialTargetUserName}'`, "color: purple; font-weight: bold;");
+
+  useEffect(() => {
+    if (!initialTargetUserId) {
+      console.warn("[ConnectionButton] useEffect for initialTargetUserId validation: initialTargetUserId is undefined or empty. Setting isValidTarget to false.");
+      setIsValidTarget(false);
+      setStatus('not_connected'); 
+      setIsLoading(false);
+      return;
+    }
+    if (!IS_UID_REGEX.test(initialTargetUserId)) {
+      console.error(`%c[ConnectionButton] CRITICAL WARNING: initialTargetUserId '${initialTargetUserId}' prop does NOT look like a Firebase UID. This component requires a UID for targetUserId. Connection features will be disabled for this target. Please check the parent component passing this prop.`, "color: red; font-size: 14px; font-weight: bold;");
+      setIsValidTarget(false);
+      setStatus('not_connected'); 
+      setIsLoading(false);
+      return;
+    }
+    console.log(`[ConnectionButton] useEffect for initialTargetUserId validation: initialTargetUserId '${initialTargetUserId}' is valid. Setting isValidTarget to true.`);
+    setIsValidTarget(true);
+  }, [initialTargetUserId]);
+
   useEffect(() => {
     let isMounted = true;
     const fetchStatus = async () => {
-      if (!currentUserId || !targetUserId) {
-        setStatus('not_connected'); // Default if no user or target
+      console.log(`%c[ConnectionButton] fetchStatus Effect - currentAuthUserId='${currentAuthUserId}', initialTargetUserId (validated)='${initialTargetUserId}', isValidTarget=${isValidTarget}`, "color: blue;");
+
+      if (!currentAuthUserId || !isValidTarget || !initialTargetUserId) {
+        console.log(`[ConnectionButton] fetchStatus: Skipping due to missing authUser, invalid target, or missing initialTargetUserId. currentAuthUserId=${currentAuthUserId}, isValidTarget=${isValidTarget}, initialTargetUserId=${initialTargetUserId}`);
+        setStatus('not_connected');
         setIsLoading(false);
         return;
       }
-      if (currentUserId === targetUserId) {
+      if (currentAuthUserId === initialTargetUserId) {
         setStatus('self');
         setIsLoading(false);
         return;
@@ -69,94 +96,139 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
 
       setIsLoading(true);
       try {
-        const fetchedStatus = await getConnectionStatus(currentUserId, targetUserId);
-         if (isMounted) {
-             setStatus(fetchedStatus ?? 'not_connected'); // Handle potential null from error
-             if (onStatusChange && fetchedStatus) onStatusChange(fetchedStatus);
-         }
+        const fetchedStatus = await getConnectionStatus(currentAuthUserId, initialTargetUserId);
+        if (isMounted) {
+          setStatus(fetchedStatus ?? 'not_connected');
+          if (onStatusChange && fetchedStatus) onStatusChange(fetchedStatus);
+        }
       } catch (error) {
-        console.error("Error fetching connection status:", error);
-         if (isMounted) setStatus('not_connected'); // Fallback on error
+        console.error("[ConnectionButton] Error fetching connection status:", error);
+        if (isMounted) setStatus('not_connected');
       } finally {
-         if (isMounted) setIsLoading(false);
+        if (isMounted) setIsLoading(false);
       }
     };
 
-    fetchStatus();
-    return () => { isMounted = false }; // Cleanup on unmount
-  }, [currentUserId, targetUserId, onStatusChange]);
+    if (isValidTarget) { // Only fetch if target is confirmed valid
+      fetchStatus();
+    } else if (initialTargetUserId) { 
+        // If initialTargetUserId was provided but deemed invalid by the other effect, 
+        // we ensure isLoading is false and status is 'not_connected'
+        console.log("[ConnectionButton] fetchStatus: Skipping because isValidTarget is false, though initialTargetUserId was provided.");
+        setIsLoading(false);
+        if (status !== 'not_connected') setStatus('not_connected');
+    } else {
+        // If no initialTargetUserId at all
+        setIsLoading(false);
+        setStatus('not_connected');
+    }
 
-  const handleAction = async (action: () => Promise<void>, successStatus: ConnectionStatus, successMessage: string, errorMessage: string) => {
-    if (!currentUserId || !targetUserId || !connectionId) {
-      toast({ variant: "destructive", title: "Error", description: "User or target ID missing." });
+    return () => { isMounted = false; };
+  }, [currentAuthUserId, initialTargetUserId, isValidTarget, onStatusChange, status]); // Added status to dependency array to re-evaluate if it gets externally changed.
+
+  const getConnectionDocIdForAction = (): string | null => {
+    if (!currentAuthUserId || !initialTargetUserId || !isValidTarget) return null;
+    return [currentAuthUserId, initialTargetUserId].sort().join('_');
+  };
+
+  const handleAction = async (
+    actionFn: (currentUid: string, targetUid: string, connId: string) => Promise<void>,
+    successStatus: ConnectionStatus,
+    successMessage: string,
+    errorMessage: string
+  ) => {
+    if (!currentAuthUserId || !initialTargetUserId || !isValidTarget) {
+      toast({ variant: "destructive", title: "Error", description: "User or target ID missing or invalid." });
       return;
     }
+    const connectionId = getConnectionDocIdForAction();
+    if (!connectionId) {
+        toast({ variant: "destructive", title: "Error", description: "Connection identifier is missing." });
+        return;
+    }
+
+    console.log(`%c[ConnectionButton] handleAction: User='${currentAuthUserId}', Target='${initialTargetUserId}', ActionMessage='${successMessage}'`, "color: darkgreen;");
+
     setIsActing(true);
     try {
-      await action();
+      await actionFn(currentAuthUserId, initialTargetUserId, connectionId);
       setStatus(successStatus);
       if (onStatusChange) onStatusChange(successStatus);
       toast({ title: "Success", description: successMessage });
     } catch (error: any) {
-      console.error(`Error during action (${errorMessage}):`, error);
+      console.error(`[ConnectionButton] Error during action (${errorMessage}):`, error);
       toast({ variant: "destructive", title: "Action Failed", description: error.message || errorMessage });
-      // Optionally refetch status on error to ensure UI consistency
-      const freshStatus = await getConnectionStatus(currentUserId, targetUserId);
-      setStatus(freshStatus ?? 'not_connected');
+      if (currentAuthUserId && initialTargetUserId && isValidTarget) {
+        const freshStatus = await getConnectionStatus(currentAuthUserId, initialTargetUserId);
+        setStatus(freshStatus ?? 'not_connected');
+      }
     } finally {
       setIsActing(false);
     }
   };
 
-  const handleSendRequest = () => handleAction(
-    () => sendConnectionRequest(currentUserId!, targetUserId),
-    'pending_sent',
-    `Connection request sent to ${targetUserName}.`,
-    'Could not send connection request.'
-  );
+  const handleSendRequest = () => {
+    if (!currentAuthUserId || !initialTargetUserId || !isValidTarget) {
+        toast({ variant: "destructive", title: "Error", description: "Cannot send request: User or target ID missing/invalid." });
+        return;
+    }
+    handleAction(
+        (authUid, targetUid) => sendConnectionRequest(authUid, targetUid),
+        'pending_sent',
+        `Connection request sent to ${initialTargetUserName}.`,
+        'Could not send connection request.'
+    );
+  };
 
   const handleAcceptRequest = () => handleAction(
-    () => acceptConnectionRequest(connectionId!, currentUserId!),
+    (authUid, _targetUid, connId) => acceptConnectionRequest(connId!, authUid),
     'connected',
-    `You are now connected with ${targetUserName}.`,
+    `You are now connected with ${initialTargetUserName}.`,
     'Could not accept connection request.'
   );
 
   const handleRejectRequest = () => handleAction(
-    () => rejectOrCancelConnectionRequest(connectionId!, currentUserId!),
+    (authUid, _targetUid, connId) => rejectOrCancelConnectionRequest(connId!, authUid),
     'not_connected',
-    `Connection request from ${targetUserName} rejected.`,
+    `Connection request from ${initialTargetUserName} rejected.`,
     'Could not reject connection request.'
   );
 
   const handleCancelRequest = () => handleAction(
-    () => rejectOrCancelConnectionRequest(connectionId!, currentUserId!),
+    (authUid, _targetUid, connId) => rejectOrCancelConnectionRequest(connId!, authUid),
     'not_connected',
-    `Connection request to ${targetUserName} cancelled.`,
+    `Connection request to ${initialTargetUserName} cancelled.`,
     'Could not cancel connection request.'
   );
 
   const handleRemoveConnection = () => handleAction(
-    () => removeConnection(connectionId!, currentUserId!),
+    (authUid, _targetUid, connId) => removeConnection(connId!, authUid),
     'not_connected',
-    `Connection with ${targetUserName} removed.`,
+    `Connection with ${initialTargetUserName} removed.`,
     'Could not remove connection.'
   );
 
+
+  if (!initialTargetUserId && !isLoading) { 
+    return null; // If no target ID at all and not loading, don't render
+  }
+
+  if (!isValidTarget && !isLoading) { 
+      return <Button size={size} variant="outline" disabled className={cn("flex items-center", className)}> Invalid Target ID </Button>;
+  }
 
   if (isLoading) {
     return <Button size={size} variant="outline" disabled className={cn("flex items-center", className)}> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</Button>;
   }
 
   if (status === 'self') {
-    return null; // Don't show button for own profile
+    return null;
   }
 
   if (status === 'blocked') {
     return <Button size={size} variant="destructive" disabled className={cn("flex items-center", className)}> <Ban className="mr-2 h-4 w-4" /> Blocked</Button>;
   }
 
-  // Determine button content based on status
   let buttonContent: React.ReactNode = null;
   let buttonProps: Partial<React.ComponentProps<typeof Button>> = { variant: variant, size: size, className: className };
 
@@ -164,8 +236,8 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
     case 'not_connected':
       buttonProps.onClick = handleSendRequest;
       buttonProps.disabled = isActing;
-      buttonProps.variant = 'default'; // Primary action
-       buttonProps.className = cn(buttonProps.className, "bg-accent hover:bg-accent/90 text-accent-foreground"); // Use accent color
+      buttonProps.variant = 'default';
+      buttonProps.className = cn(buttonProps.className, "bg-accent hover:bg-accent/90 text-accent-foreground");
       buttonContent = (
         <> {isActing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />} Connect </>
       );
@@ -173,14 +245,13 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
     case 'pending_sent':
       buttonProps.onClick = handleCancelRequest;
       buttonProps.disabled = isActing;
-      buttonProps.variant = 'outline'; // Secondary action
+      buttonProps.variant = 'outline';
       buttonContent = (
         <> {isActing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Hourglass className="mr-2 h-4 w-4" />} Request Sent </>
       );
       break;
     case 'pending_received':
-       buttonProps.variant = 'secondary'; // Highlight incoming request
-      // Show two buttons for accept/reject
+      buttonProps.variant = 'secondary';
       return (
           <div className={cn("flex gap-2", className)}>
              <Button size={size} variant="default" onClick={handleAcceptRequest} disabled={isActing} className="flex-1">
@@ -192,9 +263,8 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
           </div>
       );
     case 'connected':
-       buttonProps.variant = 'secondary'; // Indicate existing connection
-       buttonProps.disabled = isActing;
-      // Use AlertDialog for removal confirmation
+      buttonProps.variant = 'secondary';
+      buttonProps.disabled = isActing;
       buttonContent = (
          <AlertDialog>
             <AlertDialogTrigger asChild>
@@ -206,7 +276,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
                  <AlertDialogHeader>
                     <AlertDialogTitle>Remove Connection?</AlertDialogTitle>
                     <AlertDialogDescription>
-                        Are you sure you want to remove your connection with {targetUserName}? This action cannot be undone.
+                        Are you sure you want to remove your connection with {initialTargetUserName}? This action cannot be undone.
                     </AlertDialogDescription>
                  </AlertDialogHeader>
                  <AlertDialogFooter>
@@ -218,12 +288,9 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
             </AlertDialogContent>
          </AlertDialog>
       );
-      // We return directly here because the button is inside the AlertDialogTrigger
       return <>{buttonContent}</>;
-
     default:
-        // Fallback or error state - maybe show a disabled button or nothing
-        buttonContent = <Button size={size} variant="outline" disabled>Error</Button>;
+        buttonContent = <Button size={size} variant="outline" disabled> Error / Invalid State </Button>;
         break;
   }
 
