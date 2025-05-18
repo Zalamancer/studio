@@ -1,3 +1,4 @@
+
 // src/services/connectionService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -13,41 +14,16 @@ import {
   serverTimestamp,
   orderBy,
   limit,
-  // or, // Not used, can be removed
   getDoc,
-  collectionGroup, // For querying users collection
+  collectionGroup,
+  type DocumentData,
+  type QueryConstraint,
 } from 'firebase/firestore';
 import type { MutualConnection, ConnectionStatus, Connection, ConnectionRequest, UserProfileBasic, UserProfileData } from '@/types/connection';
-// Removed: import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Re-adding for direct use if needed for now
+import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Import for fallback names
 
 const mutualsCollectionRef = collection(db, 'mutuals');
 const usersCollectionRef = collection(db, 'users');
-
-// --- Pseudonym Generation (moved here temporarily if utils file is problematic) ---
-// In a larger app, keep this in a dedicated utils file.
-const ADJECTIVES = ["Agile", "Bright", "Calm", "Desert", "Eager", "Forest", "Giant", "Hidden", "Island", "Jade", "Keen", "Lunar", "Mystic", "Noble", "Ocean", "Prairie", "Quiet", "River", "Solar", "Terra", "Urban", "Vivid", "Wild", "Xeric", "Yellow", "Zenith"];
-const NOUNS = ["Fox", "Wolf", "Bear", "Eagle", "Hawk", "Lion", "Tiger", "Puma", "Jaguar", "Shark", "Whale", "Badger", "Coyote", "Falcon", "Panther", "Stallion", "Comet", "Planet", "Nebula", "Quasar", "Cipher", "Matrix", "Vector", "Pixel", "Byte", "Glitch"];
-
-const simpleHash = (str: string, max: number): number => {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash |= 0; // Convert to 32bit integer
-  }
-  return Math.abs(hash) % max;
-};
-
-export const generateAnonymousName = (userId: string): string => {
-  if (!userId) return "AnonUser";
-  const adjIndex = simpleHash(userId, ADJECTIVES.length);
-  // Offset noun hash slightly to avoid always picking same index for adj/noun if lists are same length
-  const nounIndex = simpleHash(userId.split("").reverse().join(""), NOUNS.length);
-  const numericSuffix = (simpleHash(userId.substring(0, 5), 900) + 100).toString(); // 3-digit number (100-999)
-  return `${ADJECTIVES[adjIndex]}${NOUNS[nounIndex]}${numericSuffix}`;
-};
-// --- End Pseudonym Generation ---
-
 
 // Helper to generate a consistent connection ID
 const getConnectionDocId = (userId1: string, userId2: string): string => {
@@ -56,9 +32,9 @@ const getConnectionDocId = (userId1: string, userId2: string): string => {
 
 // --- Send Connection Request ---
 export const sendConnectionRequest = async (requesterId: string, recipientId: string): Promise<void> => {
-  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[connectionService] sendConnectionRequest - Called with:`, "color: blue; font-weight:bold;", { requesterId, recipientId });
 
-  console.log(`%c[connectionService] sendConnectionRequest - Called with:`, "color: blue; font-weight:bold;", { requesterId, recipientId, clientAuthUid });
+  const clientAuthUid = auth.currentUser?.uid;
 
   if (!clientAuthUid) {
     const errorMsg = "User not authenticated. Cannot send connection request.";
@@ -91,20 +67,16 @@ export const sendConnectionRequest = async (requesterId: string, recipientId: st
 
   console.log(`%c[connectionService] sendConnectionRequest - Rule Check Values:`, "color: green; font-weight:bold;", {
     '1. request.auth != null:': !!clientAuthUid,
-    'DATA.requesterId': newConnectionData.requesterId,
-    'request.auth.uid': clientAuthUid,
     '2. request.resource.data.requesterId == request.auth.uid:': newConnectionData.requesterId === clientAuthUid,
-    'DATA.userIds': newConnectionData.userIds,
     '3. request.resource.data.userIds.hasAll([request.auth.uid]):': newConnectionData.userIds.includes(clientAuthUid)
   });
-
-  if (!auth.currentUser) {
-      const errorMsg = "User authentication lost immediately before Firestore write. Aborting.";
-      console.error(`%c[connectionService] sendConnectionRequest - FATAL ERROR: ${errorMsg}`, "color: red; font-weight:bold;");
-      throw new Error(errorMsg);
+  
+  console.log(`%c[connectionService] Final auth check before write: Current clientAuthUid is '${clientAuthUid}'. Attempting to write with connectionId: ${connectionId}. Data:`, "color: darkorange;", newConnectionData);
+  if (!clientAuthUid) { // Final check
+    const errorMsg = "User authentication lost immediately before Firestore write. Aborting.";
+    console.error(`%c[connectionService] sendConnectionRequest - FATAL ERROR: ${errorMsg}`, "color: red; font-weight:bold;");
+    throw new Error(errorMsg);
   }
-  console.log(`%c[connectionService] Final auth check passed. Attempting to write with connectionId: ${connectionId}. Data:`, "color: darkorange;", newConnectionData);
-
 
   try {
     const connectionDocSnap = await getDoc(connectionDocRef);
@@ -219,11 +191,21 @@ export const getConnectionStatus = async (userId1: string, userId2: string): Pro
 
 // --- Fetch Basic User Profile ---
 const fetchUserProfileBasic = async (userId: string): Promise<UserProfileBasic | null> => {
-  if (!userId) return null;
-  console.log(`[connectionService] fetchUserProfileBasic: Fetching basic profile for userId: ${userId}`);
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[connectionService] fetchUserProfileBasic: Fetching for targetUserId: '${userId}'. Current clientAuthUid: '${clientAuthUid || 'NULL'}'`, "color: teal;");
+
+  if (!userId) {
+    console.warn(`%c[connectionService] fetchUserProfileBasic: Attempted to fetch profile with empty userId.`, "color: orange;");
+    return null;
+  }
+  if (!clientAuthUid) {
+    console.warn(`%c[connectionService] fetchUserProfileBasic: No authenticated user (clientAuthUid is NULL) when trying to fetch profile for '${userId}'. This might lead to permission issues if rules require auth for reads.`, "color: orange; font-weight:bold;");
+  }
+
   try {
     const userDocRef = doc(usersCollectionRef, userId);
     const userSnap = await getDoc(userDocRef);
+
     if (userSnap.exists()) {
       const userData = userSnap.data();
       const profile: UserProfileBasic = {
@@ -231,13 +213,16 @@ const fetchUserProfileBasic = async (userId: string): Promise<UserProfileBasic |
         displayName: userData.displayName || userData.companyName || generateAnonymousName(userId),
         avatarUrl: userData.avatarUrl || userData.photoURL || undefined,
       };
-      console.log(`[connectionService] fetchUserProfileBasic: Profile found for ${userId}:`, profile);
+      console.log(`%c[connectionService] fetchUserProfileBasic: Profile FOUND for '${userId}':`, "color: green;", profile);
       return profile;
     }
-    console.warn(`[connectionService] fetchUserProfileBasic: Profile document not found for userId: ${userId}. Using generated name.`);
+    console.warn(`%c[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${userId}'. Using generated name.`, "color: orange;");
     return { userId: userId, displayName: generateAnonymousName(userId) };
   } catch (error: any) {
-    console.error(`[connectionService] fetchUserProfileBasic: Error fetching profile for ${userId}:`, error);
+    console.error(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: red;", error);
+    if (error.code === 'permission-denied') {
+      console.error(`%c  PERMISSION DENIED specifically for reading 'users/${userId}'. Ensure rules allow reads for authenticated users. Current client auth state was: '${clientAuthUid || 'NULL'}'`, "color: red; font-weight: bold;");
+    }
     return { userId: userId, displayName: generateAnonymousName(userId) }; // Fallback on error
   }
 };
@@ -266,7 +251,10 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
       .map(async (docSnap) => {
         const data = docSnap.data() as Omit<MutualConnection, 'id'>;
         const requestedAtMillis = data.requestedAt instanceof Timestamp ? data.requestedAt.toMillis() : null;
-        if (requestedAtMillis === null) return null;
+        if (requestedAtMillis === null) {
+            console.warn(`[connectionService] Pending request ${docSnap.id} has invalid requestedAt timestamp.`);
+            return null;
+        }
         const requesterProfile = await fetchUserProfileBasic(data.requesterId);
         return {
           connectionId: docSnap.id,
@@ -314,7 +302,10 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
       const otherUserId = data.userIds.find(id => id !== userId);
       if (!otherUserId) return null;
       const connectedAtMillis = data.connectedAt instanceof Timestamp ? data.connectedAt.toMillis() : null;
-      if (connectedAtMillis === null) return null;
+      if (connectedAtMillis === null) {
+          console.warn(`[connectionService] Connection ${docSnap.id} has invalid connectedAt timestamp.`);
+          return null;
+      }
       const otherUserProfile = await fetchUserProfileBasic(otherUserId);
       return {
         connectionId: docSnap.id,
@@ -347,8 +338,17 @@ export const getUserProfileBasic = async (userId: string): Promise<UserProfileBa
 };
 
 // --- Initialize User Profile Document ---
+export interface UserProfileData {
+  uid: string;
+  email?: string | null;
+  displayName?: string | null;
+  photoURL?: string | null;
+  companyName?: string | null;
+  industry?: string | null;
+}
+
 export const initializeUserProfile = async (userData: UserProfileData): Promise<void> => {
-  console.log(`%c[connectionService] initializeUserProfile: Called with userData:`, "color: orange", userData);
+  console.log(`%c[connectionService] initializeUserProfile: Called with incomingUserData:`, "color: orange", userData);
   if (!userData || !userData.uid) {
     console.error('%c[connectionService] initializeUserProfile: ERROR - UID is missing in userData. Aborting.', "color: red; font-weight:bold;");
     return;
@@ -359,53 +359,41 @@ export const initializeUserProfile = async (userData: UserProfileData): Promise<
   try {
     const docSnap = await getDoc(userDocRef);
     const dataToWrite: { [key: string]: any } = {
-      uid: userData.uid,
-      email: userData.email || null,
+      uid: userData.uid, // Always ensure UID is part of the document data
       lastLoginAt: serverTimestamp(),
     };
 
-    let finalDisplayName = generateAnonymousName(userData.uid); // Start with generated name
+    if (userData.email) dataToWrite.email = userData.email;
+    if (userData.photoURL) dataToWrite.avatarUrl = userData.photoURL; // Map photoURL to avatarUrl
+    if (userData.companyName) dataToWrite.companyName = userData.companyName;
+    if (userData.industry) dataToWrite.industry = userData.industry;
 
+    let finalDisplayName: string | null = null;
     if (userData.displayName && userData.displayName.trim() !== '') {
       finalDisplayName = userData.displayName;
     } else if (userData.companyName && userData.companyName.trim() !== '') {
       finalDisplayName = userData.companyName;
     }
-    dataToWrite.displayName = finalDisplayName;
-
-    if (userData.photoURL) dataToWrite.avatarUrl = userData.photoURL;
-    if (userData.companyName && userData.companyName.trim() !== '') dataToWrite.companyName = userData.companyName;
-    if (userData.industry && userData.industry.trim() !== '') dataToWrite.industry = userData.industry;
-
 
     if (!docSnap.exists()) {
       console.log(`%c[connectionService] initializeUserProfile: Creating new profile for UID ${userData.uid}.`, "color: green;");
       dataToWrite.createdAt = serverTimestamp();
+      dataToWrite.displayName = finalDisplayName || generateAnonymousName(userData.uid);
       console.log(`%c[connectionService] Data to write (CREATE) for UID ${userData.uid}:`, "color: green;", dataToWrite);
       await setDoc(userDocRef, dataToWrite);
       console.log(`%c[connectionService] User profile CREATED successfully for UID ${userData.uid}.`, "color: green; font-weight:bold;");
     } else {
       console.log(`%c[connectionService] initializeUserProfile: Updating existing profile for UID ${userData.uid}.`, "color: blue;");
       const existingData = docSnap.data();
-      const updatePayload: { [key: string]: any } = { lastLoginAt: serverTimestamp() };
-
-      // Only update displayName if new one is more specific or if existing one is a generated name
-      if ( (userData.displayName && userData.displayName.trim() !== '') || (userData.companyName && userData.companyName.trim() !== '') ) {
-         updatePayload.displayName = finalDisplayName;
-      } else if (existingData.displayName) {
-         updatePayload.displayName = existingData.displayName; // Keep existing if no new name provided
-      } else {
-         updatePayload.displayName = finalDisplayName; // Generate if none existed
+      if (finalDisplayName) { // Only update displayName if a new one is provided (from Google or form)
+        dataToWrite.displayName = finalDisplayName;
+      } else if (!existingData.displayName) { // If no new name, and no existing name, generate one
+        dataToWrite.displayName = generateAnonymousName(userData.uid);
       }
+      // Otherwise, if no new name, keep existing displayName (merge will handle this if dataToWrite.displayName is undefined)
 
-      if (userData.email) updatePayload.email = userData.email;
-      if (userData.photoURL) updatePayload.avatarUrl = userData.photoURL;
-      if (userData.companyName && userData.companyName.trim() !== '') updatePayload.companyName = userData.companyName;
-      if (userData.industry && userData.industry.trim() !== '') updatePayload.industry = userData.industry;
-
-
-      console.log(`%c[connectionService] Data to merge (UPDATE) for UID ${userData.uid}:`, "color: blue;", updatePayload);
-      await setDoc(userDocRef, updatePayload, { merge: true });
+      console.log(`%c[connectionService] Data to merge (UPDATE) for UID ${userData.uid}:`, "color: blue;", dataToWrite);
+      await setDoc(userDocRef, dataToWrite, { merge: true });
       console.log(`%c[connectionService] User profile UPDATED successfully for UID ${userData.uid}.`, "color: blue; font-weight:bold;");
     }
   } catch (error: any) {
@@ -416,35 +404,31 @@ export const initializeUserProfile = async (userData: UserProfileData): Promise<
   }
 };
 
+
 // --- Fetch Suggestible Users (for @mentions) ---
 export const getSuggestibleUsers = async (searchPrefix?: string, limitCount: number = 10): Promise<UserProfileBasic[]> => {
   console.log(`[connectionService] getSuggestibleUsers called. Prefix: '${searchPrefix}', Limit: ${limitCount}`);
   try {
-    let q;
+    const constraints: QueryConstraint[] = [orderBy('displayName'), limit(limitCount)];
     const trimmedPrefix = searchPrefix?.trim();
 
     if (trimmedPrefix) {
-      q = query(
-        usersCollectionRef,
-        where('displayName', '>=', trimmedPrefix),
-        where('displayName', '<=', trimmedPrefix + '\uf8ff'),
-        orderBy('displayName'),
-        limit(limitCount)
-      );
-    } else {
-      q = query(usersCollectionRef, orderBy('displayName'), limit(limitCount));
+        constraints.unshift(where('displayName', '<=', trimmedPrefix + '\uf8ff'));
+        constraints.unshift(where('displayName', '>=', trimmedPrefix));
     }
+    
+    const q = query(usersCollectionRef, ...constraints);
 
     const querySnapshot = await getDocs(q);
     const users = querySnapshot.docs.map(docSnap => {
-      const data = docSnap.data();
+      const data = docSnap.data() as DocumentData; // Use DocumentData for broader compatibility
       return {
         userId: docSnap.id,
         displayName: data.displayName || data.companyName || generateAnonymousName(docSnap.id),
-        avatarUrl: data.avatarUrl || data.photoURL,
+        avatarUrl: data.avatarUrl || data.photoURL || undefined, // Ensure undefined if not present
       } as UserProfileBasic;
     });
-    console.log(`[connectionService] getSuggestibleUsers: Found ${users.length} users for prefix "${trimmedPrefix}".`);
+    console.log(`[connectionService] getSuggestibleUsers: Found ${users.length} users for prefix "${trimmedPrefix || ''}".`);
     return users;
   } catch (error: any) {
     console.error('[connectionService] Error fetching suggestible users:', error);
@@ -452,6 +436,7 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCount: num
       throw new Error('Permission denied fetching users. Check Firestore rules for listing users.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
+      console.error("[connectionService] Query for suggestible users requires an index (e.g., on 'displayName' ascending). Create this in Firebase console.");
       throw new Error('Query for suggestible users requires an index. Please create it in Firebase (e.g., on displayName).');
     }
     return [];
