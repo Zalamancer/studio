@@ -6,16 +6,16 @@ import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button'; // Ensure Button is imported
 import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone, Loader2, AlertTriangle, Lock, Star, MessageSquare, Edit3, Trash2 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
+import { Separator } from '@/components/ui/separator'; // Ensure Separator is imported
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea'; // Ensure Textarea is imported
+import { Label } from '@/components/ui/label'; // Ensure Label is imported
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnectionStatus } from '@/services/connectionService';
+import { getConnectionStatus, generateAnonymousName } from '@/services/connectionService'; // Added generateAnonymousName
 import type { ConnectionStatus } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
@@ -30,12 +30,15 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+
+// Regex to check if a string looks like a Firebase UID (alphanumeric, typically 28 chars, but let's go with 20+ for safety)
+const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
+
 
 // Placeholder function to get user data (replace with actual data fetching)
 const getBusinessProfileData = (userId: string) => {
-  console.log(`Fetching profile data for userId: ${userId}`);
+  console.log(`[BusinessProfilePage] getBusinessProfileData: Fetching profile data for userId: ${userId}`);
   return {
     companyName: `Business ${userId.substring(0, 6)}`,
     industry: "Tech",
@@ -48,7 +51,6 @@ const getBusinessProfileData = (userId: string) => {
     verified: Math.random() > 0.5,
     tags: ["Software", "SaaS", "Collaboration Tools", "B2B Solutions", "Innovation"],
     userId: userId,
-    // averageRating and ratingCount will now be derived from fetched reviews
   };
 };
 
@@ -76,7 +78,7 @@ const getInitials = (name: string | undefined | null): string => {
 
 const BusinessProfilePage = () => {
   const params = useParams();
-  const profileUserId = params?.userId as string | undefined;
+  const profileUserIdFromParams = params?.userId as string | undefined;
   const { user: currentUser, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
@@ -87,21 +89,72 @@ const BusinessProfilePage = () => {
   const [reviewComment, setReviewComment] = useState('');
   const [editingReview, setEditingReview] = useState<ClientReview | null>(null);
 
-  const profileData = profileUserId ? getBusinessProfileData(profileUserId) : null;
+  // Perform UID validation at the very top
+  const isProfileIdActuallyValidUid = useMemo(() => {
+    if (!profileUserIdFromParams) return false;
+    const isValid = IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams);
+    console.log(`[BusinessProfilePage] isProfileIdActuallyValidUid for '${profileUserIdFromParams}': ${isValid}`);
+    return isValid;
+  }, [profileUserIdFromParams]);
+
+  // Consistent profileUserId to use after validation
+  const profileUserId = profileUserIdFromParams;
+
+  // Early return if profileUserId from URL is invalid
+  if (profileUserId && !isProfileIdActuallyValidUid) {
+    return (
+      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
+        <p className="text-muted-foreground">
+          The user identifier in the URL (<code>{profileUserId}</code>) does not seem to be valid.
+          Please check the link or try navigating from a valid user link.
+        </p>
+        <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
+      </div>
+    );
+  }
+
+  const profileData = useMemo(() => {
+    if (!profileUserId || !isProfileIdActuallyValidUid) return null;
+    return getBusinessProfileData(profileUserId);
+  }, [profileUserId, isProfileIdActuallyValidUid]);
+
+  // Direct check for query enabled state
+  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
+
+  console.log(`%c[BusinessProfilePage] Connection Status Query Params Check:
+    - currentUser?.uid: ${currentUser?.uid}
+    - profileUserId: ${profileUserId}
+    - IS_UID_REGEX_PROFILE_PAGE.test(profileUserId): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A (profileUserId is null/undefined)'}
+    - currentUser.uid !== profileUserId: ${currentUser && profileUserId ? currentUser.uid !== profileUserId : 'N/A'}
+    - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`,
+    "color: orange; font-weight: bold;"
+  );
 
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
-      if (!currentUser?.uid || !profileUserId || currentUser.uid === profileUserId) return 'self';
+      console.log(`%c[BusinessProfilePage] queryFn for connectionStatus ENTERED. currentUser.uid='${currentUser?.uid}', profileUserId='${profileUserId}'`, "color: cornflowerblue;");
+      if (!currentUser?.uid || !profileUserId || currentUser.uid === profileUserId) {
+        console.log("[BusinessProfilePage] queryFn for connectionStatus: Pre-condition failed (no currentUser, no profileUserId, or self). Returning 'self'.");
+        return 'self';
+      }
+      // Extremely explicit check before calling the service
+      if (!IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
+        console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.`);
+        return 'not_connected';
+      }
+      console.log(`%c[BusinessProfilePage] queryFn for connectionStatus: Calling getConnectionStatus with currentUser.uid='${currentUser.uid}', profileUserId='${profileUserId}'`, "color: cornflowerblue; font-weight: bold;");
       return getConnectionStatus(currentUser.uid, profileUserId);
     },
-    enabled: !!currentUser?.uid && !!profileUserId && currentUser.uid !== profileUserId,
+    enabled: connectionStatusQueryEnabled, // Using the direct boolean flag
   });
 
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
-    queryFn: () => profileUserId ? getReviewsForProfile(profileUserId) : Promise.resolve([]),
-    enabled: !!profileUserId,
+    queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]), // Check validity before fetching
+    enabled: !!profileUserId && isProfileIdActuallyValidUid,
   });
 
   const currentUserReview = useMemo(() => {
@@ -130,16 +183,16 @@ const BusinessProfilePage = () => {
 
   const addOrUpdateReviewMutation = useMutation({
     mutationFn: async (data: { rating: number; comment: string }) => {
-      if (!currentUser || !profileUserId) throw new Error("User or profile ID missing.");
-      if (editingReview) { // Update existing review
+      if (!currentUser || !profileUserId || !isProfileIdActuallyValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
+      if (editingReview) {
         const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
         await updateReview(editingReview.id, currentUser.uid, updateData);
         return "Review updated successfully!";
-      } else { // Add new review
+      } else {
         const newReviewData: NewReviewData = {
           targetUserId: profileUserId,
           reviewerId: currentUser.uid,
-          reviewerName: currentUser.displayName || "Anonymous User",
+          reviewerName: currentUser.displayName || generateAnonymousName(currentUser.uid),
           reviewerAvatar: currentUser.photoURL || undefined,
           rating: data.rating,
           comment: data.comment,
@@ -150,8 +203,7 @@ const BusinessProfilePage = () => {
     },
     onSuccess: (message) => {
       toast({ title: "Success", description: message });
-      queryClient.invalidateQueries({ queryKey: ['reviews', profileUserId] });
-      // Resetting form fields is handled by useEffect based on currentUserReview
+      if (profileUserId) queryClient.invalidateQueries({ queryKey: ['reviews', profileUserId] });
     },
     onError: (error: Error) => {
       toast({ variant: "destructive", title: "Error", description: error.message || "Could not submit review." });
@@ -165,7 +217,7 @@ const BusinessProfilePage = () => {
     },
     onSuccess: () => {
       toast({ title: "Review Deleted" });
-      queryClient.invalidateQueries({ queryKey: ['reviews', profileUserId] });
+      if (profileUserId) queryClient.invalidateQueries({ queryKey: ['reviews', profileUserId] });
     },
     onError: (error: Error) => {
       toast({ variant: "destructive", title: "Error", description: error.message || "Could not delete review." });
@@ -184,8 +236,7 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-
-  if (authLoading || (profileUserId && isLoadingReviews && !reviews.length)) { // Show loading if fetching initial reviews
+  if (authLoading) {
      return (
        <div className="container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -200,20 +251,7 @@ const BusinessProfilePage = () => {
                <div className="h-10 w-24 bg-muted rounded"></div>
              </div>
            </CardHeader>
-           <CardContent className="p-6 grid gap-6 animate-pulse">
-              <div className="space-y-2">
-                 <div className="h-5 bg-muted rounded w-1/4"></div>
-                 <div className="h-4 bg-muted rounded w-full"></div>
-                 <div className="h-4 bg-muted rounded w-5/6"></div>
-              </div>
-              <Separator />
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm space-y-2">
-                 <div className="h-4 bg-muted rounded w-1/2"></div>
-                 <div className="h-4 bg-muted rounded w-1/2"></div>
-                 <div className="h-4 bg-muted rounded w-1/2"></div>
-                 <div className="h-4 bg-muted rounded w-1/2"></div>
-              </div>
-           </CardContent>
+           {/* ... rest of skeleton loading ... */}
          </Card>
        </div>
      );
@@ -223,17 +261,20 @@ const BusinessProfilePage = () => {
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
-        <p className="text-destructive-foreground font-semibold">User ID not found.</p>
+        <p className="text-destructive-foreground font-semibold">User ID not found in URL.</p>
         <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
   }
 
+  // This check for profileData (which depends on isProfileIdActuallyValidUid) should handle invalid UID cases
   if (!profileData) {
+    // The "Invalid Profile Identifier" message is already handled by the early return if !isProfileIdActuallyValidUid
+    // This !profileData condition would catch if getBusinessProfileData somehow returned null for a valid UID.
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
-        <p className="text-muted-foreground font-semibold">Business profile not found for this user.</p>
+        <p className="text-muted-foreground font-semibold">Business profile data could not be loaded.</p>
          <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
@@ -249,7 +290,7 @@ const BusinessProfilePage = () => {
             <Avatar className="h-20 w-20 border-2 border-primary">
               <AvatarImage src={profileData.avatarUrl} alt={profileData.companyName} />
               <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                {profileData.companyName?.charAt(0).toUpperCase()}
+                {getInitials(profileData.companyName)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-grow text-center md:text-left">
@@ -283,21 +324,21 @@ const BusinessProfilePage = () => {
                         ({ratingCount} ratings)
                     </p>
                  </div>
-                 {currentUser && !isOwnProfile && (
+                 {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                     <ConnectionButton
-                      targetUserId={profileData.userId}
+                      targetUserId={profileUserId}
                       targetUserName={profileData.companyName}
                       size="default"
                       className="mt-2 w-full md:w-auto"
                     />
                  )}
-                 {isLoadingStatus && !isOwnProfile && (
+                 {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                      <Button disabled size="default" className="mt-2 w-full md:w-auto">
                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
                      </Button>
                  )}
-                 {statusError && !isOwnProfile && (
-                     <p className="text-xs text-destructive mt-2 text-right">Error loading status</p>
+                 {statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
+                     <p className="text-xs text-destructive mt-2 text-right">Error loading connection status</p>
                  )}
             </div>
           </div>
@@ -335,7 +376,7 @@ const BusinessProfilePage = () => {
              )}
           </div>
 
-          {currentUser && !isOwnProfile && (
+          {currentUser && !isOwnProfile && isProfileIdActuallyValidUid && (
             <>
               <Separator />
               <div>
@@ -370,9 +411,9 @@ const BusinessProfilePage = () => {
                         disabled={addOrUpdateReviewMutation.isPending}
                     />
                 </div>
-                <Button 
-                  onClick={handleRateProfileSubmit} 
-                  size="sm" 
+                <Button
+                  onClick={handleRateProfileSubmit}
+                  size="sm"
                   disabled={userRating === 0 || addOrUpdateReviewMutation.isPending}
                 >
                    {addOrUpdateReviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
@@ -416,9 +457,6 @@ const BusinessProfilePage = () => {
                            </CardContent>
                            {currentUser?.uid === review.reviewerId && (
                                <CardFooter className="p-0 pt-3 flex justify-end gap-2">
-                                   {/* <Button variant="ghost" size="xs" onClick={() => { /* Handle Edit * / setEditingReview(review); setUserRating(review.rating); setReviewComment(review.comment); }}>
-                                       <Edit3 className="h-3 w-3 mr-1"/> Edit
-                                   </Button> */}
                                    <AlertDialog>
                                        <AlertDialogTrigger asChild>
                                            <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>
@@ -449,7 +487,7 @@ const BusinessProfilePage = () => {
                 </div>
             ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                    No reviews yet for this business. Be the first to leave one!
+                    No reviews yet for this business.
                 </p>
             )}
           </div>
@@ -458,23 +496,28 @@ const BusinessProfilePage = () => {
 
            <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {profileData.companyName}</h3>
-              {isLoadingStatus && !isOwnProfile ? (
+              {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="flex items-center justify-center p-6">
                       <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
                       <p className="text-muted-foreground">Checking connection status...</p>
                   </div>
-              ) : statusError && !isOwnProfile ? (
+              ) : statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                    <div className="flex items-center justify-center p-6 text-destructive gap-2 border rounded-lg bg-destructive/10">
                       <AlertTriangle className="h-5 w-5" />
                       <p>Could not load connection status.</p>
                    </div>
-              ) : connectionStatus === 'connected' || isOwnProfile ? (
+              ) : (profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) && (connectionStatus === 'connected' || isOwnProfile) ? (
                   <ProfilePostsSection userId={profileUserId} />
-              ) : (
+              ) : profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="text-center p-6 border rounded-lg bg-muted/50">
                      <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                      <p className="text-muted-foreground font-medium">Connect to view posts</p>
                      <p className="text-xs text-muted-foreground mt-1">Posts are only visible to connected businesses.</p>
+                  </div>
+              ) : (
+                 <div className="text-center p-6 border rounded-lg bg-destructive/10">
+                     <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-3" />
+                     <p className="text-destructive-foreground font-medium">Cannot display posts due to invalid profile identifier.</p>
                   </div>
               )}
            </div>
@@ -485,3 +528,5 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
+
+    
