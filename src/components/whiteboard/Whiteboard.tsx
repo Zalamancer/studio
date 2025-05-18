@@ -39,14 +39,14 @@ export interface FocusNodeDetails {
 }
 
 interface WhiteboardProps {
-  sectorData: SectorWithSubSectors | null; // This is the full data for the main sector page
-  focusNodeDetails: FocusNodeDetails | null; // This is the node the whiteboard should currently focus on as root
+  sectorData: SectorWithSubSectors | null;
+  focusNodeDetails: FocusNodeDetails | null;
   onNodeClick?: (node: { code: string; type: 'sector' | 'subsector' | 'industry'; text: string }) => void;
 }
 
 const NODE_WIDTH = 180;
-const NODE_HEIGHT = 70;
-const USER_NODE_MIN_HEIGHT = 80;
+const USER_NODE_MIN_HEIGHT = 80; // Min height for user shapes
+const NODE_HEIGHT = 70; // Default height for fixed NAICS nodes
 const HORIZONTAL_SPACING = 100;
 const VERTICAL_SPACING = 120;
 const VERTICAL_SPACING_INDUSTRY_START = 60;
@@ -56,6 +56,7 @@ const CANVAS_PADDING = 75;
 const MIN_ZOOM = 0.25;
 const MAX_ZOOM = 5.0;
 const ZOOM_SENSITIVITY = 0.0015;
+
 
 interface UserShapeContentProps {
   shape: Shape;
@@ -68,14 +69,16 @@ const UserShapeContent: React.FC<UserShapeContentProps> = React.memo(({ shape, u
 
   useEffect(() => {
     if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
-      let newScrollHeight = textareaRef.current.scrollHeight;
-      const newHeight = Math.max(USER_NODE_MIN_HEIGHT - 16, newScrollHeight); // -16 for internal padding assumption
-      textareaRef.current.style.height = `${newScrollHeight}px`;
+      textareaRef.current.style.height = 'auto'; // Reset height to correctly calculate scrollHeight
+      const newScrollHeight = textareaRef.current.scrollHeight;
+      const newHeight = Math.max(USER_NODE_MIN_HEIGHT, newScrollHeight + 8); // Add some padding for textarea within shape
       
-      const outerShapeHeight = Math.max(USER_NODE_MIN_HEIGHT, newScrollHeight + 16); // +16 for assumed padding
-      if (shape.height !== outerShapeHeight) {
-        onHeightChange(shape.id, outerShapeHeight);
+      // Set textarea height
+      textareaRef.current.style.height = `${newScrollHeight}px`;
+
+      // Notify parent about the new *outer* shape height needed
+      if (shape.height !== newHeight) {
+        onHeightChange(shape.id, newHeight);
       }
     }
   }, [shape.text, shape.width, onHeightChange, shape.id, shape.height]);
@@ -87,8 +90,8 @@ const UserShapeContent: React.FC<UserShapeContentProps> = React.memo(({ shape, u
       onChange={(e) => updateUserShapeText(shape.id, e.target.value)}
       placeholder={shape.type === 'rectangle' ? 'Idea...' : 'Concept...'}
       className="w-full h-full resize-none bg-transparent border-none focus:ring-0 text-xs p-2 text-center flex items-center justify-center overflow-hidden"
-      onMouseDown={(e) => e.stopPropagation()}
-      rows={Math.max(2, Math.min(4, Math.floor((shape.text?.length || 0) / (shape.width / 7)) + 1))}
+      onMouseDown={(e) => e.stopPropagation()} // Prevent pan when clicking textarea
+      rows={1} // Start with 1 row, useEffect will adjust
     />
   );
 });
@@ -104,7 +107,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
   const [fixedShapes, setFixedShapes] = useState<Shape[]>([]);
   const [userShapes, setUserShapes] = useState<Shape[]>([]);
   const [editingShapeId, setEditingShapeId] = useState<string | null>(null);
-  
+  const [hoveredUserShapeId, setHoveredUserShapeId] = useState<string | null>(null);
+
+
   const [canvasDimensions, setCanvasDimensions] = useState({ width: 800, height: 600 });
   const whiteboardViewportRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -115,7 +120,9 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [isSaving, setIsSaving] = useState(false);
 
-  // Fetch user shapes
+  console.log(`[Whiteboard] Render. Current Focus: ${currentFocus?.code}`);
+
+  // Fetch user shapes for the current NAICS focus
   const {
     data: fetchedUserShapesData,
     isLoading: isLoadingShapes,
@@ -124,17 +131,17 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
     error: shapesQueryError,
     status: shapesQueryStatus,
   } = useQuery<Shape[], Error>({
-    queryKey: ['whiteboardShapes', currentFocus?.code, user?.uid],
+    queryKey: ['whiteboardShapes', currentFocus?.code, user?.uid], // Include user ID if shapes are user-specific
     queryFn: async () => {
-      console.log(`%c[Whiteboard] useQuery queryFn: Fetching shapes for NAICS context: '${currentFocus?.code}' by user '${user?.uid}'`, "color: teal;");
-      if (!currentFocus?.code || !user?.uid) {
-        console.log(`%c[Whiteboard] useQuery queryFn: Skipping fetch - no currentFocus.code or no user.`, "color: orange;");
+      console.log(`[Whiteboard] useQuery queryFn: Fetching shapes for NAICS context: '${currentFocus?.code}' by user '${user?.uid}'`);
+      if (!currentFocus?.code ) { // No user check here, as shapes are public per NAICS code
+        console.log(`[Whiteboard] useQuery queryFn: Skipping fetch - no currentFocus.code.`);
         return [];
       }
       const shapes = await getShapesForNaics(currentFocus.code);
       return Array.isArray(shapes) ? shapes : [];
     },
-    enabled: !!currentFocus?.code && !!user?.uid,
+    enabled: !!currentFocus?.code, // Only fetch if there's a NAICS context
     refetchOnWindowFocus: false,
     refetchOnMount: 'always',
   });
@@ -142,19 +149,17 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
   // Effect to process fetched user shapes
   useEffect(() => {
     if (isSuccessShapes && fetchedUserShapesData) {
-      console.log(`%c[Whiteboard] useEffect (process userShapes query): SUCCESS. Data length: ${fetchedUserShapesData.length}. Setting userShapes.`, "background: lightgreen; color: black;", fetchedUserShapesData);
-      setUserShapes(fetchedUserShapesData);
+        console.log(`%c[Whiteboard] useEffect (process userShapes query): SUCCESS. Data length: ${fetchedUserShapesData.length}. Setting userShapes.`, "background: lightgreen; color: black;", fetchedUserShapesData);
+        setUserShapes(fetchedUserShapesData);
     } else if (isErrorShapes && shapesQueryError) {
-      console.error(`%c[Whiteboard] useEffect (process userShapes query): ERROR fetching user shapes.`, "background: salmon; color: black;", shapesQueryError);
-      setUserShapes([]);
+        console.error(`%c[Whiteboard] useEffect (process userShapes query): ERROR fetching user shapes.`, "background: salmon; color: black;", shapesQueryError);
+        setUserShapes([]); // Clear on error
     } else if (!isLoadingShapes && !currentFocus?.code) {
-      console.log(`%c[Whiteboard] useEffect (process userShapes query): No currentFocus or query not active, ensuring userShapes is empty.`, "background: lightgoldenrodyellow; color: black;");
-      setUserShapes([]);
+        console.log(`%c[Whiteboard] useEffect (process userShapes query): No currentFocus or query not active, ensuring userShapes is empty.`, "background: lightgoldenrodyellow; color: black;");
+        setUserShapes([]);
     }
-  }, [isSuccessShapes, fetchedUserShapesData, isErrorShapes, shapesQueryError, isLoadingShapes, currentFocus?.code]);
+  }, [isSuccessShapes, fetchedUserShapesData, isErrorShapes, shapesQueryError, isLoadingShapes, currentFocus?.code, setUserShapes]);
 
-
-  // Log userShapes state changes
   useEffect(() => {
     console.log('%c[Whiteboard] userShapes state CHANGED to:', 'color: dodgerblue', userShapes);
   }, [userShapes]);
@@ -165,6 +170,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
     const newGeneratedShapes: Shape[] = [];
     let maxContentX = 0;
     let maxContentY = 0;
+    let currentLevelMaxY = 0; // Track max Y for current level of nodes
 
     const addShape = (shape: Shape) => {
       newGeneratedShapes.push(shape);
@@ -172,105 +178,138 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
       maxContentY = Math.max(maxContentY, shape.y + shape.height);
     };
 
-    if (!focusNode || !sectorDataForLayout) {
-      console.log(`%c[Whiteboard] generateShapesAndDimensions: No focusNode or sectorDataForLayout, returning empty.`, "color: orange;");
-      return { newGeneratedShapes: [], finalCanvasWidth: 800, finalCanvasHeight: 600 };
+    if (!focusNode || (!sectorDataForLayout && focusNode.type === 'sector')) {
+         console.warn(`%c[Whiteboard] generateShapesAndDimensions: No focusNode or sectorDataForLayout is null for sector type focus. FocusNode:`, "color: orange;", focusNode, "SectorData:", sectorDataForLayout);
+         return { newGeneratedShapes: [], finalCanvasWidth: 800, finalCanvasHeight: 600 };
     }
+    
+    let rootNodeX = CANVAS_PADDING;
+    let rootNodeY = CANVAS_PADDING;
 
-    let rootNode: Shape | undefined;
-
-    if (focusNode.type === 'sector') {
-      rootNode = {
+    if (focusNode.type === 'sector' && sectorDataForLayout) {
+      const sectorNode: Shape = {
         id: `fixed-sector-${focusNode.code}`, type: 'rectangle', text: `${focusNode.name}`,
-        x: CANVAS_PADDING, y: CANVAS_PADDING, width: NODE_WIDTH + 40, height: NODE_HEIGHT, parentId: null,
-        isFixed: true, nodeType: 'sector', code: focusNode.code
+        x: rootNodeX, y: rootNodeY, width: NODE_WIDTH + 40, height: NODE_HEIGHT, parentId: null,
+        isFixed: true, nodeType: 'sector', code: focusNode.code, docContent: ""
       };
-      addShape(rootNode);
+      addShape(sectorNode);
+      currentLevelMaxY = sectorNode.y + sectorNode.height;
 
-      let currentColumnX = CANVAS_PADDING;
-      let overallMaxBranchHeight = rootNode.y + rootNode.height;
+      let currentSubSectorX = CANVAS_PADDING;
+      let subSectorMaxYOverall = currentLevelMaxY;
 
       (sectorDataForLayout.subSectors || []).forEach((sub) => {
-        let maxIndustryNodeWidthInColumn = NODE_WIDTH; // For now, all industry nodes have NODE_WIDTH
+        const maxIndustryNodeWidthInColumn = NODE_WIDTH; 
         const currentSubSectorColumnWidth = Math.max(NODE_WIDTH, maxIndustryNodeWidthInColumn);
 
         const subSectorShape: Shape = {
           id: `fixed-subsector-${sub.code}`, type: 'rectangle', text: `${sub.name}`,
-          x: currentColumnX + (currentSubSectorColumnWidth / 2) - (NODE_WIDTH / 2),
-          y: rootNode!.y + NODE_HEIGHT + VERTICAL_SPACING,
-          width: NODE_WIDTH, height: NODE_HEIGHT, parentId: rootNode!.id,
-          isFixed: true, nodeType: 'subsector', code: sub.code
+          x: currentSubSectorX + (currentSubSectorColumnWidth / 2) - (NODE_WIDTH / 2),
+          y: currentLevelMaxY + VERTICAL_SPACING,
+          width: NODE_WIDTH, height: NODE_HEIGHT, parentId: sectorNode.id,
+          isFixed: true, nodeType: 'subsector', code: sub.code, docContent: ""
         };
         addShape(subSectorShape);
-        let currentSubBranchHeight = subSectorShape.y + subSectorShape.height;
+        let currentSubSectorBranchMaxY = subSectorShape.y + subSectorShape.height;
 
         let currentIndustryYOffset = subSectorShape.y + NODE_HEIGHT + VERTICAL_SPACING_INDUSTRY_START;
         (sub.industries || []).forEach((ind) => {
           const industryShape: Shape = {
             id: `fixed-industry-${ind.code}-${sub.code}`, type: 'rectangle', text: `${ind.name}`,
-            x: subSectorShape.x + (NODE_WIDTH / 2) - (NODE_WIDTH / 2), // Centered under sub-sector
+            x: subSectorShape.x + (NODE_WIDTH / 2) - (NODE_WIDTH / 2), 
             y: currentIndustryYOffset,
             width: NODE_WIDTH, height: NODE_HEIGHT, parentId: subSectorShape.id,
-            isFixed: true, nodeType: 'industry', code: ind.code
+            isFixed: true, nodeType: 'industry', code: ind.code, docContent: ""
           };
           addShape(industryShape);
           currentIndustryYOffset += NODE_HEIGHT + VERTICAL_SPACING_INDUSTRY_ITEM;
         });
-        currentSubBranchHeight = Math.max(currentSubBranchHeight, currentIndustryYOffset - VERTICAL_SPACING_INDUSTRY_ITEM);
-        overallMaxBranchHeight = Math.max(overallMaxBranchHeight, currentSubBranchHeight);
-        currentColumnX += currentSubSectorColumnWidth + HORIZONTAL_SPACING;
+        currentSubSectorBranchMaxY = Math.max(currentSubSectorBranchMaxY, currentIndustryYOffset - VERTICAL_SPACING_INDUSTRY_ITEM);
+        subSectorMaxYOverall = Math.max(subSectorMaxYOverall, currentSubSectorBranchMaxY);
+        currentSubSectorX += currentSubSectorColumnWidth + HORIZONTAL_SPACING;
       });
-      maxContentX = Math.max(maxContentX, currentColumnX - HORIZONTAL_SPACING);
-      maxContentY = Math.max(maxContentY, overallMaxBranchHeight);
 
-      if ((sectorDataForLayout.subSectors || []).length > 0 && rootNode) {
-        const totalSubSectorsEffectiveWidth = currentColumnX - HORIZONTAL_SPACING - CANVAS_PADDING;
-        rootNode.x = CANVAS_PADDING + Math.max(0, (totalSubSectorsEffectiveWidth / 2) - (rootNode.width / 2));
-        maxContentX = Math.max(maxContentX, rootNode.x + rootNode.width);
+      maxContentX = Math.max(maxContentX, currentSubSectorX - HORIZONTAL_SPACING);
+      maxContentY = Math.max(maxContentY, subSectorMaxYOverall);
+      
+      if ((sectorDataForLayout.subSectors || []).length > 0 && newGeneratedShapes[0]?.nodeType === 'sector') {
+        const totalSubSectorsEffectiveWidth = currentSubSectorX - HORIZONTAL_SPACING - CANVAS_PADDING;
+        newGeneratedShapes[0].x = CANVAS_PADDING + Math.max(0, (totalSubSectorsEffectiveWidth / 2) - (newGeneratedShapes[0].width / 2));
+        maxContentX = Math.max(maxContentX, newGeneratedShapes[0].x + newGeneratedShapes[0].width);
       }
 
-    } else if (focusNode.type === 'subsector') {
-      const subSectorData = sectorDataForLayout.subSectors.find(ss => ss.code === focusNode.code);
-      if (subSectorData) {
-        rootNode = {
-          id: `fixed-subsector-${focusNode.code}`, type: 'rectangle', text: `${focusNode.name}`,
-          x: CANVAS_PADDING, y: CANVAS_PADDING, width: NODE_WIDTH + 20, height: NODE_HEIGHT, parentId: null,
-          isFixed: true, nodeType: 'subsector', code: focusNode.code
-        };
-        addShape(rootNode);
-        let currentIndustryYOffset = rootNode.y + NODE_HEIGHT + VERTICAL_SPACING_INDUSTRY_START;
-        (subSectorData.industries || []).forEach((ind) => {
-          const industryShape: Shape = {
-            id: `fixed-industry-${ind.code}-${focusNode.code}`, type: 'rectangle', text: `${ind.name}`,
-            x: rootNode!.x + ((NODE_WIDTH + 20) / 2) - (NODE_WIDTH / 2), y: currentIndustryYOffset,
-            width: NODE_WIDTH, height: NODE_HEIGHT, parentId: rootNode!.id,
-            isFixed: true, nodeType: 'industry', code: ind.code
-          };
-          addShape(industryShape);
-          currentIndustryYOffset += NODE_HEIGHT + VERTICAL_SPACING_INDUSTRY_ITEM;
-        });
-      }
-    } else if (focusNode.type === 'industry') {
-      rootNode = {
-        id: `fixed-industry-${focusNode.code}`, type: 'rectangle', text: `${focusNode.name}`,
-        x: CANVAS_PADDING, y: CANVAS_PADDING, width: NODE_WIDTH, height: NODE_HEIGHT, parentId: null,
-        isFixed: true, nodeType: 'industry', code: focusNode.code
-      };
-      addShape(rootNode);
+    } else if (focusNode.type === 'subsector' && fullSectorData) {
+        const subSectorData = fullSectorData.subSectors.find(ss => ss.code === focusNode.code);
+        if (subSectorData) {
+            const subSectorNode: Shape = {
+                id: `fixed-subsector-${focusNode.code}`, type: 'rectangle', text: `${focusNode.name}`,
+                x: rootNodeX, y: rootNodeY, width: NODE_WIDTH + 20, height: NODE_HEIGHT, parentId: null,
+                isFixed: true, nodeType: 'subsector', code: focusNode.code, docContent: ""
+            };
+            addShape(subSectorNode);
+            currentLevelMaxY = subSectorNode.y + subSectorNode.height;
+
+            let currentIndustryYOffset = currentLevelMaxY + VERTICAL_SPACING_INDUSTRY_START;
+            (subSectorData.industries || []).forEach((ind) => {
+                const industryShape: Shape = {
+                    id: `fixed-industry-${ind.code}-${focusNode.code}`, type: 'rectangle', text: `${ind.name}`,
+                    x: subSectorNode.x + (subSectorNode.width / 2) - (NODE_WIDTH / 2), y: currentIndustryYOffset,
+                    width: NODE_WIDTH, height: NODE_HEIGHT, parentId: subSectorNode.id,
+                    isFixed: true, nodeType: 'industry', code: ind.code, docContent: ""
+                };
+                addShape(industryShape);
+                currentIndustryYOffset += NODE_HEIGHT + VERTICAL_SPACING_INDUSTRY_ITEM;
+            });
+            maxContentY = Math.max(maxContentY, currentIndustryYOffset - VERTICAL_SPACING_INDUSTRY_ITEM);
+        } else {
+           console.warn(`[Whiteboard] generateShapes: SubSector data not found for code ${focusNode.code} in fullSectorData.`);
+        }
+    } else if (focusNode.type === 'industry' && fullSectorData) {
+        let industryData: Industry | undefined;
+        let parentSubSectorCode: string | undefined;
+
+        for (const sub of fullSectorData.subSectors) {
+            const foundIndustry = sub.industries.find(ind => ind.code === focusNode.code);
+            if (foundIndustry) {
+                industryData = foundIndustry;
+                parentSubSectorCode = sub.code;
+                break;
+            }
+        }
+        if (industryData) {
+            const industryNode: Shape = {
+                id: `fixed-industry-${focusNode.code}`, type: 'rectangle', text: `${focusNode.name}`,
+                x: rootNodeX, y: rootNodeY, width: NODE_WIDTH, height: NODE_HEIGHT, parentId: null, // No fixed parent displayed in this focused view
+                isFixed: true, nodeType: 'industry', code: focusNode.code, docContent: ""
+            };
+            addShape(industryNode);
+        } else {
+            console.warn(`[Whiteboard] generateShapes: Industry data not found for code ${focusNode.code} in fullSectorData.`);
+        }
     }
+
 
     const finalCanvasWidth = Math.max(800, maxContentX + CANVAS_PADDING);
     const finalCanvasHeight = Math.max(600, maxContentY + CANVAS_PADDING);
     console.log(`%c[Whiteboard] generateShapesAndDimensions OUTPUT: newGeneratedShapes count: ${newGeneratedShapes.length}, canvas: ${finalCanvasWidth}x${finalCanvasHeight}`, "color: teal;");
     return { newGeneratedShapes, finalCanvasWidth, finalCanvasHeight };
-  }, []);
-
+  }, [fullSectorData]); // Added fullSectorData to dependency array for subsector/industry focus
 
   // Effect for layout of fixed shapes and initial view centering
   useEffect(() => {
     console.log(`%c[Whiteboard] LayoutEffect: Triggered.`, "color: orange;", { fullSectorData: !!fullSectorData, currentFocus });
-    if (currentFocus && fullSectorData && whiteboardViewportRef.current) {
-      const { newGeneratedShapes, finalCanvasWidth, finalCanvasHeight } = generateShapesAndDimensions(fullSectorData, currentFocus);
+    if (currentFocus && whiteboardViewportRef.current) {
+      // Use fullSectorData for layout if focus is sector, otherwise pass it for context
+      const dataForLayout = currentFocus.type === 'sector' ? fullSectorData : fullSectorData;
+      
+      if (!dataForLayout && (currentFocus.type === 'subsector' || currentFocus.type === 'industry')) {
+          console.warn("[Whiteboard] LayoutEffect: fullSectorData is missing for subsector/industry focused layout. Cannot generate shapes.");
+          setFixedShapes([]);
+          setCanvasDimensions({ width: 800, height: 600 });
+          return;
+      }
+      
+      const { newGeneratedShapes, finalCanvasWidth, finalCanvasHeight } = generateShapesAndDimensions(dataForLayout, currentFocus);
       console.log(`%c[Whiteboard] LayoutEffect: setFixedShapes called. Count: ${newGeneratedShapes.length}. Canvas: ${finalCanvasWidth}x${finalCanvasHeight}`, "color: orange;");
       setFixedShapes(newGeneratedShapes);
       setCanvasDimensions({ width: finalCanvasWidth, height: finalCanvasHeight });
@@ -280,20 +319,20 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
       const rootNodeToCenter = newGeneratedShapes.find(s => s.code === currentFocus.code && s.nodeType === currentFocus.type) || newGeneratedShapes[0];
       
       const contentXToCenter = rootNodeToCenter ? rootNodeToCenter.x + rootNodeToCenter.width / 2 : finalCanvasWidth / 2;
-      const contentYToCenter = rootNodeToCenter ? rootNodeToCenter.y + rootNodeToCenter.height / 2 : CANVAS_PADDING + NODE_HEIGHT / 2;
-
+      
       setScale(initialScale);
       setPan({
           x: (viewportWidth / 2) - (contentXToCenter * initialScale),
-          y: CANVAS_PADDING * initialScale,
+          y: CANVAS_PADDING * initialScale, // Always start pan Y from top padding
       });
     } else if (!currentFocus) {
       console.log("%c[Whiteboard] LayoutEffect: No currentFocus, clearing fixed shapes.", "color: orange");
       setFixedShapes([]);
+      // setUserShapes([]); // User shapes are fetched based on currentFocus, so they will clear via query if currentFocus is null
       setEditingShapeId(null);
+      setCanvasDimensions({width: 800, height: 600});
     }
-  }, [fullSectorData, currentFocus, generateShapesAndDimensions, isMobile]);
-
+  }, [currentFocus, generateShapesAndDimensions, fullSectorData]); // Added fullSectorData dependency
 
   // Update canvas div style when canvasDimensions change
   useEffect(() => {
@@ -303,10 +342,8 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
     }
   }, [canvasDimensions]);
 
-
-  // Event Handlers for Pan and Zoom (Correctly defined with useCallback)
   const handleMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button !== 0) return; // Only pan on left click
+    if (e.button !== 0) return;
     setIsPanning(true);
     setPanStart({
       x: e.clientX - pan.x,
@@ -352,49 +389,6 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
     setScale(newScale);
   }, [scale, pan]);
 
-  // Effect for Pan and Zoom event listeners
-  useEffect(() => {
-    const currentViewportRef = whiteboardViewportRef.current;
-    if (currentViewportRef) {
-      currentViewportRef.addEventListener('wheel', handleWheel, { passive: false });
-      // MouseMove and MouseUp are handled by the div directly, not window
-    }
-    return () => {
-      if (currentViewportRef) {
-        currentViewportRef.removeEventListener('wheel', handleWheel);
-      }
-    };
-  }, [handleWheel]); // handleWheel's dependencies are pan and scale, so it's stable unless they change
-
-
-  // Reset view functionality
-  const resetView = useCallback(() => {
-    if (currentFocus && fullSectorData && whiteboardViewportRef.current) {
-      const { newGeneratedShapes, finalCanvasWidth } = generateShapesAndDimensions(fullSectorData, currentFocus);
-      const viewportWidth = whiteboardViewportRef.current.clientWidth;
-      const newScale = 1;
-      const rootNodeToCenter = newGeneratedShapes.find(s => s.code === currentFocus.code && s.nodeType === currentFocus.type) || newGeneratedShapes[0];
-      const contentXToCenter = rootNodeToCenter ? rootNodeToCenter.x + rootNodeToCenter.width / 2 : finalCanvasWidth / 2;
-
-      setScale(newScale);
-      setPan({
-        x: (viewportWidth / 2) - (contentXToCenter * newScale),
-        y: CANVAS_PADDING * newScale,
-      });
-    } else {
-      // Fallback if no specific focus or sector data
-      setScale(1);
-      setPan({ x: CANVAS_PADDING, y: CANVAS_PADDING });
-       if (!fullSectorData && !currentFocus) { // Clear shapes if context is entirely lost
-          setFixedShapes([]);
-          setUserShapes([]);
-          setEditingShapeId(null);
-          setCanvasDimensions({width: 800, height: 600});
-      }
-    }
-  }, [fullSectorData, currentFocus, generateShapesAndDimensions]);
-  
-  // Handle window resize
   const handleResize = useCallback(() => {
     if (whiteboardViewportRef.current && (fixedShapes.length > 0 || userShapes.length > 0)) {
         const viewportWidth = whiteboardViewportRef.current.clientWidth;
@@ -412,14 +406,48 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
     }
   }, [scale, fixedShapes, userShapes, canvasDimensions, currentFocus]);
 
+
   useEffect(() => {
+    const currentViewportRef = whiteboardViewportRef.current;
+    if (currentViewportRef) {
+      currentViewportRef.addEventListener('wheel', handleWheel, { passive: false });
+    }
     window.addEventListener('resize', handleResize);
     return () => {
+      if (currentViewportRef) {
+        currentViewportRef.removeEventListener('wheel', handleWheel);
+      }
       window.removeEventListener('resize', handleResize);
     };
-  }, [handleResize]);
+  }, [handleWheel, handleResize]); 
 
 
+  const resetView = useCallback(() => {
+    if (currentFocus && whiteboardViewportRef.current) {
+        const dataForLayout = currentFocus.type === 'sector' ? fullSectorData : fullSectorData; // Ensure fullSectorData is used for context
+        const { newGeneratedShapes, finalCanvasWidth } = generateShapesAndDimensions(dataForLayout, currentFocus);
+        const viewportWidth = whiteboardViewportRef.current.clientWidth;
+        const newScale = 1;
+        const rootNodeToCenter = newGeneratedShapes.find(s => s.code === currentFocus.code && s.nodeType === currentFocus.type) || newGeneratedShapes[0];
+        const contentXToCenter = rootNodeToCenter ? rootNodeToCenter.x + rootNodeToCenter.width / 2 : finalCanvasWidth / 2;
+
+        setScale(newScale);
+        setPan({
+            x: (viewportWidth / 2) - (contentXToCenter * newScale),
+            y: CANVAS_PADDING * newScale,
+        });
+    } else {
+        setScale(1);
+        setPan({ x: CANVAS_PADDING, y: CANVAS_PADDING });
+        if (!fullSectorData && !currentFocus) { 
+            setFixedShapes([]);
+            setUserShapes([]);
+            setEditingShapeId(null);
+            setCanvasDimensions({width: 800, height: 600});
+        }
+    }
+  }, [currentFocus, generateShapesAndDimensions, fullSectorData]); // Added fullSectorData dependency
+  
   const canEditWhiteboard = !!user && !!currentFocus?.code;
 
   const addUserShape = (type: 'rectangle' | 'circle', parentShapeId: string | null = null, isSister = false) => {
@@ -438,27 +466,28 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
         const parentHeight = parentNode.height;
     
         if (isSister) {
-            effectiveParentId = parentNode.parentId;
-            const siblings = userShapes.filter(s => s.parentId === effectiveParentId);
-            const lastRelevantNode = siblings.length > 0 ? siblings[siblings.length - 1] : parentNode;
+            effectiveParentId = parentNode.parentId; // Parent is the parent of the clicked node
+            // Find siblings of the original parentNode to position the new sister node
+            const siblingsOfParentNode = userShapes.filter(s => s.parentId === effectiveParentId);
+            const lastRelevantNode = siblingsOfParentNode.length > 0 ? siblingsOfParentNode[siblingsOfParentNode.length - 1] : parentNode;
             
             newX = lastRelevantNode.x + lastRelevantNode.width + HORIZONTAL_SPACING / 2;
-            newY = lastRelevantNode.y;
-        } else { 
-            effectiveParentId = parentNode.id;
-            const children = userShapes.filter(s => s.parentId === effectiveParentId);
-            const lastChild = children.length > 0 ? children[children.length - 1] : null;
+            newY = lastRelevantNode.y; // Align Y with the last sibling or the original parent
+        } else { // Adding a child
+            effectiveParentId = parentNode.id; // Parent is the clicked node itself
+            const childrenOfParentNode = userShapes.filter(s => s.parentId === effectiveParentId);
+            const lastChild = childrenOfParentNode.length > 0 ? childrenOfParentNode[childrenOfParentNode.length - 1] : null;
             
-            newX = parentNode.x + (parentWidth / 2) - (NODE_WIDTH / 2);
+            newX = parentNode.x + (parentWidth / 2) - (NODE_WIDTH / 2); // Center under parent
             newY = lastChild 
-            ? lastChild.y + lastChild.height + VERTICAL_SPACING_INDUSTRY_ITEM 
-            : parentNode.y + parentHeight + VERTICAL_SPACING_INDUSTRY_START;
+            ? lastChild.y + lastChild.height + VERTICAL_SPACING_INDUSTRY_ITEM // Stack below last child
+            : parentNode.y + parentHeight + VERTICAL_SPACING_INDUSTRY_START; // First child position
         }
-    } else {
-        effectiveParentId = currentFocus ? fixedShapes.find(s => s.code === currentFocus.code && s.nodeType === currentFocus.type)?.id || null : null;
+    } else { // No specific parent node, adding as a root user shape relative to the current NAICS focus
+        effectiveParentId = currentFocus ? fixedShapes.find(s => s.code === currentFocus?.code && s.nodeType === currentFocus?.type)?.id || null : null;
         const rootUserShapesForContext = userShapes.filter(s => s.parentId === effectiveParentId);
         newX = CANVAS_PADDING + 50 + (rootUserShapesForContext.length * (NODE_WIDTH + HORIZONTAL_SPACING / 2));
-        newY = canvasDimensions.height - NODE_HEIGHT - CANVAS_PADDING - 50;
+        newY = canvasDimensions.height - NODE_HEIGHT - CANVAS_PADDING - 50; // Place near bottom
     }
 
     const newShape: Shape = {
@@ -468,7 +497,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
       docContent: ""
     };
     setUserShapes(prev => [...prev, newShape]);
-    setEditingShapeId(newId);
+    setEditingShapeId(newId); // Open editor for new shape
   };
 
   const updateUserShapeText = (id: string, text: string) => {
@@ -530,13 +559,14 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
     try {
       await saveShapesForNaics(currentFocus.code, userShapes, user.uid);
       toast({ title: "Whiteboard Saved", description: "Your collaborative ideas have been saved." });
-      queryClient.invalidateQueries({ queryKey: ['whiteboardShapes', currentFocus.code] });
+      queryClient.invalidateQueries({ queryKey: ['whiteboardShapes', currentFocus.code, user.uid] });
     } catch (error: any) {
-      console.error(`%c[Whiteboard] saveShapesMutation: Failed to save whiteboard shapes:`, "color: red;", error);
+      console.error(`%c[Whiteboard] saveShapes: Failed to save whiteboard shapes:`, "color: red;", error);
+      const serverAuthStatus = auth.currentUser ? `Server Auth UID: ${auth.currentUser.uid}` : "Server Auth: NULL";
       toast({
         variant: "destructive",
         title: "Save Failed",
-        description: error.message || "Could not save whiteboard. Check console.",
+        description: `${error.message || "Could not save whiteboard."} (${serverAuthStatus})`,
       });
     } finally {
       setIsSaving(false);
@@ -547,8 +577,10 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
     if (!canEditWhiteboard || !currentFocus?.code) return;
     setUserShapes([]);
     setEditingShapeId(null);
+    // Intentionally do not save here, user must click "Save Whiteboard" to persist clearing
     toast({ title: "Contextual Ideas Cleared Locally", description: "Click 'Save Whiteboard' to make this change permanent." });
   };
+
 
   const getShapeCenter = (shape: Shape, side: 'top' | 'bottom' | 'left' | 'right') => {
     const width = shape.width;
@@ -567,13 +599,18 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
   }, [fixedShapes, userShapes]);
 
   const handleUserShapeClick = (shapeId: string) => {
+    // Only allow editing for user-added shapes
     if (!userShapes.find(s => s.id === shapeId)?.isFixed) {
+      console.log(`[Whiteboard] User shape clicked, setting editingShapeId to: ${shapeId}`);
       setEditingShapeId(shapeId);
+    } else {
+        console.log(`[Whiteboard] Fixed NAICS shape clicked, editingShapeId not set.`);
     }
   };
 
   const handleDocumentContentChange = (newContent: string) => {
     if (editingShapeId && user) {
+        console.log(`[Whiteboard] Document content changed for shape ${editingShapeId}. New length: ${newContent.length}`);
       setUserShapes(prev =>
         prev.map(s =>
           s.id === editingShapeId ? { ...s, docContent: newContent, lastEditedBy: user.uid } : s
@@ -582,7 +619,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
     }
   };
 
-  const currentEditingShape = userShapes.find(s => s.id === editingShapeId);
+  const currentEditingShape = editingShapeId ? userShapes.find(s => s.id === editingShapeId) : null;
 
   console.log(`%c[Whiteboard] Render. isLoadingShapes: ${isLoadingShapes}, shapesQueryStatus: ${shapesQueryStatus}, shapesQueryError: ${!!shapesQueryError}, isSuccessShapes: ${isSuccessShapes}, isErrorShapes: ${isErrorShapes}, currentFocus: ${currentFocus?.code}, userShapes length: ${userShapes.length}`, "color: gray");
   console.log('[Whiteboard] Render - Pan:', pan, 'Scale:', scale);
@@ -605,7 +642,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
                   <Square className="h-3 w-3 mr-1" /> Add Idea
                 </Button>
                 <Button variant="outline" size="xs" onClick={clearUserShapesForCurrentFocus} className="text-destructive hover:text-destructive" disabled={isLoadingShapes || isSaving || userShapes.length === 0}>
-                  <Eraser className="h-3 w-3 mr-1" /> Clear Ideas
+                  <Eraser className="h-3 w-3 mr-1" /> Clear My Ideas
                 </Button>
                 <Button variant="default" size="xs" onClick={handleSaveWhiteboard} disabled={isLoadingShapes || isSaving || !user}>
                   {isSaving ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Save className="h-3 w-3 mr-1" />}
@@ -627,12 +664,14 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
           >
             <div
               ref={canvasRef}
-              className="relative"
+              className="relative" // Canvas for drawing shapes
               style={{
                 transform: `translate(${pan.x}px, ${pan.y}px) scale(${scale})`,
                 transformOrigin: '0 0',
+                 // Set dynamically by layoutNodes
               }}
             >
+              {/* SVG for drawing connecting lines */}
               <svg width="100%" height="100%" style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none', zIndex: 0 }}>
                 {allDisplayableShapes.map(shape => {
                   if (shape.parentId) {
@@ -641,7 +680,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
                       const parentPoint = getShapeCenter(parentShape, 'bottom');
                       const childPoint = getShapeCenter(shape, 'top');
                       const verticalDistance = childPoint.y - parentPoint.y;
-                      const curveFactor = Math.max(20, verticalDistance / 3.5);
+                      const curveFactor = Math.max(20, verticalDistance / 3.5); 
                       const pathData = `M ${parentPoint.x} ${parentPoint.y} C ${parentPoint.x} ${parentPoint.y + curveFactor}, ${childPoint.x} ${childPoint.y - curveFactor}, ${childPoint.x} ${childPoint.y}`;
                       return (
                         <path key={`line-to-${shape.id}`} d={pathData} stroke="hsl(var(--primary) / 0.5)" strokeWidth="1.5" fill="none" />
@@ -652,6 +691,7 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
                 })}
               </svg>
 
+              {/* Render shapes */}
               {allDisplayableShapes.map((shape) => (
                 <div
                   key={shape.id}
@@ -664,30 +704,31 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
                       handleUserShapeClick(shape.id);
                     }
                   }}
-                  onMouseDown={(e) => { if (!shape.isFixed) e.stopPropagation(); }}
+                  onMouseDown={(e) => { if (!shape.isFixed) e.stopPropagation(); }} // Prevent pan when clicking user shape
                   onMouseEnter={() => !shape.isFixed && setHoveredUserShapeId(shape.id)}
                   onMouseLeave={() => !shape.isFixed && setHoveredUserShapeId(null)}
                   className={cn(
-                    "absolute flex flex-col items-center justify-center p-2 text-center text-xs border-2 shadow-md rounded-md transition-all duration-100",
+                    "absolute flex flex-col items-center justify-center p-1 text-center text-xs border-2 shadow-md rounded-md transition-all duration-100",
                     shape.isFixed ? "cursor-pointer" : "bg-background/90 border-primary cursor-default",
                     shape.nodeType === 'sector' && "bg-primary text-primary-foreground font-semibold border-primary-foreground/50 shadow-xl",
                     shape.nodeType === 'subsector' && "bg-secondary text-secondary-foreground border-secondary-foreground/40 shadow-lg",
                     shape.nodeType === 'industry' && "bg-card text-card-foreground border-border shadow-md",
-                    shape.nodeType === 'user' && "bg-background/90 border-accent shadow-md",
+                    shape.nodeType === 'user' && "bg-background/90 border-accent shadow-md", // Specific style for user shapes
                     shape.type === 'circle' && !shape.isFixed && "!rounded-full"
                   )}
                   style={{
                     left: `${shape.x}px`, top: `${shape.y}px`,
                     width: `${shape.width}px`,
-                    height: `${shape.height}px`,
+                    minHeight: `${shape.isFixed ? NODE_HEIGHT : USER_NODE_MIN_HEIGHT}px`, // Ensure min height
+                    height: `${shape.height}px`, // Dynamic height for user shapes
                     zIndex: shape.isFixed ? 10 : (editingShapeId === shape.id ? 25 : 20),
                   }}
                 >
                   {shape.isFixed ? (
                     <span className="px-1 break-words select-none">{shape.text} {shape.code && `(${shape.code})`}</span>
-                  ) : (
+                  ) : ( // User-added shape
                     <>
-                     <UserShapeContent
+                      <UserShapeContent
                         shape={shape}
                         updateUserShapeText={updateUserShapeText}
                         onHeightChange={updateUserShapeHeight}
@@ -722,14 +763,15 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
         </CardContent>
       </Card>
 
+      {/* Document Editor - Rendered conditionally when a user shape is being edited */}
       {editingShapeId && currentEditingShape && (
         <div className="mt-6 w-full">
           <DocumentEditorPlaceholder
-            key={editingShapeId} 
+            key={editingShapeId} // Important: ensures editor re-mounts for new shape
             initialContent={currentEditingShape.docContent || ""}
             onContentChange={handleDocumentContentChange}
             title={`Document for: ${currentEditingShape.text || `Idea ${currentEditingShape.id.substring(0,6)}`}`}
-            readOnly={!canEditWhiteboard}
+            readOnly={!canEditWhiteboard || currentEditingShape.isFixed}
           />
         </div>
       )}
@@ -738,3 +780,4 @@ const Whiteboard: React.FC<WhiteboardProps> = ({ sectorData: fullSectorData, foc
 };
 
 export default Whiteboard;
+
