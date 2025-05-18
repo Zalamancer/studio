@@ -20,17 +20,16 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import type { MutualConnection, ConnectionStatus, Connection, ConnectionRequest, UserProfileBasic, UserProfileData } from '@/types/connection';
-import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Import for fallback names
 
 const mutualsCollectionRef = collection(db, 'mutuals');
-const usersCollectionRef = collection(db, 'users');
+const usersCollectionRef = collection(db, 'users'); // Assuming a 'users' collection for basic profiles
 const IS_UID_REGEX_SERVICE = /^[a-zA-Z0-9]{20,}$/; // For service-level checks
 
 // Helper to generate a consistent connection ID
 const getConnectionDocId = (userId1: string, userId2: string): string => {
   if (!userId1 || !userId2 || !IS_UID_REGEX_SERVICE.test(userId1) || !IS_UID_REGEX_SERVICE.test(userId2) ) {
-    console.error(`[connectionService] getConnectionDocId CRITICAL: Called with invalid UID(s). userId1: '${userId1}', userId2: '${userId2}'. This will result in an invalid/unexpected document ID.`);
-    // Return a clearly invalid ID to prevent unintended Firestore operations or make debugging easier
+    console.error(`%c[connectionService] getConnectionDocId CRITICAL: Called with invalid UID(s). userId1: '${userId1}', userId2: '${userId2}'. This will result in an invalid/unexpected document ID.`, "color: red; font-weight: bold;");
     return `INVALID_CONNECTION_ID_DUE_TO_BAD_UIDS_${userId1}_${userId2}`;
   }
   return [userId1, userId2].sort().join('_');
@@ -67,7 +66,7 @@ export const sendConnectionRequest = async (requesterId: string, recipientId: st
 
 
   const connectionId = getConnectionDocId(requesterId, recipientId);
-  if (connectionId.startsWith("INVALID_CONNECTION_ID")) { // Check if getConnectionDocId returned an invalid ID
+  if (connectionId.startsWith("INVALID_CONNECTION_ID")) { 
     console.error(`%c[connectionService] sendConnectionRequest - ERROR: Could not generate valid connectionId. Aborting.`, "color: red; font-weight:bold;");
     throw new Error("Failed to generate valid connection ID for request.");
   }
@@ -80,13 +79,16 @@ export const sendConnectionRequest = async (requesterId: string, recipientId: st
     requesterId: requesterId,
     requestedAt: serverTimestamp() as Timestamp,
   };
-
-  console.log(`%c[connectionService] sendConnectionRequest - Rule Check Values (Client-Side Simulation):
-    1. request.auth != null:                            ${!!clientAuthUid}
-    2. request.resource.data.requesterId == request.auth.uid: ${newConnectionData.requesterId === clientAuthUid} (Actual: '${newConnectionData.requesterId}' vs '${clientAuthUid}')
-    3. request.resource.data.userIds.hasAll([request.auth.uid]): ${newConnectionData.userIds.includes(clientAuthUid ?? '')} (Actual: '${newConnectionData.userIds.join(', ')}' contains '${clientAuthUid}')
-  `, "color: green; font-weight:bold;");
-  console.log(`%c[connectionService] Attempting to write to Firestore. Path: mutuals/${connectionId}. Data:`, "color: darkorange;", newConnectionData);
+  
+  console.log(`%c[connectionService] sendConnectionRequest - Pre-check:`, "color: blue;");
+  console.log(`  Param requesterId:               '${requesterId}'`);
+  console.log(`  Param recipientId:               '${recipientId}'`);
+  console.log(`  Client auth.currentUser?.uid:    '${clientAuthUid || 'NULL'}'`);
+  console.log(`  Generated connectionId:          '${connectionId}'`);
+  console.log(`%c[connectionService] sendConnectionRequest - Rule Check Values:`, "color: green;");
+  console.log(`  1. request.auth != null:                            ${!!clientAuthUid}`);
+  console.log(`  2. request.resource.data.requesterId == request.auth.uid: ${newConnectionData.requesterId === clientAuthUid} (Data: '${newConnectionData.requesterId}', Auth: '${clientAuthUid}')`);
+  console.log(`  3. request.resource.data.userIds.hasAll([request.auth.uid]): ${newConnectionData.userIds.includes(clientAuthUid ?? '')} (Data: [${newConnectionData.userIds.join(', ')}], Auth: '${clientAuthUid}')`);
 
 
   try {
@@ -106,11 +108,12 @@ export const sendConnectionRequest = async (requesterId: string, recipientId: st
       }
     }
     
-    if (!auth.currentUser) { // Final check
+    if (!auth.currentUser) { 
       const errorMsg = "User authentication lost immediately before Firestore write. Aborting.";
       console.error(`%c[connectionService] sendConnectionRequest - FATAL ERROR: ${errorMsg}`, "color: red; font-weight:bold;");
       throw new Error(errorMsg);
     }
+    console.log(`%c[connectionService] Final auth check passed. Attempting to write to Firestore. Path: mutuals/${connectionId}. Data:`, "color: darkorange;", newConnectionData);
 
     await setDoc(connectionDocRef, newConnectionData);
     console.log(`[connectionService] Connection request sent successfully: ${connectionId}`);
@@ -188,9 +191,8 @@ export const removeConnection = async (connectionId: string, userId: string): Pr
 
 // --- Get Connection Status Between Two Users ---
 export const getConnectionStatus = async (userId1: string, userId2: string): Promise<ConnectionStatus | null> => {
-  console.log(`%c[connectionService] getConnectionStatus - Called for userId1: '${userId1}', userId2: '${userId2}'`, "color: teal;");
   const currentClientAuthUid = auth.currentUser?.uid;
-  console.log(`%c  getConnectionStatus - Current client auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: teal;");
+  console.log(`%c[connectionService] getConnectionStatus - Called for userId1: '${userId1}', userId2: '${userId2}'. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: teal;");
 
   if (!userId1 || !userId2) {
     console.warn("[connectionService] getConnectionStatus: userId1 or userId2 is undefined/empty.");
@@ -205,12 +207,13 @@ export const getConnectionStatus = async (userId1: string, userId2: string): Pro
 
   const connectionId = getConnectionDocId(userId1, userId2);
   if (connectionId.startsWith("INVALID_CONNECTION_ID")) {
-      console.error(`%c[connectionService] getConnectionStatus - ERROR: Could not generate valid connectionId due to invalid input UIDs. Aborting.`, "color: red; font-weight:bold;");
-      return 'not_connected'; // Or null, to indicate an error state
+      console.error(`%c[connectionService] getConnectionStatus - ERROR: Could not generate valid connectionId due to invalid input UIDs ('${userId1}', '${userId2}'). Aborting.`, "color: red; font-weight:bold;");
+      return 'not_connected'; 
   }
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
 
   try {
+    console.log(`%c[connectionService] getConnectionStatus: Attempting to getDoc for 'mutuals/${connectionId}'`, "color: darkorange;");
     const docSnap = await getDoc(connectionDocRef);
     if (!docSnap.exists()) {
       console.log(`[connectionService] getConnectionStatus: No document found for connectionId '${connectionId}'. Returning 'not_connected'.`);
@@ -223,14 +226,15 @@ export const getConnectionStatus = async (userId1: string, userId2: string): Pro
     }
     if (data.status === 'connected') return 'connected';
     if (data.status === 'pending') return data.requesterId === userId1 ? 'pending_sent' : 'pending_received';
-    if (data.status === 'blocked') return 'blocked';
+    if (data.status === 'blocked') return 'blocked'; // Assuming 'blocked' is a possible status
+    console.warn(`[connectionService] getConnectionStatus: Document for '${connectionId}' has an unexpected status: '${data.status}'. Returning 'not_connected'.`);
     return 'not_connected';
   } catch (error: any) {
     console.error(`[connectionService] Error fetching connection status between ${userId1} and ${userId2} (ID: ${connectionId}):`, error);
     if (error.code === 'permission-denied') {
-       console.error(`  PERMISSION_DENIED for reading mutuals/${connectionId}. Client auth UID: '${currentClientAuthUid || 'NULL'}'`);
+       console.error(`  PERMISSION_DENIED for reading mutuals/${connectionId}. Client auth UID: '${currentClientAuthUid || 'NULL'}'. Rule expects 'userIds' in doc to contain this UID if doc exists.`);
     }
-    return null;
+    return null; // Indicate an error occurred during fetch
   }
 };
 
@@ -239,11 +243,12 @@ const fetchUserProfileBasic = async (userId: string): Promise<UserProfileBasic |
   const clientAuthUid = auth.currentUser?.uid;
   console.log(`%c[connectionService] fetchUserProfileBasic: Fetching for targetUserId: '${userId}'. Current clientAuthUid: '${clientAuthUid || 'NULL'}'`, "color: teal;");
 
-  if (!userId) {
-    console.warn(`%c[connectionService] fetchUserProfileBasic: Attempted to fetch profile with empty userId.`, "color: orange;");
-    return null;
+  if (!userId || !IS_UID_REGEX_SERVICE.test(userId)) { // Also check if userId looks like a UID
+    console.warn(`%c[connectionService] fetchUserProfileBasic: Attempted to fetch profile with invalid or empty userId: '${userId}'.`, "color: orange;");
+    return { userId: userId, displayName: generateAnonymousName(userId || "unknown") }; // Return generated for invalid ID too
   }
-  if (!clientAuthUid && userId !== clientAuthUid) { // More precise warning
+
+  if (!clientAuthUid && userId !== clientAuthUid) { 
     console.warn(`%c[connectionService] fetchUserProfileBasic: No authenticated user (clientAuthUid is NULL) when trying to fetch profile for OTHERS ('${userId}'). Public profile reads might be restricted by rules.`, "color: orange; font-weight:bold;");
   }
 
@@ -268,15 +273,15 @@ const fetchUserProfileBasic = async (userId: string): Promise<UserProfileBasic |
     if (error.code === 'permission-denied') {
       console.error(`%c  PERMISSION DENIED specifically for reading 'users/${userId}'. Ensure rules allow reads for authenticated users. Current client auth state was: '${clientAuthUid || 'NULL'}'`, "color: red; font-weight: bold;");
     }
-    return { userId: userId, displayName: generateAnonymousName(userId) };
+    return { userId: userId, displayName: generateAnonymousName(userId) }; // Fallback on error
   }
 };
 
 // --- Get Pending Connection Requests Received by User ---
 export const getPendingRequests = async (userId: string): Promise<ConnectionRequest[]> => {
   console.log(`[connectionService] Fetching pending requests for user: ${userId}`);
-  if (!userId) {
-    console.warn("[connectionService] getPendingRequests called with invalid userId.");
+  if (!userId || !IS_UID_REGEX_SERVICE.test(userId)) {
+    console.warn(`[connectionService] getPendingRequests called with invalid userId: '${userId}'.`);
     return [];
   }
   try {
@@ -329,8 +334,8 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
 // --- Get List of Connected Users (Mutuals) ---
 export const getConnections = async (userId: string): Promise<Connection[]> => {
   console.log(`[connectionService] Fetching connections for user: ${userId}`);
-  if (!userId) {
-    console.warn("[connectionService] getConnections called with invalid userId.");
+  if (!userId || !IS_UID_REGEX_SERVICE.test(userId)) {
+    console.warn(`[connectionService] getConnections called with invalid userId: '${userId}'.`);
     return [];
   }
   try {
@@ -379,14 +384,14 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
 
 // --- Get Basic User Profile Info (callable directly) ---
 export const getUserProfileBasic = async (userId: string): Promise<UserProfileBasic | null> => {
-  return fetchUserProfileBasic(userId);
+  return fetchUserProfileBasic(userId); // fetchUserProfileBasic already handles invalid UIDs internally
 };
 
 // --- Initialize User Profile Document ---
 export const initializeUserProfile = async (userData: UserProfileData): Promise<void> => {
   console.log(`%c[connectionService] initializeUserProfile: Called with incomingUserData:`, "color: orange", userData);
-  if (!userData || !userData.uid) {
-    console.error('%c[connectionService] initializeUserProfile: ERROR - UID is missing in userData. Aborting.', "color: red; font-weight:bold;");
+  if (!userData || !userData.uid || !IS_UID_REGEX_SERVICE.test(userData.uid)) {
+    console.error('%c[connectionService] initializeUserProfile: ERROR - UID is missing or invalid in userData. Aborting.', "color: red; font-weight:bold;", userData);
     return;
   }
 
@@ -400,19 +405,11 @@ export const initializeUserProfile = async (userData: UserProfileData): Promise<
     };
 
     if (userData.email !== undefined) dataToWrite.email = userData.email;
-    // Ensure avatarUrl is only set if photoURL is a non-empty string
     if (userData.photoURL && typeof userData.photoURL === 'string' && userData.photoURL.trim() !== '') {
         dataToWrite.avatarUrl = userData.photoURL;
-    } else if (userData.photoURL === null && docSnap.exists() && docSnap.data()?.avatarUrl) {
-        // If Google provides null and an avatarUrl already exists, we might want to keep the existing one
-        // or explicitly set it to null if the intent is to remove it. For now, if photoURL is null,
-        // we don't add avatarUrl to dataToWrite, relying on merge:true to preserve existing or set if new.
-        // If explicitly clearing is needed, pass photoURL: null from auth.ts.
     }
-
-
     if (userData.companyName !== undefined) dataToWrite.companyName = userData.companyName;
-    if (userData.industry !== undefined) dataToWrite.industry = userData.industry;
+    if (userData.industry !== undefined) dataToWrite.industry = userData.industry; // Make sure industry is handled
 
     let finalDisplayName: string | null = null;
     if (userData.displayName && userData.displayName.trim() !== '') {
@@ -433,11 +430,9 @@ export const initializeUserProfile = async (userData: UserProfileData): Promise<
       const existingData = docSnap.data() as UserProfileData;
       if (finalDisplayName) {
         dataToWrite.displayName = finalDisplayName;
-      } else if (!existingData.displayName) { // Only generate if no existing and no new one provided
+      } else if (!existingData.displayName) { 
         dataToWrite.displayName = generateAnonymousName(userData.uid);
       }
-      // For avatarUrl, if dataToWrite.avatarUrl is undefined (because userData.photoURL was null/empty),
-      // merge:true will preserve the existing avatarUrl. If userData.photoURL was a valid string, it will be updated.
       console.log(`%c[connectionService] Data to merge (UPDATE) for UID ${userData.uid}:`, "color: blue;", dataToWrite);
       await setDoc(userDocRef, dataToWrite, { merge: true });
       console.log(`%c[connectionService] User profile UPDATED successfully for UID ${userData.uid}.`, "color: blue; font-weight:bold;");
@@ -453,19 +448,23 @@ export const initializeUserProfile = async (userData: UserProfileData): Promise<
 
 // --- Fetch Suggestible Users (for @mentions) ---
 export const getSuggestibleUsers = async (searchPrefix?: string, limitCount: number = 10): Promise<UserProfileBasic[]> => {
-  console.log(`[connectionService] getSuggestibleUsers called. Prefix: '${searchPrefix}', Limit: ${limitCount}`);
+  const trimmedPrefix = searchPrefix?.trim().toLowerCase(); // Ensure lowercase for case-insensitive search (if supported by your strategy)
+  console.log(`[connectionService] getSuggestibleUsers called. Prefix: '${trimmedPrefix}', Limit: ${limitCount}`);
+
   try {
     const constraints: QueryConstraint[] = [];
-    const trimmedPrefix = searchPrefix?.trim();
 
     if (trimmedPrefix) {
-      // Firestore "starts-with" query
+      // Firestore "starts-with" query for case-insensitive search needs a trick:
+      // Add a second field, e.g., 'displayName_lowercase', that stores the lowercase version
+      // OR fetch a broader range and filter client-side (less ideal for many users)
+      // For simplicity here, sticking to case-sensitive starts-with on 'displayName'.
+      // If you need true case-insensitive search, you must store a lowercase version of the field.
       constraints.push(where('displayName', '>=', trimmedPrefix));
       constraints.push(where('displayName', '<=', trimmedPrefix + '\uf8ff'));
-      constraints.push(orderBy('displayName')); // Order by the field being queried
-    } else {
-      // If no prefix, just get some users ordered by displayName
       constraints.push(orderBy('displayName'));
+    } else {
+      constraints.push(orderBy('displayName')); // Default order if no prefix
     }
     constraints.push(limit(limitCount));
 
@@ -480,7 +479,7 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCount: num
         avatarUrl: data.avatarUrl || data.photoURL || undefined,
       } as UserProfileBasic;
     });
-    console.log(`[connectionService] getSuggestibleUsers: Found ${users.length} users for prefix "${searchPrefix || ''}".`);
+    console.log(`[connectionService] getSuggestibleUsers: Found ${users.length} users for prefix "${trimmedPrefix || ''}".`);
     return users;
   } catch (error: any) {
     console.error('[connectionService] Error fetching suggestible users:', error);
