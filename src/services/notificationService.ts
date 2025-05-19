@@ -29,56 +29,62 @@ export const createNotification = async (notificationData: NewNotificationData):
   console.log('%c[notificationService] createNotification: Called with data:', "color: purple;", JSON.stringify(notificationData, null, 2));
   console.log(`%c  Current auth UID: ${currentUserUid || 'NULL'}, Recipient: ${recipientId}, Sender: ${senderId}`, "color: purple;");
 
-
   if (!recipientId || !senderId || !notificationData.type) {
     console.error('%c[notificationService] createNotification: Missing required fields (userId, senderId, type). Data:', "color: red;", notificationData);
     throw new Error('User ID, Sender ID, and Type are required to create a notification.');
   }
 
-  let preferences: UserPreference | null = null;
+  // Handle preferences only if the notification is for the current user
   if (currentUserUid === recipientId) {
-      console.log(`%c[notificationService] createNotification: Attempting to fetch preferences for self (${recipientId}) because currentUserUid === recipientId.`, "color: cadetblue;");
-      try {
-          preferences = await getUserPreferences(recipientId);
-          console.log(`%c[notificationService] createNotification: Preferences for self (${recipientId}):`, "color: cadetblue;", preferences);
-      } catch (prefError) {
-          console.error(`%c[notificationService] createNotification: Error fetching preferences for self (${recipientId}), proceeding with notification. Error:`, "color: orange;", prefError);
+    let preferences: UserPreference | null = null;
+    try {
+      console.log(`%c[notificationService] Attempting to fetch preferences for self (${recipientId})...`, "color: cadetblue;");
+      preferences = await getUserPreferences(recipientId);
+      console.log(`%c[notificationService] Preferences for self (${recipientId}):`, "color: cadetblue;", preferences);
+    } catch (prefError) {
+      console.error(`%c[notificationService] Error fetching preferences for self (${recipientId}). Notification will NOT be created for self. Error:`, "color: orange;", prefError);
+      return null; // Don't create self-notification if preferences can't be determined
+    }
+
+    // If preferences were fetched successfully (not null)
+    if (preferences) {
+      if (notificationData.type === 'new_message' && preferences.notifyOnNewMessage === false) {
+        console.log(`%c[notificationService] Self-notification: User ${recipientId} has 'new_message' OFF. Skipping.`, "color: orange;");
+        return null;
       }
+      if (notificationData.type === 'reply' && preferences.notifyOnReply === false) {
+        console.log(`%c[notificationService] Self-notification: User ${recipientId} has 'reply' OFF. Skipping.`, "color: orange;");
+        return null;
+      }
+      if (notificationData.type === 'mention' && preferences.notifyOnMention === false) {
+        console.log(`%c[notificationService] Self-notification: User ${recipientId} has 'mention' OFF. Skipping.`, "color: orange;");
+        return null;
+      }
+      if (notificationData.type === 'connection_request' && preferences.notifyOnNewConnectionRequest === false) {
+         console.log(`%c[notificationService] Self-notification: User ${recipientId} has 'connection_request' OFF. Skipping.`, "color: orange;");
+         return null;
+      }
+      if (notificationData.type === 'connection_accepted' && preferences.notifyOnConnectionAccepted === false) {
+         console.log(`%c[notificationService] Self-notification: User ${recipientId} has 'connection_accepted' OFF. Skipping.`, "color: orange;");
+         return null;
+      }
+    } else {
+      // Preferences object is null, meaning an error occurred fetching preferences for self.
+      // Err on the side of caution and don't send self-notifications.
+      console.log(`%c[notificationService] Self-notification: Preferences object is null for ${recipientId} (likely due to fetch error). Skipping self-notification.`, "color: orange;");
+      return null;
+    }
   } else {
-      console.log(`%c[notificationService] createNotification: Skipping recipient preference check from sender's client. Recipient: ${recipientId}, CurrentUser (Sender): ${currentUserUid}`, "color: orange;");
-      // preferences remains null for notifications TO OTHERS, which is correct for the logic below
+    console.log(`%c[notificationService] Notification for other user. Recipient: ${recipientId}, Sender: ${currentUserUid}. Recipient preference check skipped by sender.`, "color: lightblue;");
+    // Proceed to create notification for other users without checking their prefs from sender's client.
   }
-
-  // Check preferences IF they were fetched (i.e., if recipient is self)
-  // If preferences is null (because recipient is not self), these checks will effectively pass, and the notification will be created.
-  if (notificationData.type === 'reply' && (preferences?.notifyOnReply === false)) {
-    console.log(`%c[notificationService] User ${recipientId} (self) has disabled 'reply' notifications. Skipping.`, "color: orange;");
-    return null;
-  }
-  if (notificationData.type === 'mention' && (preferences?.notifyOnMention === false)) {
-    console.log(`%c[notificationService] User ${recipientId} (self) has disabled 'mention' notifications. Skipping.`, "color: orange;");
-    return null;
-  }
-  if (notificationData.type === 'new_connection_request' && (preferences?.notifyOnNewConnectionRequest === false)) {
-    console.log(`%c[notificationService] User ${recipientId} (self) has disabled 'new_connection_request' notifications. Skipping.`, "color: orange;");
-    return null;
-  }
-  if (notificationData.type === 'connection_accepted' && (preferences?.notifyOnConnectionAccepted === false)) {
-    console.log(`%c[notificationService] User ${recipientId} (self) has disabled 'connection_accepted' notifications. Skipping.`, "color: orange;");
-    return null;
-  }
-  if (notificationData.type === 'new_message' && (preferences?.notifyOnNewMessage === false)) {
-    console.log(`%c[notificationService] User ${recipientId} (self) has disabled 'new_message' notifications. Skipping.`, "color: orange;");
-    return null;
-  }
-
 
   let senderProfile = null;
   try {
     senderProfile = await fetchUserProfileBasic(senderId);
     console.log('%c[notificationService] createNotification: Fetched senderProfile for senderId', "color: #20B2AA;", senderId, ':', JSON.stringify(senderProfile, null, 2));
   } catch (profileError) {
-    console.error(`%c[notificationService] createNotification: Failed to fetch sender profile for ${senderId}. Proceeding without sender details. Error:`, "color: orange;", profileError);
+    console.error(`%c[notificationService] createNotification: Failed to fetch sender profile for ${senderId}. Proceeding with generated name. Error:`, "color: orange;", profileError);
   }
 
   const fullNotificationData: Omit<Notification, 'id'> = {
@@ -86,7 +92,7 @@ export const createNotification = async (notificationData: NewNotificationData):
     type: notificationData.type,
     senderId: senderId,
     senderName: senderProfile?.displayName || generateAnonymousName(senderId),
-    senderAvatar: senderProfile?.avatarUrl || null,
+    senderAvatar: senderProfile?.avatarUrl || null, // Ensure null if undefined
     postId: notificationData.postId || null,
     postQuestion: notificationData.postQuestion || null,
     commentId: notificationData.commentId || null,
