@@ -27,7 +27,7 @@ export interface MutualConnection {
 export interface ConnectionRequest {
     connectionId: string;
     requesterId: string;
-    requesterDisplayName: string; // This will be the best available "real" name or generated if none.
+    requesterDisplayName: string; 
     requesterAvatarUrl?: string;
     requestedAt: number;
 }
@@ -37,7 +37,7 @@ export interface ConnectionRequest {
 export interface Connection {
     connectionId: string;
     otherUserId: string;
-    otherUserDisplayName: string; // This will be the best available "real" name or generated if none.
+    otherUserDisplayName: string; 
     otherUserAvatarUrl?: string;
     connectedAt: number;
 }
@@ -45,9 +45,10 @@ export interface Connection {
 // Basic user profile information used in connection lists/requests AND for @mention suggestions
 export interface UserProfileBasic {
     userId: string;
-    displayName: string; // User's actualDisplayName or companyName or generatedAnonymousName (for general display)
-    mentionName: string; // The generated "ColorAnimalNumber" name, always used for @mention text
-    companyName?: string; // Optional: for display in suggestion popover if available
+    displayName: string;        // User's actualDisplayName or companyName (for general display in suggestions)
+    mentionName: string;        // The generated "ColorAnimalNumber" name, always used for @mention text and filtering
+    companyName?: string;       // Optional: for display context in suggestion popover
+    actualDisplayName?: string; // Optional: for display context
     avatarUrl?: string;
 }
 
@@ -55,19 +56,22 @@ export interface UserProfileBasic {
 export interface UserProfileData {
     uid: string;
     email?: string;
-    actualDisplayName?: string; // User's preferred display name (e.g., real name)
+    actualDisplayName?: string;         // User's preferred display name (e.g., real name)
     companyName?: string;
-    generatedAnonymousName?: string; // The "ColorAnimalNumber" name
+    generatedAnonymousName?: string;    // The "ColorAnimalNumber" name (legacy, prefer mentionName)
+    mentionName?: string;               // The "ColorAnimalNumber" name, canonical for @mentions
+    displayName?: string;               // General display name, fallback to generatedAnonymousName if others are not set
     industry?: string;
     avatarUrl?: string | null;
-    photoURL?: string | null; // From Firebase Auth, can be synced to avatarUrl
+    photoURL?: string | null;           // From Firebase Auth, can be synced to avatarUrl
     description?: string;
     tags?: string[];
     location?: string;
-    established?: string; // Or Date
+    established?: string; 
     contactEmail?: string;
     contactPhone?: string;
     verified?: boolean;
+    actualDisplayNameVisibility?: VisibilitySetting; // New visibility setting
     companyNameVisibility?: VisibilitySetting;
     industryVisibility?: VisibilitySetting;
     descriptionVisibility?: VisibilitySetting;
