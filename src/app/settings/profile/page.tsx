@@ -26,19 +26,23 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { detailedSectorsData } from '@/components/layout/MainLayout';
 import { updateUserProfileDetails, fetchFullUserProfile } from '@/services/connectionService';
 import type { UserProfileData, VisibilitySetting } from '@/types/connection';
-import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Import generateAnonymousName
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { uploadPostImage } from '@/services/storageService'; // Assuming this is the correct path for image uploads
 
 const MAX_FILE_SIZE_MB = 1;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 const getInitials = (name: string | undefined | null): string => {
     if (!name) return '?';
-    // Use a simple first-letter initial for generated names or fallback for other names
-    const generatedNamePattern = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
-    if (generatedNamePattern.test(name)) {
-        return name.charAt(0).toUpperCase();
+    const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
+    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
+    if (pseudonymRegex.test(nameToProcess)) {
+        const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
+        if (match && match[1] && match[2]) return match[1] + match[2];
+        if (match && match[1]) return match[1];
     }
-    const names = name.split(' ');
+    const names = nameToProcess.split(' ').filter(Boolean);
+    if (names.length === 0) return '?';
     if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
     return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
 };
@@ -46,7 +50,7 @@ const getInitials = (name: string | undefined | null): string => {
 const visibilityOptions: { value: VisibilitySetting; label: string }[] = [
   { value: 'everyone', label: 'Everyone' },
   { value: 'connected', label: 'Connected Users Only' },
-  { value: 'only_me', label: 'Only Me' },
+  { value: 'only_me', label: 'Only Me (Private)' },
 ];
 
 const ProfileSettingsPage = () => {
@@ -54,13 +58,13 @@ const ProfileSettingsPage = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [actualDisplayName, setActualDisplayName] = useState('');
-  const [companyName, setCompanyName] = useState('');
+  // State for fields that are still editable
   const [industry, setIndustry] = useState('');
   const [description, setDescription] = useState('');
   const [currentAvatarUrl, setCurrentAvatarUrl] = useState<string | null>(null);
 
-  const [actualDisplayNameVisibility, setActualDisplayNameVisibility] = useState<VisibilitySetting>('everyone'); // Placeholder, not yet used
+  // State for visibility settings (these remain)
+  const [actualDisplayNameVisibility, setActualDisplayNameVisibility] = useState<VisibilitySetting>('everyone');
   const [companyNameVisibility, setCompanyNameVisibility] = useState<VisibilitySetting>('everyone');
   const [industryVisibility, setIndustryVisibility] = useState<VisibilitySetting>('everyone');
   const [descriptionVisibility, setDescriptionVisibility] = useState<VisibilitySetting>('everyone');
@@ -75,6 +79,11 @@ const ProfileSettingsPage = () => {
   const [isCompressing, setIsCompressing] = useState(false);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
 
+  // Data fetched from Firestore to display (read-only for name fields)
+  const [fetchedActualDisplayName, setFetchedActualDisplayName] = useState('');
+  const [fetchedCompanyName, setFetchedCompanyName] = useState('');
+
+
   const availableIndustries = detailedSectorsData.map(sector => sector.name);
 
   useEffect(() => {
@@ -87,27 +96,26 @@ const ProfileSettingsPage = () => {
         setIsFetchingProfile(true);
         console.log("[ProfileSettingsPage] Fetching profile for user:", user.uid);
         try {
-          // Fetch the full profile data including visibility settings
           const fullProfileData = await fetchFullUserProfile(user.uid);
 
           if (fullProfileData) {
-            setActualDisplayName(fullProfileData.actualDisplayName || '');
-            setCompanyName(fullProfileData.companyName || '');
+            setFetchedActualDisplayName(fullProfileData.actualDisplayName || 'N/A');
+            setFetchedCompanyName(fullProfileData.companyName || 'N/A');
             setIndustry(fullProfileData.industry || '');
             setDescription(fullProfileData.description || '');
-            setCurrentAvatarUrl(fullProfileData.avatarUrl || null); // Use avatarUrl from Firestore
+            setCurrentAvatarUrl(fullProfileData.avatarUrl || null);
             setPreviewUrl(fullProfileData.avatarUrl || null);
 
+            setActualDisplayNameVisibility(fullProfileData.actualDisplayNameVisibility || 'everyone');
             setCompanyNameVisibility(fullProfileData.companyNameVisibility || 'everyone');
             setIndustryVisibility(fullProfileData.industryVisibility || 'everyone');
             setDescriptionVisibility(fullProfileData.descriptionVisibility || 'everyone');
             setAvatarVisibility(fullProfileData.avatarVisibility || 'everyone');
-            // Note: actualDisplayNameVisibility not set here, but you can add if needed
-
             console.log("[ProfileSettingsPage] Full profile data loaded:", fullProfileData);
           } else {
-             // Fallback if no Firestore doc (should be rare after signup process from initializeUserProfile)
-             setCompanyName(user.displayName || ''); // Use auth.displayName as a last resort
+             // Fallback for display if no Firestore doc
+             setFetchedActualDisplayName(user.displayName || 'N/A');
+             setFetchedCompanyName('N/A');
              setCurrentAvatarUrl(user.photoURL || null);
              setPreviewUrl(user.photoURL || null);
              console.warn("[ProfileSettingsPage] No full profile document found, using auth fallbacks and default visibilities.");
@@ -124,12 +132,13 @@ const ProfileSettingsPage = () => {
         }
       } else if (!user && !authLoading) {
          console.log("[ProfileSettingsPage] No user and auth not loading. Clearing fields.");
-         setActualDisplayName('');
-         setCompanyName('');
+         setFetchedActualDisplayName('N/A');
+         setFetchedCompanyName('N/A');
          setIndustry('');
          setDescription('');
          setCurrentAvatarUrl(null);
          setPreviewUrl(null);
+         setActualDisplayNameVisibility('everyone');
          setCompanyNameVisibility('everyone');
          setIndustryVisibility('everyone');
          setDescriptionVisibility('everyone');
@@ -138,7 +147,7 @@ const ProfileSettingsPage = () => {
       }
     };
     fetchProfile();
-   }, [user, authLoading, toast]); // isFetchingProfile removed to prevent loops
+   }, [user, authLoading, toast]);
 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -202,26 +211,26 @@ const ProfileSettingsPage = () => {
 
     try {
         if (selectedFile) {
+            // Use your existing uploadPostImage or a similar function adapted for avatars
+            // Ensure uploadPostImage is correctly imported and working
             newAvatarUrl = await uploadPostImage(selectedFile, user.uid);
         }
 
-        // Prepare data for Firestore update
         const profileDataToUpdate: Partial<UserProfileData> = {
-            actualDisplayName: actualDisplayName || null, // Send null if empty to clear
-            companyName: companyName || null, // Send null if empty to clear
+            // actualDisplayName and companyName are no longer updated from this form
             industry: industry || null,
             description: description || null,
-            avatarUrl: newAvatarUrl, // This could be the old one, a new one, or null if cleared
+            avatarUrl: newAvatarUrl,
+            actualDisplayNameVisibility,
             companyNameVisibility,
             industryVisibility,
             descriptionVisibility,
             avatarVisibility,
-            // generatedAnonymousName is managed by initializeUserProfile, not directly set here
         };
 
         await updateUserProfileDetails(user.uid, profileDataToUpdate);
 
-        setCurrentAvatarUrl(newAvatarUrl);
+        setCurrentAvatarUrl(newAvatarUrl); // Update local state after successful upload
         setSelectedFile(null);
         setOriginalFile(null);
 
@@ -250,7 +259,7 @@ const ProfileSettingsPage = () => {
           </Card>
       );
   }
-  if (isFetchingProfile && !authLoading) { // Only show this if auth is done but profile is fetching
+  if (isFetchingProfile && !authLoading) {
       return (
           <Card>
               <CardHeader><CardTitle>Profile Settings</CardTitle><CardDescription>Manage your public business profile.</CardDescription></CardHeader>
@@ -288,8 +297,9 @@ const ProfileSettingsPage = () => {
     </Select>
   );
 
-  const displayInitialName = actualDisplayName || companyName || (user ? generateAnonymousName(user.uid) : 'User');
-
+  const displayInitialNameForAvatar = fetchedActualDisplayName !== 'N/A' 
+    ? fetchedActualDisplayName 
+    : (fetchedCompanyName !== 'N/A' ? fetchedCompanyName : (user ? generateAnonymousName(user.uid) : 'User'));
 
   return (
     <Card className="shadow-md border-border">
@@ -303,9 +313,9 @@ const ProfileSettingsPage = () => {
                <Label>Company Logo / Avatar</Label>
                <div className="flex items-center gap-4">
                    <Avatar className="h-20 w-20 border">
-                        <AvatarImage src={previewUrl ?? undefined} alt={displayInitialName} />
+                        <AvatarImage src={previewUrl ?? undefined} alt={displayInitialNameForAvatar} />
                         <AvatarFallback className="bg-muted text-muted-foreground text-xl">
-                            {previewUrl ? <User className="h-10 w-10" /> : getInitials(displayInitialName)}
+                            {previewUrl ? <User className="h-10 w-10" /> : getInitials(displayInitialNameForAvatar)}
                         </AvatarFallback>
                    </Avatar>
                    <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, image/gif" style={{ display: 'none' }} disabled={isSubmitting || isCompressing} />
@@ -322,19 +332,20 @@ const ProfileSettingsPage = () => {
 
             <div className="space-y-2">
                 <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-2">
-                    <Label htmlFor="actualDisplayName" className="flex-grow">Your Display Name (Optional)</Label>
-                    {/* Placeholder for actualDisplayNameVisibility if needed later */}
+                    <Label htmlFor="actualDisplayNameDisplay" className="flex-grow">Your Display Name</Label>
+                    {renderVisibilitySelect(actualDisplayNameVisibility, setActualDisplayNameVisibility, 'actualDisplayName')}
                 </div>
-                <Input id="actualDisplayName" value={actualDisplayName} onChange={(e) => setActualDisplayName(e.target.value)} placeholder="e.g., John Doe or Marketing Team" disabled={isSubmitting} />
-                <p className="text-xs text-muted-foreground">This can be your name or team name. If blank, Company Name or your anonymous name will be used.</p>
+                <Input id="actualDisplayNameDisplay" value={fetchedActualDisplayName} disabled={true} className="bg-muted/50" />
+                <p className="text-xs text-muted-foreground">This name is set via your sign-up method (e.g., Google name or company name during email sign-up) or generated if none was provided. It's not directly editable here.</p>
             </div>
 
           <div className="space-y-2">
             <div className="flex flex-col sm:flex-row justify-between sm:items-end gap-2">
-                <Label htmlFor="companyName" className="flex-grow">Company Name</Label>
+                <Label htmlFor="companyNameDisplay" className="flex-grow">Company Name</Label>
                 {renderVisibilitySelect(companyNameVisibility, setCompanyNameVisibility, 'companyName')}
             </div>
-            <Input id="companyName" value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Your Company Inc." disabled={isSubmitting} />
+            <Input id="companyNameDisplay" value={fetchedCompanyName} disabled={true} className="bg-muted/50" />
+            <p className="text-xs text-muted-foreground">Your company name is set during sign-up (for email/password accounts). It's not directly editable here.</p>
           </div>
 
           <div className="space-y-2">
@@ -374,7 +385,7 @@ const ProfileSettingsPage = () => {
                 <AlertDialogHeader>
                     <AlertDialogTitle>Image Too Large</AlertDialogTitle>
                     <AlertDialogDescription>
-                         The selected image exceeds {MAX_FILE_SIZE_MB}MB ({(originalFile?.size ? originalFile.size / 1024 / 1024 : 0).toFixed(2)}MB).
+                         The selected image exceeds {MAX_FILE_SIZE_MB}MB ({(originalFile?.size ? originalFile.size / (1024*1024) : 0).toFixed(2)}MB).
                          Would you like to compress it to fit? Compression may slightly reduce quality.
                     </AlertDialogDescription>
                 </AlertDialogHeader>
