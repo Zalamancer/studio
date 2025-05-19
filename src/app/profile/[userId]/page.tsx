@@ -15,8 +15,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnectionStatus, generateAnonymousName } from '@/services/connectionService'; // Added generateAnonymousName
-import type { ConnectionStatus } from '@/types/connection';
+import { getConnectionStatus, getUserProfileBasic } from '@/services/connectionService';
+import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Corrected import path
+import type { ConnectionStatus, UserProfileBasic } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
 import { addReview, getReviewsForProfile, updateReview, deleteReview } from '@/services/reviewService';
@@ -30,34 +31,11 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger, // Added AlertDialogTrigger
+  AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 
 // Regex to check if a string looks like a Firebase UID (alphanumeric, typically 28 chars, but let's go with 20+ for safety)
 const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
-
-
-// Placeholder function to get user data (replace with actual data fetching)
-// This is now primarily for fallback if Firestore profile is missing
-const getBusinessProfileData = (userId: string) => {
-  console.log(`[BusinessProfilePage] getBusinessProfileData: Generating fallback profile data for userId: ${userId}`);
-  return {
-    companyName: generateAnonymousName(userId), // Use generated name as default
-    industry: "Not specified",
-    location: "Location not set",
-    established: "Year not set",
-    description: "This user has not set up their detailed business profile yet.",
-    avatarUrl: `https://picsum.photos/seed/${userId}/100`, // Consistent placeholder based on UID
-    contactEmail: `contact@${generateAnonymousName(userId).toLowerCase()}.anon`, // Fallback
-    contactPhone: "Not available",
-    verified: false,
-    tags: ["General"],
-    userId: userId, // Important to include the userId here
-    averageRating: 0, // Initialize with 0
-    ratingCount: 0,   // Initialize with 0
-    reviews: [],      // Initialize with empty array
-  };
-};
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
@@ -109,37 +87,34 @@ const BusinessProfilePage = () => {
 
   const profileUserId = profileUserIdFromParams;
 
-  const { data: fetchedProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileBasic | null, Error>({
+  useEffect(() => {
+    // If the profileUserId from params is not a valid UID format, don't attempt to load profile.
+    // The rendering logic below will handle showing an "Invalid Profile" message.
+    if (profileUserId && !isProfileIdActuallyValidUid) {
+      console.warn(`[BusinessProfilePage] Invalid UID in URL: ${profileUserId}. Profile will not be loaded.`);
+    }
+  }, [profileUserId, isProfileIdActuallyValidUid]);
+
+
+  const { data: profileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileBasic | null, Error>({
     queryKey: ['userProfile', profileUserId],
     queryFn: async () => {
       console.log(`[BusinessProfilePage] Fetching profile for user ID: ${profileUserId}`);
-      if (!profileUserId || !isProfileIdActuallyValidUid) {
-        console.warn("[BusinessProfilePage] Invalid or missing profileUserId for fetching.");
+      if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) { // Re-check here for safety
+        console.warn(`[BusinessProfilePage] queryFn for userProfile: Invalid or missing profileUserId ('${profileUserId}'). Returning null.`);
         return null;
       }
-      // This now correctly fetches using the function that returns UserProfileBasic
-      const basicProfile = await generateAnonymousName(profileUserId); // Simulate fetching the basic data
-      // In a real app, this would be: await getUserProfileBasic(profileUserId);
-      // And then you'd fetch more detailed data if needed.
-      // For now, we'll merge with the placeholder
-      const placeholderData = getBusinessProfileData(profileUserId); // Get fallback structure
-      return basicProfile ? { ...placeholderData, ...basicProfile, userId: profileUserId } : placeholderData;
+      const basicProfile = await getUserProfileBasic(profileUserId);
+      return basicProfile || { userId: profileUserId, displayName: generateAnonymousName(profileUserId), avatarUrl: undefined };
     },
-    enabled: !!profileUserId && isProfileIdActuallyValidUid,
+    enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId), // Ensure it only runs for valid-looking UIDs
   });
 
-  const profileData = useMemo(() => {
-    if (!profileUserId || !isProfileIdActuallyValidUid) return null;
-    if (fetchedProfileData) return { ...getBusinessProfileData(profileUserId), ...fetchedProfileData }; // Merge fetched with placeholder for full structure
-    return getBusinessProfileData(profileUserId); // Fallback if fetch hasn't completed or failed
-  }, [profileUserId, isProfileIdActuallyValidUid, fetchedProfileData]);
-
-
-  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && isProfileIdActuallyValidUid && currentUser.uid !== profileUserId;
-  console.log(`[BusinessProfilePage] Connection Status Query Check:
+  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
+  console.log(`[BusinessProfilePage] Connection Status Query Check (Render):
     - currentUser?.uid: ${currentUser?.uid}
     - profileUserId: ${profileUserId}
-    - isProfileIdActuallyValidUid (direct check): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}
+    - isProfileIdValid (regex test): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}
     - currentUser.uid !== profileUserId: ${currentUser && profileUserId ? currentUser.uid !== profileUserId : 'N/A'}
     - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`
   );
@@ -161,25 +136,22 @@ const BusinessProfilePage = () => {
     enabled: connectionStatusQueryEnabled,
   });
 
-  const reviewsQueryEnabled = !!currentUser?.uid && !!profileUserId && isProfileIdActuallyValidUid;
-  console.log(`[BusinessProfilePage] Reviews Query Check:
-    - currentUser?.uid: ${currentUser?.uid}
+  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid;
+  console.log(`%c[BusinessProfilePage] Reviews Query Check:
     - profileUserId: ${profileUserId}
     - isProfileIdActuallyValidUid: ${isProfileIdActuallyValidUid}
-    - FINAL enabled flag for reviews query: ${reviewsQueryEnabled}`
-  );
+    - reviewsQueryEnabled: ${reviewsQueryEnabled}`, "color: mediumorchid");
 
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
     queryFn: () => {
-      console.log(`[BusinessProfilePage] queryFn for reviews: Fetching for profileUserId '${profileUserId}'. Auth user: ${currentUser?.uid}`);
-      if (!profileUserId || !isProfileIdActuallyValidUid) {
-        console.warn("[BusinessProfilePage] queryFn for reviews: profileUserId invalid or missing, returning empty array.");
-        return Promise.resolve([]);
-      }
-      return getReviewsForProfile(profileUserId);
+        if (!profileUserId || !isProfileIdActuallyValidUid) { // Guard the fetch
+          console.warn("[BusinessProfilePage] queryFn for reviews: profileUserId invalid or missing, returning empty array.");
+          return Promise.resolve([]);
+        }
+        return getReviewsForProfile(profileUserId);
     },
-    enabled: reviewsQueryEnabled,
+    enabled: reviewsQueryEnabled, // Use the refined enabled flag
   });
 
   const currentUserReview = useMemo(() => {
@@ -261,13 +233,13 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-  if (profileUserId && !isProfileIdActuallyValidUid) {
+  if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
         <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
         <p className="text-muted-foreground">
-          The user identifier in the URL (<code>{profileUserId}</code>) does not seem to be valid.
+          The user identifier in the URL (<code>{profileUserIdFromParams}</code>) does not seem to be valid.
           Please check the link or try navigating from a valid user link.
         </p>
         <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
@@ -275,7 +247,8 @@ const BusinessProfilePage = () => {
     );
   }
 
-  if (authLoading || isLoadingProfile) {
+
+  if (authLoading || (isLoadingProfile && !profileData)) { // Show loader if auth is loading OR if profile is loading and not yet available
      return (
        <div className="container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -308,7 +281,7 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!profileUserId || !profileData) { 
+  if (!profileUserId || !profileData) {
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -317,7 +290,7 @@ const BusinessProfilePage = () => {
       </div>
     );
   }
-  
+
   if (profileError) {
       return (
           <div className="container mx-auto p-4 text-center">
@@ -329,6 +302,15 @@ const BusinessProfilePage = () => {
   }
 
   const isOwnProfile = currentUser?.uid === profileData.userId;
+  const displayCompanyName = profileData.displayName || generateAnonymousName(profileData.userId);
+  const displayIndustry = profileData.industry || "Not specified";
+  const displayLocation = profileData.location || "Location not set";
+  const displayEstablished = profileData.established || "Year not set";
+  const displayDescription = profileData.description || "No profile description provided.";
+  const displayAvatarUrl = profileData.avatarUrl;
+  const displayContactEmail = profileData.contactEmail || "Email not available";
+  const displayContactPhone = profileData.contactPhone;
+  const displayTags = profileData.tags || ["General"];
 
   return (
     <div className="container mx-auto p-4 md:p-8 max-w-4xl">
@@ -336,17 +318,17 @@ const BusinessProfilePage = () => {
         <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
           <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
             <Avatar className="h-20 w-20 border-2 border-primary">
-              <AvatarImage src={profileData.avatarUrl} alt={profileData.companyName} />
+              <AvatarImage src={displayAvatarUrl} alt={displayCompanyName} />
               <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                {getInitials(profileData.companyName)}
+                {getInitials(displayCompanyName)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-grow text-center md:text-left">
               <CardTitle className="text-3xl font-bold text-foreground">
-                {profileData.companyName}
+                {displayCompanyName}
               </CardTitle>
               <CardDescription className="text-muted-foreground mt-1 flex items-center justify-center md:justify-start gap-1">
-                 <Building className="h-4 w-4" /> {profileData.industry} Industry
+                 <Building className="h-4 w-4" /> {displayIndustry}
                  {profileData.verified && (
                     <span className="ml-2 inline-flex items-center gap-1 text-green-600">
                         <CheckCircle className="h-4 w-4" /> Verified
@@ -354,7 +336,7 @@ const BusinessProfilePage = () => {
                  )}
               </CardDescription>
                <div className="mt-2 flex flex-wrap gap-2 justify-center md:justify-start">
-                  {profileData.tags.map((tag) => (
+                  {displayTags.map((tag) => (
                     <Badge key={tag} variant="secondary">{tag}</Badge>
                   ))}
                 </div>
@@ -375,12 +357,11 @@ const BusinessProfilePage = () => {
                  {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                     <ConnectionButton
                       targetUserId={profileUserId}
-                      targetUserName={profileData.companyName}
+                      targetUserName={displayCompanyName}
                       size="default"
                       className="mt-2 w-full md:w-auto"
                     />
                  )}
-                 {/* Show loading/error state for connection button area */}
                  {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                      <Button disabled size="default" className="mt-2 w-full md:w-auto">
                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
@@ -396,7 +377,7 @@ const BusinessProfilePage = () => {
           <div>
              <h3 className="text-lg font-semibold text-foreground mb-2">About Us</h3>
              <p className="text-muted-foreground text-sm leading-relaxed">
-               {profileData.description}
+               {displayDescription}
              </p>
           </div>
 
@@ -405,22 +386,22 @@ const BusinessProfilePage = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div className="flex items-center gap-2 text-muted-foreground">
                <MapPin className="h-4 w-4 text-primary" />
-               <span>{profileData.location}</span>
+               <span>{displayLocation}</span>
             </div>
             <div className="flex items-center gap-2 text-muted-foreground">
                <CalendarDays className="h-4 w-4 text-primary" />
-               <span>Established: {profileData.established}</span>
+               <span>Established: {displayEstablished}</span>
             </div>
              <div className="flex items-center gap-2 text-muted-foreground">
                <Mail className="h-4 w-4 text-primary" />
-               <a href={`mailto:${profileData.contactEmail}`} className="hover:underline hover:text-primary">
-                 {profileData.contactEmail}
+               <a href={`mailto:${displayContactEmail}`} className="hover:underline hover:text-primary">
+                 {displayContactEmail}
                </a>
             </div>
-            {profileData.contactPhone && (
+            {displayContactPhone && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <Phone className="h-4 w-4 text-primary" />
-                    <span>{profileData.contactPhone}</span>
+                    <span>{displayContactPhone}</span>
                  </div>
              )}
           </div>
@@ -544,9 +525,10 @@ const BusinessProfilePage = () => {
            <Separator />
 
            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {profileData.companyName}</h3>
-              {/* Ensure profileUserId is valid UID before rendering ProfilePostsSection */}
-              {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
+              <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {displayCompanyName}</h3>
+              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (connectionStatus === 'connected' || isOwnProfile) ? (
+                  <ProfilePostsSection userId={profileUserId} />
+              ) : isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="flex items-center justify-center p-6">
                       <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
                       <p className="text-muted-foreground">Checking connection status...</p>
@@ -556,8 +538,6 @@ const BusinessProfilePage = () => {
                       <AlertTriangle className="h-5 w-5" />
                       <p>Could not load connection status.</p>
                    </div>
-              ) : (profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) && (connectionStatus === 'connected' || isOwnProfile) ? (
-                  <ProfilePostsSection userId={profileUserId} />
               ) : profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="text-center p-6 border rounded-lg bg-muted/50">
                      <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
@@ -578,4 +558,3 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
-
