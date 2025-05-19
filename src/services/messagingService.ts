@@ -1,8 +1,7 @@
-
 // src/services/messagingService.ts
 // Client-callable functions
 
-import { db, auth } from '@/lib/firebase/config'; // Import auth for client-side UID check
+import { db, auth } from '@/lib/firebase/config';
 import {
   collection,
   query,
@@ -21,7 +20,7 @@ import {
   writeBatch,
   QueryConstraint,
 } from 'firebase/firestore';
-import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData } from '@/types/messaging';
+import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message } from '@/types/messaging';
 import { getUserProfileBasic } from './connectionService';
 
 const conversationsCollectionRef = collection(db, 'conversations');
@@ -40,6 +39,8 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
     const constraints: QueryConstraint[] = [
         where('participants', 'array-contains', userId),
     ];
+    // Ensure lastMessageTimestamp exists before trying to order by it, or handle nulls appropriately in Firestore if needed
+    // For simplicity, we assume it's populated or nulls are handled by Firestore's default ordering for nulls
     constraints.push(orderBy('lastMessageTimestamp', 'desc'));
     constraints.push(limit(50));
 
@@ -51,7 +52,6 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
 
     const conversations = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
-      // console.log(`[messagingService] Mapping document ${docSnap.id}:`, data);
 
       if (!data.participants || !Array.isArray(data.participants)) {
           console.warn(`[messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`);
@@ -64,7 +64,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
 
        const createdAtTimestampMillis = data.createdAt instanceof Timestamp
             ? data.createdAt.toMillis()
-            : Date.now();
+            : Date.now(); // Fallback, though createdAt should ideally always be a Timestamp
 
       const clientConversation: ClientConversation = {
         id: docSnap.id,
@@ -88,7 +88,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
       throw new Error(`Failed to fetch conversations: Missing or insufficient permissions. Check Firestore Rules.`);
     }
      if (error.code === 'failed-precondition' && error.message.includes('index')) {
-         console.error("[messagingService] Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index on 'participants' and 'lastMessageTimestamp'.");
+         console.error("[messagingService] Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index on 'participants' (array-contains) and 'lastMessageTimestamp' (descending).");
          throw new Error("Firestore query requires an index for conversations. Please create it in the Firebase console.");
      }
     throw new Error(`Failed to fetch conversations: ${error.message}`);
@@ -116,10 +116,13 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
       where('participants', '==', participants),
     ];
 
-    if (postId) {
-      queryConstraints.push(where('postId', '==', postId));
-    } else {
+    // If postId is explicitly 'general_connection', we query for postId == null
+    // If postId is any other string, we query for postId == that string
+    // If postId is undefined or null from the start, we query for postId == null for general chats
+    if (postId === 'general_connection' || !postId) {
       queryConstraints.push(where('postId', '==', null));
+    } else {
+      queryConstraints.push(where('postId', '==', postId));
     }
 
     queryConstraints.push(limit(1));
@@ -132,10 +135,10 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
       console.log(`[messagingService] Conversation found for ${contextDescription}: ${existingConversationId}`);
       return existingConversationId;
     } else {
-      console.log(`[messagingService] Conversation for ${contextDescription} not found. Attempting to create...`);
+      console.log(`%c[messagingService] Conversation for ${contextDescription} not found. Attempting to create...`, "color: orange");
       const newConversationData: NewConversationData = {
         participants: participants,
-        postId: postId || null,
+        postId: postId === 'general_connection' ? null : postId || null, // Ensure postId is null for general_connection
         createdAt: serverTimestamp() as Timestamp,
         lastMessage: null,
         lastMessageTimestamp: null,
@@ -143,20 +146,20 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
 
       const clientAuthUid = auth.currentUser?.uid;
       console.log(`%c[messagingService] Pre-Create Firestore Rule Check Values:`, "color: orange; font-weight: bold;");
-      console.log(`  1. Client Authenticated (auth.currentUser?.uid): '${clientAuthUid || 'NULL'}'`);
-      console.log(`  2. request.resource.data.participants.size() == 2: ${newConversationData.participants.length === 2} (Actual size: ${newConversationData.participants.length})`);
+      console.log(`  1. Client Authenticated (auth.currentUser?.uid):                  '${clientAuthUid || 'NULL'}'`);
+      console.log(`  2. request.resource.data.participants.size() == 2:              ${newConversationData.participants.length === 2} (Actual size: ${newConversationData.participants.length})`);
       console.log(`  3. request.resource.data.participants.hasAll([request.auth.uid]): ${clientAuthUid ? newConversationData.participants.includes(clientAuthUid) : false} (Participants: [${newConversationData.participants.join(', ')}])`);
       console.log(`[messagingService] Data for new conversation before addDoc:`, newConversationData);
 
 
       const docRef = await addDoc(conversationsCollectionRef, newConversationData);
 
-      console.log(`[messagingService] Conversation created successfully for ${contextDescription}: ${docRef.id}`);
+      console.log(`%c[messagingService] Conversation created successfully for ${contextDescription}: ${docRef.id}`, "color: green");
       return docRef.id;
     }
   } catch (error: any) {
     console.error(`[messagingService] Error finding or creating conversation for ${contextDescription} between ${userId1} and ${userId2}:`, error);
-    const currentUserForErrorLog = auth.currentUser; // Re-check auth state at time of error
+    const currentUserForErrorLog = auth.currentUser;
     console.error('  Current auth state at error:', currentUserForErrorLog ? `UID: ${currentUserForErrorLog.uid}` : 'No user authenticated');
     console.error('  Participants used in query/create:', participants);
     console.error('  PostID used:', postId);
@@ -183,20 +186,22 @@ export const getMessagesForConversation = async (conversationId: string): Promis
     const q = query(
       messagesRef,
       orderBy('timestamp', 'asc'),
-      limit(100)
+      limit(100) // Fetch more messages if needed, or implement pagination
     );
     const querySnapshot = await getDocs(q);
-    const messages = querySnapshot.docs.map((doc) => {
-      const data = doc.data();
+    const messages = querySnapshot.docs.map((docSnap) => {
+      const data = docSnap.data() as Message; // Type assertion
       const timestampMillis = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : Date.now();
 
       return {
-        id: doc.id,
+        id: docSnap.id,
         conversationId: conversationId,
         senderId: data.senderId,
         text: data.text,
         timestamp: timestampMillis,
         read: data.read || false,
+        replyToMessageId: data.replyToMessageId || undefined,
+        repliedToTextSnippet: data.repliedToTextSnippet || undefined,
       } as SerializableMessage;
     });
     return messages;
@@ -205,6 +210,10 @@ export const getMessagesForConversation = async (conversationId: string): Promis
      if (error.code === 'permission-denied') {
         console.error("[messagingService] Firestore permission denied for reading messages. Check security rules.");
          throw new Error(`Permission denied when trying to fetch messages. Check Firestore Rules for subcollections.`);
+    }
+    if (error.code === 'failed-precondition' && error.message.includes('index')) {
+        console.error("Firestore query for messages requires an index. Create an index on 'timestamp' (asc) in the 'messages' subcollection.");
+        throw new Error("Firestore query requires an index for messages. Please create it.");
     }
     throw new Error(`Failed to fetch messages: ${error.message}`);
   }
@@ -220,12 +229,22 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
 
     const batch = writeBatch(db);
 
-    const newMessageRef = doc(messagesRef);
-    batch.set(newMessageRef, {
+    const newMessageRef = doc(messagesRef); // Generate a new doc ref for the message
+    
+    // Prepare the message object, ensuring optional fields are handled
+    const messagePayload: Omit<Message, 'id' | 'timestamp'> = {
+        conversationId: messageData.conversationId,
         senderId: messageData.senderId,
         text: messageData.text,
-        timestamp: serverTimestamp(),
-        read: false,
+        read: false, // New messages are unread
+        // Only include reply fields if they exist in messageData
+        ...(messageData.replyToMessageId && { replyToMessageId: messageData.replyToMessageId }),
+        ...(messageData.repliedToTextSnippet && { repliedToTextSnippet: messageData.repliedToTextSnippet }),
+    };
+    
+    batch.set(newMessageRef, {
+      ...messagePayload,
+      timestamp: serverTimestamp(), // Add server timestamp
     });
 
     batch.update(conversationDocRef, {
@@ -251,7 +270,7 @@ export const getUserDetails = async (userId: string): Promise<{ name: string; av
     const profile = await getUserProfileBasic(userId);
     if (!profile) return null;
     return {
-        name: profile.displayName, // getUserProfileBasic provides a generated name if custom one is missing
+        name: profile.displayName,
         avatar: profile.avatarUrl,
     };
 };

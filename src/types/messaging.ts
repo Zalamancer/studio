@@ -26,6 +26,8 @@ export interface Message {
   text: string; // The content of the message
   timestamp: Timestamp; // When the message was sent (Firestore Timestamp)
   read: boolean; // Indicates if the message has been read (by the recipient)
+  replyToMessageId?: string; // Optional: ID of the message this is a reply to
+  repliedToTextSnippet?: string; // Optional: A snippet of the text of the message being replied to
 }
 
 // Represents a message with a serializable timestamp (e.g., number) for client components
