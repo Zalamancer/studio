@@ -1,7 +1,4 @@
-
 // src/services/notificationService.ts
-// Client-callable by default (no 'use server;' at the top)
-
 import { db } from '@/lib/firebase/config';
 import {
   collection,
@@ -17,37 +14,46 @@ import {
   getDocs,
   writeBatch,
 } from 'firebase/firestore';
-import type { NewNotificationData, ClientNotification } from '@/types/notification';
-import { fetchUserProfileBasic } from './connectionService'; // To fetch sender details
+import type { NewNotificationData, ClientNotification, Notification } from '@/types/notification';
+import { fetchUserProfileBasic } from './connectionService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 const notificationsCollectionRef = collection(db, 'notifications');
 
-// Function to create a new notification
-export const createNotification = async (notificationData: Omit<NewNotificationData, 'senderName' | 'senderAvatar'>): Promise<string> => {
+export const createNotification = async (notificationData: NewNotificationData): Promise<string> => {
   console.log('%c[notificationService] createNotification: Called with data:', "color: purple;", JSON.stringify(notificationData, null, 2));
   if (!notificationData.userId || !notificationData.senderId || !notificationData.type) {
     console.error('%c[notificationService] createNotification: Missing required fields (userId, senderId, type). Data:', "color: red;", notificationData);
     throw new Error('User ID, Sender ID, and Type are required to create a notification.');
   }
 
+  let senderProfile = null;
   try {
-    const senderProfile = await fetchUserProfileBasic(notificationData.senderId);
+    senderProfile = await fetchUserProfileBasic(notificationData.senderId);
     console.log('%c[notificationService] createNotification: Fetched senderProfile for senderId', "color: purple;", notificationData.senderId, ':', JSON.stringify(senderProfile, null, 2));
+  } catch (profileError) {
+    console.error(`%c[notificationService] createNotification: Failed to fetch sender profile for ${notificationData.senderId}. Proceeding without sender details. Error:`, "color: orange;", profileError);
+    // Proceed without sender details if fetching fails, but log it
+  }
 
-    const fullNotificationData: NewNotificationData & { timestamp: Timestamp, isRead: boolean } = {
-      ...notificationData,
-      senderName: senderProfile?.displayName || generateAnonymousName(notificationData.senderId),
-      senderAvatar: senderProfile?.avatarUrl || null, // Ensure null if undefined
-      postQuestion: notificationData.postQuestion || null,
-      commentId: notificationData.commentId || null,
-      subCommentId: notificationData.subCommentId || null,
-      textSnippet: notificationData.textSnippet || null,
-      timestamp: serverTimestamp() as Timestamp,
-      isRead: false,
-    };
-    console.log('%c[notificationService] createNotification: fullNotificationData to be written:', "color: purple; font-weight: bold;", JSON.stringify(fullNotificationData, null, 2));
+  const fullNotificationData: Omit<Notification, 'id'> = {
+    userId: notificationData.userId,
+    type: notificationData.type,
+    senderId: notificationData.senderId,
+    senderName: senderProfile?.displayName || generateAnonymousName(notificationData.senderId),
+    senderAvatar: senderProfile?.avatarUrl || null,
+    postId: notificationData.postId || null,
+    postQuestion: notificationData.postQuestion || null,
+    commentId: notificationData.commentId || null,
+    subCommentId: notificationData.subCommentId || null,
+    conversationId: notificationData.conversationId || null,
+    textSnippet: notificationData.textSnippet || null,
+    timestamp: serverTimestamp() as Timestamp,
+    isRead: false,
+  };
+  console.log('%c[notificationService] createNotification: fullNotificationData to be written:', "color: purple; font-weight: bold;", JSON.stringify(fullNotificationData, null, 2));
 
+  try {
     const docRef = await addDoc(notificationsCollectionRef, fullNotificationData);
     console.log(`%c[notificationService] Notification CREATED successfully for user ${notificationData.userId} (recipient) from sender ${notificationData.senderId} with Notification ID: ${docRef.id}`, "color: green;");
     return docRef.id;
@@ -59,20 +65,20 @@ export const createNotification = async (notificationData: Omit<NewNotificationD
       throw new Error('Permission denied. Check Firestore security rules.');
     }
     if (error.message && error.message.includes("Unsupported field value: undefined")) {
-      console.error("[notificationService] Firestore received an undefined value. Data sent:", notificationData, "Full data for Firestore:", fullNotificationData);
-      throw new Error(`Failed to create notification: ${error.message}`);
+      console.error("[notificationService] Firestore received an undefined value. Full data for Firestore:", fullNotificationData);
+      throw new Error(`Failed to create notification: Firestore received an undefined field value. ${error.message}`);
     }
     throw new Error(`Failed to create notification: ${error.message}`);
   }
 };
 
-// Function to fetch notifications for a specific user
 export const getNotificationsForUser = async (userId: string, count = 50): Promise<ClientNotification[]> => {
+  const clientAuthUid = auth.currentUser?.uid; // For logging
   if (!userId) {
     console.warn("[notificationService] getNotificationsForUser called with invalid userId.");
     return [];
   }
-  console.log(`[notificationService] Fetching notifications for user ${userId}`);
+  console.log(`%c[notificationService] Fetching notifications for user ${userId}. Client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
   try {
     const q = query(
@@ -83,26 +89,37 @@ export const getNotificationsForUser = async (userId: string, count = 50): Promi
     );
 
     const querySnapshot = await getDocs(q);
-    console.log(`[notificationService] Notification query snapshot received. Found ${querySnapshot.docs.length} notification documents for user ${userId}.`);
+    console.log(`%c[notificationService] Notification query snapshot received. Found ${querySnapshot.docs.length} notification documents for user ${userId}.`, "color: dodgerblue;");
 
     const notifications = querySnapshot.docs.map((docSnap) => {
-      const data = docSnap.data();
+      const data = docSnap.data() as Notification; // Use Notification type here
       const timestampMillis = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : Date.now();
 
       return {
         id: docSnap.id,
-        ...data,
+        userId: data.userId,
+        type: data.type,
+        senderId: data.senderId,
+        senderName: data.senderName,
+        senderAvatar: data.senderAvatar,
+        postId: data.postId,
+        postQuestion: data.postQuestion,
+        commentId: data.commentId,
+        subCommentId: data.subCommentId,
+        conversationId: data.conversationId,
+        textSnippet: data.textSnippet,
         timestamp: timestampMillis,
+        isRead: data.isRead,
       } as ClientNotification;
     });
 
-    console.log(`[notificationService] Successfully mapped ${notifications.length} client notifications for user ${userId}`);
+    console.log(`%c[notificationService] Successfully mapped ${notifications.length} client notifications for user ${userId}`, "color: green;");
     return notifications;
 
   } catch (error: any) {
     console.error(`[notificationService] Error fetching notifications for user ${userId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error("Firestore permission denied fetching notifications. Check rules for reading 'notifications'.");
+      console.error(`[notificationService] PERMISSION DENIED fetching notifications for target ${userId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Check Firestore rules for reading 'notifications' collection.`);
       throw new Error('Permission denied fetching notifications. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
@@ -113,7 +130,6 @@ export const getNotificationsForUser = async (userId: string, count = 50): Promi
   }
 };
 
-// Function to mark a single notification as read
 export const markNotificationAsRead = async (notificationId: string): Promise<void> => {
   if (!notificationId) {
     throw new Error('Notification ID is required.');
@@ -132,7 +148,6 @@ export const markNotificationAsRead = async (notificationId: string): Promise<vo
   }
 };
 
-// Function to mark all unread notifications for a user as read (using batch write)
 export const markAllNotificationsAsRead = async (userId: string): Promise<void> => {
   if (!userId) {
     throw new Error('User ID is required.');
@@ -174,3 +189,5 @@ export const markAllNotificationsAsRead = async (userId: string): Promise<void> 
   }
 };
 
+// Needed for client-side calls that need to know the current user
+import { auth } from '@/lib/firebase/config';

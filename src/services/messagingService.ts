@@ -1,6 +1,4 @@
 // src/services/messagingService.ts
-// Client-callable functions
-
 import { db, auth } from '@/lib/firebase/config';
 import {
   collection,
@@ -14,20 +12,19 @@ import {
   Timestamp,
   doc,
   getDoc,
-  setDoc,
-  arrayUnion,
-  documentId,
-  writeBatch,
-  QueryConstraint,
+  writeBatch, // Removed setDoc as batch handles creation/update
+  type QueryConstraint,
+  // Removed arrayUnion and documentId as they are not used here
 } from 'firebase/firestore';
 import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message } from '@/types/messaging';
-import { fetchUserProfileBasic } from './connectionService'; // CORRECTED IMPORT
+import { fetchUserProfileBasic } from './connectionService';
+import { createNotification } from './notificationService'; // Import notification service
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 const conversationsCollectionRef = collection(db, 'conversations');
 const messagesSubcollectionRef = (conversationId: string) => collection(db, 'conversations', conversationId, 'messages');
 
 
-// Function to fetch conversations for a specific user, returning serializable data
 export const getConversationsForUser = async (userId: string): Promise<ClientConversation[]> => {
   if (!userId) {
     console.error("[messagingService] User ID is required to fetch conversations.");
@@ -62,7 +59,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
 
        const createdAtTimestampMillis = data.createdAt instanceof Timestamp
             ? data.createdAt.toMillis()
-            : Date.now(); 
+            : Date.now();
 
       const clientConversation: ClientConversation = {
         id: docSnap.id,
@@ -86,7 +83,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
       throw new Error(`Failed to fetch conversations: Missing or insufficient permissions. Check Firestore Rules.`);
     }
      if (error.code === 'failed-precondition' && error.message.includes('index')) {
-         console.error("[messagingService] Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index on 'participants' (array-contains) and 'lastMessageTimestamp' (descending).");
+         console.error("[messagingService] Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index on 'participants' and 'lastMessageTimestamp'.");
          throw new Error("Firestore query requires an index for conversations. Please create it in the Firebase console.");
      }
     throw new Error(`Failed to fetch conversations: ${error.message}`);
@@ -106,10 +103,9 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
 
   const participants = [userId1, userId2].sort();
   const contextDescription = postId ? `post ${postId}` : 'general chat';
-  const clientAuthUid = auth.currentUser?.uid; // For logging
+  const clientAuthUid = auth.currentUser?.uid;
 
   console.log(`%c[messagingService] findOrCreateConversation: Attempting for ${contextDescription} between ${userId1} and ${userId2}. Sorted: [${participants.join(', ')}]. Client Auth: ${clientAuthUid || 'NULL'}`, "color: orange;");
-
 
   try {
     const queryConstraints: QueryConstraint[] = [
@@ -141,15 +137,13 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
         lastMessageTimestamp: null,
       };
 
-      console.log(`%c[messagingService] Pre-Create Firestore Rule Check Values:`, "color: orange; font-weight: bold;");
-      console.log(`  1. Client Authenticated (auth.currentUser?.uid):                  '${clientAuthUid || 'NULL'}'`);
-      console.log(`  2. request.resource.data.participants.size() == 2:              ${newConversationData.participants.length === 2} (Actual size: ${newConversationData.participants.length})`);
-      console.log(`  3. request.resource.data.participants.hasAll([request.auth.uid]): ${clientAuthUid ? newConversationData.participants.includes(clientAuthUid) : false} (Participants: [${newConversationData.participants.join(', ')}])`);
-      console.log(`[messagingService] Data for new conversation before addDoc:`, newConversationData);
-
+      console.log(`%c[messagingService] Pre-Create Firestore Rule Check Values:`, "color: #1E90FF; font-weight:bold;");
+      console.log(`  Client Auth UID:                          '${clientAuthUid || 'NULL'}'`);
+      console.log(`  newConversationData.participants.length === 2: ${newConversationData.participants.length === 2}`);
+      console.log(`  newConversationData.participants.includes(clientAuthUid): ${clientAuthUid ? newConversationData.participants.includes(clientAuthUid) : false}`);
+      console.log(`  Data for new conversation:`, newConversationData);
 
       const docRef = await addDoc(conversationsCollectionRef, newConversationData);
-
       console.log(`%c[messagingService] Conversation CREATED successfully for ${contextDescription}: ${docRef.id}`, "color: green; font-weight:bold;");
       return docRef.id;
     }
@@ -183,11 +177,11 @@ export const getMessagesForConversation = async (conversationId: string): Promis
     const q = query(
       messagesRef,
       orderBy('timestamp', 'asc'),
-      limit(100) 
+      limit(100)
     );
     const querySnapshot = await getDocs(q);
     const messages = querySnapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as Message; 
+      const data = docSnap.data() as Message;
       const timestampMillis = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : Date.now();
 
       return {
@@ -225,21 +219,20 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     const messagesRef = messagesSubcollectionRef(messageData.conversationId);
 
     const batch = writeBatch(db);
+    const newMessageRef = doc(messagesRef);
 
-    const newMessageRef = doc(messagesRef); 
-    
     const messagePayload: Omit<Message, 'id' | 'timestamp'> = {
         conversationId: messageData.conversationId,
         senderId: messageData.senderId,
         text: messageData.text,
-        read: false, 
+        read: false,
         ...(messageData.replyToMessageId && { replyToMessageId: messageData.replyToMessageId }),
         ...(messageData.repliedToTextSnippet && { repliedToTextSnippet: messageData.repliedToTextSnippet }),
     };
-    
+
     batch.set(newMessageRef, {
       ...messagePayload,
-      timestamp: serverTimestamp(), 
+      timestamp: serverTimestamp(),
     });
 
     batch.update(conversationDocRef, {
@@ -248,6 +241,23 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     });
 
     await batch.commit();
+
+    // Create notification for other participants
+    const conversationSnap = await getDoc(conversationDocRef);
+    if (conversationSnap.exists()) {
+        const conversationData = conversationSnap.data() as ClientConversation; // Use Client for participants
+        for (const participantId of conversationData.participants) {
+            if (participantId !== messageData.senderId) {
+                await createNotification({
+                    userId: participantId,
+                    type: 'new_message',
+                    senderId: messageData.senderId,
+                    conversationId: messageData.conversationId,
+                    textSnippet: messageData.text.substring(0, 100),
+                });
+            }
+        }
+    }
     return newMessageRef.id;
 
   } catch (error: any) {
@@ -262,10 +272,10 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
 
 export const getUserDetails = async (userId: string): Promise<{ name: string; avatar?: string } | null> => {
     if (!userId) return null;
-    const profile = await fetchUserProfileBasic(userId); // CORRECTED FUNCTION CALL
+    const profile = await fetchUserProfileBasic(userId);
     if (!profile) return null;
     return {
-        name: profile.displayName,
+        name: profile.displayName || generateAnonymousName(userId), // Fallback to generated name if displayName is somehow missing
         avatar: profile.avatarUrl,
     };
 };

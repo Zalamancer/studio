@@ -1,8 +1,7 @@
-
 // src/components/notifications/NotificationDropdown.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Loader2, Mail, UserPlus, UserCheck, MessageSquare, AtSign, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -13,7 +12,7 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'; // Removed unused group/sub imports
+} from '@/components/ui/dropdown-menu';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { getNotificationsForUser, markNotificationAsRead, markAllNotificationsAsRead } from '@/services/notificationService';
@@ -22,7 +21,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-import { generateAnonymousName } from '@/lib/pseudonymUtils'; // For fallback names
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 interface NotificationDropdownProps {
   userId: string;
@@ -34,15 +33,15 @@ const NotificationIcon: React.FC<{ type: NotificationType }> = React.memo(({ typ
     case 'mention': return <AtSign className="h-4 w-4 text-purple-500" />;
     case 'connection_request': return <UserPlus className="h-4 w-4 text-orange-500" />;
     case 'connection_accepted': return <UserCheck className="h-4 w-4 text-green-500" />;
+    case 'new_message': return <Mail className="h-4 w-4 text-sky-500" />; // Added icon for new_message
     default: return <Bell className="h-4 w-4 text-muted-foreground" />;
   }
 });
 NotificationIcon.displayName = 'NotificationIcon';
 
 const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id: string) => void }> = React.memo(({ notification, onRead }) => {
-    const timeAgo = formatDistanceToNow(notification.timestamp, { addSuffix: true });
+    const timeAgo = formatDistanceToNow(new Date(notification.timestamp), { addSuffix: true });
     const senderDisplayName = notification.senderName || generateAnonymousName(notification.senderId);
-
 
     const handleClick = () => {
         if (!notification.isRead) {
@@ -52,7 +51,7 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
 
     let title = '';
     let description = '';
-    let linkHref: string = '/';
+    let linkHref: string = '/'; // Default link
 
     switch (notification.type) {
         case 'reply':
@@ -74,6 +73,11 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
             title = `Connected with ${senderDisplayName}`;
             description = 'View their profile or start a chat.';
             linkHref = notification.senderId ? `/profile/${notification.senderId}` : '/connect';
+            break;
+        case 'new_message': // Handle new_message type
+            title = `New message from ${senderDisplayName}`;
+            description = notification.textSnippet || 'View message';
+            linkHref = notification.conversationId ? `/contracts?conversationId=${notification.conversationId}` : '/contracts';
             break;
         default:
             title = 'New Notification';
@@ -120,14 +124,13 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
         return getNotificationsForUser(userId, 20);
     },
     enabled: !!userId,
-    refetchInterval: 1000 * 60, // Refetch every minute
-    staleTime: 1000 * 30, // Consider data stale after 30 seconds
+    refetchInterval: 1000 * 60, 
+    staleTime: 1000 * 30, 
   });
 
   useEffect(() => {
     if (error) {
         console.error("[NotificationDropdown] Error fetching notifications:", error);
-        // Optionally show a toast if persistent errors occur, but be mindful of repeated toasts on refetch intervals
     }
   }, [error, toast]);
 
@@ -226,4 +229,3 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     </DropdownMenu>
   );
 };
-

@@ -2,7 +2,7 @@
 import type { Timestamp } from 'firebase/firestore';
 
 // Type of notification
-export type NotificationType = 'reply' | 'mention' | 'connection_request' | 'connection_accepted';
+export type NotificationType = 'reply' | 'mention' | 'connection_request' | 'connection_accepted' | 'new_message';
 
 // Represents a notification document stored in Firestore
 export interface Notification {
@@ -11,12 +11,13 @@ export interface Notification {
   type: NotificationType;
   senderId: string; // The ID of the user who triggered the notification
   senderName?: string; // Optional: Display name of the sender
-  senderAvatar?: string; // Optional: Avatar URL of the sender
-  postId?: string; // Optional: ID of the related post
-  postQuestion?: string; // Optional: Question snippet from the related post
-  commentId?: string; // Optional: ID of the related comment
-  subCommentId?: string; // Optional: ID of the related subcomment
-  textSnippet?: string; // Optional: A short snippet of the reply/mention text
+  senderAvatar?: string | null; // Optional: Avatar URL of the sender, can be null
+  postId?: string | null; // Optional: ID of the related post
+  postQuestion?: string | null; // Optional: Question snippet from the related post
+  commentId?: string | null; // Optional: ID of the related comment
+  subCommentId?: string | null; // Optional: ID of the related subcomment
+  conversationId?: string | null; // Optional: ID of the related conversation for new messages
+  textSnippet?: string | null; // Optional: A short snippet of the reply/mention/message text
   timestamp: Timestamp; // Firestore Timestamp when the notification was created
   isRead: boolean; // Whether the user has read the notification
 }
@@ -27,6 +28,7 @@ export interface ClientNotification extends Omit<Notification, 'timestamp'> {
 }
 
 // Data needed to create a new notification
-export type NewNotificationData = Omit<Notification, 'id' | 'timestamp' | 'isRead'> & {
+// senderName and senderAvatar will be populated by the service
+export type NewNotificationData = Omit<Notification, 'id' | 'timestamp' | 'isRead' | 'senderName' | 'senderAvatar'> & {
     // Timestamp and isRead will be set by the service/server
 };
