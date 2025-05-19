@@ -39,13 +39,11 @@ const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
-  const halfStar = rating % 1 >= 0.5 ? 1 : 0; // No actual half star, just for calculation
-  const emptyStars = totalStars - fullStars; // Corrected empty star calculation
+  const emptyStars = totalStars - fullStars;
 
   return (
     <div className="flex items-center">
       {[...Array(fullStars)].map((_, i) => <Star key={`full-${i}`} className={cn(size, "text-yellow-400 fill-yellow-400")} />)}
-      {/* No half star rendering for now, just full or empty based on floor */}
       {[...Array(emptyStars)].map((_, i) => <Star key={`empty-${i}`} className={cn(size, "text-gray-300")} />)}
     </div>
   );
@@ -53,13 +51,15 @@ const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string
 
 const getInitials = (name: string | undefined | null): string => {
   if (!name) return '?';
+  const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
+
   const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
-  if (pseudonymRegex.test(name)) {
-      const match = name.match(/^([A-Z])[a-z]+([A-Z])/);
+  if (pseudonymRegex.test(nameToProcess)) {
+      const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
       if (match && match[1] && match[2]) return match[1] + match[2];
       if (match && match[1]) return match[1];
   }
-  const names = name.split(' ');
+  const names = nameToProcess.split(' ').filter(Boolean);
   if (names.length === 0) return '?';
   if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
   return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
@@ -88,28 +88,23 @@ const BusinessProfilePage = () => {
 
   const profileUserId = profileUserIdFromParams;
 
-
   useEffect(() => {
-    // Log parameters on initial render or when they change
     console.log(`[BusinessProfilePage] Effect deps: profileUserIdFromParams='${profileUserIdFromParams}', isProfileIdActuallyValidUid=${isProfileIdActuallyValidUid}`);
   }, [profileUserIdFromParams, isProfileIdActuallyValidUid]);
-
 
   const { data: viewedUserProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileData | null, Error>({
     queryKey: ['fullUserProfile', profileUserId],
     queryFn: async () => {
-      console.log(`%c[BusinessProfilePage] fetchFullUserProfile queryFn: Fetching for profileUserId: '${profileUserId}'`, "color: teal;");
       if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
-        console.warn(`%c[BusinessProfilePage] fetchFullUserProfile queryFn: Invalid or missing profileUserId ('${profileUserId}'). Returning null.`, "color: orange;");
         return null;
       }
       return fetchFullUserProfile(profileUserId);
     },
-    enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId), // Ensure query only runs with a valid-looking UID
+    enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId),
   });
 
   const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
-  console.log(`[BusinessProfilePage] Render: profileUserId='${profileUserId}', currentUser?.uid='${currentUser?.uid}', IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)=${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}. FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`);
+  console.log(`[BusinessProfilePage] Connection status query: Enabled=${connectionStatusQueryEnabled}, currentUser='${currentUser?.uid}', profileUser='${profileUserId}'`);
 
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
@@ -118,24 +113,22 @@ const BusinessProfilePage = () => {
         console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions for fetch. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
         return 'not_connected';
       }
-      console.log(`%c[BusinessProfilePage] getConnectionStatus queryFn: Fetching for currentUser='${currentUser.uid}', profileUser='${profileUserId}'`, "color: teal;");
       return getConnectionStatus(currentUser.uid, profileUserId);
     },
     enabled: connectionStatusQueryEnabled,
   });
 
-  const reviewsQueryEnabled = !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId);
+  const reviewsQueryEnabled = !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && !!currentUser; // Only enable if user is logged in to potentially submit a review
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
     queryFn: () => {
-      console.log(`%c[BusinessProfilePage] getReviewsForProfile queryFn: Fetching for targetUserId: '${profileUserId}'. Auth UID: '${currentUser?.uid || 'NULL'}'`, "color: dodgerblue;");
-      if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) { // Redundant check, but safe
-        console.warn(`%c[BusinessProfilePage] queryFn for reviews: Invalid profileUserId ('${profileUserId}'). Returning empty array.`, "color: orange;");
+      console.log(`[BusinessProfilePage] getReviewsForProfile queryFn: Fetching for targetUserId: '${profileUserId}'. Auth UID: '${currentUser?.uid || 'NULL'}'`);
+      if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
         return Promise.resolve([]);
       }
       return getReviewsForProfile(profileUserId);
     },
-    enabled: reviewsQueryEnabled, // Depends on a valid profileUserId
+    enabled: reviewsQueryEnabled,
   });
 
   const currentUserReview = useMemo(() => {
@@ -217,8 +210,8 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
+
   if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
-    console.warn(`[BusinessProfilePage] Rendering Invalid Profile Identifier message for '${profileUserIdFromParams}'.`);
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -265,7 +258,7 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!profileUserId || !viewedUserProfileData) { // Handles case where profileUserId might be null/undefined after checks
+  if (!profileUserId || !viewedUserProfileData) {
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -288,40 +281,38 @@ const BusinessProfilePage = () => {
   const isOwnProfile = currentUser?.uid === viewedUserProfileData.uid;
 
   const canViewField = (visibilitySetting: VisibilitySetting | undefined): boolean => {
-    if (isOwnProfile) return true; // Owner can always see their own info
+    if (isOwnProfile) return true;
     if (!visibilitySetting || visibilitySetting === 'everyone') return true;
     if (visibilitySetting === 'connected' && connectionStatus === 'connected') return true;
-    // 'only_me' is covered by isOwnProfile implicitly for display logic here.
-    // If not own profile and setting is 'only_me', it means false.
     return false;
   };
 
-  const generatedName = generateAnonymousName(viewedUserProfileData.uid);
-  const headerDisplayName = viewedUserProfileData.displayName || generatedName;
-  const headerAvatarUrl = canViewField(viewedUserProfileData.avatarVisibility) ? (viewedUserProfileData.avatarUrl || viewedUserProfileData.photoURL) : undefined; // photoURL is fallback from Firebase Auth
-
-  const headerIndustry = canViewField(viewedUserProfileData.industryVisibility) ? (viewedUserProfileData.industry || "Industry Not Specified") : "[Industry Hidden]";
-
-
-  let displayCompanyNameForAboutHeading: string;
-  if (canViewField(viewedUserProfileData.companyNameVisibility) && viewedUserProfileData.companyName) {
-      displayCompanyNameForAboutHeading = viewedUserProfileData.companyName;
-  } else if (canViewField(viewedUserProfileData.companyNameVisibility) && !viewedUserProfileData.companyName) {
-      // Company name field is visible, but no company name is set.
-      // Fallback to headerDisplayName (which could be a set displayName or generated).
-      displayCompanyNameForAboutHeading = headerDisplayName;
+  const generatedNameForProfile = generateAnonymousName(viewedUserProfileData.uid);
+  const headerDisplayName = viewedUserProfileData.displayName || generatedNameForProfile;
+  
+  let nameForConnectionButton: string;
+  if (viewedUserProfileData.companyName && canViewField(viewedUserProfileData.companyNameVisibility)) {
+    nameForConnectionButton = viewedUserProfileData.companyName;
   } else {
-      // Company name field is hidden by visibility settings. Use the generated anonymous name.
-      displayCompanyNameForAboutHeading = generatedName;
+    nameForConnectionButton = headerDisplayName; // Fallback to general public display name or generated name
+  }
+
+  const headerAvatarUrl = canViewField(viewedUserProfileData.avatarVisibility) ? (viewedUserProfileData.avatarUrl || viewedUserProfileData.photoURL) : undefined;
+  const headerIndustry = canViewField(viewedUserProfileData.industryVisibility) ? (viewedUserProfileData.industry || "Industry Not Specified") : "[Industry Hidden]";
+  
+  let displayCompanyNameForAboutHeading: string;
+  if (viewedUserProfileData.companyName && canViewField(viewedUserProfileData.companyNameVisibility)) {
+      displayCompanyNameForAboutHeading = viewedUserProfileData.companyName;
+  } else {
+      displayCompanyNameForAboutHeading = generatedNameForProfile; // If specific company name is hidden, "About" refers to anonymous entity
   }
 
   const displayIndustry = canViewField(viewedUserProfileData.industryVisibility) ? (viewedUserProfileData.industry || "Not specified") : "[Industry Hidden]";
   const displayDescription = canViewField(viewedUserProfileData.descriptionVisibility) ? (viewedUserProfileData.description || "No profile description provided.") : "[Description Hidden]";
-
-  const displayLocation = viewedUserProfileData.location || "Location not set"; // Assume public or handle with its own visibility
-  const displayEstablished = viewedUserProfileData.established || "Year not set"; // Assume public or handle with its own visibility
-  const displayContactEmail = (isOwnProfile || (canViewField('everyone') && connectionStatus === 'connected')) ? (viewedUserProfileData.contactEmail || "Email not available") : "[Contact Email Hidden]";
-  const displayContactPhone = (isOwnProfile || (canViewField('everyone') && connectionStatus === 'connected')) ? (viewedUserProfileData.contactPhone) : undefined;
+  const displayLocation = viewedUserProfileData.location || "Location not set";
+  const displayEstablished = viewedUserProfileData.established || "Year not set";
+  const displayContactEmail = (isOwnProfile || (canViewField(viewedUserProfileData.companyNameVisibility) && connectionStatus === 'connected')) ? (viewedUserProfileData.contactEmail || "Email not available") : "[Contact Email Hidden]";
+  const displayContactPhone = (isOwnProfile || (canViewField(viewedUserProfileData.companyNameVisibility) && connectionStatus === 'connected')) ? (viewedUserProfileData.contactPhone) : undefined;
 
 
   return (
@@ -371,7 +362,7 @@ const BusinessProfilePage = () => {
                  {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                     <ConnectionButton
                       targetUserId={profileUserId}
-                      targetUserName={headerDisplayName}
+                      targetUserName={nameForConnectionButton}
                       size="default"
                       className="mt-2 w-full md:w-auto"
                     />
@@ -538,7 +529,7 @@ const BusinessProfilePage = () => {
 
            <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {headerDisplayName}</h3>
-              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (canViewField(viewedUserProfileData.descriptionVisibility)) ? ( 
+              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (canViewField(viewedUserProfileData.descriptionVisibility) && connectionStatus === 'connected') ? ( 
                   <ProfilePostsSection userId={profileUserId} />
               ) : isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="flex items-center justify-center p-6">
