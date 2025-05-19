@@ -82,7 +82,7 @@ const BusinessProfilePage = () => {
   const isProfileIdActuallyValidUid = useMemo(() => {
     if (!profileUserIdFromParams) return false;
     const isValid = IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams);
-    console.log(`[BusinessProfilePage] isProfileIdValidUid for '${profileUserIdFromParams}': ${isValid}`);
+    console.log(`[BusinessProfilePage] isProfileIdActuallyValidUid for '${profileUserIdFromParams}': ${isValid}`);
     return isValid;
   }, [profileUserIdFromParams]);
 
@@ -90,7 +90,6 @@ const BusinessProfilePage = () => {
 
   useEffect(() => {
     if (profileUserId && !isProfileIdActuallyValidUid) {
-        // No need to show toast here, the early return will handle UI
         console.warn(`[BusinessProfilePage] Effect: Invalid profileUserId '${profileUserId}' from URL. UI should show error.`);
     }
   }, [profileUserId, isProfileIdActuallyValidUid]);
@@ -109,15 +108,15 @@ const BusinessProfilePage = () => {
     enabled: !!profileUserId && isProfileIdActuallyValidUid,
   });
 
-  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && isProfileIdActuallyValidUid && currentUser.uid !== profileUserId;
+  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
   
-  console.log(`%c[BusinessProfilePage] Connection Status Query Params Check:
-    - currentUser?.uid:               ${currentUser?.uid || 'NULL'}
-    - !!profileUserId:                ${!!profileUserId}
-    - isProfileIdActuallyValidUid:    ${isProfileIdActuallyValidUid}
-    - currentUser?.uid !== profileUserId: ${currentUser?.uid !== profileUserId}
-    - FINAL enabled flag:             ${connectionStatusQueryEnabled}
-  `, "color: orange;");
+  useEffect(() => {
+    console.log(`[BusinessProfilePage] Debug: connectionStatusQueryEnabled: ${connectionStatusQueryEnabled}`);
+    console.log(`  currentUser?.uid: ${currentUser?.uid}`);
+    console.log(`  profileUserId: ${profileUserId}`);
+    console.log(`  isProfileIdActuallyValidUid: ${IS_UID_REGEX_PROFILE_PAGE.test(profileUserId || "")}`);
+    console.log(`  currentUser?.uid !== profileUserId: ${currentUser?.uid !== profileUserId}`);
+  }, [connectionStatusQueryEnabled, currentUser?.uid, profileUserId]);
 
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
@@ -126,6 +125,10 @@ const BusinessProfilePage = () => {
         if (!currentUser?.uid || !profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) || currentUser.uid === profileUserId) {
             console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions for fetch. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
             return 'not_connected';
+        }
+        if (!IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
+             console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.`);
+             return 'not_connected';
         }
         return getConnectionStatus(currentUser.uid, profileUserId);
     },
@@ -226,7 +229,6 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-  // Early return for invalid profile ID format from URL
   if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
@@ -307,16 +309,6 @@ const BusinessProfilePage = () => {
   const generatedNameForProfile = generateAnonymousName(viewedUserProfileData.uid);
   const headerDisplayNameForAvatar = viewedUserProfileData.displayName || generatedNameForProfile;
   
-  let headerDisplayNameForTitle: string;
-  if (viewedUserProfileData.companyName && canViewField(viewedUserProfileData.companyNameVisibility)) {
-    headerDisplayNameForTitle = viewedUserProfileData.companyName;
-  } else {
-    headerDisplayNameForTitle = viewedUserProfileData.displayName || generatedNameForProfile;
-  }
-
-  const headerAvatarUrl = canViewField(viewedUserProfileData.avatarVisibility) ? (viewedUserProfileData.avatarUrl || viewedUserProfileData.photoURL) : undefined;
-  const headerIndustry = canViewField(viewedUserProfileData.industryVisibility) ? (viewedUserProfileData.industry || "Industry Not Specified") : "[Industry Hidden]";
-  
   let displayCompanyNameForAboutHeading: string;
   if (viewedUserProfileData.companyName && canViewField(viewedUserProfileData.companyNameVisibility)) {
       displayCompanyNameForAboutHeading = viewedUserProfileData.companyName;
@@ -324,6 +316,17 @@ const BusinessProfilePage = () => {
       displayCompanyNameForAboutHeading = generatedNameForProfile; 
   }
 
+  let headerDisplayNameForTitle: string;
+  if (viewedUserProfileData.companyName && canViewField(viewedUserProfileData.companyNameVisibility)) {
+    headerDisplayNameForTitle = viewedUserProfileData.companyName;
+  } else {
+    headerDisplayNameForTitle = generatedNameForProfile;
+  }
+
+
+  const headerAvatarUrl = canViewField(viewedUserProfileData.avatarVisibility) ? (viewedUserProfileData.avatarUrl || viewedUserProfileData.photoURL) : undefined;
+  const headerIndustry = canViewField(viewedUserProfileData.industryVisibility) ? (viewedUserProfileData.industry || "Industry Not Specified") : "[Industry Hidden]";
+  
   let nameForConnectionButton: string;
   if (viewedUserProfileData.companyName && canViewField(viewedUserProfileData.companyNameVisibility)) {
     nameForConnectionButton = viewedUserProfileData.companyName;
@@ -353,7 +356,7 @@ const BusinessProfilePage = () => {
             </Avatar>
             <div className="flex-grow text-center md:text-left">
               <CardTitle className="text-3xl font-bold text-foreground">
-                {headerDisplayNameForTitle}
+                {displayCompanyNameForAboutHeading}
               </CardTitle>
               <CardDescription className="text-muted-foreground mt-1 flex items-center justify-center md:justify-start gap-1">
                  <Building className="h-4 w-4" /> {headerIndustry}
@@ -384,7 +387,7 @@ const BusinessProfilePage = () => {
                         </p>
                      </div>
                   )}
-                 {currentUser && !isOwnProfile && profileUserId && isProfileIdActuallyValidUid && (
+                 {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                     <ConnectionButton
                       targetUserId={profileUserId}
                       targetUserName={nameForConnectionButton}
@@ -392,12 +395,12 @@ const BusinessProfilePage = () => {
                       className="mt-2 w-full md:w-auto"
                     />
                  )}
-                 {isLoadingStatus && !isOwnProfile && profileUserId && isProfileIdActuallyValidUid && (
+                 {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                      <Button disabled size="default" className="mt-2 w-full md:w-auto">
                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
                      </Button>
                  )}
-                 {statusError && !isOwnProfile && profileUserId && isProfileIdActuallyValidUid && (
+                 {statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                      <p className="text-xs text-destructive mt-2 text-right">Error loading connection status</p>
                  )}
             </div>
@@ -498,7 +501,7 @@ const BusinessProfilePage = () => {
                            <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
                                 <div className="flex items-center gap-3">
                                     <Avatar className="h-9 w-9">
-                                        <AvatarImage src={review.reviewerAvatar} alt={review.reviewerName} />
+                                        <AvatarImage src={review.reviewerAvatar || undefined} alt={review.reviewerName || 'Reviewer'} />
                                         <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
                                             {getInitials(review.reviewerName)}
                                         </AvatarFallback>
@@ -553,20 +556,20 @@ const BusinessProfilePage = () => {
            <Separator />
 
            <div>
-              <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {headerDisplayNameForTitle}</h3>
-              {profileUserId && isProfileIdActuallyValidUid && (isOwnProfile || canViewField(viewedUserProfileData.descriptionVisibility /* Using description as a proxy for post visibility */) && (connectionStatus === 'connected' || isOwnProfile /* Extra check for connection for non-owners */ )) ? (
+              <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {displayCompanyNameForAboutHeading}</h3>
+              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (isOwnProfile || canViewField(viewedUserProfileData.descriptionVisibility /* Using description as a proxy for post visibility */) && (connectionStatus === 'connected' || isOwnProfile /* Extra check for connection for non-owners */ )) ? (
                   <ProfilePostsSection userId={profileUserId} />
-              ) : isLoadingStatus && !isOwnProfile && profileUserId && isProfileIdActuallyValidUid ? (
+              ) : isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="flex items-center justify-center p-6">
                       <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
                       <p className="text-muted-foreground">Checking connection status...</p>
                   </div>
-              ) : statusError && !isOwnProfile && profileUserId && isProfileIdActuallyValidUid ? (
+              ) : statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                    <div className="flex items-center justify-center p-6 text-destructive gap-2 border rounded-lg bg-destructive/10">
                       <AlertTriangle className="h-5 w-5" />
                       <p>Could not load connection status for posts.</p>
                    </div>
-              ) : profileUserId && isProfileIdActuallyValidUid ? (
+              ) : profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="text-center p-6 border rounded-lg bg-muted/50">
                      <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                      <p className="text-muted-foreground font-medium">Connect to view posts</p>
