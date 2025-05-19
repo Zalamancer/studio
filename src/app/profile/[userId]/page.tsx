@@ -1,3 +1,4 @@
+
 // src/app/profile/[userId]/page.tsx
 "use client";
 
@@ -15,7 +16,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnectionStatus, fetchUserProfileBasic } from '@/services/connectionService'; // Corrected import
+import { getConnectionStatus, fetchUserProfileBasic } from '@/services/connectionService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import type { ConnectionStatus, UserProfileBasic } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
@@ -90,6 +91,7 @@ const BusinessProfilePage = () => {
 
   // Early return for invalid UID format in URL
   if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
+    console.warn(`[BusinessProfilePage] Invalid Profile Identifier in URL: '${profileUserIdFromParams}'. Rendering error message.`);
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -111,14 +113,14 @@ const BusinessProfilePage = () => {
         console.warn(`[BusinessProfilePage] queryFn for userProfile: Invalid or missing profileUserId ('${profileUserId}'). Returning null.`);
         return null;
       }
-      const basicProfile = await fetchUserProfileBasic(profileUserId); // Corrected usage
+      const basicProfile = await fetchUserProfileBasic(profileUserId);
       return basicProfile || { userId: profileUserId, displayName: generateAnonymousName(profileUserId || "unknown_user"), avatarUrl: undefined };
     },
     enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId),
   });
 
   const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
-  
+
   console.log(`%c[BusinessProfilePage] Connection Status Query Check (Render):
     - currentUser?.uid: ${currentUser?.uid}
     - profileUserId: ${profileUserId}
@@ -155,7 +157,7 @@ const BusinessProfilePage = () => {
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
     queryFn: () => {
-        console.log(`%c[BusinessProfilePage] Fetching reviews for profile ID: ${profileUserId}`, "color: dodgerblue;");
+        console.log(`%c[reviewService] getReviewsForProfile (called from profile page): Fetching for targetUserId: '${profileUserId}'. Auth UID: '${currentUser?.uid || 'NULL'}'`, "color: dodgerblue;");
         if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
           console.warn(`[BusinessProfilePage] queryFn for reviews: Invalid profileUserId ('${profileUserId}'). Returning empty array.`);
           return Promise.resolve([]);
@@ -278,7 +280,7 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!profileUserId || !profileData) { 
+  if (!profileUserId || !profileData) {
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -555,5 +557,3 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
-
-```
