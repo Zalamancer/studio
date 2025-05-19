@@ -17,11 +17,16 @@ import {
   writeBatch,
   getDoc,
 } from 'firebase/firestore';
-import type { Review, NewReviewData, UpdateReviewData, ClientReview } from '@/types/review';
+import type { Review, NewReviewData as NewReviewDataType, UpdateReviewData, ClientReview } from '@/types/review';
 
 const REVIEWS_COLLECTION = 'reviews';
 
-export const addReview = async (reviewData: NewReviewData): Promise<string> => {
+// Ensure NewReviewData here matches or is compatible with the one in types/review.ts
+// It should already allow reviewerAvatar to be optional (string | undefined)
+type NewReviewData = Omit<Review, 'id' | 'createdAt' | 'updatedAt'>;
+
+
+export const addReview = async (reviewData: NewReviewDataType): Promise<string> => {
   console.log("[reviewService] addReview: Called with data:", reviewData);
   if (!reviewData.targetUserId || !reviewData.reviewerId || !reviewData.rating) {
     console.error("[reviewService] addReview: Missing required fields.");
@@ -34,8 +39,21 @@ export const addReview = async (reviewData: NewReviewData): Promise<string> => {
   }
 
   try {
+    const dataToSave: NewReviewData = {
+      targetUserId: reviewData.targetUserId,
+      reviewerId: reviewData.reviewerId,
+      reviewerName: reviewData.reviewerName,
+      // Ensure reviewerAvatar is explicitly null if undefined or empty string
+      reviewerAvatar: reviewData.reviewerAvatar && reviewData.reviewerAvatar.trim() !== '' ? reviewData.reviewerAvatar : null,
+      rating: reviewData.rating,
+      comment: reviewData.comment,
+      // Timestamps are added by the server/Firestore
+    };
+
+    console.log("[reviewService] addReview: Data being sent to Firestore:", dataToSave);
+
     const docRef = await addDoc(collection(db, REVIEWS_COLLECTION), {
-      ...reviewData,
+      ...dataToSave,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -45,6 +63,9 @@ export const addReview = async (reviewData: NewReviewData): Promise<string> => {
     console.error("[reviewService] Error adding review:", error);
     if (error.code === 'permission-denied') {
       console.error(`[reviewService] PERMISSION DENIED adding review. Auth UID: ${clientAuthUid}. Data:`, reviewData);
+    }
+    if (error.message && error.message.includes("Unsupported field value: undefined")) {
+      console.error("[reviewService] Firestore received an undefined value. Data sent:", reviewData);
     }
     throw new Error(error.message || "Could not add review.");
   }
@@ -73,7 +94,7 @@ export const getReviewsForProfile = async (targetUserId: string): Promise<Client
         targetUserId: data.targetUserId,
         reviewerId: data.reviewerId,
         reviewerName: data.reviewerName,
-        reviewerAvatar: data.reviewerAvatar,
+        reviewerAvatar: data.reviewerAvatar, // This can be null
         rating: data.rating,
         comment: data.comment,
         createdAt: (data.createdAt as Timestamp).toMillis(),
@@ -85,7 +106,7 @@ export const getReviewsForProfile = async (targetUserId: string): Promise<Client
   } catch (error: any) {
     console.error(`[reviewService] Error fetching reviews for profile ${targetUserId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error(`%c[reviewService] PERMISSION DENIED fetching reviews for target ${targetUserId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Firestore Rule for '/reviews/{reviewId}' should be 'allow read: if request.auth != null;'. VERIFY PUBLISHED RULES.`, "color: red; font-weight: bold;");
+      console.error(`[reviewService] PERMISSION DENIED fetching reviews for target ${targetUserId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Check Firestore rules for reading 'reviews' collection.`);
       throw new Error('Permission denied fetching reviews. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
