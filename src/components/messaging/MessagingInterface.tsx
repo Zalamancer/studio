@@ -80,7 +80,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
       <button
         onClick={() => onSelect(conversation.id)}
         className={cn(
-          "w-full text-left p-3 hover:bg-muted transition-colors rounded-lg flex items-center gap-3",
+          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-center gap-3",
           isSelected ? "bg-muted" : ""
         )}
         aria-current={isSelected ? "page" : undefined}
@@ -305,8 +305,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
               <Users className="h-5 w-5" /> Conversations
           </h2>
         </div>
-        <ScrollArea className="flex-grow">
-          <div className="p-2 space-y-1">
+        <ScrollArea className="flex-grow bg-background"> {/* ADDED bg-background to match right panel */}
+          <div className="p-2 space-y-1"> {/* Padding for the list container */}
             {isLoadingConversations ? (
               // Skeleton loaders for conversations list
               Array.from({ length: 5 }).map((_, i) => (
@@ -473,3 +473,4 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
