@@ -18,10 +18,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, User, Users, AlertTriangle, Eye, Building, MessageSquare, X, CornerDownLeft } from 'lucide-react'; // Added MessageSquare, X, CornerDownLeft
+import { Loader2, Send, User, Users, AlertTriangle, Eye, Building, MessageSquare, X, CornerDownLeft } from 'lucide-react'; 
 import { cn } from '@/lib/utils';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -31,10 +32,16 @@ interface MessagingInterfaceProps {
 
 const getInitials = (displayNameOrUid: string | undefined | null): string => {
     if (!displayNameOrUid) return '?';
-    if (displayNameOrUid.startsWith('@')) { 
-        return displayNameOrUid.length > 1 ? displayNameOrUid.charAt(1).toUpperCase() : '?';
+    const nameToProcess = displayNameOrUid.startsWith('@') ? displayNameOrUid.substring(1) : displayNameOrUid;
+
+    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
+    if (pseudonymRegex.test(nameToProcess)) {
+        const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
+        if (match && match[1] && match[2]) return match[1] + match[2];
+        if (match && match[1]) return match[1];
     }
-    const names = displayNameOrUid.split(' ');
+    const names = nameToProcess.split(' ').filter(Boolean);
+    if (names.length === 0) return '?';
     if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
     return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
 };
@@ -60,14 +67,14 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
 
     const { data: otherParticipantDetails, isLoading: isLoadingDetails } = useQuery({
         queryKey: ['userDetails', otherParticipantId],
-        queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : null,
+        queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : Promise.resolve(null),
         enabled: !!otherParticipantId,
         staleTime: Infinity,
     });
 
     const participantName = isLoadingDetails
         ? 'Loading...'
-        : otherParticipantDetails?.name || `@${otherParticipantId || 'Unknown'}`;
+        : otherParticipantDetails?.name || generateAnonymousName(otherParticipantId || 'unknown_user');
     const initials = getInitials(participantName);
 
     const formattedTime = conversation.lastMessageTimestamp
@@ -157,7 +164,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwn
         {message.replyToMessageId && message.repliedToTextSnippet && (
           <div className={cn(
             "text-xs p-1.5 rounded-md mb-1 border-l-2",
-            isOwnMessage ? "bg-primary/80 border-primary-foreground/50" : "bg-muted-foreground/10 border-muted-foreground/30"
+            isOwnMessage 
+              ? "bg-card text-primary border-primary/30" 
+              : "bg-accent text-accent-foreground border-accent/50"
           )}>
             <p className="italic truncate opacity-80">{message.repliedToTextSnippet}</p>
           </div>
@@ -215,7 +224,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
   useEffect(() => {
       if (isConversationsError && conversationsError) {
-          console.error("Error fetching conversations in UI:", conversationsError);
+          console.error("[MessagingInterface] Error fetching conversations:", conversationsError);
            toast({
                variant: "destructive",
                title: "Error Loading Conversations",
@@ -248,7 +257,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       error: messagesError
    } = useQuery<SerializableMessage[]>({
        queryKey: ['messages', selectedConversationId],
-       queryFn: () => getMessagesForConversation(selectedConversationId!),
+       queryFn: () => selectedConversationId ? getMessagesForConversation(selectedConversationId) : Promise.resolve([]),
        enabled: !!selectedConversationId,
        staleTime: 1000 * 15, 
        refetchInterval: 1000 * 30, 
@@ -258,7 +267,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     mutationFn: sendMessage,
     onSuccess: () => {
         setNewMessage('');
-        setReplyingTo(null); // Clear reply state on successful send
+        setReplyingTo(null); 
         queryClient.invalidateQueries({ queryKey: ['messages', selectedConversationId] });
         queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] }); 
     },
@@ -314,14 +323,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
    const { data: headerParticipantDetails, isLoading: isLoadingHeaderDetails } = useQuery({
        queryKey: ['userDetails', otherParticipantId],
-       queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : null,
+       queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : Promise.resolve(null),
        enabled: !!otherParticipantId,
        staleTime: Infinity, 
    });
 
    const otherParticipantName = isLoadingHeaderDetails
        ? 'Loading...'
-       : headerParticipantDetails?.name || `@${otherParticipantId || 'Select Conversation'}`;
+       : headerParticipantDetails?.name || generateAnonymousName(otherParticipantId || 'Select Conversation');
    const otherParticipantInitials = getInitials(otherParticipantName);
    const otherParticipantAvatar = headerParticipantDetails?.avatar;
    const selectedPostQuestion = selectedConversation?.postId && selectedConversation.postId !== 'general_connection'
@@ -523,3 +532,4 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
