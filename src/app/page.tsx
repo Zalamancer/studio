@@ -108,56 +108,73 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
         staleTime: 5 * 60 * 1000, // Cache for 5 minutes
     });
 
-    if (isLoadingMentions) {
+    if (isLoadingMentions && mentionedUserIds.length > 0) {
         return <>{text}</>; // Render plain text while loading profiles
     }
 
-    const parts = text.split(/(@[a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g);
+    const mentionRegexGlobal = /@([a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g;
+    const renderableParts = [];
+    let lastIndex = 0;
 
+    for (const match of text.matchAll(mentionRegexGlobal)) {
+        const mentionText = match[0]; // e.g., "@Jane Doe" or "@user123"
+        const textualMention = match[1]; // e.g., "Jane Doe" or "user123"
+        const startIndex = match.index!;
 
-    return (
-        <>
-            {parts.map((part, index) => {
-                if (part.startsWith('@')) {
-                    const textualMention = part.substring(1).trim();
-                    let profileToLink: UserProfileBasic | null | undefined = null;
+        // Add text before the mention
+        if (startIndex > lastIndex) {
+            renderableParts.push(text.substring(lastIndex, startIndex));
+        }
 
-                    // Strategy 1: Direct UID match (if textualMention is a UID and is in mentionedUserIds (and thus in map))
-                    if (IS_UID_REGEX_PAGE.test(textualMention) && mentionProfilesMap.has(textualMention)) {
-                        profileToLink = mentionProfilesMap.get(textualMention);
-                    }
+        let profileToLink: UserProfileBasic | null | undefined = undefined;
 
-                    // Strategy 2: If not found by UID, try to find by displayName match (case-insensitive) from the fetched profiles
-                    if (!profileToLink && mentionProfilesMap.size > 0) {
-                        const textualMentionLower = textualMention.toLowerCase();
-                        // Iterate through the UIDs that were *supposed* to be mentioned and whose profiles were fetched
-                        for (const uid of mentionedUserIds) {
-                            const profile = mentionProfilesMap.get(uid); // Get profile by UID
-                            if (profile && profile.displayName?.toLowerCase() === textualMentionLower) {
-                                profileToLink = profile;
-                                break;
-                            }
-                        }
-                    }
+        // Strategy 1: Direct UID match (if textualMention is a UID and is in mentionedUserIds (and thus in map))
+        if (IS_UID_REGEX_PAGE.test(textualMention) && mentionedUserIds.includes(textualMention) && mentionProfilesMap.has(textualMention)) {
+            profileToLink = mentionProfilesMap.get(textualMention);
+            console.log(`[TextWithMentions] Matched UID: '${textualMention}' to profile:`, profileToLink);
+        }
 
-                    if (profileToLink && profileToLink.userId && IS_UID_REGEX_PAGE.test(profileToLink.userId)) {
-                        return (
-                            <Link
-                                key={`${profileToLink.userId}-${index}`}
-                                href={`/profile/${profileToLink.userId}`}
-                                className="text-primary hover:underline font-medium"
-                            >
-                                @{profileToLink.displayName || generateAnonymousName(profileToLink.userId)}
-                            </Link>
-                        );
-                    } else {
-                        return <span key={index} className="text-foreground">{part}</span>;
-                    }
+        // Strategy 2: If not found by UID, try to find by displayName match (case-insensitive) from the fetched profiles
+        if (!profileToLink && mentionProfilesMap.size > 0) {
+            const textualMentionLower = textualMention.toLowerCase();
+            for (const uid of mentionedUserIds) { // Iterate over UIDs that were meant to be resolved
+                const profile = mentionProfilesMap.get(uid);
+                if (profile && profile.displayName?.toLowerCase() === textualMentionLower) {
+                    profileToLink = profile;
+                    console.log(`[TextWithMentions] Matched DisplayName: '${textualMention}' to profile (UID ${uid}):`, profileToLink);
+                    break;
                 }
-                return <React.Fragment key={index}>{part}</React.Fragment>;
-            })}
-        </>
-    );
+            }
+        }
+
+        if (profileToLink && profileToLink.userId && IS_UID_REGEX_PAGE.test(profileToLink.userId)) {
+            renderableParts.push(
+                <Link
+                    key={`${profileToLink.userId}-${startIndex}`}
+                    href={`/profile/${profileToLink.userId}`}
+                    className="text-primary hover:underline font-medium"
+                >
+                    @{profileToLink.displayName || generateAnonymousName(profileToLink.userId)}
+                </Link>
+            );
+        } else {
+            // Render as styled text if no resolvable profile or if it's an @ symbol not in mentionedUserIds
+            renderableParts.push(
+                <span key={`unresolved-${startIndex}`} className="text-primary cursor-default" title={`Unresolved mention: ${mentionText}`}>
+                    {mentionText}
+                </span>
+            );
+             console.log(`[TextWithMentions] Unresolved mention or not in mentionedUserIds: '${mentionText}'`);
+        }
+        lastIndex = startIndex + mentionText.length;
+    }
+
+    // Add any remaining text after the last mention
+    if (lastIndex < text.length) {
+        renderableParts.push(text.substring(lastIndex));
+    }
+
+    return <>{renderableParts}</>;
 });
 TextWithMentions.displayName = 'TextWithMentions';
 
@@ -1463,7 +1480,8 @@ export default BoardPageContent;
 
 // Helper to extract display names from text, assuming @DisplayName format
 const extractDisplayNamesFromText = (text: string): string[] => {
-    const mentionRegex = /@([a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g;
+    console.log(`%c[page.tsx] extractDisplayNamesFromText - Input Text: "${text}"`, "color: orange");
+    const mentionRegex = /@([a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g; // Allows spaces, dots, hyphens in display names
     const matches = text.matchAll(mentionRegex);
     const displayNames = new Set<string>();
     for (const match of matches) {
@@ -1471,6 +1489,7 @@ const extractDisplayNamesFromText = (text: string): string[] => {
             displayNames.add(match[1].trim());
         }
     }
+    console.log(`%c[page.tsx] extractDisplayNamesFromText - Extracted display names:`, "color: orange", Array.from(displayNames));
     return Array.from(displayNames);
 };
 
@@ -1479,8 +1498,8 @@ const extractMentionedUids = (text: string, profilesToSearch: UserProfileBasic[]
     const textualMentions = extractDisplayNamesFromText(text);
     const uids = new Set<string>();
 
-    // console.log(`%c[page.tsx] extractMentionedUids - Input Textual Mentions:`, "color: orange", textualMentions);
-    // console.log(`%c[page.tsx] extractMentionedUids - Profiles to Search In (length: ${profilesToSearch.length}):`, "color: orange", profilesToSearch.slice(0,5));
+    console.log(`%c[page.tsx] extractMentionedUids - Input Textual Mentions:`, "color: orange", textualMentions);
+    console.log(`%c[page.tsx] extractMentionedUids - Profiles to Search In (count: ${profilesToSearch.length}):`, "color: orange;", profilesToSearch.map(p => ({uid:p.userId, name:p.displayName})).slice(0,10));
 
     textualMentions.forEach(displayName => {
         const displayNameLower = displayName.toLowerCase();
@@ -1488,20 +1507,25 @@ const extractMentionedUids = (text: string, profilesToSearch: UserProfileBasic[]
 
         // Strategy 1: Case-insensitive display name match
         foundProfile = profilesToSearch.find(p => p.displayName?.toLowerCase() === displayNameLower);
+        if (foundProfile) {
+             console.log(`%c[page.tsx] extractMentionedUids - Resolved (DisplayName Match): "${displayName}" to UID "${foundProfile.userId}"`, "color: green");
+        }
 
         // Strategy 2: If not found by display name, check if the 'displayName' itself is a UID
         if (!foundProfile && IS_UID_REGEX_PAGE.test(displayName)) {
             foundProfile = profilesToSearch.find(p => p.userId === displayName);
+            if (foundProfile) {
+                 console.log(`%c[page.tsx] extractMentionedUids - Resolved (UID Match): "${displayName}" to UID "${foundProfile.userId}"`, "color: green");
+            }
         }
 
         if (foundProfile && IS_UID_REGEX_PAGE.test(foundProfile.userId)) {
             uids.add(foundProfile.userId);
-            // console.log(`%c[page.tsx] extractMentionedUids - Resolved: "${displayName}" to UID "${foundProfile.userId}"`, "color: green");
         } else {
-            // console.warn(`%c[page.tsx] extractMentionedUids: Could not resolve textual mention "${displayName}" to a UID from profilesToSearch.`, "color: red");
+            console.warn(`%c[page.tsx] extractMentionedUids: Could not resolve textual mention "${displayName}" to a UID from profilesToSearch.`, "color: red");
         }
     });
-    // console.log(`%c[page.tsx] extractMentionedUids - Final Resolved UIDs:`, "color: green; font-weight: bold;", Array.from(uids));
+    console.log(`%c[page.tsx] extractMentionedUids - Final Resolved UIDs:`, "color: green; font-weight: bold;", Array.from(uids));
     return Array.from(uids);
 };
 

@@ -1,3 +1,4 @@
+
 // src/services/commentService.ts
 // Client-callable by default (no 'use server;' at the top)
 
@@ -28,23 +29,25 @@ import { generateAnonymousName } from '@/lib/pseudonymUtils'; // For fallback na
 
 // Helper function to extract mentioned user UIDs from text
 // This assumes mentions are in the format @UID and UIDs are alphanumeric with underscores.
-const extractMentions = (text: string): string[] => {
-  const mentionRegex = /@([a-zA-Z0-9_-]+)/g; // Adjusted to include hyphen, common in some UIDs
+// This helper is LOCAL to this service. The global one is in page.tsx
+const extractMentionsFromTextService = (text: string): string[] => {
+  console.log(`%c[commentService] extractMentionsFromTextService - Input Text: "${text}"`, "color: #FF8C00");
+  const mentionRegex = /@([a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g;
   const matches = text.matchAll(mentionRegex);
   const userIdentifiers = new Set<string>();
   for (const match of matches) {
     if (match[1]) {
-      userIdentifiers.add(match[1]);
+      userIdentifiers.add(match[1].trim());
     }
   }
-  console.log(`[commentService] extractMentions from text "${text.substring(0,30)}...": Found UIDs:`, Array.from(userIdentifiers));
+  console.log(`%c[commentService] extractMentionsFromTextService - Extracted potential identifiers:`, "color: #FF8C00", Array.from(userIdentifiers));
   return Array.from(userIdentifiers);
 };
 
 // --- Comment Functions ---
 
 export const addCommentToPost = async (postId: string, commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
-  console.log(`[commentService] addCommentToPost: Called for postId '${postId}' by userId '${commentData.userId}'. Comment text: "${commentData.text?.substring(0,50)}..."`);
+  console.log(`%c[commentService] addCommentToPost: Called for postId '${postId}' by userId '${commentData.userId}'. Comment text: "${commentData.text?.substring(0,50)}..."`, "color: blue;");
   if (!postId) throw new Error('Post ID is required to add a comment.');
   if (!commentData.userId) throw new Error('User ID is required for the comment.');
   if (!commentData.text || commentData.text.trim() === '') throw new Error('Comment text cannot be empty.');
@@ -52,54 +55,56 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
   try {
     const postDocRef = doc(db, 'posts', postId);
     const commentsCollectionRef = collection(postDocRef, 'comments');
-    const rawMentions = extractMentions(commentData.text); // These should be UIDs if input format is @UID
-    console.log(`[commentService] addCommentToPost: Extracted raw mentions (potential UIDs):`, rawMentions);
+
+    // IMPORTANT: The commentData.mentionedUserIds should already be an array of UIDs resolved by the client (e.g., extractMentionedUids in page.tsx)
+    const resolvedMentionedUids = Array.isArray(commentData.mentionedUserIds) ? commentData.mentionedUserIds : [];
+    console.log(`%c[commentService] addCommentToPost: Received resolvedMentionedUids from client:`, "color: blue;", resolvedMentionedUids);
+
 
     const fullCommentData: NewCommentData & { timestamp: Timestamp } = {
       ...commentData,
       likeCount: 0,
       likedBy: [],
-      mentionedUserIds: rawMentions, // Directly use extracted UIDs
+      mentionedUserIds: resolvedMentionedUids, // Use the UIDs passed from the client
       timestamp: serverTimestamp() as Timestamp,
     };
 
     const docRef = await addDoc(commentsCollectionRef, fullCommentData);
     const newCommentId = docRef.id;
-    console.log(`[commentService] addCommentToPost: Comment added successfully to post ${postId} with ID: ${newCommentId}`);
+    console.log(`%c[commentService] addCommentToPost: Comment added successfully to post ${postId} with ID: ${newCommentId}`, "color: green;");
 
     const postDetails = await getPostDetails(postId); // Fetch post details once
 
-    // Notify post author (if different from commenter) - This seems missing, usually a good feature
-    // const postAuthorId = (await getDoc(postDocRef)).data()?.userId;
-    // if (postAuthorId && postAuthorId !== commentData.userId) { ... create 'reply' type notification ... }
-
-
     // Notify mentioned users
-    if (rawMentions.length > 0) {
-      console.log(`[commentService] addCommentToPost: Processing ${rawMentions.length} mentions for notifications.`);
-      for (const mentionedRecipientUid of rawMentions) {
-        // Self-mentions will now trigger notifications due to previous change request
+    if (resolvedMentionedUids.length > 0) {
+      console.log(`%c[commentService] addCommentToPost: Processing ${resolvedMentionedUids.length} mentions for notifications using UIDs.`, "color: blue;");
+      for (const mentionedRecipientUid of resolvedMentionedUids) {
+        // Ensure mentionedRecipientUid is a valid UID before proceeding
+        if (!mentionedRecipientUid || typeof mentionedRecipientUid !== 'string' || !/^[a-zA-Z0-9]{20,}$/.test(mentionedRecipientUid)) {
+            console.warn(`%c[commentService] addCommentToPost: Invalid or non-UID identifier found in resolvedMentionedUids, skipping notification for: '${mentionedRecipientUid}'`, "color: orange;");
+            continue;
+        }
         const notificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
-          userId: mentionedRecipientUid, // This is the UID of the user being mentioned
+          userId: mentionedRecipientUid,
           type: 'mention',
-          senderId: commentData.userId, // The user who made the comment
+          senderId: commentData.userId,
           postId: postId,
-          postQuestion: postDetails?.question || null, // Ensure null if undefined
+          postQuestion: postDetails?.question || null,
           commentId: newCommentId,
           textSnippet: commentData.text.substring(0, 100),
         };
-        console.log(`[commentService] addCommentToPost: Attempting to create 'mention' notification for recipient UID '${mentionedRecipientUid}'. Payload:`, notificationPayload);
+        console.log(`%c[commentService] addCommentToPost: Attempting to create 'mention' notification for recipient UID '${mentionedRecipientUid}'. Payload:`, "color: blue;", notificationPayload);
         try {
           await createNotification(notificationPayload);
-          console.log(`[commentService] addCommentToPost: Mention notification CREATED for recipient ${mentionedRecipientUid} regarding comment ${newCommentId}`);
+          console.log(`%c[commentService] addCommentToPost: Mention notification CREATED for recipient ${mentionedRecipientUid} regarding comment ${newCommentId}`, "color: green;");
         } catch (notifyError: any) {
-          console.error(`[commentService] addCommentToPost: FAILED to create mention notification for recipient ${mentionedRecipientUid}. Error:`, notifyError.message, notifyError);
+          console.error(`%c[commentService] addCommentToPost: FAILED to create mention notification for recipient ${mentionedRecipientUid}. Error:`, "color: red;", notifyError.message, notifyError);
         }
       }
     }
     return newCommentId;
   } catch (error: any) {
-    console.error(`[commentService] addCommentToPost: Error adding comment to post ${postId}:`, error);
+    console.error(`%c[commentService] addCommentToPost: Error adding comment to post ${postId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
       console.error("Firestore permission denied. Check security rules for writing to posts/{postId}/comments subcollection.");
       throw new Error('Permission denied. Check Firestore security rules.');
@@ -113,7 +118,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
     console.warn("[commentService] getCommentsForPost called with invalid postId.");
     return [];
   }
-  console.log(`[commentService] Fetching comments for post: ${postId}`);
+  // console.log(`[commentService] Fetching comments for post: ${postId}`);
 
   try {
     const postDocRef = doc(db, 'posts', postId);
@@ -139,7 +144,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
     const comments = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) {
-        console.warn(`[commentService] Document ${docSnap.id} has missing or invalid fields.`);
+        // console.warn(`[commentService] Document ${docSnap.id} has missing or invalid fields.`);
         return null;
       }
       const timestampMillis = data.timestamp.toMillis();
@@ -224,7 +229,7 @@ export const deleteCommentFromPost = async (postId: string, commentId: string): 
 // --- SubComment Functions ---
 
 export const addSubCommentToComment = async (postId: string, commentId: string, subCommentData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
-  console.log(`[commentService] addSubCommentToComment: Called for postId '${postId}', commentId '${commentId}' by userId '${subCommentData.userId}'. Text: "${subCommentData.text?.substring(0,50)}..."`);
+  console.log(`%c[commentService] addSubCommentToComment: Called for postId '${postId}', commentId '${commentId}' by userId '${subCommentData.userId}'. Text: "${subCommentData.text?.substring(0,50)}..."`, "color: blue;");
   if (!postId || !commentId) throw new Error('Post ID and Comment ID are required to add a subcomment.');
   if (!subCommentData.userId) throw new Error('User ID is required for the subcomment.');
   if (!subCommentData.text || subCommentData.text.trim() === '') throw new Error('Subcomment text cannot be empty.');
@@ -232,21 +237,23 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
   try {
     const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
     const subCommentsCollectionRef = collection(commentDocRef, 'subcomments');
-    const rawMentions = extractMentions(subCommentData.text); // These should be UIDs
-    console.log(`[commentService] addSubCommentToComment: Extracted raw mentions (potential UIDs):`, rawMentions);
+
+    // IMPORTANT: subCommentData.mentionedUserIds should already be an array of UIDs resolved by the client
+    const resolvedMentionedUids = Array.isArray(subCommentData.mentionedUserIds) ? subCommentData.mentionedUserIds : [];
+    console.log(`%c[commentService] addSubCommentToComment: Received resolvedMentionedUids from client:`, "color: blue;", resolvedMentionedUids);
 
 
     const fullSubCommentData: NewSubCommentData & { timestamp: Timestamp } = {
         ...subCommentData,
         likeCount: 0,
         likedBy: [],
-        mentionedUserIds: rawMentions,
+        mentionedUserIds: resolvedMentionedUids,
         timestamp: serverTimestamp() as Timestamp,
     };
 
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
     const newSubCommentId = docRef.id;
-    console.log(`[commentService] addSubCommentToComment: Subcomment added successfully to comment ${commentId} with ID: ${newSubCommentId}`);
+    console.log(`%c[commentService] addSubCommentToComment: Subcomment added successfully to comment ${commentId} with ID: ${newSubCommentId}`, "color: green;");
 
     const postDetails = await getPostDetails(postId);
     const commentSnap = await getDoc(commentDocRef);
@@ -264,24 +271,32 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
             subCommentId: newSubCommentId,
             textSnippet: subCommentData.text.substring(0, 100),
         };
-        console.log(`[commentService] addSubCommentToComment: Attempting to create 'reply' notification for original commenter '${originalCommenterId}'. Payload:`, replyNotificationPayload);
+        console.log(`%c[commentService] addSubCommentToComment: Attempting to create 'reply' notification for original commenter '${originalCommenterId}'. Payload:`, "color: blue;", replyNotificationPayload);
         try {
              await createNotification(replyNotificationPayload);
-             console.log(`[commentService] addSubCommentToComment: Reply notification CREATED for original commenter ${originalCommenterId}`);
+             console.log(`%c[commentService] addSubCommentToComment: Reply notification CREATED for original commenter ${originalCommenterId}`, "color: green;");
         } catch (notifyError: any) {
-             console.error(`[commentService] addSubCommentToComment: FAILED to create reply notification for original commenter ${originalCommenterId}. Error:`, notifyError.message, notifyError);
+             console.error(`%c[commentService] addSubCommentToComment: FAILED to create reply notification for original commenter ${originalCommenterId}. Error:`, "color: red;", notifyError.message, notifyError);
         }
     }
 
     // Notify mentioned users
-    if (rawMentions.length > 0) {
-       console.log(`[commentService] addSubCommentToComment: Processing ${rawMentions.length} mentions for notifications.`);
-       for (const mentionedRecipientUid of rawMentions) {
-           // Avoid sending a duplicate mention notification if the mentioned user is the original commenter AND they are not the sub-commenter
-           const isSelfMention = mentionedRecipientUid === subCommentData.userId;
+    if (resolvedMentionedUids.length > 0) {
+       console.log(`%c[commentService] addSubCommentToComment: Processing ${resolvedMentionedUids.length} mentions for notifications using UIDs.`, "color: blue;");
+       for (const mentionedRecipientUid of resolvedMentionedUids) {
+           // Ensure mentionedRecipientUid is a valid UID
+            if (!mentionedRecipientUid || typeof mentionedRecipientUid !== 'string' || !/^[a-zA-Z0-9]{20,}$/.test(mentionedRecipientUid)) {
+                console.warn(`%c[commentService] addSubCommentToComment: Invalid or non-UID identifier found in resolvedMentionedUids, skipping notification for: '${mentionedRecipientUid}'`, "color: orange;");
+                continue;
+            }
+
            const isMentioningOriginalCommenter = mentionedRecipientUid === originalCommenterId;
 
-           if (isSelfMention || (!isMentioningOriginalCommenter || (isMentioningOriginalCommenter && subCommentData.userId === originalCommenterId))) {
+           // Send mention notification if:
+           // 1. The mentioned user is NOT the original commenter (they already get a 'reply' notification if different from sub-commenter)
+           // OR
+           // 2. The mentioned user IS the original commenter, AND the sub-commenter IS ALSO the original commenter (i.e., original commenter mentioning themselves in their own reply)
+           if (!isMentioningOriginalCommenter || (isMentioningOriginalCommenter && subCommentData.userId === originalCommenterId)) {
                const mentionNotificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
                    userId: mentionedRecipientUid,
                    type: 'mention',
@@ -292,21 +307,21 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
                    subCommentId: newSubCommentId,
                    textSnippet: subCommentData.text.substring(0, 100),
                };
-               console.log(`[commentService] addSubCommentToComment: Attempting to create 'mention' notification for recipient UID '${mentionedRecipientUid}'. Payload:`, mentionNotificationPayload);
+               console.log(`%c[commentService] addSubCommentToComment: Attempting to create 'mention' notification for recipient UID '${mentionedRecipientUid}'. Payload:`, "color: blue;", mentionNotificationPayload);
                try {
                    await createNotification(mentionNotificationPayload);
-                   console.log(`[commentService] addSubCommentToComment: Mention notification CREATED for recipient ${mentionedRecipientUid} regarding subcomment ${newSubCommentId}`);
+                   console.log(`%c[commentService] addSubCommentToComment: Mention notification CREATED for recipient ${mentionedRecipientUid} regarding subcomment ${newSubCommentId}`, "color: green;");
                } catch (notifyError: any) {
-                   console.error(`[commentService] addSubCommentToComment: FAILED to create mention notification for recipient ${mentionedRecipientUid}. Error:`, notifyError.message, notifyError);
+                   console.error(`%c[commentService] addSubCommentToComment: FAILED to create mention notification for recipient ${mentionedRecipientUid}. Error:`, "color: red;", notifyError.message, notifyError);
                }
            } else {
-                console.log(`[commentService] addSubCommentToComment: SKIPPING mention notification for original commenter '${mentionedRecipientUid}' as they received/will receive a 'reply' notification.`);
+                console.log(`%c[commentService] addSubCommentToComment: SKIPPING mention notification for original commenter '${mentionedRecipientUid}' as they already received/will receive a 'reply' notification.`, "color: #FFA500;");
            }
        }
     }
     return newSubCommentId;
   } catch (error: any) {
-    console.error(`[commentService] addSubCommentToComment: Error adding subcomment to comment ${commentId}:`, error);
+    console.error(`%c[commentService] addSubCommentToComment: Error adding subcomment to comment ${commentId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
       throw new Error('Permission denied. Check Firestore security rules.');
     }
@@ -422,3 +437,4 @@ export const toggleLikeSubComment = async (postId: string, commentId: string, su
         throw new Error(`Failed to toggle subcomment like: ${error.message}`);
     }
 };
+

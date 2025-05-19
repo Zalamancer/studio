@@ -1,3 +1,4 @@
+
 // src/components/notifications/NotificationDropdown.tsx
 "use client";
 
@@ -21,7 +22,7 @@ import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
-// Removed: import { generateAnonymousName } from '@/lib/pseudonymUtils'; // No longer needed
+import { generateAnonymousName } from '@/lib/pseudonymUtils'; // For fallback names
 
 interface NotificationDropdownProps {
   userId: string;
@@ -40,7 +41,7 @@ NotificationIcon.displayName = 'NotificationIcon';
 
 const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id: string) => void }> = React.memo(({ notification, onRead }) => {
     const timeAgo = formatDistanceToNow(notification.timestamp, { addSuffix: true });
-    const senderDisplayName = notification.senderName || `@${notification.senderId}`;
+    const senderDisplayName = notification.senderName || generateAnonymousName(notification.senderId);
 
 
     const handleClick = () => {
@@ -114,11 +115,21 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
 
   const { data: notifications = [], isLoading, error } = useQuery<ClientNotification[]>({
     queryKey: ['notifications', userId],
-    queryFn: () => getNotificationsForUser(userId, 20),
+    queryFn: () => {
+        console.log(`[NotificationDropdown] useQuery: Fetching notifications for userId: ${userId}`);
+        return getNotificationsForUser(userId, 20);
+    },
     enabled: !!userId,
-    refetchInterval: 1000 * 60,
-    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60, // Refetch every minute
+    staleTime: 1000 * 30, // Consider data stale after 30 seconds
   });
+
+  useEffect(() => {
+    if (error) {
+        console.error("[NotificationDropdown] Error fetching notifications:", error);
+        // Optionally show a toast if persistent errors occur, but be mindful of repeated toasts on refetch intervals
+    }
+  }, [error, toast]);
 
   const markReadMutation = useMutation({
     mutationFn: markNotificationAsRead,
@@ -215,3 +226,4 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     </DropdownMenu>
   );
 };
+

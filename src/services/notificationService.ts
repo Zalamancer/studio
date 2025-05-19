@@ -1,3 +1,4 @@
+
 // src/services/notificationService.ts
 // Client-callable by default (no 'use server;' at the top)
 
@@ -24,20 +25,20 @@ const notificationsCollectionRef = collection(db, 'notifications');
 
 // Function to create a new notification
 export const createNotification = async (notificationData: Omit<NewNotificationData, 'senderName' | 'senderAvatar'>): Promise<string> => {
-  console.log('[notificationService] createNotification: Called with data:', JSON.stringify(notificationData, null, 2));
+  console.log('%c[notificationService] createNotification: Called with data:', "color: purple;", JSON.stringify(notificationData, null, 2));
   if (!notificationData.userId || !notificationData.senderId || !notificationData.type) {
-    console.error('[notificationService] createNotification: Missing required fields (userId, senderId, type). Data:', notificationData);
+    console.error('%c[notificationService] createNotification: Missing required fields (userId, senderId, type). Data:', "color: red;", notificationData);
     throw new Error('User ID, Sender ID, and Type are required to create a notification.');
   }
 
   try {
     const senderProfile = await getUserProfileBasic(notificationData.senderId);
-    console.log('[notificationService] createNotification: Fetched senderProfile for senderId', notificationData.senderId, ':', JSON.stringify(senderProfile, null, 2));
+    console.log('%c[notificationService] createNotification: Fetched senderProfile for senderId', "color: purple;", notificationData.senderId, ':', JSON.stringify(senderProfile, null, 2));
 
     const fullNotificationData: NewNotificationData & { timestamp: Timestamp, isRead: boolean } = {
       ...notificationData,
       senderName: senderProfile?.displayName || generateAnonymousName(notificationData.senderId),
-      senderAvatar: senderProfile?.avatarUrl || null, // Ensure null if undefined or empty
+      senderAvatar: senderProfile?.avatarUrl || null,
       postQuestion: notificationData.postQuestion || null,
       commentId: notificationData.commentId || null,
       subCommentId: notificationData.subCommentId || null,
@@ -45,13 +46,13 @@ export const createNotification = async (notificationData: Omit<NewNotificationD
       timestamp: serverTimestamp() as Timestamp,
       isRead: false,
     };
-    console.log('[notificationService] createNotification: fullNotificationData to be written:', JSON.stringify(fullNotificationData, null, 2));
+    console.log('%c[notificationService] createNotification: fullNotificationData to be written:', "color: purple; font-weight: bold;", JSON.stringify(fullNotificationData, null, 2));
 
     const docRef = await addDoc(notificationsCollectionRef, fullNotificationData);
-    console.log(`[notificationService] Notification CREATED successfully for user ${notificationData.userId} with ID: ${docRef.id}`);
+    console.log(`%c[notificationService] Notification CREATED successfully for user ${notificationData.userId} (recipient) from sender ${notificationData.senderId} with Notification ID: ${docRef.id}`, "color: green;");
     return docRef.id;
   } catch (error: any) {
-    console.error(`[notificationService] FAILED to create notification for user ${notificationData.userId}. Error:`, error.message, error);
+    console.error(`%c[notificationService] FAILED to create notification for user ${notificationData.userId}. Sender was ${notificationData.senderId}. Error:`, "color: red;", error.message, error);
     console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
     if (error.code === 'permission-denied') {
       console.error("[notificationService] Firestore permission denied creating notification. Check rules for 'notifications' collection.");
@@ -168,3 +169,4 @@ export const markAllNotificationsAsRead = async (userId: string): Promise<void> 
     throw new Error(`Failed to mark all notifications as read: ${error.message}`);
   }
 };
+
