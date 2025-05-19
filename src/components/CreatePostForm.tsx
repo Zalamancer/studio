@@ -2,7 +2,7 @@
 // src/components/CreatePostForm.tsx
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'; // Added useMemo
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -40,11 +40,29 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
-import { getSuggestibleUsers } from '@/services/connectionService'; // For real user suggestions
+import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
-// Local getInitials function for this component
+
+export interface Industry {
+  name: string;
+  code: string;
+}
+
+export interface SubSector {
+  name: string;
+  code: string;
+  industries: Industry[];
+}
+
+export interface SectorWithSubSectors {
+  name: string;
+  code: string;
+  description?: string;
+  subSectors: SubSector[];
+}
+
 const getInitials = (displayNameOrUid: string | undefined | null): string => {
     if (!displayNameOrUid) return '?';
     const nameToProcess = displayNameOrUid.startsWith('@') ? displayNameOrUid.substring(1) : displayNameOrUid;
@@ -93,23 +111,6 @@ export interface CreatePostFormData {
   mentionedUserIds: string[];
 }
 
-export interface Industry {
-  name: string;
-  code: string;
-}
-
-export interface SubSector {
-  name: string;
-  code: string;
-  industries: Industry[];
-}
-
-export interface SectorWithSubSectors {
-  name: string;
-  code: string;
-  description?: string;
-  subSectors: SubSector[];
-}
 
 interface CreatePostFormProps {
   onSubmit: (data: CreatePostFormData) => void;
@@ -146,16 +147,27 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
   const [descriptionMentionQuery, setDescriptionMentionQuery] = useState('');
   const [showDescriptionSuggestions, setShowDescriptionSuggestions] = useState(false);
+  const [debouncedDescriptionQuery, setDebouncedDescriptionQuery] = useState('');
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
   const descriptionSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [selectedMentionedUserIds, setSelectedMentionedUserIds] = useState<Set<string>>(new Set());
 
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedDescriptionQuery(descriptionMentionQuery);
+    }, 300); // 300ms debounce time
+
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [descriptionMentionQuery]);
 
   const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
-    queryKey: ['suggestibleUsersForCreatePost', descriptionMentionQuery],
-    queryFn: () => getSuggestibleUsers(descriptionMentionQuery, descriptionMentionQuery ? 10 : 25),
-    enabled: showDescriptionSuggestions,
-    staleTime: 1000 * 60 * 1,
+    queryKey: ['suggestibleUsersForCreatePost', debouncedDescriptionQuery],
+    queryFn: () => getSuggestibleUsers(debouncedDescriptionQuery, debouncedDescriptionQuery ? 10 : 25),
+    enabled: showDescriptionSuggestions, // Only fetch when suggestions are active
+    staleTime: 1000 * 60 * 1, // 1 minute
+    retry: 1,
   });
 
 
@@ -166,14 +178,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     if (selectedSectorCode) {
       const selectedMainSector = detailedSectorsData.find(s => s.code === selectedSectorCode);
       setCurrentSubSectors(selectedMainSector?.subSectors || []);
-      form.resetField("subSector");
-      form.resetField("industry");
+      form.resetField("subSector", { defaultValue: "" });
+      form.resetField("industry", { defaultValue: "" });
       setCurrentIndustries([]);
     } else {
       setCurrentSubSectors([]);
       setCurrentIndustries([]);
-      form.resetField("subSector");
-      form.resetField("industry");
+      form.resetField("subSector", { defaultValue: "" });
+      form.resetField("industry", { defaultValue: "" });
     }
   }, [selectedSectorCode, detailedSectorsData, form]);
 
@@ -181,31 +193,30 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     if (selectedSubSectorCode) {
       const selectedSub = currentSubSectors.find(ss => ss.code === selectedSubSectorCode);
       setCurrentIndustries(selectedSub?.industries || []);
-      form.resetField("industry");
+      form.resetField("industry", { defaultValue: "" });
     } else {
       setCurrentIndustries([]);
-      form.resetField("industry");
+      form.resetField("industry", { defaultValue: "" });
     }
   }, [selectedSubSectorCode, currentSubSectors, form]);
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    form.setValue("image", null); // Reset first in case of error
+    setSelectedImageFile(null);
+    setOriginalTooLargeFile(null);
+    setImagePreviewUrl(null);
+
     if (file) {
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a JPG, PNG, or GIF image." });
         if (fileInputRef.current) fileInputRef.current.value = "";
-        form.setValue("image", null);
-        setImagePreviewUrl(null);
-        setSelectedImageFile(null);
         return;
       }
       if (file.size > MAX_FILE_SIZE_BYTES) {
         setOriginalTooLargeFile(file);
         setShowCompressionDialog(true);
         if (fileInputRef.current) fileInputRef.current.value = "";
-        form.setValue("image", null);
-        setImagePreviewUrl(null);
-        setSelectedImageFile(null);
         return;
       }
       setSelectedImageFile(file);
@@ -213,11 +224,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       const reader = new FileReader();
       reader.onloadend = () => setImagePreviewUrl(reader.result as string);
       reader.readAsDataURL(file);
-    } else {
-      form.setValue("image", null); // Explicitly set to null if no file or selection cancelled
-      setSelectedImageFile(null);
-      setOriginalTooLargeFile(null);
-      setImagePreviewUrl(null);
     }
   };
 
@@ -272,8 +278,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         mentionedUserIds: Array.from(selectedMentionedUserIds),
     };
     onSubmit(submitData);
-    // Consider resetting selectedMentionedUserIds here or if the dialog fully closes
-    // For now, it will persist if the dialog reopens without a full unmount.
+    // Reset local component state related to mentions after submit
+    setSelectedMentionedUserIds(new Set());
+    setDescriptionMentionQuery('');
+    setShowDescriptionSuggestions(false);
   };
 
   const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
@@ -291,22 +299,19 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
     if (activeQuery !== null) {
         console.log("[CreatePostForm] evaluateMentionState - Active Query:", activeQuery);
-        setDescriptionMentionQuery(activeQuery);
+        setDescriptionMentionQuery(activeQuery); // Update for debouncing
         setShowDescriptionSuggestions(true);
     } else {
         console.log("[CreatePostForm] evaluateMentionState - No Active Query, hiding suggestions.");
-        // Only hide if not due to focus moving to popover
-        if (descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement)) {
-            setShowDescriptionSuggestions(false);
-        }
-        // Always clear query if not active
-        setDescriptionMentionQuery('');
+        setShowDescriptionSuggestions(false);
+        setDescriptionMentionQuery(''); // Clear for debouncing
     }
   }, [setDescriptionMentionQuery, setShowDescriptionSuggestions]);
 
+
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
-    form.setValue("description", value); // Update RHF state
+    form.setValue("description", value);
     if (descriptionTextareaRef.current) {
         evaluateMentionState(value, descriptionTextareaRef.current.selectionStart || 0);
     }
@@ -317,6 +322,16 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         console.log("[CreatePostForm] Description field FOCUSED.");
         evaluateMentionState(descriptionTextareaRef.current.value, descriptionTextareaRef.current.selectionStart || 0);
     }
+  };
+
+  const handleDescriptionBlur = () => {
+    // Delay hiding suggestions to allow click on popover
+    setTimeout(() => {
+        if (descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement as Node)) {
+            console.log("[CreatePostForm] Textarea BLUR, hiding suggestions.");
+            setShowDescriptionSuggestions(false);
+        }
+    }, 150);
   };
   
   const handleSelectDescriptionSuggestion = (profile: UserProfileBasic) => {
@@ -329,10 +344,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     if (lastAtIndex > -1) {
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
-        const mentionToInsert = profile.mentionName; // Use mentionName (ColorAnimalNumber)
+        const mentionToInsert = profile.mentionName; // Use mentionName ("ColorAnimalNumber")
         const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
+        
         form.setValue("description", newText, { shouldValidate: true, shouldDirty: true });
-        setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId)); // Store UID
+        setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId));
+        
         const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
         setTimeout(() => {
             descriptionTextareaRef.current?.focus();
@@ -364,34 +381,38 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     };
   }, [showDescriptionSuggestions]);
 
-  const filteredDescriptionSuggestions = useMemo(() => {
-    if (!showDescriptionSuggestions) return [];
-    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
-
-    const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId);
-
-    if (descriptionMentionQuery.trim() === '' && profilesSource.length > 0) {
-        return profilesSource;
-    }
-    if (profilesSource.length === 0) {
-        return [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
-    }
-
-    const queryLower = descriptionMentionQuery.toLowerCase();
-    const suggestions = profilesSource.filter(profile =>
-        profile.mentionName.toLowerCase().includes(queryLower) || // Filter by mentionName (ColorAnimalNumber)
-        (profile.actualDisplayName && profile.actualDisplayName.toLowerCase().includes(queryLower)) ||
-        (profile.companyName && profile.companyName.toLowerCase().includes(queryLower))
-    ).slice(0,10);
-
-    return suggestions.length > 0 ? suggestions : [{ userId: 'no-match-desc', displayName: `No users matching "@${descriptionMentionQuery}"`, mentionName:'no-match-desc' } as UserProfileBasic];
-  }, [descriptionMentionQuery, suggestibleUsers, isLoadingSuggestibleUsers, showDescriptionSuggestions, currentUserId]);
-
   useEffect(() => {
     if (!form.formState.isDirty && !form.formState.isSubmitting) {
       setSelectedMentionedUserIds(new Set());
     }
   }, [form.formState.isDirty, form.formState.isSubmitting]);
+
+  const filteredDescriptionSuggestions = useMemo(() => {
+    console.log(`%c[CreatePostForm] filteredDescriptionSuggestions: Recalculating...`, "color: mediumpurple;");
+    console.log(`  Debounced Query: "${debouncedDescriptionQuery}", showSuggestions: ${showDescriptionSuggestions}, isLoading: ${isLoadingSuggestibleUsers}`);
+    console.log(`  SuggestibleUsers (count ${suggestibleUsers.length}):`, suggestibleUsers.slice(0,5));
+
+    if (!showDescriptionSuggestions) return [];
+    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
+    
+    const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId);
+
+    if (debouncedDescriptionQuery.trim() === '') {
+        const initialSuggestions = profilesSource;
+        console.log(`%c[CreatePostForm] filteredDescriptionSuggestions (empty query): Initial suggestions count: ${initialSuggestions.length}`, "color: mediumpurple;", initialSuggestions.slice(0,5));
+        return initialSuggestions.length > 0 ? initialSuggestions : [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
+    }
+    
+    const queryLower = debouncedDescriptionQuery.toLowerCase();
+    const suggestions = profilesSource.filter(profile =>
+        profile.mentionName.toLowerCase().includes(queryLower) || // Filter by mentionName (ColorAnimalNumber)
+        (profile.actualDisplayName && profile.actualDisplayName.toLowerCase().includes(queryLower)) ||
+        (profile.companyName && profile.companyName.toLowerCase().includes(queryLower))
+    ).slice(0,10);
+    
+    console.log(`%c[CreatePostForm] filteredDescriptionSuggestions (with query '${queryLower}'): Filtered suggestions count: ${suggestions.length}`, "color: mediumpurple;", suggestions.slice(0,5));
+    return suggestions.length > 0 ? suggestions : [{ userId: 'no-match-desc', displayName: `No users matching "@${debouncedDescriptionQuery}"`, mentionName:'no-match-desc' } as UserProfileBasic];
+  }, [debouncedDescriptionQuery, suggestibleUsers, isLoadingSuggestibleUsers, showDescriptionSuggestions, currentUserId]);
 
 
   return (
@@ -423,9 +444,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                   <Popover
                     open={showDescriptionSuggestions && filteredDescriptionSuggestions.length > 0 && (filteredDescriptionSuggestions[0]?.userId !== 'loading-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-users-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-match-desc')}
                     onOpenChange={(isOpen) => {
-                      console.log("[CreatePostForm] Popover onOpenChange, isOpen:", isOpen);
-                      setShowDescriptionSuggestions(isOpen);
-                      if (!isOpen) setDescriptionMentionQuery(''); // Clear query when popover closes externally
+                        setShowDescriptionSuggestions(isOpen);
+                        if (!isOpen) setDescriptionMentionQuery('');
                     }}
                   >
                     <PopoverTrigger asChild>
@@ -440,12 +460,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                           }}
                           onChange={handleDescriptionChange}
                           onFocus={handleDescriptionFocus}
-                          onBlur={() => setTimeout(() => {
-                            if (descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement as Node)) {
-                                console.log("[CreatePostForm] Textarea BLUR, hiding suggestions.");
-                                setShowDescriptionSuggestions(false);
-                            }
-                          }, 150)}
+                          onBlur={handleDescriptionBlur}
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -453,42 +468,44 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                      <PopoverContent
                         ref={descriptionSuggestionsPopoverRef}
                         className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
-                        side="top"
+                        side="bottom" // Changed from top to bottom for better UX with Textarea
                         align="start"
-                        onOpenAutoFocus={(e) => e.preventDefault()}
+                        onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focusing popover itself
                      >
-                        {filteredDescriptionSuggestions.map(profile => {
-                           const displayableName = profile.actualDisplayName || profile.companyName;
-                           const showSecondaryName = displayableName && displayableName !== profile.mentionName;
-                           return (
-                             profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
-                                <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
-                                    {profile.displayName}
-                                </div>
-                             ) : (
-                                <Button
-                                    key={profile.userId}
-                                    variant="ghost"
-                                    size="sm"
-                                    className="w-full justify-start h-auto px-2 py-1 text-xs"
-                                    onMouseDown={(e) => e.preventDefault()}
-                                    onClick={() => handleSelectDescriptionSuggestion(profile)}
-                                >
-                                    <Avatar className="h-5 w-5 mr-2">
-                                        <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
-                                        <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
-                                    </Avatar>
-                                    <div className="flex flex-col items-start">
-                                        {showSecondaryName && (
-                                            <span className="font-medium text-foreground">{displayableName}</span>
-                                        )}
-                                        <span className={cn("text-muted-foreground", !showSecondaryName && "font-medium text-foreground")}>
-                                            @{profile.mentionName}
-                                        </span>
+                       {filteredDescriptionSuggestions.map(profile => {
+                            const displayableName = profile.actualDisplayName || profile.companyName;
+                            // Only show displayableName if it exists and is different from mentionName
+                            const showSecondaryNameLine = displayableName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
+
+                            return (
+                                profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
+                                    <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
+                                        {profile.displayName} {/* This will be "Loading users..." or "No users..." */}
                                     </div>
-                                </Button>
-                            )
-                           );
+                                ) : (
+                                    <Button
+                                        key={profile.userId}
+                                        variant="ghost"
+                                        size="sm"
+                                        className="w-full justify-start h-auto px-2 py-1 text-xs"
+                                        onMouseDown={(e) => e.preventDefault()} // Prevent textarea blur
+                                        onClick={() => handleSelectDescriptionSuggestion(profile)}
+                                    >
+                                        <Avatar className="h-5 w-5 mr-2">
+                                            <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
+                                            <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
+                                        </Avatar>
+                                        <div className="flex flex-col items-start">
+                                            {showSecondaryNameLine && (
+                                                <span className="font-medium text-foreground">{displayableName}</span>
+                                            )}
+                                            <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
+                                                @{profile.mentionName}
+                                            </span>
+                                        </div>
+                                    </Button>
+                                )
+                            );
                         })}
                     </PopoverContent>
                   </Popover>
@@ -531,7 +548,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                         </div>
                         {imagePreviewUrl && (
                             <div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto">
-                                <Image src={imagePreviewUrl} alt="Preview" layout="fill" objectFit="contain" className="rounded-md" data-ai-hint="uploaded image"/>
+                                <Image src={imagePreviewUrl} alt="Preview" fill objectFit="contain" className="rounded-md" data-ai-hint="uploaded image"/>
                             </div>
                         )}
                         <FormDescription>Max 2MB. JPG, PNG, GIF accepted.</FormDescription>
@@ -694,3 +711,4 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     </Form>
   );
 };
+
