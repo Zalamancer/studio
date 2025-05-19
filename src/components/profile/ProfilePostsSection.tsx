@@ -5,18 +5,30 @@ import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getPostsByUserId } from '@/services/postService';
 import type { Post } from '@/types/post';
-import { Loader2, AlertTriangle } from 'lucide-react';
-import { Card, CardHeader, CardContent } from '@/components/ui/card'; // Adjusted Card imports
+import { Loader2, AlertTriangle, Link2 } from 'lucide-react';
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Timestamp } from 'firebase/firestore';
+import Image from 'next/image';
+import Link from 'next/link';
 import {
   Sheet,
   SheetContent,
   SheetDescription,
   SheetHeader,
   SheetTitle,
-} from "@/components/ui/sheet"
+  SheetFooter,
+} from "@/components/ui/sheet";
+import {
+  Carousel,
+  CarouselContent,
+  CarouselItem,
+  CarouselNext,
+  CarouselPrevious,
+} from "@/components/ui/carousel";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Button } from '@/components/ui/button';
+import { cn } from '@/lib/utils';
 
 interface ProfilePostsSectionProps {
   userId: string;
@@ -44,6 +56,18 @@ const ProfilePostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () =
                 ))}
             </div>
            <h3 className="text-base font-semibold leading-snug text-card-foreground">{post.question}</h3>
+           {post.imageUrls && post.imageUrls.length > 0 && (
+             <div className="mt-2 rounded-md overflow-hidden aspect-video relative">
+               <Image
+                 src={post.imageUrls[0]}
+                 alt={post.question}
+                 fill
+                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                 style={{ objectFit: 'cover' }}
+                 data-ai-hint="post image"
+               />
+             </div>
+           )}
            {post.description && (
              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
               {post.description}
@@ -102,45 +126,127 @@ export const ProfilePostsSection: React.FC<ProfilePostsSectionProps> = ({ userId
 
   return (
       <div>
-          {/* Post Feed - Masonry Layout */}
-         <div className="columns-1 sm:columns-2 gap-4 space-y-4">
+         <div className="columns-1 sm:columns-2 md:columns-3 gap-4 space-y-4">
              {posts.map((post) => (
                  <ProfilePostCard key={post.id} post={post} onOpen={() => setSelectedPost(post)} />
              ))}
          </div>
 
-         {/* Post Detail Side Panel (Similar to main page) */}
          <Sheet open={!!selectedPost} onOpenChange={(open) => !open && setSelectedPost(null)}>
-             <SheetContent className="sm:max-w-lg w-[90vw] p-0" side="right">
-                 <ScrollArea className="h-screen">
+             <SheetContent className="sm:max-w-lg w-[90vw] p-0 flex flex-col" side="right">
                  {selectedPost && (
-                     <div className="p-6 flex flex-col h-full">
-                         <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
-                             <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
-                              <div className="flex flex-wrap items-center gap-2 pt-1">
-                                 {selectedPost.tags?.map((tag, index) => (
-                                 <Badge key={`${selectedPost.id}-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
-                                 ))}
-                             </div>
-                              <SheetDescription className="text-sm pt-1">
-                                 Posted on: {selectedPost.createdAt instanceof Timestamp ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
-                             </SheetDescription>
-                         </SheetHeader>
+                     <>
+                         <ScrollArea className="flex-grow">
+                             <div className="p-6 pb-0">
+                                 <SheetHeader className="space-y-2.5 text-left mb-6 border-b pb-4">
+                                     <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
+                                     <div className="flex flex-wrap items-center gap-2 pt-1">
+                                         {selectedPost.tags?.map((tag, index) => (
+                                         <Badge key={`${selectedPost.id}-profile-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
+                                         ))}
+                                     </div>
+                                     <SheetDescription className="text-sm pt-1">
+                                         Posted on: {selectedPost.createdAt instanceof Timestamp ? selectedPost.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
+                                     </SheetDescription>
+                                 </SheetHeader>
 
-                         <div className="space-y-4 text-sm flex-grow">
-                              {selectedPost.description && (
-                                  <div>
-                                      <strong className="text-foreground">Details:</strong>
-                                      <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{selectedPost.description}</p>
-                                  </div>
-                              )}
-                              {/* Add other relevant post details if needed */}
-                         </div>
-                         {/* Footer can be added if actions are needed (e.g., navigating to the post on the main board) */}
-                         {/* <div className="mt-6 pt-4 border-t flex justify-end gap-2"> ... </div> */}
-                     </div>
+                                 {selectedPost.imageUrls && selectedPost.imageUrls.length > 0 && (
+                                 <div className="mb-4 rounded-lg overflow-hidden shadow-md">
+                                     <Carousel className="w-full">
+                                     <CarouselContent>
+                                         {selectedPost.imageUrls.map((url, index) => (
+                                         <CarouselItem key={index}>
+                                             <div className="aspect-video relative">
+                                             <Image
+                                                 src={url}
+                                                 alt={`Post image ${index + 1}`}
+                                                 fill
+                                                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                                 style={{ objectFit: 'contain' }}
+                                                 className="rounded-md"
+                                                 data-ai-hint="uploaded content"
+                                             />
+                                             </div>
+                                         </CarouselItem>
+                                         ))}
+                                     </CarouselContent>
+                                     {selectedPost.imageUrls.length > 1 && (
+                                         <>
+                                         <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2" />
+                                         <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2" />
+                                         </>
+                                     )}
+                                     </Carousel>
+                                 </div>
+                                 )}
+
+                                 <div className="space-y-4 text-sm mb-6">
+                                     {selectedPost.description && (
+                                     <div>
+                                         <strong className="text-foreground">Details:</strong>
+                                         <p className="text-muted-foreground mt-1 whitespace-pre-wrap">{selectedPost.description}</p>
+                                     </div>
+                                     )}
+
+                                     <div className="grid grid-cols-1 gap-y-2 mt-4 border-t pt-4">
+                                        <div>
+                                            <strong className="block text-foreground">Sector:</strong>
+                                            <span className="text-muted-foreground">{selectedPost.sector || 'N/A'}</span>
+                                        </div>
+                                        {selectedPost.subSector && (
+                                            <div>
+                                            <strong className="block text-foreground">Sub-Sector:</strong>
+                                            <span className="text-muted-foreground">{selectedPost.subSector}</span>
+                                            </div>
+                                        )}
+                                        {selectedPost.industry && (
+                                            <div>
+                                            <strong className="block text-foreground">Industry:</strong>
+                                            <span className="text-muted-foreground">{selectedPost.industry}</span>
+                                            </div>
+                                        )}
+                                        {selectedPost.naicsCode && (
+                                            <div>
+                                            <strong className="block text-foreground">NAICS Code:</strong>
+                                            <Badge variant="outline" className="text-xs ml-1">{selectedPost.naicsCode}</Badge>
+                                            </div>
+                                        )}
+                                     </div>
+
+                                     <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4">
+                                        <div>
+                                            <strong className="block text-foreground">Business Type:</strong>
+                                            <span className="text-muted-foreground">{selectedPost.businessType || 'N/A'}</span>
+                                        </div>
+                                        <div className="flex items-center gap-2">
+                                            <strong className="text-foreground">Safety Indicator:</strong>
+                                            <span className={cn(
+                                            "inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                                            selectedPost.safetyIndicator === 'High' ? "bg-primary text-primary-foreground"
+                                            : selectedPost.safetyIndicator === 'Medium' ? "bg-secondary text-secondary-foreground"
+                                            : "bg-destructive text-destructive-foreground"
+                                            )}>
+                                            {selectedPost.safetyIndicator || 'N/A'}
+                                            </span>
+                                        </div>
+                                        <div>
+                                            <strong className="block text-foreground">Rating Score:</strong>
+                                            <span className="text-muted-foreground">{selectedPost.ratingScore ? `${selectedPost.ratingScore} / 5` : 'N/A'}</span>
+                                        </div>
+                                     </div>
+                                 </div>
+                             </div>
+                         </ScrollArea>
+                         <SheetFooter className="p-6 border-t bg-background sticky bottom-0">
+                            <Button variant="default" size="sm" asChild className="w-full">
+                                <Link href={`/?postId=${selectedPost.id}`}>
+                                    <Link2 className="mr-2 h-4 w-4" />
+                                    View Full Post & Comments on Board
+                                </Link>
+                            </Button>
+                         </SheetFooter>
+                     </>
                  )}
-                 </ScrollArea>
              </SheetContent>
          </Sheet>
       </div>

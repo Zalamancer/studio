@@ -13,14 +13,14 @@ export interface Post {
   businessType: string;
   safetyIndicator: 'High' | 'Medium' | 'Low';
   ratingScore: number;
-  stockGraphData?: { name: string; uv: number }[];
+  stockGraphData?: { name: string; uv: number }[]; // This seems unused, consider removal if not needed
   createdAt: Timestamp;
   naicsCode?: string; // Stores the most specific NAICS code selected (Industry > Sub-sector > Sector)
-  imageUrls?: string[]; // Changed from imageUrl to support multiple images
+  imageUrls?: string[]; // Array of image URLs
 }
 
 // Type for data being added
 export type NewPostData = Omit<Post, 'id' | 'createdAt'> & {
     createdAt?: Date; // For client-side representation before server timestamp
-    // imageUrl?: string; // This was used temporarily by form handling, actual storage is imageUrls
+    // imageUrls will be part of this type implicitly from Post
 };
