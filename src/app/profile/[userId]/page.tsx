@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnectionStatus, getUserProfileBasic } from '@/services/connectionService';
+import { getConnectionStatus, fetchUserProfileBasic } from '@/services/connectionService'; // Corrected import
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import type { ConnectionStatus, UserProfileBasic } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
@@ -33,7 +33,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
+import { Skeleton } from '@/components/ui/skeleton';
 
 // Regex to check if a string looks like a Firebase UID (alphanumeric, typically 28 chars, but let's go with 20+ for safety)
 const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
@@ -86,7 +86,7 @@ const BusinessProfilePage = () => {
     return isValid;
   }, [profileUserIdFromParams]);
 
-  const profileUserId = profileUserIdFromParams; // Use this consistently
+  const profileUserId = profileUserIdFromParams;
 
   // Early return for invalid UID format in URL
   if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
@@ -111,21 +111,20 @@ const BusinessProfilePage = () => {
         console.warn(`[BusinessProfilePage] queryFn for userProfile: Invalid or missing profileUserId ('${profileUserId}'). Returning null.`);
         return null;
       }
-      const basicProfile = await getUserProfileBasic(profileUserId);
-      return basicProfile || { userId: profileUserId, displayName: generateAnonymousName(profileUserId), avatarUrl: undefined };
+      const basicProfile = await fetchUserProfileBasic(profileUserId); // Corrected usage
+      return basicProfile || { userId: profileUserId, displayName: generateAnonymousName(profileUserId || "unknown_user"), avatarUrl: undefined };
     },
     enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId),
   });
-
 
   const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
   
   console.log(`%c[BusinessProfilePage] Connection Status Query Check (Render):
     - currentUser?.uid: ${currentUser?.uid}
     - profileUserId: ${profileUserId}
-    - isProfileIdValid (regex test): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}
+    - IS_UID_REGEX_PROFILE_PAGE.test(profileUserId): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}
     - currentUser.uid !== profileUserId: ${currentUser && profileUserId ? currentUser.uid !== profileUserId : 'N/A'}
-    - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`,
+    - FINAL connectionStatusQueryEnabled: ${connectionStatusQueryEnabled}`,
     "color: cornflowerblue;"
   );
 
@@ -146,7 +145,7 @@ const BusinessProfilePage = () => {
     enabled: connectionStatusQueryEnabled,
   });
 
-  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid && !!currentUser; // Also ensure current user exists for permission checks later
+  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid && !!currentUser;
   console.log(`%c[BusinessProfilePage] Reviews Query Check:
     - profileUserId: ${profileUserId}
     - isProfileIdActuallyValidUid: ${isProfileIdActuallyValidUid}
@@ -155,7 +154,14 @@ const BusinessProfilePage = () => {
 
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
-    queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]),
+    queryFn: () => {
+        console.log(`%c[BusinessProfilePage] Fetching reviews for profile ID: ${profileUserId}`, "color: dodgerblue;");
+        if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
+          console.warn(`[BusinessProfilePage] queryFn for reviews: Invalid profileUserId ('${profileUserId}'). Returning empty array.`);
+          return Promise.resolve([]);
+        }
+        return getReviewsForProfile(profileUserId);
+    },
     enabled: reviewsQueryEnabled,
   });
 
@@ -272,7 +278,7 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!profileUserId || !profileData) { // Combined check: if profileUserId is falsy OR profileData is falsy
+  if (!profileUserId || !profileData) { 
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -549,3 +555,5 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
+
+```
