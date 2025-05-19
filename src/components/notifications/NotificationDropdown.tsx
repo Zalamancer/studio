@@ -1,7 +1,8 @@
+
 // src/components/notifications/NotificationDropdown.tsx
 "use client";
 
-import React, { useEffect } from 'react'; // Added useEffect
+import React, { useEffect, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Loader2, Mail, UserPlus, UserCheck, MessageSquare, AtSign, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -22,6 +23,8 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { useToast } from '@/hooks/use-toast';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { getUserPreferences } from '@/services/userPreferenceService'; // Import preference service
+import type { UserPreference } from '@/types/userPreferences'; // Import preference type
 
 interface NotificationDropdownProps {
   userId: string;
@@ -51,7 +54,7 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
 
     let title = '';
     let description = '';
-    let linkHref: string = '/'; // Default link
+    let linkHref: string = '/'; 
 
     switch (notification.type) {
         case 'reply':
@@ -117,22 +120,58 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
-  const { data: notifications = [], isLoading, error } = useQuery<ClientNotification[]>({
+  const { data: fetchedNotifications = [], isLoading: isLoadingNotifications, error: notificationsError } = useQuery<ClientNotification[]>({
     queryKey: ['notifications', userId],
     queryFn: () => {
         console.log(`[NotificationDropdown] useQuery: Fetching notifications for userId: ${userId}`);
         return getNotificationsForUser(userId, 20);
     },
     enabled: !!userId,
-    refetchInterval: 1000 * 60,
+    refetchInterval: 1000 * 60, 
     staleTime: 1000 * 30,
   });
 
+  const { data: userPreferences, isLoading: isLoadingPreferences, error: preferencesError } = useQuery<UserPreference | null>({
+    queryKey: ['userPreferences', userId],
+    queryFn: () => getUserPreferences(userId),
+    enabled: !!userId,
+    staleTime: 1000 * 60 * 5, // Cache preferences for 5 minutes
+  });
+
   useEffect(() => {
-    if (error) {
-        console.error("[NotificationDropdown] Error fetching notifications:", error);
+    if (notificationsError) {
+        console.error("[NotificationDropdown] Error fetching notifications:", notificationsError);
     }
-  }, [error]);
+    if (preferencesError) {
+        console.error("[NotificationDropdown] Error fetching user preferences:", preferencesError);
+    }
+  }, [notificationsError, preferencesError]);
+
+  const filteredNotifications = useMemo(() => {
+    if (!userPreferences || isLoadingNotifications || isLoadingPreferences) {
+      // Return all if preferences not loaded yet, or if still loading notifications
+      // Or, return empty array if you want to wait for prefs: return [];
+      return fetchedNotifications;
+    }
+    console.log("[NotificationDropdown] Filtering notifications based on preferences:", userPreferences);
+    return fetchedNotifications.filter(notification => {
+      switch (notification.type) {
+        case 'new_message':
+          return userPreferences.notifyOnNewMessage !== false;
+        case 'reply':
+          return userPreferences.notifyOnReply !== false;
+        case 'mention':
+          return userPreferences.notifyOnMention !== false;
+        case 'connection_request':
+          return userPreferences.notifyOnNewConnectionRequest !== false;
+        case 'connection_accepted':
+          return userPreferences.notifyOnConnectionAccepted !== false;
+        // Assuming platform updates are not filtered here or handled differently
+        default:
+          return true;
+      }
+    });
+  }, [fetchedNotifications, userPreferences, isLoadingNotifications, isLoadingPreferences]);
 
   const markReadMutation = useMutation({
     mutationFn: markNotificationAsRead,
@@ -159,7 +198,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
   });
 
   const handleMarkAsRead = (notificationId: string) => {
-    const notification = notifications.find(n => n.id === notificationId);
+    const notification = fetchedNotifications.find(n => n.id === notificationId);
     if (notification && !notification.isRead) {
         markReadMutation.mutate(notificationId);
     }
@@ -171,7 +210,8 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
      }
   };
 
-  const unreadCount = notifications.filter(n => !n.isRead).length;
+  const unreadCount = filteredNotifications.filter(n => !n.isRead).length;
+  const isLoading = isLoadingNotifications || isLoadingPreferences;
 
   return (
     <DropdownMenu>
@@ -210,12 +250,12 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
               <div className="flex justify-center items-center h-32">
                 <Loader2 className="h-6 w-6 animate-spin text-primary" />
               </div>
-            ) : error ? (
-              <p className="p-4 text-sm text-destructive text-center">Error loading notifications.</p>
-            ) : notifications.length === 0 ? (
+            ) : notificationsError || preferencesError ? (
+              <p className="p-4 text-sm text-destructive text-center">Error loading notifications or preferences.</p>
+            ) : filteredNotifications.length === 0 ? (
               <p className="p-4 text-sm text-muted-foreground text-center">No notifications yet.</p>
             ) : (
-              notifications.map(notification => (
+              filteredNotifications.map(notification => (
                 <NotificationItem
                   key={notification.id}
                   notification={notification}
