@@ -21,7 +21,7 @@ import {
   increment, // For updating likeCount atomically
 } from 'firebase/firestore';
 import type { NewCommentData, ClientComment, NewSubCommentData, ClientSubComment } from '@/types/comment';
-import { getUserProfileBasic } from '@/services/connectionService';
+import { fetchUserProfileBasic } from '@/services/connectionService'; // CORRECTED IMPORT
 import { createNotification } from './notificationService';
 import type { NewNotificationData } from '@/types/notification';
 import { getPostDetails } from './messagingService';
@@ -56,7 +56,6 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
     const postDocRef = doc(db, 'posts', postId);
     const commentsCollectionRef = collection(postDocRef, 'comments');
 
-    // IMPORTANT: The commentData.mentionedUserIds should already be an array of UIDs resolved by the client (e.g., extractMentionedUids in page.tsx)
     const resolvedMentionedUids = Array.isArray(commentData.mentionedUserIds) ? commentData.mentionedUserIds : [];
     console.log(`%c[commentService] addCommentToPost: Received resolvedMentionedUids from client:`, "color: blue;", resolvedMentionedUids);
 
@@ -65,7 +64,7 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
       ...commentData,
       likeCount: 0,
       likedBy: [],
-      mentionedUserIds: resolvedMentionedUids, // Use the UIDs passed from the client
+      mentionedUserIds: resolvedMentionedUids,
       timestamp: serverTimestamp() as Timestamp,
     };
 
@@ -73,13 +72,11 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
     const newCommentId = docRef.id;
     console.log(`%c[commentService] addCommentToPost: Comment added successfully to post ${postId} with ID: ${newCommentId}`, "color: green;");
 
-    const postDetails = await getPostDetails(postId); // Fetch post details once
+    const postDetails = await getPostDetails(postId);
 
-    // Notify mentioned users
     if (resolvedMentionedUids.length > 0) {
       console.log(`%c[commentService] addCommentToPost: Processing ${resolvedMentionedUids.length} mentions for notifications using UIDs.`, "color: blue;");
       for (const mentionedRecipientUid of resolvedMentionedUids) {
-        // Ensure mentionedRecipientUid is a valid UID before proceeding
         if (!mentionedRecipientUid || typeof mentionedRecipientUid !== 'string' || !/^[a-zA-Z0-9]{20,}$/.test(mentionedRecipientUid)) {
             console.warn(`%c[commentService] addCommentToPost: Invalid or non-UID identifier found in resolvedMentionedUids, skipping notification for: '${mentionedRecipientUid}'`, "color: orange;");
             continue;
@@ -118,7 +115,6 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
     console.warn("[commentService] getCommentsForPost called with invalid postId.");
     return [];
   }
-  // console.log(`[commentService] Fetching comments for post: ${postId}`);
 
   try {
     const postDocRef = doc(db, 'posts', postId);
@@ -134,9 +130,9 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
     const userProfilesMap = new Map<string, { displayName: string; avatarUrl?: string }>();
 
     await Promise.all(userIds.map(async (userId) => {
-        const profile = await getUserProfileBasic(userId);
+        const profile = await fetchUserProfileBasic(userId); // CORRECTED USAGE
         userProfilesMap.set(userId, {
-            displayName: profile?.displayName || generateAnonymousName(userId), // Fallback to generated name
+            displayName: profile?.displayName || generateAnonymousName(userId),
             avatarUrl: profile?.avatarUrl
         });
     }));
@@ -144,7 +140,6 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
     const comments = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) {
-        // console.warn(`[commentService] Document ${docSnap.id} has missing or invalid fields.`);
         return null;
       }
       const timestampMillis = data.timestamp.toMillis();
@@ -154,7 +149,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
         userId: data.userId,
         text: data.text,
         timestamp: timestampMillis,
-        userName: userProfile?.displayName, // Will use the fetched/generated name
+        userName: userProfile?.displayName,
         userAvatar: userProfile?.avatarUrl,
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],
@@ -238,7 +233,6 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
     const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
     const subCommentsCollectionRef = collection(commentDocRef, 'subcomments');
 
-    // IMPORTANT: subCommentData.mentionedUserIds should already be an array of UIDs resolved by the client
     const resolvedMentionedUids = Array.isArray(subCommentData.mentionedUserIds) ? subCommentData.mentionedUserIds : [];
     console.log(`%c[commentService] addSubCommentToComment: Received resolvedMentionedUids from client:`, "color: blue;", resolvedMentionedUids);
 
@@ -259,7 +253,6 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
     const commentSnap = await getDoc(commentDocRef);
     const originalCommenterId = commentSnap.data()?.userId;
 
-    // Notify original commenter about the reply (if not the same person)
     if (originalCommenterId && originalCommenterId !== subCommentData.userId) {
         const replyNotificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
             userId: originalCommenterId,
@@ -280,11 +273,9 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
         }
     }
 
-    // Notify mentioned users
     if (resolvedMentionedUids.length > 0) {
        console.log(`%c[commentService] addSubCommentToComment: Processing ${resolvedMentionedUids.length} mentions for notifications using UIDs.`, "color: blue;");
        for (const mentionedRecipientUid of resolvedMentionedUids) {
-           // Ensure mentionedRecipientUid is a valid UID
             if (!mentionedRecipientUid || typeof mentionedRecipientUid !== 'string' || !/^[a-zA-Z0-9]{20,}$/.test(mentionedRecipientUid)) {
                 console.warn(`%c[commentService] addSubCommentToComment: Invalid or non-UID identifier found in resolvedMentionedUids, skipping notification for: '${mentionedRecipientUid}'`, "color: orange;");
                 continue;
@@ -292,10 +283,6 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
 
            const isMentioningOriginalCommenter = mentionedRecipientUid === originalCommenterId;
 
-           // Send mention notification if:
-           // 1. The mentioned user is NOT the original commenter (they already get a 'reply' notification if different from sub-commenter)
-           // OR
-           // 2. The mentioned user IS the original commenter, AND the sub-commenter IS ALSO the original commenter (i.e., original commenter mentioning themselves in their own reply)
            if (!isMentioningOriginalCommenter || (isMentioningOriginalCommenter && subCommentData.userId === originalCommenterId)) {
                const mentionNotificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
                    userId: mentionedRecipientUid,
@@ -347,9 +334,9 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
     const userIds = Array.from(new Set(querySnapshot.docs.map(docSnap => docSnap.data().userId).filter(Boolean)));
     const userProfilesMap = new Map<string, { displayName: string; avatarUrl?: string }>();
     await Promise.all(userIds.map(async (userId) => {
-        const profile = await getUserProfileBasic(userId);
+        const profile = await fetchUserProfileBasic(userId); // CORRECTED USAGE
         userProfilesMap.set(userId, {
-            displayName: profile?.displayName || generateAnonymousName(userId), // Fallback to generated name
+            displayName: profile?.displayName || generateAnonymousName(userId),
             avatarUrl: profile?.avatarUrl
         });
     }));
@@ -366,7 +353,7 @@ export const getSubCommentsForComment = async (postId: string, commentId: string
         userId: data.userId,
         text: data.text,
         timestamp: timestampMillis,
-        userName: userProfile?.displayName, // Will use the fetched/generated name
+        userName: userProfile?.displayName,
         userAvatar: userProfile?.avatarUrl,
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],

@@ -18,7 +18,7 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import type { NewNotificationData, ClientNotification } from '@/types/notification';
-import { getUserProfileBasic } from './connectionService'; // To fetch sender details
+import { fetchUserProfileBasic } from './connectionService'; // To fetch sender details
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 const notificationsCollectionRef = collection(db, 'notifications');
@@ -32,13 +32,13 @@ export const createNotification = async (notificationData: Omit<NewNotificationD
   }
 
   try {
-    const senderProfile = await getUserProfileBasic(notificationData.senderId);
+    const senderProfile = await fetchUserProfileBasic(notificationData.senderId);
     console.log('%c[notificationService] createNotification: Fetched senderProfile for senderId', "color: purple;", notificationData.senderId, ':', JSON.stringify(senderProfile, null, 2));
 
     const fullNotificationData: NewNotificationData & { timestamp: Timestamp, isRead: boolean } = {
       ...notificationData,
       senderName: senderProfile?.displayName || generateAnonymousName(notificationData.senderId),
-      senderAvatar: senderProfile?.avatarUrl || null,
+      senderAvatar: senderProfile?.avatarUrl || null, // Ensure null if undefined
       postQuestion: notificationData.postQuestion || null,
       commentId: notificationData.commentId || null,
       subCommentId: notificationData.subCommentId || null,
@@ -57,6 +57,10 @@ export const createNotification = async (notificationData: Omit<NewNotificationD
     if (error.code === 'permission-denied') {
       console.error("[notificationService] Firestore permission denied creating notification. Check rules for 'notifications' collection.");
       throw new Error('Permission denied. Check Firestore security rules.');
+    }
+    if (error.message && error.message.includes("Unsupported field value: undefined")) {
+      console.error("[notificationService] Firestore received an undefined value. Data sent:", notificationData, "Full data for Firestore:", fullNotificationData);
+      throw new Error(`Failed to create notification: ${error.message}`);
     }
     throw new Error(`Failed to create notification: ${error.message}`);
   }

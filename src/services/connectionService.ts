@@ -20,7 +20,7 @@ import {
   type QueryConstraint,
 } from 'firebase/firestore';
 import type { MutualConnection, ConnectionStatus, Connection, ConnectionRequest, UserProfileBasic, UserProfileData } from '@/types/connection';
-import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Import for fallback names
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 const mutualsCollectionRef = collection(db, 'mutuals');
 const usersCollectionRef = collection(db, 'users');
@@ -40,6 +40,9 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
   const requesterId = String(requesterIdParam || "").trim();
   const recipientId = String(recipientIdParam || "").trim();
 
+  console.log(`%c[connectionService] sendConnectionRequest - DEBUG: Initial params: requesterId='${requesterId}', recipientId='${recipientId}'`, "color: orange;");
+
+
   if (requesterId === recipientId) {
     const errorMsg = "Cannot send connection request to yourself.";
     console.error(`%c[connectionService] sendConnectionRequest - ERROR: ${errorMsg}`, "color: red; font-weight:bold;");
@@ -47,9 +50,12 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
   }
 
   const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[connectionService] sendConnectionRequest - DEBUG: clientAuthUid from auth.currentUser: '${clientAuthUid || 'NULL'}'`, "color: orange;");
+
+
   if (!clientAuthUid) {
     const errorMsg = "User not authenticated. Cannot send connection request.";
-    console.error(`%c[connectionService] sendConnectionRequest - ERROR: ${errorMsg}. Auth state:`, "color: red; font-weight:bold;", auth.currentUser);
+    console.error(`%c[connectionService] sendConnectionRequest - ERROR: ${errorMsg}. Auth state (is this client-side?):`, "color: red; font-weight:bold;", auth.currentUser);
     throw new Error(errorMsg);
   }
 
@@ -60,13 +66,13 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
   }
 
   if (!IS_UID_REGEX_SERVICE.test(requesterId) || !IS_UID_REGEX_SERVICE.test(recipientId)) {
-    console.error(`%c[connectionService] sendConnectionRequest - ERROR: One or both IDs are invalid. Requester: '${requesterId}', Recipient: '${recipientId}'.`, "color: red; font-weight:bold;");
+    console.error(`%c[connectionService] sendConnectionRequest - ERROR: One or both IDs are invalid format. Requester: '${requesterId}', Recipient: '${recipientId}'.`, "color: red; font-weight:bold;");
     throw new Error(`Invalid user ID format. Cannot send connection request.`);
   }
 
   const connectionId = getConnectionDocId(requesterId, recipientId);
   if (connectionId.startsWith("INVALID_CONNECTION_ID")) {
-    console.error(`%c[connectionService] sendConnectionRequest - ERROR: Could not generate valid connectionId. Aborting.`, "color: red; font-weight:bold;");
+    console.error(`%c[connectionService] sendConnectionRequest - ERROR: Could not generate valid connectionId due to invalid input UIDs. Aborting.`, "color: red; font-weight:bold;");
     throw new Error("Failed to generate valid connection ID for request.");
   }
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
@@ -185,10 +191,7 @@ export const getConnectionStatus = async (userId1Param: string, userId2Param: st
   const userId2 = String(userId2Param || "").trim();
   const currentClientAuthUid = auth.currentUser?.uid;
 
-  // console.log(`%c[connectionService] getConnectionStatus - Called for userId1: '${userId1}', userId2: '${userId2}'. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: teal;");
-
   if (!userId1 || !userId2) {
-    // console.warn("[connectionService] getConnectionStatus: userId1 or userId2 is undefined/empty.");
     return 'not_connected';
   }
   if (userId1 === userId2) return 'self';
@@ -206,21 +209,17 @@ export const getConnectionStatus = async (userId1Param: string, userId2Param: st
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
 
   try {
-    // console.log(`%c[connectionService] getConnectionStatus: Attempting to getDoc for 'mutuals/${connectionId}'`, "color: darkorange;");
     const docSnap = await getDoc(connectionDocRef);
     if (!docSnap.exists()) {
-      // console.log(`[connectionService] getConnectionStatus: No document found for connectionId '${connectionId}'. Returning 'not_connected'.`);
       return 'not_connected';
     }
     const data = docSnap.data() as MutualConnection;
     if (!data || !data.status || !data.requesterId || !data.userIds) {
-        // console.warn(`[connectionService] getConnectionStatus: Document for '${connectionId}' has incomplete data. Returning 'not_connected'.`, data);
         return 'not_connected';
     }
     if (data.status === 'connected') return 'connected';
     if (data.status === 'pending') return data.requesterId === userId1 ? 'pending_sent' : 'pending_received';
     if (data.status === 'blocked') return 'blocked';
-    // console.warn(`[connectionService] getConnectionStatus: Document for '${connectionId}' has an unexpected status: '${data.status}'. Returning 'not_connected'.`);
     return 'not_connected';
   } catch (error: any) {
     console.error(`[connectionService] Error fetching connection status between ${userId1} and ${userId2} (ID: ${connectionId}):`, error);
@@ -232,13 +231,13 @@ export const getConnectionStatus = async (userId1Param: string, userId2Param: st
 };
 
 
-export const getUserProfileBasic = async (userId: string): Promise<UserProfileBasic | null> => {
+export const fetchUserProfileBasic = async (userId: string): Promise<UserProfileBasic | null> => {
   const trimmedUserId = String(userId || "").trim();
   const clientAuthUid = auth.currentUser?.uid;
-  // console.log(`%c[connectionService] getUserProfileBasic: Fetching for targetUserId: '${trimmedUserId}'. Current clientAuthUid: '${clientAuthUid || 'NULL'}'`, "color: teal;");
+  console.log(`%c[connectionService] fetchUserProfileBasic: Fetching for targetUserId: '${trimmedUserId}'. Current clientAuthUid: '${clientAuthUid || 'NULL'}'`, "color: teal;");
 
   if (!trimmedUserId || !IS_UID_REGEX_SERVICE.test(trimmedUserId)) {
-    // console.warn(`%c[connectionService] getUserProfileBasic: Attempted to fetch profile with invalid or empty userId: '${trimmedUserId}'. Returning generated name.`, "color: orange;");
+    console.warn(`%c[connectionService] fetchUserProfileBasic: Attempted to fetch profile with invalid or empty userId: '${trimmedUserId}'. Returning generated name.`, "color: orange;");
     return { userId: trimmedUserId, displayName: generateAnonymousName(trimmedUserId || "unknown_user") };
   }
 
@@ -253,15 +252,15 @@ export const getUserProfileBasic = async (userId: string): Promise<UserProfileBa
         displayName: userData.displayName || userData.companyName || generateAnonymousName(trimmedUserId),
         avatarUrl: userData.avatarUrl || userData.photoURL || undefined,
       };
-      // console.log(`%c[connectionService] getUserProfileBasic: Profile FOUND for '${trimmedUserId}':`, "color: green;", profile);
+      console.log(`%c[connectionService] fetchUserProfileBasic: Profile FOUND for '${trimmedUserId}':`, "color: green;", profile);
       return profile;
     }
-    // console.warn(`%c[connectionService] getUserProfileBasic: Profile document NOT FOUND for userId: '${trimmedUserId}'. Using generated name.`, "color: orange;");
+    console.warn(`%c[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${trimmedUserId}'. Using generated name.`, "color: orange;");
     return { userId: trimmedUserId, displayName: generateAnonymousName(trimmedUserId) };
   } catch (error: any) {
-    console.error(`%c[connectionService] getUserProfileBasic: Error fetching profile for '${trimmedUserId}':`, "color: red;", error);
+    console.error(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${trimmedUserId}':`, "color: red;", error);
     if (error.code === 'permission-denied') {
-      // console.error(`%c  PERMISSION DENIED specifically for reading 'users/${trimmedUserId}'. Ensure rules allow reads for authenticated users. Current client auth state was: '${clientAuthUid || 'NULL'}'`, "color: red; font-weight: bold;");
+      console.error(`%c  PERMISSION DENIED specifically for reading 'users/${trimmedUserId}'. Ensure rules allow reads for authenticated users. Current client auth state was: '${clientAuthUid || 'NULL'}'`, "color: red; font-weight: bold;");
     }
     return { userId: trimmedUserId, displayName: generateAnonymousName(trimmedUserId) };
   }
@@ -294,7 +293,7 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
             console.warn(`[connectionService] Pending request ${docSnap.id} has invalid requestedAt timestamp.`);
             return null;
         }
-        const requesterProfile = await getUserProfileBasic(data.requesterId);
+        const requesterProfile = await fetchUserProfileBasic(data.requesterId); // Changed from getUserProfileBasic
         return {
           connectionId: docSnap.id,
           requesterId: data.requesterId,
@@ -344,7 +343,7 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
           console.warn(`[connectionService] Connection ${docSnap.id} has invalid connectedAt timestamp.`);
           return null;
       }
-      const otherUserProfile = await getUserProfileBasic(otherUserId);
+      const otherUserProfile = await fetchUserProfileBasic(otherUserId); // Changed from getUserProfileBasic
       return {
         connectionId: docSnap.id,
         otherUserId: otherUserId,
@@ -379,63 +378,61 @@ export const initializeUserProfile = async (userData: UserProfileData): Promise<
   }
 
   const userDocRef = doc(usersCollectionRef, userData.uid);
-  const dataToWrite: { [key: string]: any } = {
+  const dataToWrite: Partial<UserProfileData & { createdAt?: Timestamp, lastLoginAt?: Timestamp }> = {
     uid: userData.uid,
-    lastLoginAt: serverTimestamp(),
+    lastLoginAt: serverTimestamp() as Timestamp,
   };
 
+  let determinedDisplayName: string;
+
+  // Logic to determine displayName for new profile
+  if (userData.companyName && userData.companyName.trim() !== '') {
+    determinedDisplayName = userData.companyName;
+    console.log(`%c  [initializeUserProfile] Using companyName for displayName: '${determinedDisplayName}'`, "color: #DA70D6;");
+  } else if (userData.displayName && userData.displayName.trim() !== '') {
+    // This case is now less likely for initial Google sign-up due to auth.ts changes,
+    // but good for profile updates or if Google name is explicitly passed later.
+    determinedDisplayName = userData.displayName;
+    console.log(`%c  [initializeUserProfile] Using explicit displayName from userData: '${determinedDisplayName}'`, "color: #DA70D6;");
+  } else {
+    determinedDisplayName = generateAnonymousName(userData.uid);
+    console.log(`%c  [initializeUserProfile] Generating anonymous name: '${determinedDisplayName}'`, "color: #DA70D6;");
+  }
+  dataToWrite.displayName = determinedDisplayName;
+
+
+  // Include other fields if they are present and valid
   if (userData.email) dataToWrite.email = userData.email;
-  if (userData.photoURL) dataToWrite.avatarUrl = userData.photoURL;
+  if (userData.photoURL) dataToWrite.avatarUrl = userData.photoURL; // Map photoURL to avatarUrl
   if (userData.companyName) dataToWrite.companyName = userData.companyName;
-  if (userData.industry) dataToWrite.industry = userData.industry; // Add industry
+  if (userData.industry) dataToWrite.industry = userData.industry;
+
+  console.log(`%c[connectionService] initializeUserProfile: Data to write/merge to Firestore for UID ${userData.uid}:`, "color: #1E90FF;", dataToWrite);
 
   try {
     const docSnap = await getDoc(userDocRef);
     if (!docSnap.exists()) {
       console.log(`%c[connectionService] initializeUserProfile: Creating new profile for UID ${userData.uid}.`, "color: green;");
-      dataToWrite.createdAt = serverTimestamp();
-      
-      // Determine displayName for new profile
-      if (userData.displayName && userData.displayName.trim() !== '') {
-        dataToWrite.displayName = userData.displayName;
-         console.log(`%c  Using displayName from userData (e.g., Google): '${userData.displayName}'`, "color: green;");
-      } else if (userData.companyName && userData.companyName.trim() !== '') {
-        dataToWrite.displayName = userData.companyName;
-         console.log(`%c  Using companyName from userData: '${userData.companyName}'`, "color: green;");
-      } else {
-        dataToWrite.displayName = generateAnonymousName(userData.uid);
-         console.log(`%c  Generated anonymous name: '${dataToWrite.displayName}'`, "color: green;");
-      }
-      
-      console.log(`%c[connectionService] Data to write (CREATE) for UID ${userData.uid}:`, "color: green;", dataToWrite);
+      dataToWrite.createdAt = serverTimestamp() as Timestamp;
       await setDoc(userDocRef, dataToWrite);
       console.log(`%c[connectionService] User profile CREATED successfully for UID ${userData.uid}.`, "color: green; font-weight:bold;");
     } else {
       console.log(`%c[connectionService] initializeUserProfile: Updating existing profile for UID ${userData.uid}.`, "color: blue;");
+      // For updates, ensure we don't overwrite existing displayName with a generated one unless necessary
       const existingData = docSnap.data() as UserProfileData;
-      
-      // Determine displayName for update (prefer new, then existing, then generate if absolutely none)
-      if (userData.displayName && userData.displayName.trim() !== '') {
-        dataToWrite.displayName = userData.displayName;
-         console.log(`%c  Updating displayName from userData (e.g., Google): '${userData.displayName}'`, "color: blue;");
-      } else if (userData.companyName && userData.companyName.trim() !== '') {
-        // If no new displayName from Google, but companyName from form might be "newer" or intended as primary
-        dataToWrite.displayName = userData.companyName;
-         console.log(`%c  Setting/Updating displayName from companyName: '${userData.companyName}'`, "color: blue;");
-      } else if (!existingData.displayName && !existingData.companyName) {
-        // Only generate if NO displayable name exists at all on existing profile
+      if (!dataToWrite.displayName && !existingData.displayName && !existingData.companyName) {
+         // Only generate if no displayable name was incoming and none exists.
         dataToWrite.displayName = generateAnonymousName(userData.uid);
-         console.log(`%c  Existing profile had no name, generated anonymous name: '${dataToWrite.displayName}'`, "color: blue;");
-      } else {
-         console.log(`%c  Keeping existing displayName: '${existingData.displayName || existingData.companyName}'`, "color: blue;");
-         // If dataToWrite.displayName is still undefined here, it means an existing displayName should be preserved.
-         // So we don't add it to dataToWrite, allowing merge to keep old value.
-         if (dataToWrite.displayName === undefined && (existingData.displayName || existingData.companyName) ) {
-            delete dataToWrite.displayName; // Don't overwrite existing displayable name with undefined
-         }
+        console.log(`%c  [initializeUserProfile] Existing profile had no name, set generated name for update: '${dataToWrite.displayName}'`, "color: blue;");
+      } else if (!dataToWrite.displayName && (existingData.displayName || existingData.companyName)) {
+        // If no new displayName/companyName is coming in from userData, keep the existing one.
+        delete dataToWrite.displayName; 
+        console.log(`%c  [initializeUserProfile] No new display name provided, keeping existing: '${existingData.displayName || existingData.companyName}'`, "color: blue;");
       }
+      // Always ensure companyName from userData is written if provided, even on update
+      if (userData.companyName) dataToWrite.companyName = userData.companyName;
 
-      console.log(`%c[connectionService] Data to merge (UPDATE) for UID ${userData.uid}:`, "color: blue;", dataToWrite);
+
       await setDoc(userDocRef, dataToWrite, { merge: true });
       console.log(`%c[connectionService] User profile UPDATED successfully for UID ${userData.uid}.`, "color: blue; font-weight:bold;");
     }
@@ -469,8 +466,13 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
 
     const q = query(usersCollectionRef, ...constraints);
 
+    console.log("%c[connectionService] getSuggestibleUsers: Executing Firestore query...", "color: #BA55D3;", q);
     const querySnapshot = await getDocs(q);
     console.log(`%c[connectionService] getSuggestibleUsers: Firestore query executed. Found ${querySnapshot.docs.length} documents.`, "color: #BA55D3");
+
+    if (querySnapshot.empty) {
+      console.log("%c[connectionService] getSuggestibleUsers: No documents found for the query.", "color: orange;");
+    }
 
     const users = querySnapshot.docs.map(docSnap => {
       const data = docSnap.data() as DocumentData;
@@ -479,9 +481,10 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
         displayName: data.displayName || data.companyName || generateAnonymousName(docSnap.id),
         avatarUrl: data.avatarUrl || data.photoURL || undefined,
       };
+      // console.log(`%c  [Suggestible User] Mapped: ${profile.displayName} (UID: ${profile.userId})`, "color: #BA55D3");
       return profile;
     });
-    console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users.`, "color: green;", users.slice(0,5).map(u => u.displayName)); // Log first 5 displayNames
+    console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users. First few:`, "color: green;", users.slice(0,5).map(u => ({name: u.displayName, uid: u.userId })));
     return users;
   } catch (error: any) {
     console.error('%c[connectionService] Error fetching suggestible users:', "color: red;", error);
@@ -493,6 +496,6 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
       console.error("%c  MISSING INDEX. Firestore query for suggestible users requires an index (e.g., on 'displayName' ascending). Create this in Firebase console.", "color: red;");
       throw new Error('Query for suggestible users requires an index on displayName (ascending).');
     }
-    return []; // Return empty on other errors
+    return [];
   }
 };

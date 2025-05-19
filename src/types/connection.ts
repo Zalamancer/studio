@@ -13,52 +13,52 @@ export type ConnectionStatus =
 
 // Represents the document stored in the 'mutuals' collection in Firestore
 export interface MutualConnection {
-  id?: string; // Make ID optional as it's not part of the document data itself
-  userIds: string[]; // Array containing the two user IDs, sorted alphabetically
-  status: 'pending' | 'connected' | 'blocked'; // Status of the connection
-  requesterId: string; // User ID of the person who initiated the request (if status is 'pending')
-  requestedAt: Timestamp; // Timestamp when the request was sent (Firestore Timestamp)
-  connectedAt?: Timestamp; // Timestamp when the connection was established (Firestore Timestamp, optional)
-  // Add other fields as needed, e.g., blockDetails
+  id?: string; 
+  userIds: string[]; 
+  status: 'pending' | 'connected' | 'blocked'; 
+  requesterId: string; 
+  requestedAt: Timestamp; 
+  connectedAt?: Timestamp; 
 }
 
 // Represents a pending connection request, often including basic profile info of the requester
 // Used for displaying incoming requests to the user. Timestamps are numbers (ms).
 export interface ConnectionRequest {
-    connectionId: string; // The ID of the MutualConnection document
+    connectionId: string; 
     requesterId: string;
     requesterDisplayName: string;
     requesterAvatarUrl?: string;
-    requestedAt: number; // Milliseconds since epoch
+    requestedAt: number; 
 }
 
 // Represents an established connection, often including basic profile info of the other user.
 // Used for displaying the user's list of connections. Timestamps are numbers (ms).
 export interface Connection {
-    connectionId: string; // The ID of the MutualConnection document
+    connectionId: string; 
     otherUserId: string;
     otherUserDisplayName: string;
     otherUserAvatarUrl?: string;
-    connectedAt: number; // Milliseconds since epoch
+    connectedAt: number; 
 }
 
 // Basic user profile information used in connection lists/requests
 export interface UserProfileBasic {
     userId: string;
-    displayName: string;
+    displayName: string; // Can be actual name, company name, or generated pseudonym
     avatarUrl?: string;
 }
 
 // More detailed user profile data stored in the 'users' collection
+// This is the data structure for documents in the 'users' collection.
 export interface UserProfileData {
-    uid: string; // Should always match the document ID in 'users' collection
-    email?: string;
-    displayName?: string;
-    companyName?: string;
-    industry?: string;
-    avatarUrl?: string; // URL to the user's profile picture
-    photoURL?: string; // Often from auth provider, can be used for avatar
-    createdAt?: Timestamp;
-    lastLoginAt?: Timestamp;
-    // Add other fields as needed, e.g., location, description, tags
+    uid: string;             // Should always match the document ID in 'users' collection
+    email?: string;          // User's email
+    displayName?: string;    // User's preferred display name (could be their actual name, or the generated one)
+    companyName?: string;    // Optional company name from sign-up form
+    industry?: string;       // Optional industry from sign-up form
+    avatarUrl?: string;      // URL to the user's profile picture (could be user-uploaded or from photoURL)
+    photoURL?: string;       // Often from auth provider (e.g., Google), used as a source for avatarUrl
+    createdAt?: Timestamp;   // Firestore Timestamp of profile creation
+    lastLoginAt?: Timestamp; // Firestore Timestamp of last login
+    // Add other fields as needed, e.g., location, description, tags, customPseudonym
 }

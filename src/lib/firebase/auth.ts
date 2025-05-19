@@ -10,10 +10,10 @@ import {
   sendPasswordResetEmail,
   UserCredential,
   AuthError,
-  updateProfile // Import updateProfile if you want to set displayName in Auth
+  updateProfile
 } from "firebase/auth";
-import { initializeUserProfile } from '@/services/connectionService'; // Import user profile function
-import type { UserProfileData } from '@/types/connection'; // Import UserProfileData type
+import { initializeUserProfile } from '@/services/connectionService';
+import type { UserProfileData } from '@/types/connection';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -24,27 +24,36 @@ export const signInWithGoogle = async (): Promise<UserCredential | null> => {
     console.log("[auth.ts] Google Sign-In successful, user:", result.user);
     if (result.user) {
       // Prepare data for profile initialization/update
+      // Do NOT pass result.user.displayName here to ensure generated name is used by default.
+      // CompanyName and Industry will be collected later for Google users.
       const profileData: UserProfileData = {
         uid: result.user.uid,
         email: result.user.email || '',
-        displayName: result.user.displayName || '', // Google usually provides displayName
+        // displayName: '', // Intentionally omit or pass empty to let initializeUserProfile generate one
         photoURL: result.user.photoURL || undefined,
-        // companyName and industry are not directly available from Google Sign-In
+        // companyName and industry will be undefined here for initial Google sign-in
       };
-      console.log("[auth.ts] Calling initializeUserProfile for Google user:", profileData);
+      console.log("[auth.ts] Calling initializeUserProfile for Google user (expecting generated name):", profileData);
       try {
         await initializeUserProfile(profileData);
         console.log("[auth.ts] User profile initialized/updated after Google sign-in.");
       } catch (profileError) {
         console.error("[auth.ts] Error initializing/updating profile after Google sign-in:", profileError);
-        // Decide if this error should prevent login or just be logged
-        // For now, just log it. The user is authenticated.
       }
     }
     return result;
   } catch (error) {
     const authError = error as AuthError;
     console.error("[auth.ts] Error signing in with Google:", authError.code, authError.message);
+    if (authError.code === 'auth/popup-closed-by-user') {
+      // User closed the popup, not necessarily an "error" to show a destructive toast for.
+      // The component calling this might handle this by doing nothing.
+      console.log("[auth.ts] Google sign-in popup closed by user.");
+    } else if (authError.code === 'auth/account-exists-with-different-credential') {
+      console.error("[auth.ts] Google sign-in: Account exists with different credential for this email.");
+    } else if (authError.code === 'auth/api-key-not-valid') {
+      console.error("[auth.ts] CRITICAL: Invalid Firebase API Key. Check .env.local and Firebase project config.");
+    }
     throw authError;
   }
 };
@@ -61,12 +70,14 @@ export const signUpWithEmailPassword = async (
     console.log("[auth.ts] Email/Password Sign-Up successful, user:", userCredential.user);
 
     if (userCredential.user) {
-      // Optionally update Firebase Auth profile displayName immediately
-      // This helps if initializeUserProfile takes time or if some parts of the app read from auth.currentUser.displayName directly
-      if (additionalData?.companyName) {
+      // For email/password, companyName becomes the initial displayName if provided
+      const initialDisplayName = additionalData?.companyName || ''; 
+      
+      // Update Firebase Auth profile displayName immediately if companyName is available
+      if (initialDisplayName) {
         try {
-          await updateProfile(userCredential.user, { displayName: additionalData.companyName });
-          console.log("[auth.ts] Firebase Auth profile displayName updated to companyName:", additionalData.companyName);
+          await updateProfile(userCredential.user, { displayName: initialDisplayName });
+          console.log("[auth.ts] Firebase Auth profile displayName updated to companyName:", initialDisplayName);
         } catch (updateProfileError) {
           console.error("[auth.ts] Error updating Firebase Auth profile displayName:", updateProfileError);
         }
@@ -75,10 +86,10 @@ export const signUpWithEmailPassword = async (
       const profileData: UserProfileData = {
         uid: userCredential.user.uid,
         email: userCredential.user.email || '',
-        displayName: additionalData?.companyName || '', // Use companyName as displayName for email signups
+        displayName: initialDisplayName, // Pass companyName as displayName here
         companyName: additionalData?.companyName || undefined,
         industry: additionalData?.industry || undefined,
-        photoURL: undefined, // No photoURL from email/password sign-up by default
+        photoURL: undefined,
       };
       console.log("[auth.ts] Calling initializeUserProfile for Email/Password user:", profileData);
       try {
@@ -86,9 +97,6 @@ export const signUpWithEmailPassword = async (
         console.log("[auth.ts] User profile initialized after Email/Password sign-up.");
       } catch (profileError) {
         console.error("[auth.ts] Error initializing profile after Email/Password sign-up:", profileError);
-        // Decide if this error should prevent login or just be logged
-        // If profile creation is critical, you might want to delete the auth user here and re-throw
-        // For now, just log it. The user is authenticated.
       }
     }
     return userCredential;
@@ -104,15 +112,13 @@ export const signInWithEmailPassword = async (email: string, password: string): 
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     console.log("[auth.ts] Email/Password Sign-In successful:", userCredential.user);
-    // Optionally, update lastLoginAt in user profile here if needed (already in initializeUserProfile)
     if (userCredential.user) {
        const profileData: UserProfileData = {
         uid: userCredential.user.uid,
         email: userCredential.user.email || '',
-        displayName: userCredential.user.displayName || '',
+        displayName: userCredential.user.displayName || '', // Use existing auth displayName
         photoURL: userCredential.user.photoURL || undefined,
       };
-      // We call initializeUserProfile on login too, to ensure profile exists or lastLogin is updated
       console.log("[auth.ts] Calling initializeUserProfile on Email/Password login:", profileData);
       try {
         await initializeUserProfile(profileData);
@@ -133,7 +139,7 @@ export const signInWithEmailPassword = async (email: string, password: string): 
 export const sendPasswordReset = async (email: string): Promise<void> => {
   try {
     const actionCodeSettings = {
-      url: `${window.location.origin}/login`, // URL to redirect back to after password reset
+      url: typeof window !== 'undefined' ? `${window.location.origin}/login` : 'http://localhost:9002/login', // Fallback for server-side if needed
       handleCodeInApp: true,
     };
     await sendPasswordResetEmail(auth, email, actionCodeSettings);
@@ -141,8 +147,8 @@ export const sendPasswordReset = async (email: string): Promise<void> => {
   } catch (error) {
     const authError = error as AuthError;
     console.error("[auth.ts] Send Password Reset Error:", authError.code, authError.message);
-    if (authError.code === 'auth/unauthorized-continue-uri') {
-        console.error("[auth.ts] The domain of the continue URL is not whitelisted. Please check your Firebase console's Authentication -> Settings -> Authorized domains.");
+    if (authError.code === 'auth/unauthorized-continue-uri' && typeof window !== 'undefined') {
+        console.error("[auth.ts] The domain of the continue URL (" + window.location.origin + ") is not whitelisted. Please check your Firebase console's Authentication -> Settings -> Authorized domains.");
     }
     throw authError;
   }
