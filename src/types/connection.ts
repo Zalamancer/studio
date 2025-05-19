@@ -1,6 +1,7 @@
-
 // src/types/connection.ts
 import type { Timestamp } from 'firebase/firestore';
+
+export type VisibilitySetting = 'everyone' | 'connected' | 'only_me';
 
 // Status of a connection between two users
 export type ConnectionStatus =
@@ -44,21 +45,32 @@ export interface Connection {
 // Basic user profile information used in connection lists/requests
 export interface UserProfileBasic {
     userId: string;
-    displayName: string; // Can be actual name, company name, or generated pseudonym
+    displayName: string; 
     avatarUrl?: string;
 }
 
 // More detailed user profile data stored in the 'users' collection
-// This is the data structure for documents in the 'users' collection.
 export interface UserProfileData {
-    uid: string;             // Should always match the document ID in 'users' collection
-    email?: string;          // User's email
-    displayName?: string;    // User's preferred display name (could be their actual name, or the generated one)
-    companyName?: string;    // Optional company name from sign-up form
-    industry?: string;       // Optional industry from sign-up form
-    avatarUrl?: string;      // URL to the user's profile picture (could be user-uploaded or from photoURL)
-    photoURL?: string;       // Often from auth provider (e.g., Google), used as a source for avatarUrl
-    createdAt?: Timestamp;   // Firestore Timestamp of profile creation
-    lastLoginAt?: Timestamp; // Firestore Timestamp of last login
-    // Add other fields as needed, e.g., location, description, tags, customPseudonym
+    uid: string;             
+    email?: string;          
+    displayName?: string;    
+    companyName?: string;    
+    industry?: string;       
+    avatarUrl?: string | null;      
+    photoURL?: string | null;       
+    description?: string;
+    tags?: string[];
+    location?: string;
+    established?: string; // Or Date
+    contactEmail?: string;
+    contactPhone?: string;
+    verified?: boolean;
+    companyNameVisibility?: VisibilitySetting;
+    industryVisibility?: VisibilitySetting;
+    descriptionVisibility?: VisibilitySetting;
+    avatarVisibility?: VisibilitySetting; // Added for avatar too
+    // Add other visibility fields as needed, e.g., contactEmailVisibility
+    createdAt?: Timestamp;   
+    lastLoginAt?: Timestamp; 
+    updatedAt?: Timestamp;
 }
