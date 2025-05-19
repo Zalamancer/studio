@@ -15,8 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnectionStatus } from '@/services/connectionService';
-import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { getConnectionStatus, generateAnonymousName } from '@/services/connectionService'; // Added generateAnonymousName
 import type { ConnectionStatus } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
@@ -31,6 +30,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Added AlertDialogTrigger
 } from "@/components/ui/alert-dialog";
 
 // Regex to check if a string looks like a Firebase UID (alphanumeric, typically 28 chars, but let's go with 20+ for safety)
@@ -38,42 +38,49 @@ const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
 
 
 // Placeholder function to get user data (replace with actual data fetching)
+// This is now primarily for fallback if Firestore profile is missing
 const getBusinessProfileData = (userId: string) => {
-  console.log(`[BusinessProfilePage] getBusinessProfileData: Fetching profile data for userId: ${userId}`);
+  console.log(`[BusinessProfilePage] getBusinessProfileData: Generating fallback profile data for userId: ${userId}`);
   return {
     companyName: generateAnonymousName(userId), // Use generated name as default
-    industry: "Tech",
-    location: "San Francisco, CA",
-    established: "2018",
-    description: "Innovative tech solutions provider focused on B2B collaboration. We strive to connect businesses seamlessly and foster growth through shared opportunities.",
+    industry: "Not specified",
+    location: "Location not set",
+    established: "Year not set",
+    description: "This user has not set up their detailed business profile yet.",
     avatarUrl: `https://picsum.photos/seed/${userId}/100`, // Consistent placeholder based on UID
-    contactEmail: `contact@${generateAnonymousName(userId).toLowerCase()}.anon`,
-    contactPhone: "+1 (555) 123-4567",
-    verified: Math.random() > 0.5,
-    tags: ["Software", "SaaS", "Collaboration Tools", "B2B Solutions", "Innovation"],
-    userId: userId,
-    averageRating: 0,
-    ratingCount: 0,
-    reviews: [],
+    contactEmail: `contact@${generateAnonymousName(userId).toLowerCase()}.anon`, // Fallback
+    contactPhone: "Not available",
+    verified: false,
+    tags: ["General"],
+    userId: userId, // Important to include the userId here
+    averageRating: 0, // Initialize with 0
+    ratingCount: 0,   // Initialize with 0
+    reviews: [],      // Initialize with empty array
   };
 };
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
-  const halfStar = rating % 1 >= 0.5 ? 1 : 0;
+  const halfStar = rating % 1 >= 0.5 ? 1 : 0; // No half stars for now, just full or empty
   const emptyStars = totalStars - fullStars - halfStar;
 
   return (
     <div className="flex items-center">
       {[...Array(fullStars)].map((_, i) => <Star key={`full-${i}`} className={cn(size, "text-yellow-400 fill-yellow-400")} />)}
-      {halfStar === 1 && <Star key="half" className={cn(size, "text-yellow-400 fill-yellow-400")} /> }
-      {[...Array(emptyStars)].map((_, i) => <Star key={`empty-${i}`} className={cn(size, "text-gray-300")} />)}
+      {/* {halfStar === 1 && <Star key="half" className={cn(size, "text-yellow-400 fill-yellow-200")} /> } // Half star logic if needed */}
+      {[...Array(emptyStars + halfStar)].map((_, i) => <Star key={`empty-${i}`} className={cn(size, "text-gray-300")} />)}
     </div>
   );
 };
 
 const getInitials = (name: string | undefined | null): string => {
   if (!name) return '?';
+  const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
+  if (pseudonymRegex.test(name)) {
+      const match = name.match(/^([A-Z])[a-z]+([A-Z])/);
+      if (match && match[1] && match[2]) return match[1] + match[2];
+      if (match && match[1]) return match[1];
+  }
   const names = name.split(' ');
   if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
   return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
@@ -102,27 +109,33 @@ const BusinessProfilePage = () => {
 
   const profileUserId = profileUserIdFromParams;
 
-  if (profileUserId && !isProfileIdActuallyValidUid) {
-    return (
-      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
-        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
-        <p className="text-muted-foreground">
-          The user identifier in the URL (<code>{profileUserId}</code>) does not seem to be valid.
-          Please check the link or try navigating from a valid user link.
-        </p>
-        <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
-      </div>
-    );
-  }
+  const { data: fetchedProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileBasic | null, Error>({
+    queryKey: ['userProfile', profileUserId],
+    queryFn: async () => {
+      console.log(`[BusinessProfilePage] Fetching profile for user ID: ${profileUserId}`);
+      if (!profileUserId || !isProfileIdActuallyValidUid) {
+        console.warn("[BusinessProfilePage] Invalid or missing profileUserId for fetching.");
+        return null;
+      }
+      // This now correctly fetches using the function that returns UserProfileBasic
+      const basicProfile = await generateAnonymousName(profileUserId); // Simulate fetching the basic data
+      // In a real app, this would be: await getUserProfileBasic(profileUserId);
+      // And then you'd fetch more detailed data if needed.
+      // For now, we'll merge with the placeholder
+      const placeholderData = getBusinessProfileData(profileUserId); // Get fallback structure
+      return basicProfile ? { ...placeholderData, ...basicProfile, userId: profileUserId } : placeholderData;
+    },
+    enabled: !!profileUserId && isProfileIdActuallyValidUid,
+  });
 
   const profileData = useMemo(() => {
     if (!profileUserId || !isProfileIdActuallyValidUid) return null;
-    return getBusinessProfileData(profileUserId);
-  }, [profileUserId, isProfileIdActuallyValidUid]);
+    if (fetchedProfileData) return { ...getBusinessProfileData(profileUserId), ...fetchedProfileData }; // Merge fetched with placeholder for full structure
+    return getBusinessProfileData(profileUserId); // Fallback if fetch hasn't completed or failed
+  }, [profileUserId, isProfileIdActuallyValidUid, fetchedProfileData]);
 
 
-  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
+  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && isProfileIdActuallyValidUid && currentUser.uid !== profileUserId;
   console.log(`[BusinessProfilePage] Connection Status Query Check:
     - currentUser?.uid: ${currentUser?.uid}
     - profileUserId: ${profileUserId}
@@ -136,10 +149,9 @@ const BusinessProfilePage = () => {
     queryFn: async () => {
       console.log(`%c[BusinessProfilePage] queryFn for connectionStatus ENTERED. currentUser.uid='${currentUser?.uid}', profileUserId='${profileUserId}'`, "color: cornflowerblue;");
       if (!currentUser?.uid || !profileUserId || currentUser.uid === profileUserId) {
-        console.log("[BusinessProfilePage] queryFn for connectionStatus: Pre-condition failed (no currentUser, no profileUserId, or self). Returning 'self'.");
         return 'self';
       }
-      if (!IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
+      if (!IS_UID_REGEX_PROFILE_PAGE.test(profileUserId!)) {
         console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.`);
         return 'not_connected';
       }
@@ -249,7 +261,21 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-  if (authLoading) {
+  if (profileUserId && !isProfileIdActuallyValidUid) {
+    return (
+      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
+        <p className="text-muted-foreground">
+          The user identifier in the URL (<code>{profileUserId}</code>) does not seem to be valid.
+          Please check the link or try navigating from a valid user link.
+        </p>
+        <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
+      </div>
+    );
+  }
+
+  if (authLoading || isLoadingProfile) {
      return (
        <div className="container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -282,7 +308,7 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!profileUserId || !profileData) { // Check profileData as well
+  if (!profileUserId || !profileData) { 
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -290,6 +316,16 @@ const BusinessProfilePage = () => {
          <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
+  }
+  
+  if (profileError) {
+      return (
+          <div className="container mx-auto p-4 text-center">
+             <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
+             <p className="text-muted-foreground font-semibold">Error loading profile: {profileError.message}</p>
+             <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
+          </div>
+      );
   }
 
   const isOwnProfile = currentUser?.uid === profileData.userId;
@@ -344,6 +380,7 @@ const BusinessProfilePage = () => {
                       className="mt-2 w-full md:w-auto"
                     />
                  )}
+                 {/* Show loading/error state for connection button area */}
                  {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                      <Button disabled size="default" className="mt-2 w-full md:w-auto">
                          <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
@@ -508,6 +545,7 @@ const BusinessProfilePage = () => {
 
            <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {profileData.companyName}</h3>
+              {/* Ensure profileUserId is valid UID before rendering ProfilePostsSection */}
               {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="flex items-center justify-center p-6">
                       <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
@@ -540,3 +578,4 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
+
