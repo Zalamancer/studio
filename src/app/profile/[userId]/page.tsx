@@ -16,7 +16,7 @@ import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getConnectionStatus, getUserProfileBasic } from '@/services/connectionService';
-import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Corrected import path
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import type { ConnectionStatus, UserProfileBasic } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Skeleton } from '@/components/ui/skeleton'; // Import Skeleton
 
 // Regex to check if a string looks like a Firebase UID (alphanumeric, typically 28 chars, but let's go with 20+ for safety)
 const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
@@ -85,38 +86,47 @@ const BusinessProfilePage = () => {
     return isValid;
   }, [profileUserIdFromParams]);
 
-  const profileUserId = profileUserIdFromParams;
+  const profileUserId = profileUserIdFromParams; // Use this consistently
 
-  useEffect(() => {
-    // If the profileUserId from params is not a valid UID format, don't attempt to load profile.
-    // The rendering logic below will handle showing an "Invalid Profile" message.
-    if (profileUserId && !isProfileIdActuallyValidUid) {
-      console.warn(`[BusinessProfilePage] Invalid UID in URL: ${profileUserId}. Profile will not be loaded.`);
-    }
-  }, [profileUserId, isProfileIdActuallyValidUid]);
-
+  // Early return for invalid UID format in URL
+  if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
+    return (
+      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
+        <p className="text-muted-foreground">
+          The user identifier in the URL (<code>{profileUserIdFromParams}</code>) does not seem to be valid.
+          Please check the link or try navigating from a valid user link.
+        </p>
+        <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
+      </div>
+    );
+  }
 
   const { data: profileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileBasic | null, Error>({
     queryKey: ['userProfile', profileUserId],
     queryFn: async () => {
       console.log(`[BusinessProfilePage] Fetching profile for user ID: ${profileUserId}`);
-      if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) { // Re-check here for safety
+      if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
         console.warn(`[BusinessProfilePage] queryFn for userProfile: Invalid or missing profileUserId ('${profileUserId}'). Returning null.`);
         return null;
       }
       const basicProfile = await getUserProfileBasic(profileUserId);
       return basicProfile || { userId: profileUserId, displayName: generateAnonymousName(profileUserId), avatarUrl: undefined };
     },
-    enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId), // Ensure it only runs for valid-looking UIDs
+    enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId),
   });
 
+
   const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
-  console.log(`[BusinessProfilePage] Connection Status Query Check (Render):
+  
+  console.log(`%c[BusinessProfilePage] Connection Status Query Check (Render):
     - currentUser?.uid: ${currentUser?.uid}
     - profileUserId: ${profileUserId}
     - isProfileIdValid (regex test): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}
     - currentUser.uid !== profileUserId: ${currentUser && profileUserId ? currentUser.uid !== profileUserId : 'N/A'}
-    - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`
+    - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`,
+    "color: cornflowerblue;"
   );
 
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
@@ -136,22 +146,17 @@ const BusinessProfilePage = () => {
     enabled: connectionStatusQueryEnabled,
   });
 
-  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid;
+  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid && !!currentUser; // Also ensure current user exists for permission checks later
   console.log(`%c[BusinessProfilePage] Reviews Query Check:
     - profileUserId: ${profileUserId}
     - isProfileIdActuallyValidUid: ${isProfileIdActuallyValidUid}
+    - !!currentUser: ${!!currentUser}
     - reviewsQueryEnabled: ${reviewsQueryEnabled}`, "color: mediumorchid");
 
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
-    queryFn: () => {
-        if (!profileUserId || !isProfileIdActuallyValidUid) { // Guard the fetch
-          console.warn("[BusinessProfilePage] queryFn for reviews: profileUserId invalid or missing, returning empty array.");
-          return Promise.resolve([]);
-        }
-        return getReviewsForProfile(profileUserId);
-    },
-    enabled: reviewsQueryEnabled, // Use the refined enabled flag
+    queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]),
+    enabled: reviewsQueryEnabled,
   });
 
   const currentUserReview = useMemo(() => {
@@ -233,34 +238,20 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-  if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
-    return (
-      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
-        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
-        <p className="text-muted-foreground">
-          The user identifier in the URL (<code>{profileUserIdFromParams}</code>) does not seem to be valid.
-          Please check the link or try navigating from a valid user link.
-        </p>
-        <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
-      </div>
-    );
-  }
 
-
-  if (authLoading || (isLoadingProfile && !profileData)) { // Show loader if auth is loading OR if profile is loading and not yet available
+  if (authLoading || (isLoadingProfile && !profileData)) {
      return (
        <div className="container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
            <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
              <div className="flex flex-col md:flex-row items-start md:items-center gap-4 animate-pulse">
-               <div className="h-20 w-20 rounded-full bg-muted"></div>
+               <Skeleton className="h-20 w-20 rounded-full bg-muted"></Skeleton>
                <div className="flex-grow space-y-2">
-                  <div className="h-6 bg-muted rounded w-3/4"></div>
-                  <div className="h-4 bg-muted rounded w-1/2"></div>
-                  <div className="h-4 bg-muted rounded w-1/3"></div>
+                  <Skeleton className="h-6 bg-muted rounded w-3/4"></Skeleton>
+                  <Skeleton className="h-4 bg-muted rounded w-1/2"></Skeleton>
+                  <Skeleton className="h-4 bg-muted rounded w-1/3"></Skeleton>
                </div>
-               <div className="h-10 w-24 bg-muted rounded"></div>
+               <Skeleton className="h-10 w-24 bg-muted rounded"></Skeleton>
              </div>
            </CardHeader>
             <CardContent className="p-6 space-y-4">
@@ -281,11 +272,11 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!profileUserId || !profileData) {
+  if (!profileUserId || !profileData) { // Combined check: if profileUserId is falsy OR profileData is falsy
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
-        <p className="text-muted-foreground font-semibold">Business profile data could not be loaded for this user.</p>
+        <p className="text-muted-foreground font-semibold">Business profile data could not be loaded or profile ID is missing.</p>
          <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
@@ -342,18 +333,20 @@ const BusinessProfilePage = () => {
                 </div>
             </div>
             <div className="flex flex-col items-center md:items-end gap-2 ml-auto mt-4 md:mt-0 w-full md:w-auto">
-                 <div className="text-center md:text-right">
-                    <p className="text-sm text-muted-foreground">Average Rating</p>
-                    <div className="flex items-center gap-1 justify-center md:justify-end">
-                        <StarDisplay rating={averageRating} size="h-5 w-5" />
-                        <span className="text-lg font-semibold text-primary ml-1">
-                            {averageRating.toFixed(1)}
-                        </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground">
-                        ({ratingCount} ratings)
-                    </p>
-                 </div>
+                 { (averageRating > 0 || ratingCount > 0 || isOwnProfile) && (
+                     <div className="text-center md:text-right">
+                        <p className="text-sm text-muted-foreground">Average Rating</p>
+                        <div className="flex items-center gap-1 justify-center md:justify-end">
+                            <StarDisplay rating={averageRating} size="h-5 w-5" />
+                            <span className="text-lg font-semibold text-primary ml-1">
+                                {averageRating.toFixed(1)}
+                            </span>
+                        </div>
+                        <p className="text-xs text-muted-foreground">
+                            ({ratingCount} ratings)
+                        </p>
+                     </div>
+                  )}
                  {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
                     <ConnectionButton
                       targetUserId={profileUserId}
@@ -428,9 +421,7 @@ const BusinessProfilePage = () => {
                   ))}
                 </div>
                 <div className="space-y-2 mb-4">
-                    <Label htmlFor="reviewComment" className="text-sm font-medium">
-                      {editingReview ? "Your comment" : "Add a comment (optional)"}
-                    </Label>
+                    <Label htmlFor="reviewComment" className="text-sm font-medium">Add a comment (optional)</Label>
                     <Textarea
                         id="reviewComment"
                         placeholder="Share your experience with this business..."
