@@ -1,8 +1,7 @@
-
 // src/components/CreatePostForm.tsx
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'; // Added useMemo
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -22,7 +21,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Loader2, Upload, XCircle, ImageDown, User, AtSign } from 'lucide-react'; // Added AtSign
+import { Loader2, Upload, XCircle, ImageDown, User, AtSign } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
@@ -36,42 +35,24 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Added Popover
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Added Avatar
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Import getInitials
-
-export interface Industry {
-  name: string;
-  code: string;
-}
-
-export interface SubSector {
-  name: string;
-  code: string;
-  industries: Industry[];
-}
-
-export interface SectorWithSubSectors {
-  name: string;
-  code: string;
-  description?: string;
-  subSectors: SubSector[];
-}
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 // Local getInitials function for this component
 const getInitials = (displayNameOrUid: string | undefined | null): string => {
     if (!displayNameOrUid) return '?';
     const nameToProcess = displayNameOrUid.startsWith('@') ? displayNameOrUid.substring(1) : displayNameOrUid;
 
-    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/; // Matches ColorAnimalNumber format
+    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
     if (pseudonymRegex.test(nameToProcess)) {
         const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
-        if (match && match[1] && match[2]) return match[1] + match[2]; // e.g., BlueWhale -> BW
-        if (match && match[1]) return match[1]; // Fallback if only one capital word found
+        if (match && match[1] && match[2]) return match[1] + match[2];
+        if (match && match[1]) return match[1];
     }
     const names = nameToProcess.split(' ').filter(Boolean);
     if (names.length === 0) return '?';
@@ -108,6 +89,25 @@ export interface CreatePostFormData {
   subSector?: string;
   industry?: string;
   imageFile?: File | null;
+  mentionedUserIds: string[]; // Added this field
+}
+
+export interface Industry {
+  name: string;
+  code: string;
+}
+
+export interface SubSector {
+  name: string;
+  code: string;
+  industries: Industry[];
+}
+
+export interface SectorWithSubSectors {
+  name: string;
+  code: string;
+  description?: string;
+  subSectors: SubSector[];
 }
 
 interface CreatePostFormProps {
@@ -148,6 +148,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
   const descriptionSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [debouncedDescriptionQuery, setDebouncedDescriptionQuery] = useState('');
+  const [selectedMentionedUserIds, setSelectedMentionedUserIds] = useState<Set<string>>(new Set());
+
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -270,19 +272,22 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         subSector: values.subSector,
         industry: values.industry,
         imageFile: selectedImageFile,
+        mentionedUserIds: Array.from(selectedMentionedUserIds),
     };
     onSubmit(submitData);
+    // Reset selected mentions after submit if needed, or handle in parent
+    // setSelectedMentionedUserIds(new Set());
   };
 
   const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
-    console.log("[CreatePostForm] evaluateMentionState - Text:", text, "Cursor:", cursorPosition);
+    console.log("[CreatePostForm] evaluateMentionState - Text:", text.substring(0, 50) + "...", "Cursor:", cursorPosition);
     let activeQuery = null;
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
         const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
-        if (!/\s/.test(potentialQuery) && !/\n/.test(potentialQuery)) {
+        if (!/\s/.test(potentialQuery) && !/\n/.test(potentialQuery)) { // Ensure no spaces/newlines in the query itself
             activeQuery = potentialQuery;
         }
     }
@@ -302,13 +307,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     const value = e.target.value;
     form.setValue("description", value);
     if (descriptionTextareaRef.current) {
-        evaluateMentionState(value, descriptionTextareaRef.current.selectionStart);
+        evaluateMentionState(value, descriptionTextareaRef.current.selectionStart || 0);
     }
   };
 
   const handleDescriptionFocus = () => {
     if (descriptionTextareaRef.current) {
-        evaluateMentionState(descriptionTextareaRef.current.value, descriptionTextareaRef.current.selectionStart);
+        evaluateMentionState(descriptionTextareaRef.current.value, descriptionTextareaRef.current.selectionStart || 0);
     }
   };
   
@@ -322,10 +327,11 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     if (lastAtIndex > -1) {
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
-        const mentionNameToInsert = generateAnonymousName(profile.userId);
-        const newText = `${textBeforeMention}@${mentionNameToInsert} ${textAfterCursor}`;
+        const mentionToInsert = generateAnonymousName(profile.userId); // Use mentionName (ColorAnimalNumber)
+        const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
         form.setValue("description", newText);
-        const newCursorPosition = textBeforeMention.length + `@${mentionNameToInsert} `.length;
+        setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId)); // Store UID
+        const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
         setTimeout(() => {
             descriptionTextareaRef.current?.focus();
             descriptionTextareaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
@@ -338,14 +344,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
         if (
+            showDescriptionSuggestions &&
             descriptionSuggestionsPopoverRef.current &&
             !descriptionSuggestionsPopoverRef.current.contains(event.target as Node) &&
             descriptionTextareaRef.current &&
             !descriptionTextareaRef.current.contains(event.target as Node)
         ) {
-            if (showDescriptionSuggestions) {
-                setShowDescriptionSuggestions(false);
-            }
+            setShowDescriptionSuggestions(false);
         }
     };
     if (showDescriptionSuggestions) {
@@ -371,13 +376,23 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
     const queryLower = debouncedDescriptionQuery.toLowerCase();
     const suggestions = profilesSource.filter(profile =>
-        generateAnonymousName(profile.userId).toLowerCase().includes(queryLower) ||
-        (profile.companyName && profile.companyName.toLowerCase().includes(queryLower)) ||
-        (profile.actualDisplayName && profile.actualDisplayName.toLowerCase().includes(queryLower))
+        generateAnonymousName(profile.userId).toLowerCase().includes(queryLower) || // Filter by ColorAnimalNumber
+        (profile.actualDisplayName && profile.actualDisplayName.toLowerCase().includes(queryLower)) ||
+        (profile.companyName && profile.companyName.toLowerCase().includes(queryLower))
     ).slice(0,10);
 
     return suggestions.length > 0 ? suggestions : [{ userId: 'no-match-desc', displayName: `No users matching "${debouncedDescriptionQuery}"`, mentionName:'no-match-desc' } as UserProfileBasic];
   }, [debouncedDescriptionQuery, suggestibleUsers, isLoadingSuggestibleUsers, showDescriptionSuggestions, currentUserId]);
+
+  useEffect(() => {
+    // Reset selected mentioned UIDs when the form dialog is closed or on successful submission
+    // This depends on how the parent component handles form reset.
+    // If `isSubmitting` becomes false after a successful submission, this could be a place.
+    // Or parent can reset the form values, which then could trigger a reset here.
+    if (!form.formState.isDirty) { // A simple heuristic, might need adjustment
+      setSelectedMentionedUserIds(new Set());
+    }
+  }, [form.formState.isDirty]);
 
 
   return (
@@ -409,7 +424,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                   <Popover 
                     open={showDescriptionSuggestions && filteredDescriptionSuggestions.length > 0 && (filteredDescriptionSuggestions[0]?.userId !== 'loading-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-users-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-match-desc')} 
                     onOpenChange={(isOpen) => {
-                      if (!isOpen) setShowDescriptionSuggestions(false);
+                      setShowDescriptionSuggestions(isOpen);
                     }}
                   >
                     <PopoverTrigger asChild>
@@ -424,7 +439,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                           }}
                           onChange={handleDescriptionChange}
                           onFocus={handleDescriptionFocus}
-                          onBlur={() => setTimeout(() => {
+                          onBlur={() => setTimeout(() => { // Delay to allow click on popover
                             if (!descriptionSuggestionsPopoverRef.current?.contains(document.activeElement as Node)) {
                                 setShowDescriptionSuggestions(false);
                             }
@@ -438,7 +453,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                         className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
                         side="top"
                         align="start"
-                        onOpenAutoFocus={(e) => e.preventDefault()}
+                        onOpenAutoFocus={(e) => e.preventDefault()} // Prevent stealing focus
                      >
                         {filteredDescriptionSuggestions.map(profile => (
                              profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
@@ -451,7 +466,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                     variant="ghost"
                                     size="sm"
                                     className="w-full justify-start h-auto px-2 py-1 text-xs"
-                                    onMouseDown={(e) => e.preventDefault()}
+                                    onMouseDown={(e) => e.preventDefault()} // Prevent Textarea blur
                                     onClick={() => handleSelectDescriptionSuggestion(profile)}
                                 >
                                     <Avatar className="h-5 w-5 mr-2">
@@ -459,7 +474,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                         <AvatarFallback className="text-xs">{getInitials(profile.displayName || generateAnonymousName(profile.userId))}</AvatarFallback>
                                     </Avatar>
                                     <div className="flex flex-col items-start">
-                                        <span className="font-medium text-foreground">{profile.companyName || profile.displayName}</span>
+                                        <span className="font-medium text-foreground">{profile.actualDisplayName || profile.companyName || generateAnonymousName(profile.userId)}</span>
                                         <span className="text-muted-foreground">@{generateAnonymousName(profile.userId)}</span>
                                     </div>
                                 </Button>
@@ -669,4 +684,3 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     </Form>
   );
 };
-

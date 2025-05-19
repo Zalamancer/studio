@@ -17,6 +17,7 @@ export interface Post {
   createdAt: Timestamp;
   naicsCode?: string; // Stores the most specific NAICS code selected (Industry > Sub-sector > Sector)
   imageUrls?: string[]; // Array of image URLs
+  mentionedUserIds?: string[]; // Array of UIDs of users mentioned in the description
 }
 
 // Type for data being added

@@ -1,4 +1,3 @@
-
 // src/services/postService.ts
 import { db } from '@/lib/firebase/config';
 import {
@@ -31,32 +30,26 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
         }
     }
 
-    // Specifically ensure imageUrls is an array, even if empty.
-    if (dataForFirestore.imageUrls === undefined) {
-        dataForFirestore.imageUrls = [];
-    } else if (!Array.isArray(dataForFirestore.imageUrls)) {
-        if (typeof dataForFirestore.imageUrls === 'string') {
-            dataForFirestore.imageUrls = [dataForFirestore.imageUrls];
-        } else {
-            console.warn(`Invalid imageUrls type found in postData for Firestore: ${typeof dataForFirestore.imageUrls}. Defaulting to empty array.`);
-            dataForFirestore.imageUrls = [];
-        }
-    }
+    // Specifically ensure imageUrls and mentionedUserIds are arrays, even if empty.
+    dataForFirestore.imageUrls = Array.isArray(dataForFirestore.imageUrls) ? dataForFirestore.imageUrls : [];
+    dataForFirestore.mentionedUserIds = Array.isArray(dataForFirestore.mentionedUserIds) ? dataForFirestore.mentionedUserIds : [];
+
 
     dataForFirestore.createdAt = serverTimestamp();
+    console.log("[postService] Data being sent to Firestore:", dataForFirestore);
 
     const docRef = await addDoc(postsCollectionRef, dataForFirestore);
-    console.log("Post added successfully with ID: ", docRef.id);
+    console.log("[postService] Post added successfully with ID: ", docRef.id);
     return docRef.id;
   } catch (error: any) {
-    console.error('Error adding post to Firestore:', error);
+    console.error('[postService] Error adding post to Firestore:', error);
     console.error("Firestore Error Code:", error.code);
     console.error("Firestore Error Message:", error.message);
     if (error.code === 'permission-denied') {
         console.error("Firestore permission denied. Check your security rules.");
         throw new Error('Permission denied. You might need to adjust Firestore security rules.');
     }
-    if (error.message.includes("Unsupported field value: undefined")) {
+    if (error.message && error.message.includes("Unsupported field value: undefined")) {
         console.error("Attempted to write undefined field to Firestore. Payload:", postData);
          throw new Error(`Failed to add post: Firestore received an undefined field value. ${error.message}`);
     }
@@ -68,21 +61,22 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
   try {
     const q = query(postsCollectionRef, orderBy('createdAt', 'desc'), limit(50));
     const querySnapshot = await getDocs(q);
-    const posts = querySnapshot.docs.map((docSnap) => { // Changed doc to docSnap to avoid conflict
+    const posts = querySnapshot.docs.map((docSnap) => {
        const data = docSnap.data();
        const createdAt = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now();
 
        return {
-            id: docSnap.id, // Use docSnap here
-            ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls'>),
+            id: docSnap.id,
+            ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls' | 'mentionedUserIds'>),
             imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
+            mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
             createdAt: createdAt,
        } as Post;
     });
-    console.log(`Fetched ${posts.length} posts from Firestore.`);
+    console.log(`[postService] Fetched ${posts.length} posts from Firestore.`);
     return posts;
   } catch (error: any) {
-    console.error('Error fetching posts from Firestore:', error);
+    console.error('[postService] Error fetching posts from Firestore:', error);
     console.error("Firestore Error Code:", error.code);
     console.error("Firestore Error Message:", error.message);
      if (error.code === 'permission-denied') {
@@ -111,10 +105,10 @@ export const deletePostFromFirestore = async (postId: string): Promise<void> => 
 
 export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
   if (!userId) {
-    console.warn("getPostsByUserId called with invalid userId.");
+    console.warn("[postService] getPostsByUserId called with invalid userId.");
     return [];
   }
-  console.log(`Fetching posts for user ${userId}`);
+  console.log(`[postService] Fetching posts for user ${userId}`);
 
   try {
     const q = query(
@@ -124,27 +118,28 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
       limit(20)
     );
 
-    console.log("Executing Firestore query for user's posts...");
+    console.log("[postService] Executing Firestore query for user's posts...");
     const querySnapshot = await getDocs(q);
-    console.log(`Query snapshot received. Found ${querySnapshot.docs.length} posts for user ${userId}.`);
+    console.log(`[postService] Query snapshot received. Found ${querySnapshot.docs.length} posts for user ${userId}.`);
 
-    const posts = querySnapshot.docs.map((docSnap) => { // Changed doc to docSnap
+    const posts = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       const createdAt = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now();
 
       return {
-        id: docSnap.id, // Use docSnap here
-        ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls'>),
+        id: docSnap.id,
+        ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls' | 'mentionedUserIds'>),
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
+        mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
         createdAt: createdAt,
       } as Post;
     });
 
-    console.log(`Successfully mapped ${posts.length} posts for user ${userId}`);
+    console.log(`[postService] Successfully mapped ${posts.length} posts for user ${userId}`);
     return posts;
 
   } catch (error: any) {
-    console.error(`Error fetching posts for user ${userId}:`, error);
+    console.error(`[postService] Error fetching posts for user ${userId}:`, error);
     if (error.code === 'permission-denied') {
       console.error(`Firestore permission denied fetching posts for user ${userId}. Check rules.`);
       throw new Error('Permission denied fetching user posts.');
