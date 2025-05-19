@@ -1,5 +1,5 @@
 // src/services/userPreferenceService.ts
-import { db, auth } from '@/lib/firebase/config';
+import { db, auth } from '@/lib/firebase/config'; // Import auth
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, Timestamp } from 'firebase/firestore';
 import type { UserPreference, UpdateUserPreferencesData } from '@/types/userPreferences';
 
@@ -10,7 +10,13 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     console.warn("[userPreferenceService] getUserPreferences: No userId provided.");
     return null;
   }
-  console.log(`%c[userPreferenceService] getUserPreferences: Fetching for userId: ${userId}`, "color: dodgerblue;");
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[userPreferenceService] getUserPreferences: Fetching for userId: '${userId}'. Current client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
+
+  // Log the UID that will be compared by the Firestore rule
+  console.log(`%c[userPreferenceService] Rule Check Debug: For this call, rule will effectively check if '${clientAuthUid || 'NULL'}' == '${userId}'`, "color: #FF8C00; font-weight: bold;");
+
+
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     const docSnap = await getDoc(prefDocRef);
@@ -20,16 +26,19 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
       return {
         userId: data.userId,
         favoriteSectorCodes: data.favoriteSectorCodes || [],
-        notifyOnReply: data.notifyOnReply ?? true, // Default to true if undefined
-        notifyOnMention: data.notifyOnMention ?? true, // Default to true if undefined
+        notifyOnReply: data.notifyOnReply ?? true,
+        notifyOnMention: data.notifyOnMention ?? true,
         notifyOnNewConnectionRequest: data.notifyOnNewConnectionRequest ?? true,
         notifyOnConnectionAccepted: data.notifyOnConnectionAccepted ?? true,
         notifyOnNewMessage: data.notifyOnNewMessage ?? true,
         notifyOnPlatformUpdates: data.notifyOnPlatformUpdates ?? true,
+        // @ts-ignore
+        createdAt: data.createdAt, // Keep existing timestamps if they exist
+        // @ts-ignore
+        updatedAt: data.updatedAt
       };
     }
     console.log(`%c[userPreferenceService] getUserPreferences: No preferences document found for ${userId}. Returning defaults.`, "color: orange;");
-    // Return default preferences if no document exists for a new user
     return {
         userId: userId,
         favoriteSectorCodes: [],
@@ -40,9 +49,10 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
         notifyOnNewMessage: true,
         notifyOnPlatformUpdates: true,
     };
-  } catch (error) {
+  } catch (error: any) { // Changed from error without type
     console.error(`%c[userPreferenceService] getUserPreferences: Error fetching preferences for ${userId}:`, "color: red;", error);
-    // Optionally return defaults or rethrow, depending on desired error handling
+    // Log the auth state again at the point of error
+    console.error(`%c  Auth state at error point: auth.currentUser?.uid = ${auth.currentUser?.uid || 'NULL'}`, "color: red;");
     return null;
   }
 };
@@ -68,8 +78,8 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     const docSnap = await getDoc(prefDocRef);
-    const updatePayload: Partial<UserPreference> = {
-      ...dataToUpdate, // This includes favoriteSectorCodes if passed, and new notification settings
+    const updatePayload: Partial<UserPreference> & { updatedAt: Timestamp } = {
+      ...dataToUpdate,
       updatedAt: Timestamp.now()
     };
 
@@ -77,7 +87,6 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
       await updateDoc(prefDocRef, updatePayload);
       console.log(`%c[userPreferenceService] updateUserPreferences: Preferences updated for user ${userId}.`, "color: green;");
     } else {
-      // If document doesn't exist, create it with all fields
       const createPayload: UserPreference = {
         userId: userId,
         favoriteSectorCodes: dataToUpdate.favoriteSectorCodes || [],
@@ -87,9 +96,7 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
         notifyOnConnectionAccepted: dataToUpdate.notifyOnConnectionAccepted ?? true,
         notifyOnNewMessage: dataToUpdate.notifyOnNewMessage ?? true,
         notifyOnPlatformUpdates: dataToUpdate.notifyOnPlatformUpdates ?? true,
-        // @ts-ignore - Firestore will convert serverTimestamp
-        createdAt: Timestamp.now(), 
-        // @ts-ignore
+        createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
       await setDoc(prefDocRef, createPayload);
@@ -104,9 +111,6 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
   }
 };
 
-
-// Keep existing favorite sector functions if they are still used elsewhere directly,
-// or refactor them to use updateUserPreferences. For now, I'll assume they might still be in direct use.
 
 export const getUserFavoriteSectors = async (userId: string): Promise<string[]> => {
   const preferences = await getUserPreferences(userId);
@@ -124,10 +128,10 @@ export const addFavoriteSector = async (userId: string, sectorCode: string): Pro
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     await setDoc(prefDocRef, {
-      userId: userId,
+      userId: userId, // Ensure userId is written for new docs for rules
       favoriteSectorCodes: arrayUnion(sectorCode),
       updatedAt: Timestamp.now()
-    }, { merge: true }); // Use merge to create if not exists or update if exists
+    }, { merge: true });
     console.log(`%c[userPreferenceService] addFavoriteSector: Sector ${sectorCode} added for user ${userId}.`, "color: green;");
   } catch (error: any) {
     console.error(`%c[userPreferenceService] addFavoriteSector: Firestore error for user ${userId}, sector ${sectorCode}:`, "color: red;", error);
@@ -149,14 +153,14 @@ export const removeFavoriteSector = async (userId: string, sectorCode: string): 
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     const docSnap = await getDoc(prefDocRef);
-    if (docSnap.exists()) {
+    if (docSnap.exists()) { // Only update if doc exists
       await updateDoc(prefDocRef, {
         favoriteSectorCodes: arrayRemove(sectorCode),
         updatedAt: Timestamp.now()
       });
       console.log(`%c[userPreferenceService] removeFavoriteSector: Sector ${sectorCode} removed for user ${userId}.`, "color: green;");
     } else {
-      console.log(`%c[userPreferenceService] removeFavoriteSector: No preferences doc found for user ${userId}.`, "color: orange;");
+      console.log(`%c[userPreferenceService] removeFavoriteSector: No preferences doc found for user ${userId}. Nothing to remove.`, "color: orange;");
     }
   } catch (error: any) {
     console.error(`%c[userPreferenceService] removeFavoriteSector: Firestore error for user ${userId}, sector ${sectorCode}:`, "color: red;", error);
