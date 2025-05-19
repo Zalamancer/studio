@@ -2,14 +2,14 @@
 // src/components/CreatePostForm.tsx
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'; // Added useMemo
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label"; // Ensure Label is imported
+import { Label } from "@/components/ui/label";
 import {
   Form,
   FormControl,
@@ -22,8 +22,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Loader2, Upload, XCircle, ImageDown } from 'lucide-react';
-import Image from 'next/image'; // Import Next.js Image component
+import { Loader2, Upload, XCircle, ImageDown, User, AtSign } from 'lucide-react'; // Added AtSign
+import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
 import {
@@ -36,31 +36,51 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"; // Added Popover
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; // Added Avatar
+import { cn } from '@/lib/utils';
+import { useQuery } from '@tanstack/react-query';
+import { getSuggestibleUsers } from '@/services/connectionService';
+import type { UserProfileBasic } from '@/types/connection';
+import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Import getInitials
 
-// Define the shape of a single industry
-export interface Industry { // Exported for MainLayout.tsx
+export interface Industry {
   name: string;
   code: string;
 }
 
-// Define the shape of a single sub-sector with industries
-export interface SubSector { // Exported for MainLayout.tsx
+export interface SubSector {
   name: string;
   code: string;
   industries: Industry[];
 }
 
-// Define the shape of a single sector with sub-sectors
-export interface SectorWithSubSectors { // Exported for MainLayout.tsx
+export interface SectorWithSubSectors {
   name: string;
   code: string;
-  description?: string; // Optional description for the sector
+  description?: string;
   subSectors: SubSector[];
 }
 
+// Local getInitials function for this component
+const getInitials = (displayNameOrUid: string | undefined | null): string => {
+    if (!displayNameOrUid) return '?';
+    const nameToProcess = displayNameOrUid.startsWith('@') ? displayNameOrUid.substring(1) : displayNameOrUid;
 
-// Zod schema update
-const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/; // Matches ColorAnimalNumber format
+    if (pseudonymRegex.test(nameToProcess)) {
+        const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
+        if (match && match[1] && match[2]) return match[1] + match[2]; // e.g., BlueWhale -> BW
+        if (match && match[1]) return match[1]; // Fallback if only one capital word found
+    }
+    const names = nameToProcess.split(' ').filter(Boolean);
+    if (names.length === 0) return '?';
+    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
+    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
+};
+
+
+const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif"];
 
 const postFormSchema = z.object({
@@ -84,10 +104,10 @@ export interface CreatePostFormData {
   question: string;
   description?: string;
   tags: string[];
-  sector: string; // Main sector code
-  subSector?: string; // Sub-sector code
-  industry?: string; // Industry code
-  imageFile?: File | null; // For the uploaded image file
+  sector: string;
+  subSector?: string;
+  industry?: string;
+  imageFile?: File | null;
 }
 
 interface CreatePostFormProps {
@@ -95,9 +115,10 @@ interface CreatePostFormProps {
   availableTags: string[];
   detailedSectorsData: SectorWithSubSectors[];
   isSubmitting: boolean;
+  currentUserId: string | null;
 }
 
-export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availableTags, detailedSectorsData, isSubmitting }) => {
+export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availableTags, detailedSectorsData, isSubmitting, currentUserId }) => {
   const form = useForm<PostFormValues>({
     resolver: zodResolver(postFormSchema),
     defaultValues: {
@@ -121,6 +142,27 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
   const [isCompressing, setIsCompressing] = useState(false);
   const [originalTooLargeFile, setOriginalTooLargeFile] = useState<File | null>(null);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
+
+  const [descriptionMentionQuery, setDescriptionMentionQuery] = useState('');
+  const [showDescriptionSuggestions, setShowDescriptionSuggestions] = useState(false);
+  const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const descriptionSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
+  const [debouncedDescriptionQuery, setDebouncedDescriptionQuery] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedDescriptionQuery(descriptionMentionQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [descriptionMentionQuery]);
+
+
+  const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
+    queryKey: ['suggestibleUsersForCreatePost', debouncedDescriptionQuery],
+    queryFn: () => getSuggestibleUsers(debouncedDescriptionQuery, debouncedDescriptionQuery ? 10 : 25),
+    enabled: showDescriptionSuggestions,
+    staleTime: 1000 * 60 * 1,
+  });
 
 
   const selectedSectorCode = form.watch("sector");
@@ -158,28 +200,25 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a JPG, PNG, or GIF image." });
         if (fileInputRef.current) fileInputRef.current.value = "";
-        form.setValue("image", null); // Explicitly set form value to null
+        form.setValue("image", null);
         setImagePreviewUrl(null);
         setSelectedImageFile(null);
         return;
       }
-
       if (file.size > MAX_FILE_SIZE_BYTES) {
         setOriginalTooLargeFile(file);
         setShowCompressionDialog(true);
         if (fileInputRef.current) fileInputRef.current.value = "";
-        form.setValue("image", null); // Explicitly set form value to null
+        form.setValue("image", null);
         setImagePreviewUrl(null);
         setSelectedImageFile(null);
         return;
       }
-
       setSelectedImageFile(file);
       form.setValue("image", file);
       const reader = new FileReader();
       reader.onloadend = () => setImagePreviewUrl(reader.result as string);
       reader.readAsDataURL(file);
-
     }
   };
 
@@ -204,7 +243,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       console.error("Image compression error:", error);
       toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress image. Try a smaller file." });
       if (fileInputRef.current) fileInputRef.current.value = "";
-      form.setValue("image", null); // Ensure form value is null on compression failure
+      form.setValue("image", null);
       setImagePreviewUrl(null);
       setSelectedImageFile(null);
     } finally {
@@ -230,16 +269,121 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         sector: values.sector,
         subSector: values.subSector,
         industry: values.industry,
-        imageFile: selectedImageFile, 
+        imageFile: selectedImageFile,
     };
     onSubmit(submitData);
   };
+
+  const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
+    console.log("[CreatePostForm] evaluateMentionState - Text:", text, "Cursor:", cursorPosition);
+    let activeQuery = null;
+    const textBeforeCursor = text.substring(0, cursorPosition);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
+        const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
+        if (!/\s/.test(potentialQuery) && !/\n/.test(potentialQuery)) {
+            activeQuery = potentialQuery;
+        }
+    }
+
+    if (activeQuery !== null) {
+        console.log("[CreatePostForm] evaluateMentionState - Active Query:", activeQuery);
+        setDescriptionMentionQuery(activeQuery);
+        setShowDescriptionSuggestions(true);
+    } else {
+        console.log("[CreatePostForm] evaluateMentionState - No Active Query");
+        setDescriptionMentionQuery('');
+        setShowDescriptionSuggestions(false);
+    }
+  }, [setDescriptionMentionQuery, setShowDescriptionSuggestions]);
+
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const value = e.target.value;
+    form.setValue("description", value);
+    if (descriptionTextareaRef.current) {
+        evaluateMentionState(value, descriptionTextareaRef.current.selectionStart);
+    }
+  };
+
+  const handleDescriptionFocus = () => {
+    if (descriptionTextareaRef.current) {
+        evaluateMentionState(descriptionTextareaRef.current.value, descriptionTextareaRef.current.selectionStart);
+    }
+  };
+  
+  const handleSelectDescriptionSuggestion = (profile: UserProfileBasic) => {
+    if (!descriptionTextareaRef.current) return;
+    const currentValue = form.getValues("description") || "";
+    const cursorPosition = descriptionTextareaRef.current.selectionStart || 0;
+    const textBeforeCursor = currentValue.substring(0, cursorPosition);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    if (lastAtIndex > -1) {
+        const textBeforeMention = currentValue.substring(0, lastAtIndex);
+        const textAfterCursor = currentValue.substring(cursorPosition);
+        const mentionNameToInsert = generateAnonymousName(profile.userId);
+        const newText = `${textBeforeMention}@${mentionNameToInsert} ${textAfterCursor}`;
+        form.setValue("description", newText);
+        const newCursorPosition = textBeforeMention.length + `@${mentionNameToInsert} `.length;
+        setTimeout(() => {
+            descriptionTextareaRef.current?.focus();
+            descriptionTextareaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+        }, 0);
+    }
+    setShowDescriptionSuggestions(false);
+    setDescriptionMentionQuery('');
+  };
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+        if (
+            descriptionSuggestionsPopoverRef.current &&
+            !descriptionSuggestionsPopoverRef.current.contains(event.target as Node) &&
+            descriptionTextareaRef.current &&
+            !descriptionTextareaRef.current.contains(event.target as Node)
+        ) {
+            if (showDescriptionSuggestions) {
+                setShowDescriptionSuggestions(false);
+            }
+        }
+    };
+    if (showDescriptionSuggestions) {
+        document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+        document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [showDescriptionSuggestions]);
+
+  const filteredDescriptionSuggestions = useMemo(() => {
+    if (!showDescriptionSuggestions) return [];
+    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
+
+    const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId);
+
+    if (debouncedDescriptionQuery.trim() === '' && profilesSource.length > 0) {
+        return profilesSource;
+    }
+    if (profilesSource.length === 0 && debouncedDescriptionQuery.trim() === '') {
+        return [{ userId: 'no-users-desc', displayName: 'No users available.', mentionName: 'no-users-desc' } as UserProfileBasic];
+    }
+
+    const queryLower = debouncedDescriptionQuery.toLowerCase();
+    const suggestions = profilesSource.filter(profile =>
+        generateAnonymousName(profile.userId).toLowerCase().includes(queryLower) ||
+        (profile.companyName && profile.companyName.toLowerCase().includes(queryLower)) ||
+        (profile.actualDisplayName && profile.actualDisplayName.toLowerCase().includes(queryLower))
+    ).slice(0,10);
+
+    return suggestions.length > 0 ? suggestions : [{ userId: 'no-match-desc', displayName: `No users matching "${debouncedDescriptionQuery}"`, mentionName:'no-match-desc' } as UserProfileBasic];
+  }, [debouncedDescriptionQuery, suggestibleUsers, isLoadingSuggestibleUsers, showDescriptionSuggestions, currentUserId]);
+
 
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-0">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 p-1">
-          {/* Left Column */}
           <div className="space-y-6 flex flex-col">
             <FormField
               control={form.control}
@@ -262,14 +406,67 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
               render={({ field }) => (
                 <FormItem className="flex-grow flex flex-col">
                   <FormLabel>Description (Optional)</FormLabel>
-                  <FormControl className="flex-grow">
-                    <Textarea
-                      placeholder="Provide more context or details..."
-                      className="resize-y min-h-[120px] flex-1"
-                      {...field}
-                      disabled={isSubmitting}
-                    />
-                  </FormControl>
+                  <Popover 
+                    open={showDescriptionSuggestions && filteredDescriptionSuggestions.length > 0 && (filteredDescriptionSuggestions[0]?.userId !== 'loading-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-users-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-match-desc')} 
+                    onOpenChange={(isOpen) => {
+                      if (!isOpen) setShowDescriptionSuggestions(false);
+                    }}
+                  >
+                    <PopoverTrigger asChild>
+                      <FormControl className="flex-grow">
+                        <Textarea
+                          placeholder="Provide more context or details... (@mention users)"
+                          className="resize-y min-h-[120px] flex-1"
+                          {...field}
+                          ref={(e) => {
+                            field.ref(e);
+                            descriptionTextareaRef.current = e;
+                          }}
+                          onChange={handleDescriptionChange}
+                          onFocus={handleDescriptionFocus}
+                          onBlur={() => setTimeout(() => {
+                            if (!descriptionSuggestionsPopoverRef.current?.contains(document.activeElement as Node)) {
+                                setShowDescriptionSuggestions(false);
+                            }
+                          }, 150)}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                    </PopoverTrigger>
+                     <PopoverContent
+                        ref={descriptionSuggestionsPopoverRef}
+                        className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
+                        side="top"
+                        align="start"
+                        onOpenAutoFocus={(e) => e.preventDefault()}
+                     >
+                        {filteredDescriptionSuggestions.map(profile => (
+                             profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
+                                <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
+                                    {profile.displayName}
+                                </div>
+                             ) : (
+                                <Button
+                                    key={profile.userId}
+                                    variant="ghost"
+                                    size="sm"
+                                    className="w-full justify-start h-auto px-2 py-1 text-xs"
+                                    onMouseDown={(e) => e.preventDefault()}
+                                    onClick={() => handleSelectDescriptionSuggestion(profile)}
+                                >
+                                    <Avatar className="h-5 w-5 mr-2">
+                                        <AvatarImage src={profile.avatarUrl} alt={profile.displayName || generateAnonymousName(profile.userId)} />
+                                        <AvatarFallback className="text-xs">{getInitials(profile.displayName || generateAnonymousName(profile.userId))}</AvatarFallback>
+                                    </Avatar>
+                                    <div className="flex flex-col items-start">
+                                        <span className="font-medium text-foreground">{profile.companyName || profile.displayName}</span>
+                                        <span className="text-muted-foreground">@{generateAnonymousName(profile.userId)}</span>
+                                    </div>
+                                </Button>
+                            )
+                         ))}
+                    </PopoverContent>
+                  </Popover>
                   <FormMessage />
                 </FormItem>
               )}
@@ -278,7 +475,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
              <FormField
                 control={form.control}
                 name="image"
-                render={() => ( 
+                render={() => (
                     <FormItem>
                         <FormLabel>Image (Optional)</FormLabel>
                         <FormControl>
@@ -287,7 +484,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                 accept="image/png, image/jpeg, image/gif"
                                 ref={fileInputRef}
                                 onChange={handleImageChange}
-                                className="hidden" 
+                                className="hidden"
                                 disabled={isSubmitting || isCompressing}
                             />
                         </FormControl>
@@ -309,17 +506,16 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                         </div>
                         {imagePreviewUrl && (
                             <div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto">
-                                <Image src={imagePreviewUrl} alt="Preview" layout="fill" objectFit="contain" className="rounded-md" />
+                                <Image src={imagePreviewUrl} alt="Preview" layout="fill" objectFit="contain" className="rounded-md" data-ai-hint="uploaded image"/>
                             </div>
                         )}
                         <FormDescription>Max 2MB. JPG, PNG, GIF accepted.</FormDescription>
-                        <FormMessage /> 
+                        <FormMessage />
                     </FormItem>
                 )}
              />
           </div>
 
-          {/* Right Column */}
           <div className="space-y-6">
             <FormField
               control={form.control}
@@ -434,7 +630,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
             <DialogClose asChild>
                  <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
             </DialogClose>
-            <Button type="submit" disabled={isSubmitting || isCompressing}>
+            <Button type="submit" disabled={isSubmitting || isCompressing || isLoadingSuggestibleUsers}>
                 {isSubmitting || isCompressing ? (
                     <>
                         <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -460,7 +656,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
             <AlertDialogCancel onClick={() => {
               setOriginalTooLargeFile(null);
               if (fileInputRef.current) fileInputRef.current.value = "";
-              form.setValue("image", null); // Explicitly set form value to null
+              form.setValue("image", null);
               setImagePreviewUrl(null);
               setSelectedImageFile(null);
             }}>Cancel</AlertDialogCancel>

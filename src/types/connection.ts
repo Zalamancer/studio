@@ -14,50 +14,53 @@ export type ConnectionStatus =
 
 // Represents the document stored in the 'mutuals' collection in Firestore
 export interface MutualConnection {
-  id?: string; 
-  userIds: string[]; 
-  status: 'pending' | 'connected' | 'blocked'; 
-  requesterId: string; 
-  requestedAt: Timestamp; 
-  connectedAt?: Timestamp; 
+  id?: string;
+  userIds: string[];
+  status: 'pending' | 'connected' | 'blocked';
+  requesterId: string;
+  requestedAt: Timestamp;
+  connectedAt?: Timestamp;
 }
 
 // Represents a pending connection request, often including basic profile info of the requester
 // Used for displaying incoming requests to the user. Timestamps are numbers (ms).
 export interface ConnectionRequest {
-    connectionId: string; 
+    connectionId: string;
     requesterId: string;
-    requesterDisplayName: string;
+    requesterDisplayName: string; // This will be the best available "real" name or generated if none.
     requesterAvatarUrl?: string;
-    requestedAt: number; 
+    requestedAt: number;
 }
 
 // Represents an established connection, often including basic profile info of the other user.
 // Used for displaying the user's list of connections. Timestamps are numbers (ms).
 export interface Connection {
-    connectionId: string; 
+    connectionId: string;
     otherUserId: string;
-    otherUserDisplayName: string;
+    otherUserDisplayName: string; // This will be the best available "real" name or generated if none.
     otherUserAvatarUrl?: string;
-    connectedAt: number; 
+    connectedAt: number;
 }
 
-// Basic user profile information used in connection lists/requests
+// Basic user profile information used in connection lists/requests AND for @mention suggestions
 export interface UserProfileBasic {
     userId: string;
-    displayName: string; 
+    displayName: string; // User's actualDisplayName or companyName or generatedAnonymousName (for general display)
+    mentionName: string; // The generated "ColorAnimalNumber" name, always used for @mention text
+    companyName?: string; // Optional: for display in suggestion popover if available
     avatarUrl?: string;
 }
 
 // More detailed user profile data stored in the 'users' collection
 export interface UserProfileData {
-    uid: string;             
-    email?: string;          
-    displayName?: string;    
-    companyName?: string;    
-    industry?: string;       
-    avatarUrl?: string | null;      
-    photoURL?: string | null;       
+    uid: string;
+    email?: string;
+    actualDisplayName?: string; // User's preferred display name (e.g., real name)
+    companyName?: string;
+    generatedAnonymousName?: string; // The "ColorAnimalNumber" name
+    industry?: string;
+    avatarUrl?: string | null;
+    photoURL?: string | null; // From Firebase Auth, can be synced to avatarUrl
     description?: string;
     tags?: string[];
     location?: string;
@@ -68,9 +71,8 @@ export interface UserProfileData {
     companyNameVisibility?: VisibilitySetting;
     industryVisibility?: VisibilitySetting;
     descriptionVisibility?: VisibilitySetting;
-    avatarVisibility?: VisibilitySetting; // Added for avatar too
-    // Add other visibility fields as needed, e.g., contactEmailVisibility
-    createdAt?: Timestamp;   
-    lastLoginAt?: Timestamp; 
+    avatarVisibility?: VisibilitySetting;
+    createdAt?: Timestamp;
+    lastLoginAt?: Timestamp;
     updatedAt?: Timestamp;
 }
