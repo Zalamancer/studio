@@ -1,3 +1,4 @@
+
 // src/types/connection.ts
 import type { Timestamp } from 'firebase/firestore';
 
@@ -47,4 +48,17 @@ export interface UserProfileBasic {
     displayName: string;
     avatarUrl?: string;
 }
-```
+
+// More detailed user profile data stored in the 'users' collection
+export interface UserProfileData {
+    uid: string; // Should always match the document ID in 'users' collection
+    email?: string;
+    displayName?: string;
+    companyName?: string;
+    industry?: string;
+    avatarUrl?: string; // URL to the user's profile picture
+    photoURL?: string; // Often from auth provider, can be used for avatar
+    createdAt?: Timestamp;
+    lastLoginAt?: Timestamp;
+    // Add other fields as needed, e.g., location, description, tags
+}
