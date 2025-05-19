@@ -1,7 +1,7 @@
 // src/components/notifications/NotificationDropdown.tsx
 "use client";
 
-import React from 'react';
+import React, { useEffect } from 'react'; // Added useEffect
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Bell, Loader2, Mail, UserPlus, UserCheck, MessageSquare, AtSign, CheckCheck } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -33,7 +33,7 @@ const NotificationIcon: React.FC<{ type: NotificationType }> = React.memo(({ typ
     case 'mention': return <AtSign className="h-4 w-4 text-purple-500" />;
     case 'connection_request': return <UserPlus className="h-4 w-4 text-orange-500" />;
     case 'connection_accepted': return <UserCheck className="h-4 w-4 text-green-500" />;
-    case 'new_message': return <Mail className="h-4 w-4 text-sky-500" />; // Added icon for new_message
+    case 'new_message': return <Mail className="h-4 w-4 text-sky-500" />;
     default: return <Bell className="h-4 w-4 text-muted-foreground" />;
   }
 });
@@ -74,7 +74,7 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
             description = 'View their profile or start a chat.';
             linkHref = notification.senderId ? `/profile/${notification.senderId}` : '/connect';
             break;
-        case 'new_message': // Handle new_message type
+        case 'new_message':
             title = `New message from ${senderDisplayName}`;
             description = notification.textSnippet || 'View message';
             linkHref = notification.conversationId ? `/contracts?conversationId=${notification.conversationId}` : '/contracts';
@@ -124,15 +124,15 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
         return getNotificationsForUser(userId, 20);
     },
     enabled: !!userId,
-    refetchInterval: 1000 * 60, 
-    staleTime: 1000 * 30, 
+    refetchInterval: 1000 * 60,
+    staleTime: 1000 * 30,
   });
 
   useEffect(() => {
     if (error) {
         console.error("[NotificationDropdown] Error fetching notifications:", error);
     }
-  }, [error, toast]);
+  }, [error]);
 
   const markReadMutation = useMutation({
     mutationFn: markNotificationAsRead,
