@@ -15,7 +15,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnectionStatus, fetchFullUserProfile, type UserProfileData } from '@/services/connectionService'; // Use fetchFullUserProfile
+import { getConnectionStatus, fetchFullUserProfile, type UserProfileData, type VisibilitySetting } from '@/services/connectionService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import type { ConnectionStatus } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
@@ -39,13 +39,14 @@ const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
-  const halfStar = rating % 1 >= 0.5 ? 1 : 0;
-  const emptyStars = totalStars - fullStars - halfStar;
+  const halfStar = rating % 1 >= 0.5 ? 1 : 0; // No actual half star, just for calculation
+  const emptyStars = totalStars - fullStars; // Corrected empty star calculation
 
   return (
     <div className="flex items-center">
       {[...Array(fullStars)].map((_, i) => <Star key={`full-${i}`} className={cn(size, "text-yellow-400 fill-yellow-400")} />)}
-      {[...Array(emptyStars + halfStar)].map((_, i) => <Star key={`empty-${i}`} className={cn(size, "text-gray-300")} />)}
+      {/* No half star rendering for now, just full or empty based on floor */}
+      {[...Array(emptyStars)].map((_, i) => <Star key={`empty-${i}`} className={cn(size, "text-gray-300")} />)}
     </div>
   );
 };
@@ -59,6 +60,7 @@ const getInitials = (name: string | undefined | null): string => {
       if (match && match[1]) return match[1];
   }
   const names = name.split(' ');
+  if (names.length === 0) return '?';
   if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
   return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
 };
@@ -86,61 +88,54 @@ const BusinessProfilePage = () => {
 
   const profileUserId = profileUserIdFromParams;
 
-  if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
-    console.warn(`[BusinessProfilePage] Invalid Profile Identifier in URL: '${profileUserIdFromParams}'. Rendering error message.`);
-    return (
-      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
-        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-        <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
-        <p className="text-muted-foreground">
-          The user identifier in the URL (<code>{profileUserIdFromParams}</code>) does not seem to be valid.
-          Please check the link or try navigating from a valid user link.
-        </p>
-        <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
-      </div>
-    );
-  }
+
+  useEffect(() => {
+    // Log parameters on initial render or when they change
+    console.log(`[BusinessProfilePage] Effect deps: profileUserIdFromParams='${profileUserIdFromParams}', isProfileIdActuallyValidUid=${isProfileIdActuallyValidUid}`);
+  }, [profileUserIdFromParams, isProfileIdActuallyValidUid]);
+
 
   const { data: viewedUserProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileData | null, Error>({
     queryKey: ['fullUserProfile', profileUserId],
     queryFn: async () => {
-      console.log(`[BusinessProfilePage] Fetching full profile for user ID: ${profileUserId}`);
+      console.log(`%c[BusinessProfilePage] fetchFullUserProfile queryFn: Fetching for profileUserId: '${profileUserId}'`, "color: teal;");
       if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
-        console.warn(`[BusinessProfilePage] queryFn for fullUserProfile: Invalid or missing profileUserId ('${profileUserId}'). Returning null.`);
+        console.warn(`%c[BusinessProfilePage] fetchFullUserProfile queryFn: Invalid or missing profileUserId ('${profileUserId}'). Returning null.`, "color: orange;");
         return null;
       }
       return fetchFullUserProfile(profileUserId);
     },
-    enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId),
+    enabled: !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId), // Ensure query only runs with a valid-looking UID
   });
 
   const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
+  console.log(`[BusinessProfilePage] Render: profileUserId='${profileUserId}', currentUser?.uid='${currentUser?.uid}', IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)=${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}. FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`);
 
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
       if (!currentUser?.uid || !profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) || currentUser.uid === profileUserId) {
-        console.error(`[BusinessProfilePage] queryFn for connectionStatus: Invalid conditions. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
+        console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions for fetch. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
         return 'not_connected';
       }
+      console.log(`%c[BusinessProfilePage] getConnectionStatus queryFn: Fetching for currentUser='${currentUser.uid}', profileUser='${profileUserId}'`, "color: teal;");
       return getConnectionStatus(currentUser.uid, profileUserId);
     },
     enabled: connectionStatusQueryEnabled,
   });
 
-  const reviewsQueryEnabled = !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && !!currentUser;
-
+  const reviewsQueryEnabled = !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId);
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
     queryFn: () => {
-      console.log(`%c[BusinessProfilePage] getReviewsForProfile: Fetching for targetUserId: '${profileUserId}'. Auth UID: '${currentUser?.uid || 'NULL'}'`, "color: dodgerblue;");
-      if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
-        console.warn(`[BusinessProfilePage] queryFn for reviews: Invalid profileUserId ('${profileUserId}'). Returning empty array.`);
+      console.log(`%c[BusinessProfilePage] getReviewsForProfile queryFn: Fetching for targetUserId: '${profileUserId}'. Auth UID: '${currentUser?.uid || 'NULL'}'`, "color: dodgerblue;");
+      if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) { // Redundant check, but safe
+        console.warn(`%c[BusinessProfilePage] queryFn for reviews: Invalid profileUserId ('${profileUserId}'). Returning empty array.`, "color: orange;");
         return Promise.resolve([]);
       }
       return getReviewsForProfile(profileUserId);
     },
-    enabled: reviewsQueryEnabled,
+    enabled: reviewsQueryEnabled, // Depends on a valid profileUserId
   });
 
   const currentUserReview = useMemo(() => {
@@ -222,8 +217,22 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
+  if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
+    console.warn(`[BusinessProfilePage] Rendering Invalid Profile Identifier message for '${profileUserIdFromParams}'.`);
+    return (
+      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
+        <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
+        <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
+        <p className="text-muted-foreground">
+          The user identifier in the URL (<code>{profileUserIdFromParams}</code>) does not seem to be valid.
+          Please check the link or try navigating from a valid user link.
+        </p>
+        <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
+      </div>
+    );
+  }
 
-  if (authLoading || (isLoadingProfile && !viewedUserProfileData)) {
+  if (authLoading || (isLoadingProfile && !viewedUserProfileData && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId || ''))) {
      return (
        <div className="container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -256,11 +265,11 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!profileUserId || !viewedUserProfileData) {
+  if (!profileUserId || !viewedUserProfileData) { // Handles case where profileUserId might be null/undefined after checks
     return (
       <div className="container mx-auto p-4 text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
-        <p className="text-muted-foreground font-semibold">Business profile data could not be loaded or profile ID is missing.</p>
+        <p className="text-muted-foreground font-semibold">Business profile data could not be loaded or profile ID is missing/invalid.</p>
          <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
@@ -278,25 +287,41 @@ const BusinessProfilePage = () => {
 
   const isOwnProfile = currentUser?.uid === viewedUserProfileData.uid;
 
-  const canViewField = (visibility: VisibilitySetting | undefined): boolean => {
-    if (isOwnProfile) return true;
-    if (visibility === 'everyone') return true;
-    if (visibility === 'connected' && connectionStatus === 'connected') return true;
+  const canViewField = (visibilitySetting: VisibilitySetting | undefined): boolean => {
+    if (isOwnProfile) return true; // Owner can always see their own info
+    if (!visibilitySetting || visibilitySetting === 'everyone') return true;
+    if (visibilitySetting === 'connected' && connectionStatus === 'connected') return true;
+    // 'only_me' is covered by isOwnProfile implicitly for display logic here.
+    // If not own profile and setting is 'only_me', it means false.
     return false;
   };
 
-  const headerDisplayName = viewedUserProfileData.displayName || generateAnonymousName(viewedUserProfileData.uid);
-  const headerAvatarUrl = canViewField(viewedUserProfileData.avatarVisibility) ? (viewedUserProfileData.avatarUrl || viewedUserProfileData.photoURL) : undefined;
-  const headerIndustry = canViewField(viewedUserProfileData.industryVisibility) ? (viewedUserProfileData.industry || "Industry Not Specified") : "[Hidden]";
+  const generatedName = generateAnonymousName(viewedUserProfileData.uid);
+  const headerDisplayName = viewedUserProfileData.displayName || generatedName;
+  const headerAvatarUrl = canViewField(viewedUserProfileData.avatarVisibility) ? (viewedUserProfileData.avatarUrl || viewedUserProfileData.photoURL) : undefined; // photoURL is fallback from Firebase Auth
 
-  const displayCompanyName = canViewField(viewedUserProfileData.companyNameVisibility) ? (viewedUserProfileData.companyName || headerDisplayName) : "[Company Name Hidden]";
+  const headerIndustry = canViewField(viewedUserProfileData.industryVisibility) ? (viewedUserProfileData.industry || "Industry Not Specified") : "[Industry Hidden]";
+
+
+  let displayCompanyNameForAboutHeading: string;
+  if (canViewField(viewedUserProfileData.companyNameVisibility) && viewedUserProfileData.companyName) {
+      displayCompanyNameForAboutHeading = viewedUserProfileData.companyName;
+  } else if (canViewField(viewedUserProfileData.companyNameVisibility) && !viewedUserProfileData.companyName) {
+      // Company name field is visible, but no company name is set.
+      // Fallback to headerDisplayName (which could be a set displayName or generated).
+      displayCompanyNameForAboutHeading = headerDisplayName;
+  } else {
+      // Company name field is hidden by visibility settings. Use the generated anonymous name.
+      displayCompanyNameForAboutHeading = generatedName;
+  }
+
   const displayIndustry = canViewField(viewedUserProfileData.industryVisibility) ? (viewedUserProfileData.industry || "Not specified") : "[Industry Hidden]";
   const displayDescription = canViewField(viewedUserProfileData.descriptionVisibility) ? (viewedUserProfileData.description || "No profile description provided.") : "[Description Hidden]";
-  
-  const displayLocation = viewedUserProfileData.location || "Location not set"; // Assuming location is public
-  const displayEstablished = viewedUserProfileData.established || "Year not set"; // Assuming established year is public
-  const displayContactEmail = (isOwnProfile || connectionStatus === 'connected') ? (viewedUserProfileData.contactEmail || "Email not available") : "[Contact Email Hidden]";
-  const displayContactPhone = (isOwnProfile || connectionStatus === 'connected') ? (viewedUserProfileData.contactPhone) : undefined;
+
+  const displayLocation = viewedUserProfileData.location || "Location not set"; // Assume public or handle with its own visibility
+  const displayEstablished = viewedUserProfileData.established || "Year not set"; // Assume public or handle with its own visibility
+  const displayContactEmail = (isOwnProfile || (canViewField('everyone') && connectionStatus === 'connected')) ? (viewedUserProfileData.contactEmail || "Email not available") : "[Contact Email Hidden]";
+  const displayContactPhone = (isOwnProfile || (canViewField('everyone') && connectionStatus === 'connected')) ? (viewedUserProfileData.contactPhone) : undefined;
 
 
   return (
@@ -312,7 +337,7 @@ const BusinessProfilePage = () => {
             </Avatar>
             <div className="flex-grow text-center md:text-left">
               <CardTitle className="text-3xl font-bold text-foreground">
-                {headerDisplayName} {/* Always show display name/generated name */}
+                {headerDisplayName}
               </CardTitle>
               <CardDescription className="text-muted-foreground mt-1 flex items-center justify-center md:justify-start gap-1">
                  <Building className="h-4 w-4" /> {headerIndustry}
@@ -364,7 +389,7 @@ const BusinessProfilePage = () => {
         </CardHeader>
         <CardContent className="p-6 grid gap-6">
           <div>
-             <h3 className="text-lg font-semibold text-foreground mb-2">About {displayCompanyName === headerDisplayName ? "Us" : displayCompanyName}</h3>
+             <h3 className="text-lg font-semibold text-foreground mb-2">About {displayCompanyNameForAboutHeading}</h3>
              <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">
                {displayDescription}
              </p>
@@ -513,7 +538,7 @@ const BusinessProfilePage = () => {
 
            <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {headerDisplayName}</h3>
-              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (canViewField('connected')) ? ( // Simplified visibility for posts to 'connected'
+              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (canViewField(viewedUserProfileData.descriptionVisibility)) ? ( 
                   <ProfilePostsSection userId={profileUserId} />
               ) : isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="flex items-center justify-center p-6">
