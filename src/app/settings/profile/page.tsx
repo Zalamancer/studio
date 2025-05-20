@@ -26,30 +26,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { detailedSectorsData } from '@/components/layout/MainLayout';
 import { updateUserProfileDetails, fetchFullUserProfile } from '@/services/connectionService';
 import type { UserProfileData, VisibilitySetting } from '@/types/connection';
-import { generateAnonymousName } from '@/lib/pseudonymUtils';
-import { uploadPostImage } from '@/services/storageService'; // Assuming this service exists and works for general image uploads
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
+import { uploadPostImage } from '@/services/storageService';
 
 const MAX_FILE_SIZE_MB = 1;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
-
-const getInitials = (name: string | undefined | null): string => {
-    if (!name) return '?';
-    const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
-
-    // Check for ColorAnimalNumber format first (for mentionName)
-    const mentionNameRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
-    if (mentionNameRegex.test(nameToProcess)) {
-        const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
-        if (match && match[1] && match[2]) return match[1] + match[2];
-        if (match && match[1]) return match[1];
-    }
-    // Fallback for other names (actualDisplayName, companyName)
-    const parts = nameToProcess.split(' ').filter(Boolean);
-    if (parts.length === 0) return '?';
-    if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
-    return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
-};
-
 
 const visibilityOptions: { value: VisibilitySetting; label: string }[] = [
   { value: 'everyone', label: 'Everyone' },
@@ -65,7 +46,8 @@ const ProfileSettingsPage = () => {
   // State for editable fields
   const [industry, setIndustry] = useState('');
   const [description, setDescription] = useState('');
-  // State for read-only display
+
+  // State for read-only display from fetched profile
   const [fetchedActualDisplayName, setFetchedActualDisplayName] = useState('');
   const [fetchedCompanyName, setFetchedCompanyName] = useState('');
   const [fetchedMentionName, setFetchedMentionName] = useState('');
@@ -92,7 +74,7 @@ const ProfileSettingsPage = () => {
   const [isCompressing, setIsCompressing] = useState(false);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
 
-  const availableIndustries = detailedSectorsData.map(sector => sector.name); // Using main sector names as industries
+  const availableIndustries = detailedSectorsData.map(sector => sector.name);
 
   useEffect(() => {
     const fetchProfile = async () => {
@@ -132,9 +114,9 @@ const ProfileSettingsPage = () => {
             setFetchedCompanyName(fullProfileData.companyName || '');
             setFetchedMentionName(fullProfileData.mentionName || generateAnonymousName(user.uid));
 
-            const avatarToDisplay = fullProfileData.avatarUrl || user.photoURL || null;
+            const avatarToDisplay = fullProfileData.avatarUrl || null; // Use null for consistency
             setPreviewUrl(avatarToDisplay);
-            setCurrentDbAvatarUrl(fullProfileData.avatarUrl || null); // Store what's in DB for avatar
+            setCurrentDbAvatarUrl(avatarToDisplay);
 
             setActualDisplayNameVisibility(fullProfileData.actualDisplayNameVisibility || 'everyone');
             setCompanyNameVisibility(fullProfileData.companyNameVisibility || 'everyone');
@@ -144,19 +126,20 @@ const ProfileSettingsPage = () => {
             console.log("[ProfileSettingsPage] Full profile data loaded.");
 
           } else {
+             // This case should ideally not be hit if initializeUserProfile works correctly
              setIndustry('');
              setDescription('');
              setFetchedActualDisplayName('');
              setFetchedCompanyName('');
              setFetchedMentionName(generateAnonymousName(user.uid));
-             setPreviewUrl(user.photoURL || null);
+             setPreviewUrl(null); // Start with null, consistent with email sign-up
              setCurrentDbAvatarUrl(null);
              setActualDisplayNameVisibility('everyone');
              setCompanyNameVisibility('everyone');
              setIndustryVisibility('everyone');
              setDescriptionVisibility('everyone');
              setAvatarVisibility('everyone');
-             console.warn("[ProfileSettingsPage] No full profile document found, using auth fallbacks and default visibilities.");
+             console.warn("[ProfileSettingsPage] No full profile document found, using fallbacks and default visibilities.");
           }
         } catch (error) {
           console.error("[ProfileSettingsPage] Error fetching profile:", error);
@@ -172,7 +155,7 @@ const ProfileSettingsPage = () => {
       }
     };
     fetchProfile();
-   }, [user, authLoading, toast]);
+   }, [user, authLoading, toast]); // Removed isFetchingProfile from deps
 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -180,7 +163,7 @@ const ProfileSettingsPage = () => {
     if (file) {
         if (!file.type.startsWith('image/')) {
             toast({ variant: "destructive", title: "Invalid File Type", description: "Please select an image file (JPG, PNG, GIF)." });
-             setSelectedFile(null); setOriginalFile(null); setPreviewUrl(currentDbAvatarUrl); // Revert to DB avatar or null
+             setSelectedFile(null); setOriginalFile(null); setPreviewUrl(currentDbAvatarUrl);
              if (fileInputRef.current) fileInputRef.current.value = '';
             return;
         }
@@ -232,39 +215,32 @@ const ProfileSettingsPage = () => {
         return;
     }
     setIsSubmitting(true);
-    let newAvatarUrlForFirestore: string | null | undefined = undefined; // undefined means "don't change"
+    let newAvatarUrlForFirestore: string | null | undefined = undefined;
 
     try {
-        if (selectedFile) { // A new file was selected and processed
-            newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid); // Using uploadPostImage, ensure path is appropriate
+        if (selectedFile) {
+            newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid);
         } else if (previewUrl === null && currentDbAvatarUrl !== null) {
-            // If preview is null (meaning user cleared it) and there was a DB avatar, set to null to delete
             newAvatarUrlForFirestore = null;
         }
-        // If selectedFile is null AND previewUrl is same as currentDbAvatarUrl, newAvatarUrlForFirestore remains undefined (no change)
 
-        const profileDataToUpdate: Partial<Pick<UserProfileData,
-            'industry' | 'description' | 'avatarUrl' |
-            'actualDisplayNameVisibility' | 'companyNameVisibility' |
-            'industryVisibility' | 'descriptionVisibility' | 'avatarVisibility'
-        >> = {
+        const profileDataToUpdate: Partial<UserProfileData> = {
             industry: industry || null,
             description: description || null,
-            // Only include avatarUrl in update if it has changed or is being cleared
             ...(newAvatarUrlForFirestore !== undefined && { avatarUrl: newAvatarUrlForFirestore }),
-            actualDisplayNameVisibility,
-            companyNameVisibility,
-            industryVisibility,
-            descriptionVisibility,
-            avatarVisibility,
+            actualDisplayNameVisibility, // Already in state
+            companyNameVisibility,     // Already in state
+            industryVisibility,        // Already in state
+            descriptionVisibility,     // Already in state
+            avatarVisibility,          // Already in state
         };
 
         await updateUserProfileDetails(user.uid, profileDataToUpdate);
 
         if (newAvatarUrlForFirestore !== undefined) {
-            setCurrentDbAvatarUrl(newAvatarUrlForFirestore); // Update currentDbAvatarUrl to the new saved one
+            setCurrentDbAvatarUrl(newAvatarUrlForFirestore);
         }
-        setSelectedFile(null); // Clear selected file after successful save
+        setSelectedFile(null);
         setOriginalFile(null);
 
         toast({ title: "Profile Updated", description: "Your profile information has been saved." });
@@ -292,7 +268,7 @@ const ProfileSettingsPage = () => {
           </Card>
       );
   }
-  if (isFetchingProfile && !authLoading) {
+  if (isFetchingProfile && !authLoading) { // Only show this if auth is done but profile fetch is ongoing
       return (
           <Card>
               <CardHeader><CardTitle>Profile Settings</CardTitle><CardDescription>Manage your public business profile.</CardDescription></CardHeader>
@@ -319,7 +295,7 @@ const ProfileSettingsPage = () => {
     fieldId: string,
     labelPrefix: string
   ) => (
-    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1 sm:gap-2">
+    <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-1 sm:gap-2 mt-1">
         <Label htmlFor={`${fieldId}Visibility`} className="text-xs text-muted-foreground whitespace-nowrap">{labelPrefix} Visibility:</Label>
         <Select value={value} onValueChange={(v) => onChange(v as VisibilitySetting)} disabled={isSubmitting}>
         <SelectTrigger id={`${fieldId}Visibility`} className="w-full sm:w-[180px] text-xs h-8">
@@ -334,6 +310,8 @@ const ProfileSettingsPage = () => {
     </div>
   );
 
+  const displayedNameForAvatar = fetchedActualDisplayName || fetchedCompanyName || fetchedMentionName;
+
   return (
     <Card className="shadow-md border-border">
       <CardHeader>
@@ -346,61 +324,70 @@ const ProfileSettingsPage = () => {
                <Label className="text-base font-medium">Avatar / Logo</Label>
                <div className="flex items-center gap-4">
                    <Avatar className="h-20 w-20 border">
-                        <AvatarImage src={previewUrl ?? undefined} alt={fetchedActualDisplayName || fetchedCompanyName || fetchedMentionName} />
+                        <AvatarImage src={previewUrl ?? undefined} alt={displayedNameForAvatar} />
                         <AvatarFallback className="bg-muted text-muted-foreground text-xl">
-                            {previewUrl ? <User className="h-10 w-10" /> : getInitials(fetchedActualDisplayName || fetchedCompanyName || fetchedMentionName)}
+                            {previewUrl ? <User className="h-10 w-10" /> : getInitials(displayedNameForAvatar)}
                         </AvatarFallback>
                    </Avatar>
                    <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, image/gif" style={{ display: 'none' }} disabled={isSubmitting || isCompressing} />
-                   <Button type="button" variant="outline" size="sm" onClick={handleAvatarChangeClick} disabled={isSubmitting || isCompressing}>
-                        {isCompressing ? <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Compressing... </> : <> <Upload className="mr-2 h-4 w-4" /> Change </>}
-                    </Button>
+                   <div className="flex flex-col gap-2">
+                        <Button type="button" variant="outline" size="sm" onClick={handleAvatarChangeClick} disabled={isSubmitting || isCompressing}>
+                            {isCompressing ? <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Compressing... </> : <> <Upload className="mr-2 h-4 w-4" /> Change Avatar </>}
+                        </Button>
+                        {previewUrl && (
+                            <Button type="button" variant="ghost" size="xs" onClick={() => { setPreviewUrl(null); setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} disabled={isSubmitting || isCompressing} className="text-destructive hover:text-destructive">
+                                Remove Avatar
+                            </Button>
+                        )}
+                   </div>
                </div>
                 <p className="text-xs text-muted-foreground">Upload a JPG, PNG, or GIF. Max size {MAX_FILE_SIZE_MB}MB.</p>
                 {renderVisibilitySelect(avatarVisibility, setAvatarVisibility, 'avatar', 'Avatar')}
            </div>
 
-            <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+            <div className="space-y-1 p-4 border rounded-md bg-muted/20">
                 <Label htmlFor="actualDisplayName" className="text-base font-medium">Display Name</Label>
-                <Input id="actualDisplayName" value={fetchedActualDisplayName} disabled={true} className="bg-background/50 cursor-not-allowed"/>
-                <p className="text-xs text-muted-foreground">Your primary public name (e.g., from Google). Not directly editable here.</p>
+                <Input id="actualDisplayName" value={fetchedActualDisplayName || "Not set"} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
+                <p className="text-xs text-muted-foreground">Your public display name (e.g., from Google sign-in). Cannot be changed here.</p>
                 {renderVisibilitySelect(actualDisplayNameVisibility, setActualDisplayNameVisibility, 'actualDisplayName', 'Display Name')}
             </div>
 
 
-            <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+            <div className="space-y-1 p-4 border rounded-md bg-muted/20">
                 <Label htmlFor="companyName" className="text-base font-medium">Company Name</Label>
-                <Input id="companyName" value={fetchedCompanyName} disabled={true} className="bg-background/50 cursor-not-allowed"/>
-                <p className="text-xs text-muted-foreground">Your company's name (e.g., from email sign-up). Not directly editable here.</p>
+                <Input id="companyName" value={fetchedCompanyName || "Not set"} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
+                <p className="text-xs text-muted-foreground">Your company's name (e.g., from email sign-up). Cannot be changed here.</p>
                 {renderVisibilitySelect(companyNameVisibility, setCompanyNameVisibility, 'companyName', 'Company Name')}
             </div>
 
-            <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+            <div className="space-y-1 p-4 border rounded-md bg-muted/20">
                 <Label htmlFor="mentionName" className="text-base font-medium">Mention Name (@)</Label>
-                <Input id="mentionName" value={`@${fetchedMentionName}`} disabled={true} className="bg-background/50 cursor-not-allowed"/>
+                <Input id="mentionName" value={fetchedMentionName ? `@${fetchedMentionName}` : "Not generated"} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
                 <p className="text-xs text-muted-foreground">Your unique anonymous identifier for mentions. Automatically generated.</p>
+                {/* Mention name visibility is not typically controlled by the user */}
             </div>
 
 
-          <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+          <div className="space-y-1 p-4 border rounded-md bg-muted/20">
              <Label htmlFor="industry" className="text-base font-medium">Industry</Label>
             <Select value={industry} onValueChange={setIndustry} disabled={isSubmitting}>
-                <SelectTrigger id="industry" className="w-full">
+                <SelectTrigger id="industry" className="w-full text-sm">
                     <SelectValue placeholder="Select your industry" />
                 </SelectTrigger>
                 <SelectContent>
                     {availableIndustries.map((ind) => (
-                        <SelectItem key={ind} value={ind}>{ind}</SelectItem>
+                        <SelectItem key={ind} value={ind} className="text-sm">{ind}</SelectItem>
                     ))}
+                    <SelectItem value="Other" className="text-sm">Other</SelectItem>
                 </SelectContent>
             </Select>
             {renderVisibilitySelect(industryVisibility, setIndustryVisibility, 'industry', 'Industry')}
           </div>
 
-          <div className="space-y-3 p-4 border rounded-md bg-muted/20">
+          <div className="space-y-1 p-4 border rounded-md bg-muted/20">
             <Label htmlFor="description" className="text-base font-medium">About Your Business</Label>
-            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Tell others a bit about your company..." rows={4} disabled={isSubmitting} className="resize-y" />
-            {renderVisibilitySelect(descriptionVisibility, setDescriptionVisibility, 'description', 'Description')}
+            <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Tell others a bit about your company..." rows={4} disabled={isSubmitting} className="resize-y text-sm" />
+            {renderVisibilitySelect(descriptionVisibility, setDescriptionVisibility, 'description', 'About')}
           </div>
 
           <div className="flex justify-end pt-4">

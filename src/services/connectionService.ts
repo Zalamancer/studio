@@ -1,9 +1,6 @@
 // src/services/connectionService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
-  updateProfile, // From firebase/auth
-} from 'firebase/auth';
-import {
   collection as firestoreCollection,
   query as firestoreQuery,
   where as firestoreWhere,
@@ -19,7 +16,9 @@ import {
   deleteDoc as firestoreDeleteDoc,
   type QueryConstraint as FirestoreQueryConstraint,
 } from 'firebase/firestore';
-
+import {
+  updateProfile, // From firebase/auth
+} from 'firebase/auth';
 import type { ConnectionStatus, Connection, ConnectionRequest, UserProfileBasic, UserProfileData } from '@/types/connection';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import { createNotification } from './notificationService';
@@ -80,17 +79,18 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
   const connectionDocRef = firestoreDoc(mutualsCollectionRef, connectionId);
   const sortedUserIds = [requesterId, recipientId].sort();
 
-  const newConnectionData = { 
+  const newConnectionData = {
     userIds: sortedUserIds,
-    status: 'pending' as const, 
+    status: 'pending' as const,
     requesterId: requesterId,
     requestedAt: firestoreServerTimestamp() as Timestamp,
   };
 
-  console.log(`%c[connectionService] sendConnectionRequest - Rule Check Values:`, "color: green;");
+  console.log(`%c[connectionService] sendConnectionRequest - Rule Check Values (Client-side perspective for Firestore 'create' rule on /mutuals/{connectionId}):`, "color: green;");
   console.log(`  1. request.auth != null:                            ${!!clientAuthUid}`);
   console.log(`  2. request.resource.data.requesterId == request.auth.uid: ${newConnectionData.requesterId === clientAuthUid} (Data: '${newConnectionData.requesterId}', Auth: '${clientAuthUid}')`);
   console.log(`  3. request.resource.data.userIds.hasAll([request.auth.uid]): ${clientAuthUid ? newConnectionData.userIds.includes(clientAuthUid) : false} (Data: [${newConnectionData.userIds.join(', ')}], Auth: '${clientAuthUid}')`);
+
 
   try {
     const connectionDocSnap = await firestoreGetDoc(connectionDocRef);
@@ -227,10 +227,8 @@ export const getConnectionStatus = async (userId1Param: string, userId2Param: st
   const connectionDocRef = firestoreDoc(mutualsCollectionRef, connectionId);
 
   try {
-    console.log(`%c[connectionService] getConnectionStatus: About to getDoc for 'mutuals/${connectionId}'. Client auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: blue;");
     const docSnap = await firestoreGetDoc(connectionDocRef);
     if (!docSnap.exists()) {
-      console.log(`[connectionService] getConnectionStatus: Document 'mutuals/${connectionId}' does not exist.`);
       return 'not_connected';
     }
     const data = docSnap.data();
@@ -238,7 +236,6 @@ export const getConnectionStatus = async (userId1Param: string, userId2Param: st
       console.warn(`[connectionService] Connection document ${connectionId} is malformed or missing key fields.`);
       return 'not_connected';
     }
-    console.log(`[connectionService] getConnectionStatus: Document 'mutuals/${connectionId}' exists. Data:`, data);
     if (data.status === 'connected') return 'connected';
     if (data.status === 'pending') return data.requesterId === userId1 ? 'pending_sent' : 'pending_received';
     if (data.status === 'blocked') return 'blocked';
@@ -260,43 +257,40 @@ export const fetchUserProfileBasic = async (userIdParam: string): Promise<UserPr
   if (!userId || !IS_UID_REGEX_SERVICE.test(userId)) {
     console.warn(`%c[connectionService] fetchUserProfileBasic: Invalid or empty userId: '${userId}'. Returning generated name.`, "color: orange;");
     const anonName = generateAnonymousName(userId || "unknown_user_id");
-    return { userId: userId, displayName: anonName, mentionName: anonName, companyName: undefined, actualDisplayName: undefined, avatarUrl: undefined };
+    return { userId: userId, displayName: anonName, mentionName: anonName, actualDisplayName: undefined, companyName: undefined, avatarUrl: undefined };
   }
 
   try {
     const userDocRef = firestoreDoc(usersCollectionRef, userId);
-    const preGetDocAuthUid = auth.currentUser?.uid;
-    console.log(`%c[connectionService] fetchUserProfileBasic: About to call getDoc for 'users/${userId}'. Auth UID pre-getDoc: '${preGetDocAuthUid || 'NULL'}'`, "color: blue;");
-
     const userSnap = await firestoreGetDoc(userDocRef);
 
     if (userSnap.exists()) {
       const userData = userSnap.data() as UserProfileData;
-      const mentionName = userData.mentionName || userData.generatedAnonymousName || generateAnonymousName(userId);
-      const primaryDisplay = userData.actualDisplayName || userData.companyName || mentionName; // Fallback to mentionName if others are absent
+      const currentMentionName = userData.mentionName || generateAnonymousName(userId);
+      const currentDisplayName = userData.actualDisplayName || userData.companyName || currentMentionName;
 
       const profile: UserProfileBasic = {
         userId: userId,
-        displayName: primaryDisplay,
-        mentionName: mentionName,
-        companyName: userData.companyName || undefined,
+        displayName: currentDisplayName,
+        mentionName: currentMentionName,
         actualDisplayName: userData.actualDisplayName || undefined,
+        companyName: userData.companyName || undefined,
         avatarUrl: userData.avatarUrl || userData.photoURL || undefined,
       };
       console.log(`%c[connectionService] fetchUserProfileBasic: Profile FOUND for '${userId}':`, "color: green;", profile);
       return profile;
     }
-    console.warn(`%c[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${userId}'. Using generated names.`, "color: orange;");
+    console.warn(`%c[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${userId}'. Generating names.`, "color: orange;");
     const anonName = generateAnonymousName(userId);
-    return { userId: userId, displayName: anonName, mentionName: anonName, companyName: undefined, actualDisplayName: undefined, avatarUrl: undefined };
+    return { userId: userId, displayName: anonName, mentionName: anonName, actualDisplayName: undefined, companyName: undefined, avatarUrl: undefined };
   } catch (error: any) {
     const errorCatchAuthUid = auth.currentUser?.uid;
     console.error(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: red;", error);
     if (error.code === 'permission-denied') {
       console.error(`%c  PERMISSION DENIED specifically for reading 'users/${userId}'. Client auth state at error catch: '${errorCatchAuthUid || 'NULL'}'`, "color: red; font-weight: bold;");
     }
-    const anonName = generateAnonymousName(userId);
-    return { userId: userId, displayName: anonName, mentionName: anonName, companyName: undefined, actualDisplayName: undefined, avatarUrl: undefined };
+    const anonName = generateAnonymousName(userId); // Fallback
+    return { userId: userId, displayName: anonName, mentionName: anonName, actualDisplayName: undefined, companyName: undefined, avatarUrl: undefined };
   }
 };
 
@@ -314,42 +308,36 @@ export const fetchFullUserProfile = async (userIdParam: string): Promise<UserPro
 
   try {
     const userDocRef = firestoreDoc(usersCollectionRef, userId);
-    const preGetDocAuthUid = auth.currentUser?.uid;
-    console.log(`%c[connectionService] fetchFullUserProfile: About to call getDoc for 'users/${userId}'. Auth UID pre-getDoc: '${preGetDocAuthUid || 'NULL'}'`, "color: blue;");
-
     const userSnap = await firestoreGetDoc(userDocRef);
 
     if (userSnap.exists()) {
-      const userData = userSnap.data() as UserProfileData;
-      const mentionName = userData.mentionName || userData.generatedAnonymousName || generateAnonymousName(userId);
-      const primaryDisplay = userData.actualDisplayName || userData.companyName || mentionName;
+      const userData = userSnap.data() as UserProfileData; // Assume UserProfileData is correct type
+      // Ensure mentionName exists, generate if it doesn't (for older docs)
+      const currentMentionName = userData.mentionName || generateAnonymousName(userId);
 
       const fullProfile: UserProfileData = {
+        ...userData, // Spread existing data
         uid: userId,
+        mentionName: currentMentionName,
+        // Ensure all fields from UserProfileData are present or explicitly null/defaulted
         email: userData.email || undefined,
-        actualDisplayName: userData.actualDisplayName || undefined,
-        companyName: userData.companyName || undefined,
-        generatedAnonymousName: userData.generatedAnonymousName, // Keep if exists, for potential legacy
-        mentionName: mentionName,
-        displayName: primaryDisplay,
-        industry: userData.industry || undefined,
+        actualDisplayName: userData.actualDisplayName || null,
+        companyName: userData.companyName || null,
+        industry: userData.industry || null,
         avatarUrl: userData.avatarUrl || userData.photoURL || null,
         photoURL: userData.photoURL || null,
-        description: userData.description || undefined,
+        description: userData.description || null,
         tags: userData.tags || [],
-        location: userData.location || undefined,
-        established: userData.established || undefined,
-        contactEmail: userData.contactEmail || undefined,
-        contactPhone: userData.contactPhone || undefined,
+        location: userData.location || null,
+        established: userData.established || null,
+        contactEmail: userData.contactEmail || null,
+        contactPhone: userData.contactPhone || null,
         verified: userData.verified || false,
         actualDisplayNameVisibility: userData.actualDisplayNameVisibility || 'everyone',
         companyNameVisibility: userData.companyNameVisibility || 'everyone',
         industryVisibility: userData.industryVisibility || 'everyone',
         descriptionVisibility: userData.descriptionVisibility || 'everyone',
         avatarVisibility: userData.avatarVisibility || 'everyone',
-        createdAt: userData.createdAt || undefined,
-        lastLoginAt: userData.lastLoginAt || undefined,
-        updatedAt: userData.updatedAt || undefined,
       };
       console.log(`%c[connectionService] fetchFullUserProfile: Full profile FOUND for '${userId}'.`, "color: green;");
       return fullProfile;
@@ -397,7 +385,7 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
         return {
           connectionId: docSnap.id,
           requesterId: data.requesterId,
-          requesterDisplayName: requesterProfile?.displayName || generateAnonymousName(data.requesterId), // Fallback to generated if needed
+          requesterDisplayName: requesterProfile?.displayName || generateAnonymousName(data.requesterId),
           requesterAvatarUrl: requesterProfile?.avatarUrl,
           requestedAt: requestedAtMillis,
         } as ConnectionRequest;
@@ -447,7 +435,7 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
       return {
         connectionId: docSnap.id,
         otherUserId: otherUserId,
-        otherUserDisplayName: otherUserProfile?.displayName || generateAnonymousName(otherUserId), // Fallback
+        otherUserDisplayName: otherUserProfile?.displayName || generateAnonymousName(otherUserId),
         otherUserAvatarUrl: otherUserProfile?.avatarUrl,
         connectedAt: connectedAtMillis,
       } as Connection;
@@ -469,146 +457,130 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
   }
 };
 
-export const initializeUserProfile = async (userData: UserProfileData): Promise<void> => {
-  console.log(`%c[connectionService] initializeUserProfile: Called with incomingUserData:`, "color: orange", JSON.stringify(userData, null, 2));
-  if (!userData || !userData.uid || !IS_UID_REGEX_SERVICE.test(userData.uid)) {
+export const initializeUserProfile = async (userData: Partial<Pick<UserProfileData, 'uid' | 'email' | 'actualDisplayName' | 'companyName' | 'photoURL' | 'industry'>>): Promise<void> => {
+  const clientAuthUser = auth.currentUser; // Get current auth user for logging
+  console.log(`%c[connectionService] initializeUserProfile: Called. Client auth UID: ${clientAuthUser?.uid || 'NULL'}. Incoming userData:`, "color: orange", userData);
+
+  if (!userData.uid || !IS_UID_REGEX_SERVICE.test(userData.uid)) {
     console.error('%c[connectionService] initializeUserProfile: ERROR - UID is missing or invalid in userData. Aborting.', "color: red; font-weight:bold;", userData);
     return;
   }
 
   const userDocRef = firestoreDoc(usersCollectionRef, userData.uid);
-  const generatedColorAnimalName = generateAnonymousName(userData.uid);
-  let finalAuthDisplayName: string;
-  let finalAvatarUrl: string | null = null;
-  const authProfileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
+  const generatedMentionName = generateAnonymousName(userData.uid); // Always generate for consistency
+  let finalAuthProfileDisplayName: string;
 
   try {
     console.log(`%c[connectionService] initializeUserProfile: Checking for existing document for UID ${userData.uid}...`, "color: orange");
     const docSnap = await firestoreGetDoc(userDocRef);
-    const dataPayload: Partial<UserProfileData> = { uid: userData.uid };
+    let dataToWrite: Partial<UserProfileData> = { uid: userData.uid };
+    let operationType: 'CREATE' | 'UPDATE' = 'CREATE';
 
     if (!docSnap.exists()) {
       console.log(`%c[connectionService] initializeUserProfile: CREATING NEW PROFILE for UID ${userData.uid}.`, "color: green; font-weight: bold;");
-      dataPayload.createdAt = firestoreServerTimestamp() as Timestamp;
-      dataPayload.generatedAnonymousName = generatedColorAnimalName; // Legacy field, still good to set
-      dataPayload.mentionName = generatedColorAnimalName; // Canonical for @mentions
+      dataToWrite.createdAt = firestoreServerTimestamp() as Timestamp;
+      dataToWrite.mentionName = generatedMentionName;
+      dataToWrite.actualDisplayName = userData.actualDisplayName || null;
+      dataToWrite.companyName = userData.companyName || null;
+      dataToWrite.email = userData.email || null;
+      dataToWrite.industry = userData.industry || null;
+      dataToWrite.avatarUrl = null; // Start with null avatar (initials will be used)
+      // Default visibilities
+      dataToWrite.actualDisplayNameVisibility = 'everyone';
+      dataToWrite.companyNameVisibility = 'everyone';
+      dataToWrite.industryVisibility = 'everyone';
+      dataToWrite.descriptionVisibility = 'everyone';
+      dataToWrite.avatarVisibility = 'everyone';
 
-      // Determine primary display name for general use and auth profile
-      if (userData.actualDisplayName) {
-        dataPayload.actualDisplayName = userData.actualDisplayName;
-        finalAuthDisplayName = userData.actualDisplayName;
-      } else if (userData.companyName) {
-        dataPayload.companyName = userData.companyName;
-        finalAuthDisplayName = userData.companyName;
-      } else {
-        finalAuthDisplayName = generatedColorAnimalName;
-      }
-      dataPayload.displayName = finalAuthDisplayName; // General display name field
-
-      // For new users (including Google sign-up), avatarUrl and photoURL are forced to null for initials display
-      finalAvatarUrl = null;
-      dataPayload.avatarUrl = finalAvatarUrl;
-      console.log(`%c[connectionService] initializeUserProfile (NEW PROFILE): Setting avatarUrl to null for new user ${userData.uid}. Initial Google photoURL (if any): ${userData.photoURL}`, "color: #FF8C00;");
-
-
-      if (userData.email) dataPayload.email = userData.email;
-      if (userData.companyName) dataPayload.companyName = userData.companyName; // Set if provided
-      if (userData.industry) dataPayload.industry = userData.industry;
-
-      // Default visibilities for new profiles
-      dataPayload.actualDisplayNameVisibility = 'everyone';
-      dataPayload.companyNameVisibility = 'everyone';
-      dataPayload.industryVisibility = 'everyone';
-      dataPayload.descriptionVisibility = 'everyone';
-      dataPayload.avatarVisibility = 'everyone';
-
-      authProfileUpdates.displayName = finalAuthDisplayName;
-      authProfileUpdates.photoURL = finalAvatarUrl; // Will be null
-
-      console.log(`%c[connectionService] initializeUserProfile: Data to write (CREATE) for UID ${userData.uid}:`, "color: #1E90FF; font-weight:bold;", dataPayload);
-      await firestoreSetDoc(userDocRef, dataPayload);
-      console.log(`%c[connectionService] initializeUserProfile: User profile CREATED successfully in Firestore for UID ${userData.uid}.`, "color: green; font-weight:bold;");
+      finalAuthProfileDisplayName = dataToWrite.actualDisplayName || dataToWrite.companyName || dataToWrite.mentionName;
 
     } else {
+      operationType = 'UPDATE';
       console.log(`%c[connectionService] initializeUserProfile: UPDATING EXISTING PROFILE for UID ${userData.uid}.`, "color: blue; font-weight: bold;");
       const existingData = docSnap.data() as UserProfileData;
-      const dataToMerge: Partial<UserProfileData> = { uid: userData.uid };
+      dataToWrite.mentionName = existingData.mentionName || generatedMentionName; // Ensure mentionName exists
 
-      dataToMerge.generatedAnonymousName = existingData.generatedAnonymousName || generatedColorAnimalName; // Ensure legacy field if missing
-      dataToMerge.mentionName = existingData.mentionName || generatedColorAnimalName; // Ensure canonical mentionName
-
-      // Determine primary display name, preferring new userData if available
-      let determinedActualDisplayName = userData.actualDisplayName || existingData.actualDisplayName;
-      let determinedCompanyName = userData.companyName || existingData.companyName;
-
-      if (determinedActualDisplayName) {
-          dataToMerge.actualDisplayName = determinedActualDisplayName;
-          finalAuthDisplayName = determinedActualDisplayName;
-      } else if (determinedCompanyName) {
-          dataToMerge.companyName = determinedCompanyName;
-          finalAuthDisplayName = determinedCompanyName;
+      // Update actualDisplayName if new data is provided
+      if (userData.actualDisplayName !== undefined) {
+        dataToWrite.actualDisplayName = userData.actualDisplayName || null;
       } else {
-          finalAuthDisplayName = dataToMerge.mentionName!; // Fallback to existing/newly generated mentionName
+        dataToWrite.actualDisplayName = existingData.actualDisplayName || null;
       }
-      dataToMerge.displayName = finalAuthDisplayName;
 
-      // Avatar logic for existing users: only update if Google photoURL is new and different from current Firestore avatarUrl
-      if (userData.photoURL && userData.photoURL.trim() !== '' && userData.photoURL !== existingData.avatarUrl) {
-        finalAvatarUrl = userData.photoURL;
+      // Update companyName if new data is provided
+      if (userData.companyName !== undefined) {
+        dataToWrite.companyName = userData.companyName || null;
+      } else {
+        dataToWrite.companyName = existingData.companyName || null;
+      }
+
+      // Update email if new data is provided and different
+      if (userData.email && userData.email !== existingData.email) {
+        dataToWrite.email = userData.email;
+      }
+      // Update industry if new data is provided
+      if (userData.industry !== undefined) {
+        dataToWrite.industry = userData.industry || null;
+      }
+      // Update avatarUrl ONLY if new photoURL is provided AND it's different
+      // OR if there was no avatarUrl before and new photoURL is provided
+      if (userData.photoURL && userData.photoURL !== existingData.avatarUrl) {
+        dataToWrite.avatarUrl = userData.photoURL;
       } else if (existingData.avatarUrl !== undefined) {
-        finalAvatarUrl = existingData.avatarUrl;
+        dataToWrite.avatarUrl = existingData.avatarUrl; // Keep existing
       } else {
-        finalAvatarUrl = null;
-      }
-      dataToMerge.avatarUrl = finalAvatarUrl;
-      console.log(`%c[connectionService] initializeUserProfile (UPDATE): Determined finalAvatarUrl: ${finalAvatarUrl}`, "color: #FF8C00;");
-
-
-      if (userData.email && userData.email !== existingData.email) dataToMerge.email = userData.email;
-      if (userData.companyName && userData.companyName !== existingData.companyName) dataToMerge.companyName = userData.companyName;
-      if (userData.industry && userData.industry !== existingData.industry) dataToMerge.industry = userData.industry;
-
-      // Preserve existing visibilities or default them if not present
-      dataToMerge.actualDisplayNameVisibility = existingData.actualDisplayNameVisibility || 'everyone';
-      dataToMerge.companyNameVisibility = existingData.companyNameVisibility || 'everyone';
-      dataToMerge.industryVisibility = existingData.industryVisibility || 'everyone';
-      dataToMerge.descriptionVisibility = existingData.descriptionVisibility || 'everyone';
-      dataToMerge.avatarVisibility = existingData.avatarVisibility || 'everyone';
-
-      authProfileUpdates.displayName = finalAuthDisplayName;
-      if (finalAvatarUrl !== (auth.currentUser?.photoURL || null)) {
-          authProfileUpdates.photoURL = finalAvatarUrl;
+        dataToWrite.avatarUrl = null; // Default to null if no existing and no new
       }
 
-      dataToMerge.lastLoginAt = firestoreServerTimestamp() as Timestamp;
-      dataToMerge.updatedAt = firestoreServerTimestamp() as Timestamp;
+      // Ensure visibility settings are preserved or defaulted
+      dataToWrite.actualDisplayNameVisibility = existingData.actualDisplayNameVisibility || 'everyone';
+      dataToWrite.companyNameVisibility = existingData.companyNameVisibility || 'everyone';
+      dataToWrite.industryVisibility = existingData.industryVisibility || 'everyone';
+      dataToWrite.descriptionVisibility = existingData.descriptionVisibility || 'everyone';
+      dataToWrite.avatarVisibility = existingData.avatarVisibility || 'everyone';
 
-      console.log(`%c[connectionService] initializeUserProfile: Data to merge (UPDATE) for UID ${userData.uid}:`, "color: #1E90FF; font-weight:bold;", dataToMerge);
-      await firestoreSetDoc(userDocRef, dataToMerge, { merge: true });
-      console.log(`%c[connectionService] initializeUserProfile: User profile UPDATED successfully in Firestore for UID ${userData.uid}.`, "color: green; font-weight:bold;");
+      finalAuthProfileDisplayName = dataToWrite.actualDisplayName || dataToWrite.companyName || dataToWrite.mentionName;
     }
 
-    // Sync with Firebase Auth Profile if changes are needed
-    if (auth.currentUser) {
-        const authUpdatesNeeded: { displayName?: string | null; photoURL?: string | null } = {};
-        if (auth.currentUser.displayName !== finalAuthDisplayName) {
-            authUpdatesNeeded.displayName = finalAuthDisplayName;
-        }
-        if (auth.currentUser.photoURL !== finalAvatarUrl) { // finalAvatarUrl is already correctly null for new sign-ups
-            authUpdatesNeeded.photoURL = finalAvatarUrl;
-        }
+    dataToWrite.lastLoginAt = firestoreServerTimestamp() as Timestamp;
+    dataToWrite.updatedAt = firestoreServerTimestamp() as Timestamp;
 
-        if (Object.keys(authUpdatesNeeded).length > 0) {
-            console.log(`%c[connectionService] initializeUserProfile: Attempting to update auth.currentUser profile with:`, "color: #FF8C00;", authUpdatesNeeded);
-            try {
-                await updateProfile(auth.currentUser, authUpdatesNeeded);
-                console.log(`%c[connectionService] initializeUserProfile: auth.currentUser profile updated successfully.`, "color: #FF8C00;");
-            } catch (authUpdateError) {
-                console.error(`%c[connectionService] initializeUserProfile: FAILED to update auth.currentUser profile. Error:`, "color: red;", authUpdateError);
-            }
-        } else {
-            console.log(`%c[connectionService] initializeUserProfile: No changes needed for auth.currentUser profile. Current Auth DisplayName: '${auth.currentUser.displayName}', PhotoURL: '${auth.currentUser.photoURL}'. Calculated: DisplayName='${finalAuthDisplayName}', AvatarURL='${finalAvatarUrl}'`, "color: #FF8C00;");
+    console.log(`%c[connectionService] initializeUserProfile: Data to write/merge (${operationType}) to Firestore for UID ${userData.uid}:`, "color: #1E90FF; font-weight:bold;", dataToWrite);
+    await firestoreSetDoc(userDocRef, dataToWrite, { merge: operationType === 'UPDATE' }); // Use merge only for updates
+    console.log(`%c[connectionService] initializeUserProfile: User profile ${operationType}D successfully in Firestore for UID ${userData.uid}.`, "color: green; font-weight:bold;");
+
+    // Sync with Firebase Auth Profile
+    if (auth.currentUser) {
+      const authProfileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
+      const currentAuthDisplayName = auth.currentUser.displayName;
+      const currentAuthPhotoURL = auth.currentUser.photoURL;
+
+      // Use the determined final display name for Firebase Auth profile
+      if (finalAuthProfileDisplayName && currentAuthDisplayName !== finalAuthProfileDisplayName) {
+        authProfileUpdates.displayName = finalAuthProfileDisplayName;
+      }
+
+      // For new sign-ups (Google or email), avatarUrl is null to force initials
+      // For existing users, if photoURL from Google changed, update it.
+      const finalAuthPhotoURL = (operationType === 'CREATE') ? null : dataToWrite.avatarUrl;
+
+      if (currentAuthPhotoURL !== finalAuthPhotoURL) {
+        authProfileUpdates.photoURL = finalAuthPhotoURL;
+      }
+
+      if (Object.keys(authProfileUpdates).length > 0) {
+        console.log(`%c[connectionService] initializeUserProfile: Attempting to update auth.currentUser profile with:`, "color: #FF8C00;", authProfileUpdates);
+        try {
+          await updateProfile(auth.currentUser, authProfileUpdates);
+          console.log(`%c[connectionService] initializeUserProfile: auth.currentUser profile updated successfully.`, "color: #FF8C00;");
+        } catch (authUpdateError) {
+          console.error(`%c[connectionService] initializeUserProfile: FAILED to update auth.currentUser profile. Error:`, "color: red;", authUpdateError);
         }
+      } else {
+        console.log(`%c[connectionService] initializeUserProfile: No changes needed for auth.currentUser profile. Auth Name: '${currentAuthDisplayName}', Auth Photo: '${currentAuthPhotoURL}'. Firestore values for auth update: Name='${finalAuthProfileDisplayName}', Photo='${finalAuthPhotoURL}'`, "color: #FF8C00;");
+      }
+    } else {
+      console.warn("[connectionService] initializeUserProfile: auth.currentUser is null, cannot sync Firebase Auth profile.");
     }
 
   } catch (error: any) {
@@ -621,31 +593,26 @@ export const initializeUserProfile = async (userData: UserProfileData): Promise<
 
 export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?: number): Promise<UserProfileBasic[]> => {
   const trimmedPrefix = searchPrefix?.trim().toLowerCase();
+  // When no prefix, fetch more to show a general list. When prefix, fetch fewer for performance.
   const effectiveLimit = !trimmedPrefix ? (limitCountArg || 25) : (limitCountArg || 10);
   console.log(`%c[connectionService] getSuggestibleUsers called. Prefix: '${trimmedPrefix}', Effective Limit: ${effectiveLimit}`, "color: #BA55D3");
 
   try {
     const constraints: FirestoreQueryConstraint[] = [];
-    // For @mentions, we query/filter by `mentionName` (the ColorAnimalNumber name)
-    const fieldToQuery = 'mentionName';
+    const fieldToQueryAndOrder = 'mentionName'; // Always query and order by mentionName
 
     if (trimmedPrefix) {
-      console.log(`%c[connectionService] getSuggestibleUsers: Applying prefix search for '${trimmedPrefix}' on ${fieldToQuery}.`, "color: #BA55D3");
+      console.log(`%c[connectionService] getSuggestibleUsers: Applying prefix search for '${trimmedPrefix}' on ${fieldToQueryAndOrder}.`, "color: #BA55D3");
       // Firestore prefix queries require a field to start with the prefix.
-      // Case-sensitive: Firestore's default string comparisons are case-sensitive.
-      // For case-insensitive prefix search, you'd typically store a lowercase version of mentionName.
-      // For now, assuming mentionName is stored consistently (e.g., PascalCase as generated).
-      // If searchPrefix is 'blue', it will match 'BlueWhale123' if you query for 'Blue'.
-      // To make it truly case-insensitive at query time, you'd need more complex data duplication or a search service.
-      // The current filter will be case-sensitive for the prefix part.
-      const prefixForQuery = trimmedPrefix.charAt(0).toUpperCase() + trimmedPrefix.slice(1); // Basic attempt to match PascalCase
+      // mentionName is stored as "ColorAnimalNumber", so queries should match this.
+      const prefixForQuery = trimmedPrefix.charAt(0).toUpperCase() + trimmedPrefix.slice(1);
 
-      constraints.push(firestoreWhere(fieldToQuery, '>=', prefixForQuery));
-      constraints.push(firestoreWhere(fieldToQuery, '<=', prefixForQuery + '\uf8ff'));
-      constraints.push(firestoreOrderBy(fieldToQuery));
+      constraints.push(firestoreWhere(fieldToQueryAndOrder, '>=', prefixForQuery));
+      constraints.push(firestoreWhere(fieldToQueryAndOrder, '<=', prefixForQuery + '\uf8ff')); // \uf8ff is a high Unicode char for suffix matching
+      constraints.push(firestoreOrderBy(fieldToQueryAndOrder)); // Order by the same field used in range filter
     } else {
-      console.log(`%c[connectionService] getSuggestibleUsers: No prefix, fetching general list ordered by ${fieldToQuery}.`, "color: #BA55D3");
-      constraints.push(firestoreOrderBy(fieldToQuery));
+      console.log(`%c[connectionService] getSuggestibleUsers: No prefix, fetching general list ordered by ${fieldToQueryAndOrder}.`, "color: #BA55D3");
+      constraints.push(firestoreOrderBy(fieldToQueryAndOrder));
     }
     constraints.push(firestoreLimit(effectiveLimit));
 
@@ -659,22 +626,21 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
     }
 
     const users = querySnapshot.docs.map(docSnap => {
-      const data = docSnap.data() as UserProfileData;
-      const mentionName = data.mentionName || data.generatedAnonymousName || generateAnonymousName(docSnap.id);
-      // For the suggestion UI, displayName can be the more "real" name if available
-      const displayForUI = data.actualDisplayName || data.companyName || mentionName;
+      const data = docSnap.data() as UserProfileData; // Assume UserProfileData has all needed fields
+      const currentMentionName = data.mentionName || generateAnonymousName(docSnap.id); // Fallback if mentionName somehow missing
+      const currentDisplayName = data.actualDisplayName || data.companyName || currentMentionName;
 
       const profile: UserProfileBasic = {
         userId: docSnap.id,
-        displayName: displayForUI,
-        mentionName: mentionName,
-        companyName: data.companyName || undefined,
+        displayName: currentDisplayName,
+        mentionName: currentMentionName,
         actualDisplayName: data.actualDisplayName || undefined,
+        companyName: data.companyName || undefined,
         avatarUrl: data.avatarUrl || data.photoURL || undefined,
       };
       return profile;
     });
-    console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users.`, "color: green;");
+    console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users. Example users:`, "color: green;", users.slice(0, 3));
     return users;
   } catch (error: any) {
     console.error('%c[connectionService] Error fetching suggestible users:', "color: red;", error);
@@ -683,7 +649,7 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
       throw new Error('Permission denied fetching users. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      console.error("%c  MISSING INDEX. Firestore query for suggestible users requires an index on 'mentionName' (ascending). Create this in Firebase console.", "color: red;");
+      console.error("%c  MISSING INDEX. Firestore query for suggestible users likely requires an index on 'mentionName' (ascending). Create this in Firebase console.", "color: red;");
       throw new Error("Query for suggestible users requires an index on mentionName (ascending).");
     }
     return [];
@@ -713,13 +679,13 @@ export const updateUserProfileDetails = async (
   const allowedUpdateFields: (keyof typeof dataToUpdate)[] = [
       'industry', 'description', 'avatarUrl',
       'industryVisibility', 'descriptionVisibility', 'avatarVisibility',
-      'actualDisplayNameVisibility', 'companyNameVisibility' // Added visibility for names
+      'actualDisplayNameVisibility', 'companyNameVisibility'
   ];
 
   allowedUpdateFields.forEach(key => {
     const value = dataToUpdate[key];
     if (value !== undefined) {
-      sanitizedData[key] = value;
+      sanitizedData[key] = value === '' ? null : value; // Store empty strings as null if desired, or keep as ''
     }
   });
 
@@ -736,7 +702,7 @@ export const updateUserProfileDetails = async (
 
     // Sync avatar with Firebase Auth if it was part of the update
     if (dataToUpdate.avatarUrl !== undefined && clientAuthUser.photoURL !== dataToUpdate.avatarUrl) {
-      const authUpdates: { photoURL?: string | null } = { photoURL: dataToUpdate.avatarUrl };
+      const authUpdates: { photoURL?: string | null } = { photoURL: dataToUpdate.avatarUrl }; // dataToUpdate.avatarUrl can be string or null
       console.log(`%c[connectionService] updateUserProfileDetails: Attempting to update auth.currentUser photoURL with:`, "color: #FF8C00;", authUpdates.photoURL);
       await updateProfile(clientAuthUser, authUpdates);
       console.log(`%c[connectionService] updateUserProfileDetails: auth.currentUser photoURL updated successfully.`, "color: #FF8C00;");
