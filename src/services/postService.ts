@@ -20,6 +20,7 @@ const postsCollectionRef = collection(db, 'posts');
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
     const dataForFirestore: { [key: string]: any } = {};
+    
     // Iterate over postData and copy defined values
     for (const key in postData) {
         if (Object.prototype.hasOwnProperty.call(postData, key)) {
@@ -30,10 +31,16 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
         }
     }
 
-    // Specifically ensure imageUrls and mentionedUserIds are arrays, even if empty.
+    // Ensure imageUrls and mentionedUserIds are arrays, even if empty.
     dataForFirestore.imageUrls = Array.isArray(dataForFirestore.imageUrls) ? dataForFirestore.imageUrls : [];
     dataForFirestore.mentionedUserIds = Array.isArray(dataForFirestore.mentionedUserIds) ? dataForFirestore.mentionedUserIds : [];
+    
+    // Set requestType, defaulting to 'post' if not provided
+    dataForFirestore.requestType = postData.requestType || 'post';
 
+    // Remove paymentAmount and deadline as they are no longer part of NewPostData
+    // delete dataForFirestore.paymentAmount; 
+    // delete dataForFirestore.deadline; 
 
     dataForFirestore.createdAt = serverTimestamp();
     console.log("[postService] Data being sent to Firestore:", dataForFirestore);
@@ -67,9 +74,11 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
 
        return {
             id: docSnap.id,
-            ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls' | 'mentionedUserIds'>),
+            ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls' | 'mentionedUserIds' | 'deadline'>),
             imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
             mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
+            requestType: data.requestType || 'post', // Default to 'post' if not present
+            // deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined, // Removed
             createdAt: createdAt,
        } as Post;
     });
@@ -128,9 +137,11 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
 
       return {
         id: docSnap.id,
-        ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls' | 'mentionedUserIds'>),
+        ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls' | 'mentionedUserIds' | 'deadline'>),
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
         mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
+        requestType: data.requestType || 'post', // Default to 'post' if not present
+        // deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined, // Removed
         createdAt: createdAt,
       } as Post;
     });

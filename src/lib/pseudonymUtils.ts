@@ -24,15 +24,30 @@ export const generateAnonymousName = (userId: string | null | undefined): string
     return `${randomColor}${randomAnimal}${randomNumber}`;
   }
 
-  // Use different parts of the userId or manipulate it for different hashes
-  // to reduce likelihood of same adjective/noun pairs for similar UIDs
-  const colorSeed = userId + "color";
-  const animalSeed = userId + "animal";
-  const numSeed = userId.substring(0, Math.min(userId.length, 5)) + "num"; // First 5 chars for number part
+  const colorSeed = userId + "c"; // Slightly shorter seeds can also work
+  const animalSeed = userId + "a";
+  const numSeed = userId.substring(0, Math.min(userId.length, 8)) + "n"; // Use a few chars
 
   const colorIndex = simpleHash(colorSeed, COLORS.length);
   const animalIndex = simpleHash(animalSeed, ANIMALS.length);
   const numericSuffix = (simpleHash(numSeed, 900) + 100).toString(); // 3-digit number (100-999)
 
   return `${COLORS[colorIndex]}${ANIMALS[animalIndex]}${numericSuffix}`;
+};
+
+export const getInitials = (displayNameOrUid: string | undefined | null): string => {
+    if (!displayNameOrUid) return '?';
+    const nameToProcess = displayNameOrUid.startsWith('@') ? displayNameOrUid.substring(1) : displayNameOrUid;
+
+    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}$/; // Matches ColorAnimalNumber format
+    if (pseudonymRegex.test(nameToProcess)) {
+        const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/); // First letter of Color + First letter of Animal
+        if (match && match[1] && match[2]) return match[1] + match[2];
+        if (match && match[1]) return match[1]; // Fallback if only one capital found (should not happen with current regex)
+    }
+    // Fallback for regular names (e.g., "John Doe" -> "JD", "Company Inc" -> "CI")
+    const names = nameToProcess.split(' ').filter(Boolean);
+    if (names.length === 0) return '?';
+    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
+    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
 };
