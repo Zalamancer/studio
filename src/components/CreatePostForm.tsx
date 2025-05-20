@@ -2,7 +2,7 @@
 // src/components/CreatePostForm.tsx
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'; // Added useMemo
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -40,9 +40,9 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
-import { getSuggestibleUsers } from '@/services/connectionService';
+import { getSuggestibleUsers } from '@/services/connectionService'; // For real user suggestions
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 
 
 export interface Industry {
@@ -63,20 +63,9 @@ export interface SectorWithSubSectors {
   subSectors: SubSector[];
 }
 
-const getInitials = (displayNameOrUid: string | undefined | null): string => {
-    if (!displayNameOrUid) return '?';
-    const nameToProcess = displayNameOrUid.startsWith('@') ? displayNameOrUid.substring(1) : displayNameOrUid;
-
-    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
-    if (pseudonymRegex.test(nameToProcess)) {
-        const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
-        if (match && match[1] && match[2]) return match[1] + match[2];
-        if (match && match[1]) return match[1];
-    }
-    const names = nameToProcess.split(' ').filter(Boolean);
-    if (names.length === 0) return '?';
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
+// Use shared getInitials
+const getInitials = (name: string | undefined | null): string => {
+    return getSharedInitials(name);
 };
 
 
@@ -155,18 +144,15 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedDescriptionQuery(descriptionMentionQuery);
-    }, 300); // 300ms debounce time
-
-    return () => {
-      clearTimeout(handler);
-    };
+    }, 300);
+    return () => clearTimeout(handler);
   }, [descriptionMentionQuery]);
 
   const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
-    queryKey: ['suggestibleUsersForCreatePost', debouncedDescriptionQuery],
+    queryKey: ['suggestibleUsersForCreatePost', debouncedDescriptionQuery, currentUserId],
     queryFn: () => getSuggestibleUsers(debouncedDescriptionQuery, debouncedDescriptionQuery ? 10 : 25),
-    enabled: showDescriptionSuggestions, // Only fetch when suggestions are active
-    staleTime: 1000 * 60 * 1, // 1 minute
+    enabled: showDescriptionSuggestions && !!currentUserId,
+    staleTime: 1000 * 60 * 1,
     retry: 1,
   });
 
@@ -202,7 +188,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    form.setValue("image", null); // Reset first in case of error
+    form.setValue("image", null);
     setSelectedImageFile(null);
     setOriginalTooLargeFile(null);
     setImagePreviewUrl(null);
@@ -211,12 +197,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a JPG, PNG, or GIF image." });
         if (fileInputRef.current) fileInputRef.current.value = "";
+        form.setValue("image", null); // Ensure Zod validation gets null
         return;
       }
       if (file.size > MAX_FILE_SIZE_BYTES) {
         setOriginalTooLargeFile(file);
         setShowCompressionDialog(true);
         if (fileInputRef.current) fileInputRef.current.value = "";
+        form.setValue("image", null); // Ensure Zod validation gets null
         return;
       }
       setSelectedImageFile(file);
@@ -278,14 +266,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
         mentionedUserIds: Array.from(selectedMentionedUserIds),
     };
     onSubmit(submitData);
-    // Reset local component state related to mentions after submit
     setSelectedMentionedUserIds(new Set());
     setDescriptionMentionQuery('');
     setShowDescriptionSuggestions(false);
   };
 
   const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
-    console.log("[CreatePostForm] evaluateMentionState - Text:", text, "Cursor:", cursorPosition);
+    console.log("[CreatePostForm] evaluateMentionState - Text:", text.substring(0,50), "Cursor:", cursorPosition);
     let activeQuery = null;
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
@@ -299,12 +286,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
     if (activeQuery !== null) {
         console.log("[CreatePostForm] evaluateMentionState - Active Query:", activeQuery);
-        setDescriptionMentionQuery(activeQuery); // Update for debouncing
+        setDescriptionMentionQuery(activeQuery);
         setShowDescriptionSuggestions(true);
     } else {
         console.log("[CreatePostForm] evaluateMentionState - No Active Query, hiding suggestions.");
         setShowDescriptionSuggestions(false);
-        setDescriptionMentionQuery(''); // Clear for debouncing
+        setDescriptionMentionQuery('');
     }
   }, [setDescriptionMentionQuery, setShowDescriptionSuggestions]);
 
@@ -319,19 +306,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
   const handleDescriptionFocus = () => {
     if (descriptionTextareaRef.current) {
-        console.log("[CreatePostForm] Description field FOCUSED.");
         evaluateMentionState(descriptionTextareaRef.current.value, descriptionTextareaRef.current.selectionStart || 0);
     }
-  };
-
-  const handleDescriptionBlur = () => {
-    // Delay hiding suggestions to allow click on popover
-    setTimeout(() => {
-        if (descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement as Node)) {
-            console.log("[CreatePostForm] Textarea BLUR, hiding suggestions.");
-            setShowDescriptionSuggestions(false);
-        }
-    }, 150);
   };
   
   const handleSelectDescriptionSuggestion = (profile: UserProfileBasic) => {
@@ -344,7 +320,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     if (lastAtIndex > -1) {
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
-        const mentionToInsert = profile.mentionName; // Use mentionName ("ColorAnimalNumber")
+        const mentionToInsert = profile.mentionName; 
         const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
         
         form.setValue("description", newText, { shouldValidate: true, shouldDirty: true });
@@ -369,7 +345,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
             descriptionTextareaRef.current &&
             !descriptionTextareaRef.current.contains(event.target as Node)
         ) {
-            console.log("[CreatePostForm] handleClickOutside: Hiding suggestions.");
             setShowDescriptionSuggestions(false);
         }
     };
@@ -388,30 +363,18 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
   }, [form.formState.isDirty, form.formState.isSubmitting]);
 
   const filteredDescriptionSuggestions = useMemo(() => {
-    console.log(`%c[CreatePostForm] filteredDescriptionSuggestions: Recalculating...`, "color: mediumpurple;");
-    console.log(`  Debounced Query: "${debouncedDescriptionQuery}", showSuggestions: ${showDescriptionSuggestions}, isLoading: ${isLoadingSuggestibleUsers}`);
-    console.log(`  SuggestibleUsers (count ${suggestibleUsers.length}):`, suggestibleUsers.slice(0,5));
-
     if (!showDescriptionSuggestions) return [];
     if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
     
-    const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId);
+    const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
 
-    if (debouncedDescriptionQuery.trim() === '') {
-        const initialSuggestions = profilesSource;
-        console.log(`%c[CreatePostForm] filteredDescriptionSuggestions (empty query): Initial suggestions count: ${initialSuggestions.length}`, "color: mediumpurple;", initialSuggestions.slice(0,5));
-        return initialSuggestions.length > 0 ? initialSuggestions : [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
+    if (profilesSource.length === 0 && debouncedDescriptionQuery.trim() !== '') {
+      return [{ userId: 'no-match-desc', displayName: `No users matching "@${debouncedDescriptionQuery}"`, mentionName:'no-match-desc' } as UserProfileBasic];
     }
-    
-    const queryLower = debouncedDescriptionQuery.toLowerCase();
-    const suggestions = profilesSource.filter(profile =>
-        profile.mentionName.toLowerCase().includes(queryLower) || // Filter by mentionName (ColorAnimalNumber)
-        (profile.actualDisplayName && profile.actualDisplayName.toLowerCase().includes(queryLower)) ||
-        (profile.companyName && profile.companyName.toLowerCase().includes(queryLower))
-    ).slice(0,10);
-    
-    console.log(`%c[CreatePostForm] filteredDescriptionSuggestions (with query '${queryLower}'): Filtered suggestions count: ${suggestions.length}`, "color: mediumpurple;", suggestions.slice(0,5));
-    return suggestions.length > 0 ? suggestions : [{ userId: 'no-match-desc', displayName: `No users matching "@${debouncedDescriptionQuery}"`, mentionName:'no-match-desc' } as UserProfileBasic];
+    if (profilesSource.length === 0) {
+        return [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
+    }
+    return profilesSource;
   }, [debouncedDescriptionQuery, suggestibleUsers, isLoadingSuggestibleUsers, showDescriptionSuggestions, currentUserId]);
 
 
@@ -460,7 +423,11 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                           }}
                           onChange={handleDescriptionChange}
                           onFocus={handleDescriptionFocus}
-                          onBlur={handleDescriptionBlur}
+                          onBlur={() => setTimeout(() => {
+                            if (descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement as Node)) {
+                              setShowDescriptionSuggestions(false);
+                            }
+                          }, 150)}
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -468,19 +435,18 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                      <PopoverContent
                         ref={descriptionSuggestionsPopoverRef}
                         className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
-                        side="bottom" // Changed from top to bottom for better UX with Textarea
+                        side="bottom"
                         align="start"
-                        onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focusing popover itself
+                        onOpenAutoFocus={(e) => e.preventDefault()}
                      >
                        {filteredDescriptionSuggestions.map(profile => {
-                            const displayableName = profile.actualDisplayName || profile.companyName;
-                            // Only show displayableName if it exists and is different from mentionName
-                            const showSecondaryNameLine = displayableName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
-
+                            const displayableName = profile.displayName; // This is already actualDisplayName || companyName || mentionName
+                            const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
+                            
                             return (
                                 profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
                                     <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
-                                        {profile.displayName} {/* This will be "Loading users..." or "No users..." */}
+                                        {profile.displayName}
                                     </div>
                                 ) : (
                                     <Button
@@ -488,7 +454,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                         variant="ghost"
                                         size="sm"
                                         className="w-full justify-start h-auto px-2 py-1 text-xs"
-                                        onMouseDown={(e) => e.preventDefault()} // Prevent textarea blur
+                                        onMouseDown={(e) => e.preventDefault()}
                                         onClick={() => handleSelectDescriptionSuggestion(profile)}
                                     >
                                         <Avatar className="h-5 w-5 mr-2">
@@ -711,4 +677,3 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     </Form>
   );
 };
-
