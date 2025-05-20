@@ -19,21 +19,19 @@ const googleProvider = new GoogleAuthProvider();
 
 // Google Sign-In / Sign-Up
 export const signInWithGoogle = async (): Promise<UserCredential | null> => {
+  console.log("[auth.ts] Attempting Google Sign-In/Sign-Up...");
   try {
     const result = await signInWithPopup(auth, googleProvider);
-    console.log("[auth.ts] Google Sign-In successful, user:", result.user);
+    console.log("[auth.ts] Google Sign-In successful, user from provider:", result.user);
     if (result.user) {
-      // Prepare data for profile initialization/update
-      // Do NOT pass result.user.displayName here to ensure generated name is used by default.
-      // CompanyName and Industry will be collected later for Google users.
       const profileData: UserProfileData = {
         uid: result.user.uid,
-        email: result.user.email || '',
-        // displayName: '', // Intentionally omit or pass empty to let initializeUserProfile generate one
-        photoURL: result.user.photoURL || undefined,
+        email: result.user.email || undefined, // Ensure email is passed
+        actualDisplayName: result.user.displayName || undefined, // Pass Google display name
+        photoURL: result.user.photoURL || undefined, // Pass Google photo URL
         // companyName and industry will be undefined here for initial Google sign-in
       };
-      console.log("[auth.ts] Calling initializeUserProfile for Google user (expecting generated name):", profileData);
+      console.log("[auth.ts] Calling initializeUserProfile for Google user:", profileData);
       try {
         await initializeUserProfile(profileData);
         console.log("[auth.ts] User profile initialized/updated after Google sign-in.");
@@ -44,17 +42,16 @@ export const signInWithGoogle = async (): Promise<UserCredential | null> => {
     return result;
   } catch (error) {
     const authError = error as AuthError;
-    console.error("[auth.ts] Error signing in with Google:", authError.code, authError.message);
-    if (authError.code === 'auth/popup-closed-by-user') {
-      // User closed the popup, not necessarily an "error" to show a destructive toast for.
-      // The component calling this might handle this by doing nothing.
-      console.log("[auth.ts] Google sign-in popup closed by user.");
-    } else if (authError.code === 'auth/account-exists-with-different-credential') {
-      console.error("[auth.ts] Google sign-in: Account exists with different credential for this email.");
-    } else if (authError.code === 'auth/api-key-not-valid') {
+    // Log more specific errors, but not all.
+    if (authError.code !== 'auth/popup-closed-by-user') {
+        console.error("[auth.ts] Error signing in with Google:", authError.code, authError.message);
+    } else {
+        console.log("[auth.ts] Google sign-in popup closed by user.");
+    }
+    if (authError.code === 'auth/api-key-not-valid') {
       console.error("[auth.ts] CRITICAL: Invalid Firebase API Key. Check .env.local and Firebase project config.");
     }
-    throw authError;
+    throw authError; // Re-throw for the calling component (e.g., login/signup page) to handle
   }
 };
 
@@ -64,32 +61,18 @@ export const signUpWithEmailPassword = async (
   password: string,
   additionalData?: { companyName?: string; industry?: string; }
 ): Promise<UserCredential | null> => {
-  console.log("[auth.ts] Attempting Email/Password Sign-Up for:", email, "with additionalData:", additionalData);
+  console.log("[auth.ts] Attempting Email/Password Sign-Up for:", email);
   try {
     const userCredential = await createUserWithEmailAndPassword(auth, email, password);
-    console.log("[auth.ts] Email/Password Sign-Up successful, user:", userCredential.user);
+    console.log("[auth.ts] Email/Password Sign-Up successful, user from provider:", userCredential.user);
 
     if (userCredential.user) {
-      // For email/password, companyName becomes the initial displayName if provided
-      const initialDisplayName = additionalData?.companyName || ''; 
-      
-      // Update Firebase Auth profile displayName immediately if companyName is available
-      if (initialDisplayName) {
-        try {
-          await updateProfile(userCredential.user, { displayName: initialDisplayName });
-          console.log("[auth.ts] Firebase Auth profile displayName updated to companyName:", initialDisplayName);
-        } catch (updateProfileError) {
-          console.error("[auth.ts] Error updating Firebase Auth profile displayName:", updateProfileError);
-        }
-      }
-
       const profileData: UserProfileData = {
         uid: userCredential.user.uid,
-        email: userCredential.user.email || '',
-        displayName: initialDisplayName, // Pass companyName as displayName here
+        email: userCredential.user.email || undefined,
         companyName: additionalData?.companyName || undefined,
         industry: additionalData?.industry || undefined,
-        photoURL: undefined,
+        // actualDisplayName will be set from companyName by initializeUserProfile if not set
       };
       console.log("[auth.ts] Calling initializeUserProfile for Email/Password user:", profileData);
       try {
@@ -97,29 +80,35 @@ export const signUpWithEmailPassword = async (
         console.log("[auth.ts] User profile initialized after Email/Password sign-up.");
       } catch (profileError) {
         console.error("[auth.ts] Error initializing profile after Email/Password sign-up:", profileError);
+        // Decide if this should throw or just log, for now, it logs.
       }
     }
     return userCredential;
   } catch (error) {
     const authError = error as AuthError;
-    console.error("[auth.ts] Error signing up with Email/Password:", authError.code, authError.message);
-    throw authError;
+    // Log more specific errors, but not all.
+    if (authError.code !== 'auth/email-already-in-use' && authError.code !== 'auth/weak-password') {
+        console.error("[auth.ts] Error signing up with Email/Password:", authError.code, authError.message);
+    }
+    throw authError; // Re-throw for the calling component to handle
   }
 };
 
+
 // Email/Password Sign-In
 export const signInWithEmailPassword = async (email: string, password: string): Promise<UserCredential> => {
+  console.log("[auth.ts] Attempting Email/Password Sign-In for:", email);
   try {
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
     console.log("[auth.ts] Email/Password Sign-In successful:", userCredential.user);
     if (userCredential.user) {
        const profileData: UserProfileData = {
         uid: userCredential.user.uid,
-        email: userCredential.user.email || '',
-        displayName: userCredential.user.displayName || '', // Use existing auth displayName
+        email: userCredential.user.email || undefined,
+        actualDisplayName: userCredential.user.displayName || undefined,
         photoURL: userCredential.user.photoURL || undefined,
       };
-      console.log("[auth.ts] Calling initializeUserProfile on Email/Password login:", profileData);
+      console.log("[auth.ts] Calling initializeUserProfile on Email/Password login (will mostly update lastLoginAt):", profileData);
       try {
         await initializeUserProfile(profileData);
         console.log("[auth.ts] User profile checked/updated after Email/Password login.");
@@ -130,18 +119,34 @@ export const signInWithEmailPassword = async (email: string, password: string): 
     return userCredential;
   } catch (error) {
     const authError = error as AuthError;
-    console.error("[auth.ts] Error signing in with Email/Password:", authError.code, authError.message);
-    throw authError;
+    // Only log unexpected errors to the console.
+    // 'auth/invalid-credential', 'auth/user-not-found', 'auth/wrong-password' are expected if user inputs are wrong.
+    if (
+      authError.code !== 'auth/invalid-credential' &&
+      authError.code !== 'auth/user-not-found' && // Often comes with invalid-credential
+      authError.code !== 'auth/wrong-password'    // Also often comes with invalid-credential
+    ) {
+      console.error("[auth.ts] Error signing in with Email/Password:", authError.code, authError.message);
+    }
+    throw authError; // Re-throw for the calling component (login/page.tsx) to handle
   }
 };
 
+
 // Password Reset
 export const sendPasswordReset = async (email: string): Promise<void> => {
+  console.log("[auth.ts] Attempting to send password reset email to:", email);
   try {
+    // Determine the continue URL based on the environment
+    const continueUrl = typeof window !== 'undefined'
+      ? `${window.location.origin}/login` // Client-side: use current origin
+      : process.env.NEXT_PUBLIC_BASE_URL ? `${process.env.NEXT_PUBLIC_BASE_URL}/login` : 'http://localhost:9002/login'; // Server-side: use env var or default
+
     const actionCodeSettings = {
-      url: typeof window !== 'undefined' ? `${window.location.origin}/login` : 'http://localhost:9002/login', // Fallback for server-side if needed
+      url: continueUrl,
       handleCodeInApp: true,
     };
+    console.log("[auth.ts] Password reset actionCodeSettings:", actionCodeSettings);
     await sendPasswordResetEmail(auth, email, actionCodeSettings);
     console.log("[auth.ts] Password reset email sent successfully to:", email);
   } catch (error) {
@@ -150,9 +155,10 @@ export const sendPasswordReset = async (email: string): Promise<void> => {
     if (authError.code === 'auth/unauthorized-continue-uri' && typeof window !== 'undefined') {
         console.error("[auth.ts] The domain of the continue URL (" + window.location.origin + ") is not whitelisted. Please check your Firebase console's Authentication -> Settings -> Authorized domains.");
     }
-    throw authError;
+    throw authError; // Re-throw for the component to handle
   }
 };
+
 
 // Sign Out
 export const signOut = async (): Promise<void> => {
@@ -161,6 +167,6 @@ export const signOut = async (): Promise<void> => {
     console.log("[auth.ts] User signed out successfully.");
   } catch (error) {
     console.error("[auth.ts] Error signing out:", error);
-    throw error;
+    throw error; // Re-throw for the component to handle
   }
 };
