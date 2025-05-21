@@ -1,7 +1,8 @@
+
 // src/components/messaging/MessagingInterface.tsx
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getConversationsForUser,
@@ -15,36 +16,19 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, User, Users, AlertTriangle, Eye, Building, MessageSquare, X, CornerDownLeft } from 'lucide-react'; 
+import { Loader2, Send, Users, AlertTriangle, Eye, Building, MessageSquare, X, CornerDownLeft, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
-import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
+import { useIsMobile } from '@/hooks/use-mobile'; // Import useIsMobile
 
 interface MessagingInterfaceProps {
   currentUserId: string;
   initialConversationId?: string | null;
-  highlightPostId?: string | null;
+  highlightPostId?: string | null; // This prop might be less relevant if list isn't always shown
 }
-
-const getInitials = (displayNameOrUid: string | undefined | null): string => {
-    if (!displayNameOrUid) return '?';
-    const nameToProcess = displayNameOrUid.startsWith('@') ? displayNameOrUid.substring(1) : displayNameOrUid;
-
-    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-z]+[0-9]{3}$/;
-    if (pseudonymRegex.test(nameToProcess)) {
-        const match = nameToProcess.match(/^([A-Z])[a-z]+([A-Z])/);
-        if (match && match[1] && match[2]) return match[1] + match[2];
-        if (match && match[1]) return match[1];
-    }
-    const names = nameToProcess.split(' ').filter(Boolean);
-    if (names.length === 0) return '?';
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
-};
 
 interface ConversationListItemProps {
   conversation: ClientConversation;
@@ -66,7 +50,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
     const otherParticipantId = conversation.participants.find(p => p !== currentUserId);
 
     const { data: otherParticipantDetails, isLoading: isLoadingDetails } = useQuery({
-        queryKey: ['userDetails', otherParticipantId],
+        queryKey: ['userDetails', otherParticipantId, 'messagingInterfaceList'],
         queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : Promise.resolve(null),
         enabled: !!otherParticipantId,
         staleTime: Infinity,
@@ -91,11 +75,11 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
         )}
         aria-current={isSelected ? "page" : undefined}
       >
-         <Avatar className="h-9 w-9 flex-shrink-0"> 
+         <Avatar className="h-9 w-9 flex-shrink-0">
           <AvatarImage src={otherParticipantDetails?.avatar} alt={participantName} />
           <AvatarFallback className="bg-primary text-primary-foreground text-xs">{initials}</AvatarFallback>
          </Avatar>
-        <div className="flex-grow overflow-hidden min-w-0"> 
+        <div className="flex-grow overflow-hidden min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{participantName}</p>
           {postQuestion && (
               <p className="text-xs text-primary truncate font-medium mt-0.5">
@@ -107,7 +91,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
           </p>
         </div>
         {formattedTime && (
-          <span className="text-xs text-muted-foreground self-start pt-1 flex-shrink-0"> 
+          <span className="text-xs text-muted-foreground self-start pt-1 flex-shrink-0">
             {formattedTime}
           </span>
         )}
@@ -145,9 +129,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwn
   return (
     <div className={cn("flex group mb-1", isOwnMessage ? "justify-end" : "justify-start")}>
        {!isOwnMessage && (
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className="h-6 w-6 p-1 mr-1 opacity-0 group-hover:opacity-50 focus-within:opacity-50 hover:opacity-100 self-center"
           onClick={() => onStartReply(message)}
           aria-label="Reply to message"
@@ -164,8 +148,8 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwn
         {message.replyToMessageId && message.repliedToTextSnippet && (
           <div className={cn(
             "text-xs p-1.5 rounded-md mb-1 border-l-2",
-            isOwnMessage 
-              ? "bg-card text-primary border-primary/30" 
+            isOwnMessage
+              ? "bg-card text-primary border-primary/30"
               : "bg-accent text-accent-foreground border-accent/50"
           )}>
             <p className="italic truncate opacity-80">{message.repliedToTextSnippet}</p>
@@ -180,9 +164,9 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwn
         </p>
       </div>
       {isOwnMessage && (
-        <Button 
-          variant="ghost" 
-          size="icon" 
+        <Button
+          variant="ghost"
+          size="icon"
           className="h-6 w-6 p-1 ml-1 opacity-0 group-hover:opacity-50 focus-within:opacity-50 hover:opacity-100 self-center"
           onClick={() => onStartReply(message)}
           aria-label="Reply to message"
@@ -200,13 +184,15 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     initialConversationId,
     highlightPostId,
 }) => {
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationId || null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<SerializableMessage | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile();
+  const [activeMobileView, setActiveMobileView] = useState<'list' | 'chat'>('list');
 
   const {
       data: conversations = [],
@@ -246,7 +232,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        return detailsMap;
      },
      enabled: conversations.length > 0 && conversations.some(c => c.postId && c.postId !== 'general_connection'),
-     staleTime: 1000 * 60 * 10, 
+     staleTime: 1000 * 60 * 10,
    });
 
    const postDetailsMap = postDetailsQueries.data;
@@ -259,17 +245,17 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        queryKey: ['messages', selectedConversationId],
        queryFn: () => selectedConversationId ? getMessagesForConversation(selectedConversationId) : Promise.resolve([]),
        enabled: !!selectedConversationId,
-       staleTime: 1000 * 15, 
-       refetchInterval: 1000 * 30, 
+       staleTime: 1000 * 15,
+       refetchInterval: 1000 * 30,
    });
 
   const sendMessageMutation = useMutation({
     mutationFn: sendMessage,
     onSuccess: () => {
         setNewMessage('');
-        setReplyingTo(null); 
+        setReplyingTo(null);
         queryClient.invalidateQueries({ queryKey: ['messages', selectedConversationId] });
-        queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] }); 
+        queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
     },
     onError: (error: Error) => {
         toast({
@@ -283,7 +269,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
    useEffect(() => {
        const timer = setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-       }, 100); 
+       }, 100);
        return () => clearTimeout(timer);
    }, [messages, selectedConversationId]);
 
@@ -296,7 +282,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         conversationId: selectedConversationId,
         senderId: currentUserId,
         text: newMessage.trim(),
-        ...(replyingTo && { 
+        ...(replyingTo && {
           replyToMessageId: replyingTo.id,
           repliedToTextSnippet: replyingTo.text.substring(0, 75) + (replyingTo.text.length > 75 ? "..." : "")
         }),
@@ -309,23 +295,38 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
          if (initialConversationId && conversations.some(c => c.id === initialConversationId)) {
              if (selectedConversationId !== initialConversationId) {
                 setSelectedConversationId(initialConversationId);
+                if (isMobile) setActiveMobileView('chat');
              }
-         } else if (!selectedConversationId) {
+         } else if (!selectedConversationId && !isMobile) { // Don't auto-select on mobile initial list view
              setSelectedConversationId(conversations[0].id);
          }
      } else if (!isLoadingConversations && !selectedConversationId) {
          setSelectedConversationId(null);
      }
-   }, [conversations, selectedConversationId, isLoadingConversations, isConversationsError, initialConversationId]);
+     // If initialConversationId is present and we are on mobile, set activeMobileView to chat
+     if (isMobile && initialConversationId) {
+        setActiveMobileView('chat');
+     } else if (isMobile && !initialConversationId) {
+        setActiveMobileView('list');
+     }
+   }, [conversations, selectedConversationId, isLoadingConversations, isConversationsError, initialConversationId, isMobile, setSelectedConversationId, setActiveMobileView]);
+
+
+   const handleConversationSelect = (conversationId: string) => {
+    setSelectedConversationId(conversationId);
+    if (isMobile) {
+      setActiveMobileView('chat');
+    }
+  };
 
    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
    const otherParticipantId = selectedConversation?.participants.find(p => p !== currentUserId);
 
    const { data: headerParticipantDetails, isLoading: isLoadingHeaderDetails } = useQuery({
-       queryKey: ['userDetails', otherParticipantId],
+       queryKey: ['userDetails', otherParticipantId, 'messagingInterfaceHeader'],
        queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : Promise.resolve(null),
        enabled: !!otherParticipantId,
-       staleTime: Infinity, 
+       staleTime: Infinity,
    });
 
    const otherParticipantName = isLoadingHeaderDetails
@@ -346,18 +347,24 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     setReplyingTo(null);
   };
 
-
   return (
     <div className="flex h-full border rounded-lg overflow-hidden bg-card">
       {/* Conversations List Panel */}
-      <div className="w-1/3 border-r flex flex-col">
+      <div
+        className={cn(
+          "flex flex-col border-r bg-background", // Common styles
+          isMobile
+            ? activeMobileView === 'list' ? "w-full flex" : "hidden" // Mobile: full width if list, hidden if chat
+            : "w-1/3 flex" // Desktop: 1/3 width
+        )}
+      >
         <div className="p-4 border-b">
           <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
               <Users className="h-5 w-5" /> Conversations
           </h2>
         </div>
-        <ScrollArea className="flex-grow bg-background"> 
-          <div className="p-2 space-y-1"> 
+        <ScrollArea className="flex-grow">
+          <div className="p-2 space-y-1">
             {isLoadingConversations ? (
               Array.from({ length: 5 }).map((_, i) => (
                   <div key={i} className="flex items-center gap-3 p-3">
@@ -384,14 +391,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             ) : (
               conversations.map((conv) => {
                  const postQuestion = conv.postId && conv.postId !== 'general_connection' ? postDetailsMap?.get(conv.postId)?.question : null;
-                 const shouldHighlight = highlightPostId === conv.postId && initialConversationId === conv.id; 
+                 const shouldHighlight = highlightPostId === conv.postId && selectedConversationId === conv.id;
                  return (
                      <ConversationListItem
                          key={conv.id}
                          conversation={conv}
-                         isSelected={selectedConversationId === conv.id}
+                         isSelected={selectedConversationId === conv.id && !isMobile} // Don't show selection highlight on mobile list view
                          currentUserId={currentUserId}
-                         onSelect={setSelectedConversationId}
+                         onSelect={handleConversationSelect} // Use new handler
                          postQuestion={postQuestion}
                          highlight={shouldHighlight}
                      />
@@ -403,10 +410,22 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       </div>
 
       {/* Messages Panel */}
-      <div className="w-2/3 flex flex-col">
+      <div
+        className={cn(
+          "flex flex-col", // Common styles
+          isMobile
+            ? activeMobileView === 'chat' ? "w-full flex" : "hidden" // Mobile: full width if chat, hidden if list
+            : "w-2/3 flex" // Desktop: 2/3 width
+        )}
+      >
         {selectedConversationId ? (
           <>
             <div className="p-4 border-b flex items-center gap-3 bg-muted/50">
+               {isMobile && activeMobileView === 'chat' && (
+                 <Button variant="ghost" size="icon" className="mr-2" onClick={() => setActiveMobileView('list')}>
+                   <ArrowLeft className="h-5 w-5" />
+                 </Button>
+               )}
                <Avatar className="h-9 w-9 flex-shrink-0">
                    <AvatarImage src={otherParticipantAvatar} alt={otherParticipantName} />
                    <AvatarFallback className="bg-primary text-primary-foreground text-xs">{otherParticipantInitials}</AvatarFallback>
@@ -430,7 +449,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                {selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && (
                    <Link href={`/?postId=${selectedConversation.postId}`}
                          className={cn(
-                             "text-primary hover:underline text-xs flex items-center gap-1 ml-auto flex-shrink-0", 
+                             "text-primary hover:underline text-xs flex items-center gap-1 ml-auto flex-shrink-0",
                              "focus:outline-none focus:ring-1 focus:ring-ring rounded p-1"
                          )}
                          title="View Post Details"
@@ -462,7 +481,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                    />
                  ))
                )}
-               <div ref={messagesEndRef} /> 
+               <div ref={messagesEndRef} />
             </ScrollArea>
 
             <div className="p-4 border-t bg-muted/50">
@@ -521,9 +540,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                  </>
              ) : (
                   <>
-                     <Users className="h-12 w-12 text-muted-foreground mb-4" />
-                     <h3 className="text-lg font-medium text-foreground">Select a Conversation</h3>
-                     <p className="text-sm text-muted-foreground">Choose a conversation from the list to start chatting.</p>
+                     <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
+                     <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
+                     <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
                   </>
               )}
           </div>
@@ -532,4 +551,3 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
-
