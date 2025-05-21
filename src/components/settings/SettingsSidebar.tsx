@@ -6,7 +6,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { User, ShieldCheck, Bell, Lock } from 'lucide-react';
+import { User, ShieldCheck, Bell, Lock, CreditCard } from 'lucide-react'; // Added CreditCard
 import { Card, CardContent } from '@/components/ui/card';
 
 const settingsLinks = [
@@ -14,6 +14,7 @@ const settingsLinks = [
   { name: 'Verification', href: '/settings/verification', icon: ShieldCheck },
   { name: 'Account', href: '/settings/account', icon: Lock },
   { name: 'Notifications', href: '/settings/notifications', icon: Bell },
+  { name: 'Payment Method', href: '/settings/payment-method', icon: CreditCard }, // New Link
 ];
 
 const SettingsSidebar = () => {
