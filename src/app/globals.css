@@ -97,3 +97,12 @@ body {
 .animate-spin {
   animation: spin 1s linear infinite;
 }
+
+/* Custom rule to hide elements with .mb-6 on mobile viewports */
+/* This targets screens up to 767px wide (Tailwind's 'md' breakpoint is typically 768px) */
+/* Use with caution as this is a global override for a utility class. */
+@media screen and (max-width: 767px) {
+  .mb-6 {
+    display: none !important; /* !important may be needed to override more specific Tailwind display utilities */
+  }
+}
