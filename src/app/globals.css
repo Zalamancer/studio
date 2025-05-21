@@ -98,11 +98,11 @@ body {
   animation: spin 1s linear infinite;
 }
 
-/* Custom rule to hide elements with .mb-6 on mobile viewports */
-/* This targets screens up to 767px wide (Tailwind's 'md' breakpoint is typically 768px) */
+/* Custom rule to hide elements with .mb-6 on mobile and tablet viewports */
+/* This targets screens up to 1023px wide (Tailwind's 'lg' breakpoint is typically 1024px) */
 /* Use with caution as this is a global override for a utility class. */
-@media screen and (max-width: 767px) {
+@media screen and (max-width: 1023px) { /* Updated from 767px */
   .mb-6 {
-    display: none !important; /* !important may be needed to override more specific Tailwind display utilities */
+    display: none; /* Removed !important as a first attempt */
   }
 }
