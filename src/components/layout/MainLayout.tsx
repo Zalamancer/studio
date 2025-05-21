@@ -1,10 +1,12 @@
+
 // src/components/layout/MainLayout.tsx
 "use client";
 
 import React,
 {
   useState,
-  useEffect
+  useEffect,
+  useCallback
 } from 'react';
 import Link from 'next/link';
 import {
@@ -35,30 +37,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import {
-  Home,
-  Compass,
-  Network,
-  FileText,
-  LogOut,
-  PlusCircle,
-  UserCircle,
-  CreditCard,
-  Settings,
-  User,
-  Bell,
-  Handshake, 
-  HelpingHand 
-} from "lucide-react"; 
-import { signOut } from '@/lib/firebase/auth'; 
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, HelpingHand, Factory } from "lucide-react";
+import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import {
-  CreatePostForm,
-  type CreatePostFormData,
+import type {
+  CreatePostFormData
 } from '@/components/CreatePostForm';
 import type {
-  NewPostData
+  NewPostData,
+  Post
 } from '@/types/post';
 import {
   addPostToFirestore
@@ -70,20 +58,13 @@ import {
   useMutation,
   useQueryClient
 } from '@tanstack/react-query';
-import {
-  ThemeToggle
-} from '@/components/ThemeToggle';
-import {
-  cn
-} from '@/lib/utils';
-import {
-  NotificationDropdown
-} from '@/components/notifications/NotificationDropdown';
+import { cn } from '@/lib/utils';
+import { NotificationDropdown } from '@/components/notifications/NotificationDropdown';
 import { createNotification } from '@/services/notificationService';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
 import { useIsMobile } from "@/hooks/use-mobile";
-
+import dynamic from 'next/dynamic';
 
 // This data is now the single source of truth for sector hierarchy.
 export interface Industry {
@@ -202,41 +183,227 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21", description: "Establishments that extract naturally occurring mineral solids, liquid minerals, and gases.",
     subSectors: [
       { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "211111" }, { name: "Natural Gas Liquid Extraction", code: "211130" }] },
-      { name: "Coal Mining", code: "212", industries: [{ name: "Bituminous Coal and Lignite Surface Mining", code: "212111" }, { name: "Bituminous Coal Underground Mining", code: "212112" }, { name: "Anthracite Mining", code: "212113" }] },
-      { name: "Metal Ore Mining", code: "212", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold Ore Mining", code: "212221" }, { name: "Silver Ore Mining", code: "212222" }, { name: "Copper, Nickel, Lead, and Zinc Mining", code: "212230" }] },
-      { name: "Nonmetallic Mineral Mining and Quarrying", code: "212", industries: [{ name: "Dimension Stone Mining and Quarrying", code: "212311" }, { name: "Crushed and Broken Limestone Mining and Quarrying", code: "212312" }, { name: "Construction Sand and Gravel Mining", code: "212321" }, { name: "Industrial Sand Mining", code: "212322" }, { name: "Clay and Ceramic and Refractory Minerals Mining", code: "212325" }] },
+      { name: "Coal Mining", code: "2121", industries: [{ name: "Bituminous Coal and Lignite Surface Mining", code: "212111" }, { name: "Bituminous Coal Underground Mining", code: "212112" }, { name: "Anthracite Mining", code: "212113" }] },
+      { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold Ore Mining", code: "212221" }, { name: "Silver Ore Mining", code: "212222" }, { name: "Copper, Nickel, Lead, and Zinc Mining", code: "212230" }] },
+      { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Dimension Stone Mining and Quarrying", code: "212311" }, { name: "Crushed and Broken Limestone Mining and Quarrying", code: "212312" }, { name: "Construction Sand and Gravel Mining", code: "212321" }, { name: "Industrial Sand Mining", code: "212322" }, { name: "Clay and Ceramic and Refractory Minerals Mining", code: "212325" }] },
       { name: "Support Activities for Mining", code: "213", industries: [{ name: "Drilling Oil and Gas Wells", code: "213111" }, { name: "Support Activities for Oil and Gas Operations", code: "213112" }, { name: "Support Activities for Coal Mining", code: "213113" }] },
     ]
   },
   {
     name: "Utilities", code: "22", description: "Establishments engaged in providing utility services such as electric power, natural gas, steam supply, water supply, and sewage removal.",
     subSectors: [
-      { name: "Electric Power Generation, Transmission and Distribution", code: "221", industries: [{ name: "Hydroelectric Power Generation", code: "221111" }, { name: "Fossil Fuel Electric Power Generation", code: "221112" }, { name: "Nuclear Electric Power Generation", code: "221113" }, { name: "Electric Bulk Power Transmission and Control", code: "221121" }, { name: "Electric Power Distribution", code: "221122" }] },
-      { name: "Natural Gas Distribution", code: "221", industries: [{ name: "Natural Gas Distribution", code: "221210" }] },
-      { name: "Water, Sewage and Other Systems", code: "221", industries: [{ name: "Water Supply and Irrigation Systems", code: "221310" }, { name: "Sewage Treatment Facilities", code: "221320" }, { name: "Steam and Air-Conditioning Supply", code: "221330" }] },
+      { name: "Electric Power Generation, Transmission and Distribution", code: "2211", industries: [{ name: "Hydroelectric Power Generation", code: "221111" }, { name: "Fossil Fuel Electric Power Generation", code: "221112" }, { name: "Nuclear Electric Power Generation", code: "221113" }, { name: "Electric Bulk Power Transmission and Control", code: "221121" }, { name: "Electric Power Distribution", code: "221122" }] },
+      { name: "Natural Gas Distribution", code: "2212", industries: [{ name: "Natural Gas Distribution", code: "221210" }] },
+      { name: "Water, Sewage and Other Systems", code: "2213", industries: [{ name: "Water Supply and Irrigation Systems", code: "221310" }, { name: "Sewage Treatment Facilities", code: "221320" }, { name: "Steam and Air-Conditioning Supply", code: "221330" }] },
     ]
   },
   {
     name: "Construction", code: "23", description: "Establishments primarily engaged in the construction of buildings and engineering projects.",
     subSectors: [
-      { name: "Construction of Buildings", code: "236", industries: [{ name: "Residential Building Construction", code: "23611" }, { name: "Nonresidential Building Construction", code: "236220" }] },
-      { name: "Heavy and Civil Engineering Construction", code: "237", industries: [{ name: "Water and Sewer Line and Related Structures Construction", code: "237110" }, { name: "Oil and Gas Pipeline and Related Structures Construction", code: "237120" }, { name: "Power and Communication Line and Related Structures Construction", code: "237130" }, { name: "Highway, Street, and Bridge Construction", code: "237310" }] },
-      { name: "Specialty Trade Contractors", code: "238", industries: [{ name: "Plumbing, Heating, and Air-Conditioning Contractors", code: "238220" }, { name: "Electrical Contractors and Other Wiring Installation Contractors", code: "238210" }, { name: "Painting and Wall Covering Contractors", code: "238320" }, { name: "Site Preparation Contractors", code: "238910" }] },
+      { name: "Construction of Buildings", code: "236", industries: [{ name: "New Single-Family Housing Construction (except For-Sale Builders)", code: "236115" }, { name: "New Multifamily Housing Construction (except For-Sale Builders)", code: "236116" }, { name: "Industrial Building Construction", code: "236210" }, { name: "Commercial and Institutional Building Construction", code: "236220" }] },
+      { name: "Heavy and Civil Engineering Construction", code: "237", industries: [{ name: "Water and Sewer Line and Related Structures Construction", code: "237110" }, { name: "Oil and Gas Pipeline and Related Structures Construction", code: "237120" }, { name: "Power and Communication Line and Related Structures Construction", code: "237130" }, { name: "Highway, Street, and Bridge Construction", code: "237310" }, { name: "Other Heavy and Civil Engineering Construction", code: "237990"}] },
+      { name: "Specialty Trade Contractors", code: "238", industries: [{ name: "Plumbing, Heating, and Air-Conditioning Contractors", code: "238220" }, { name: "Electrical Contractors and Other Wiring Installation Contractors", code: "238210" }, { name: "Painting and Wall Covering Contractors", code: "238320" }, { name: "Site Preparation Contractors", code: "238910" }, {"name": "Masonry Contractors", code: "238140"}, {"name": "Roofing Contractors", code: "238160"} ] },
     ]
   },
   {
     name: "Manufacturing", code: "31-33", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products.",
     subSectors: [
-      { name: "Food Manufacturing", code: "311", industries: [{ name: "Animal Food Manufacturing", code: "3111" }, { name: "Grain and Oilseed Milling", code: "3112" }, { name: "Sugar and Confectionery Product Manufacturing", code: "3113" }, {name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "3114"}]},
-      { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [{ name: "Beverage Manufacturing", code: "3121" }, { name: "Tobacco Manufacturing", code: "3122" }] },
-      { name: "Textile Mills", code: "313", industries: [{ name: "Fiber, Yarn, and Thread Mills", code: "3131" }, { name: "Fabric Mills", code: "3132" }] },
-      { name: "Apparel Manufacturing", code: "315", industries: [{ name: "Apparel Knitting Mills", code: "3151" }, { name: "Cut and Sew Apparel Manufacturing", code: "3152" }] },
-      { name: "Chemical Manufacturing", code: "325", industries: [{ name: "Basic Chemical Manufacturing", code: "3251" }, { name: "Pharmaceutical and Medicine Manufacturing", code: "3254" }] },
-      { name: "Transportation Equipment Manufacturing", code: "336", industries: [{ name: "Motor Vehicle Manufacturing", code: "3361" }, { name: "Aerospace Product and Parts Manufacturing", code: "3364" }] },
-      { name: "Wood Product Manufacturing", code: "321", industries: [{name: "Sawmills and Wood Preservation", code: "3211"}, {name: "Veneer, Plywood, and Engineered Wood Product Manufacturing", code: "3212"}]},
-      { name: "Paper Manufacturing", code: "322", industries: [{name: "Pulp, Paper, and Paperboard Mills", code: "3221"}, {name: "Converted Paper Product Manufacturing", code: "3222"}]},
-      { name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [{name: "Plastics Product Manufacturing", code: "3261"}, {name: "Rubber Product Manufacturing", code: "3262"}]},
-      { name: "Primary Metal Manufacturing", code: "331", industries: [{name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "3311"}, {name: "Steel Product Manufacturing from Purchased Steel", code: "3312"}]}
+      { name: "Food Manufacturing", code: "311", industries: [
+          { name: "Animal Food Manufacturing", code: "3111" },
+          { name: "Grain and Oilseed Milling", code: "3112" },
+          { name: "Sugar and Confectionery Product Manufacturing", code: "3113" },
+          { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "3114" },
+          { name: "Dairy Product Manufacturing", code: "3115" },
+          { name: "Animal Slaughtering and Processing", code: "3116" },
+          { name: "Seafood Product Preparation and Packaging", code: "311710" },
+          { name: "Bakeries and Tortilla Manufacturing", code: "3118" },
+          { name: "Other Food Manufacturing", code: "3119" },
+      ]},
+      { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [
+          { name: "Soft Drink and Ice Manufacturing", code: "31211" },
+          { name: "Breweries", code: "312120" },
+          { name: "Wineries", code: "312130" },
+          { name: "Distilleries", code: "312140" },
+          { name: "Tobacco Manufacturing", code: "312230" },
+      ]},
+      { name: "Textile Mills", code: "313", industries: [
+          { name: "Fiber, Yarn, and Thread Mills", code: "313110" },
+          { name: "Broadwoven Fabric Mills", code: "313210" },
+          { name: "Narrow Fabric Mills and Schiffli Machine Embroidery", code: "313220" },
+          { name: "Nonwoven Fabric Mills", code: "313230" },
+          { name: "Knit Fabric Mills", code: "313240" },
+          { name: "Textile and Fabric Finishing Mills", code: "313310" },
+          { name: "Fabric Coating Mills", code: "313320" },
+      ]},
+      { name: "Textile Product Mills", code: "314", industries: [
+          { name: "Carpet and Rug Mills", code: "314110" },
+          { name: "Curtain and Linen Mills", code: "314120" },
+          { name: "Textile Bag and Canvas Mills", code: "314910" },
+          { name: "Rope, Cordage, Twine, Tire Cord, and Tire Fabric Mills", code: "314994" },
+          { name: "All Other Miscellaneous Textile Product Mills", code: "314999" },
+      ]},
+      { name: "Apparel Manufacturing", code: "315", industries: [
+          { name: "Apparel Knitting Mills", code: "315120" },
+          { name: "Cut and Sew Apparel Contractors", code: "315210" },
+          { name: "Cut and Sew Apparel Manufacturing (except Contractors)", code: "315250" },
+          { name: "Apparel Accessories and Other Apparel Manufacturing", code: "315990" },
+      ]},
+      { name: "Leather and Allied Product Manufacturing", code: "316", industries: [
+          { name: "Leather and Hide Tanning and Finishing", code: "316110" },
+          { name: "Footwear Manufacturing", code: "316210" },
+          { name: "Other Leather and Allied Product Manufacturing", code: "316990" },
+      ]},
+      { name: "Wood Product Manufacturing", code: "321", industries: [
+          { name: "Sawmills", code: "321113" },
+          { name: "Wood Preservation", code: "321114" },
+          { name: "Hardwood Veneer and Plywood Manufacturing", code: "321211" },
+          { name: "Softwood Veneer and Plywood Manufacturing", code: "321212" },
+          { name: "Engineered Wood Member Manufacturing", code: "321215" },
+          { name: "Reconstituted Wood Product Manufacturing", code: "321219" },
+          { name: "Wood Window and Door Manufacturing", code: "321911" },
+          { name: "Cut Stock, Resawing Lumber, and Planing", code: "321912" },
+          { name: "Other Millwork (including Flooring)", code: "321918" },
+          { name: "Wood Container and Pallet Manufacturing", code: "321920" },
+          { name: "Manufactured Home (Mobile Home) Manufacturing", code: "321991" },
+          { name: "Prefabricated Wood Building Manufacturing", code: "321992" },
+          { name: "All Other Miscellaneous Wood Product Manufacturing", code: "321999" },
+      ]},
+      { name: "Paper Manufacturing", code: "322", industries: [
+          { name: "Pulp Mills", code: "322110" },
+          { name: "Paper Mills", code: "322120" },
+          { name: "Paperboard Mills", code: "322130" },
+          { name: "Corrugated and Solid Fiber Box Manufacturing", code: "322211" },
+          { name: "Folding Paperboard Box Manufacturing", code: "322212" },
+          { name: "Other Paperboard Container Manufacturing", code: "322219" },
+          { name: "Paper Bag and Coated and Treated Paper Manufacturing", code: "322220" },
+          { name: "Stationery Product Manufacturing", code: "322230" },
+          { name: "Sanitary Paper Product Manufacturing", code: "322291" },
+          { name: "All Other Converted Paper Product Manufacturing", code: "322299" },
+      ]},
+      { name: "Printing and Related Support Activities", code: "323", industries: [
+          { name: "Commercial Printing (except Screen and Books)", code: "323111" },
+          { name: "Commercial Screen Printing", code: "323113" },
+          { name: "Books Printing", code: "323117" },
+          { name: "Support Activities for Printing", code: "323120" },
+      ]},
+      { name: "Petroleum and Coal Products Manufacturing", code: "324", industries: [
+          { name: "Petroleum Refineries", code: "324110" },
+          { name: "Asphalt Paving Mixture and Block Manufacturing", code: "324121" },
+          { name: "Asphalt Shingle and Coating Materials Manufacturing", code: "324122" },
+          { name: "Petroleum Lubricating Oil and Grease Manufacturing", code: "324191" },
+          { name: "All Other Petroleum and Coal Products Manufacturing", code: "324199" },
+      ]},
+      { name: "Chemical Manufacturing", code: "325", industries: [
+          { name: "Petrochemical Manufacturing", code: "325110" },
+          { name: "Industrial Gas Manufacturing", code: "325120" },
+          { name: "Synthetic Dye and Pigment Manufacturing", code: "325130" },
+          { name: "Other Basic Inorganic Chemical Manufacturing", code: "325180" },
+          { name: "Ethyl Alcohol Manufacturing", code: "325193" },
+          { name: "All Other Basic Organic Chemical Manufacturing", code: "325199" },
+          { name: "Plastics Material and Resin Manufacturing", code: "325211" },
+          { name: "Synthetic Rubber Manufacturing", code: "325212" },
+          { name: "Artificial and Synthetic Fibers and Filaments Manufacturing", code: "325220" },
+          { name: "Nitrogenous Fertilizer Manufacturing", code: "325311" },
+          { name: "Pesticide and Other Agricultural Chemical Manufacturing", code: "325320" },
+          { name: "Pharmaceutical Preparation Manufacturing", code: "325412" },
+          { name: "Paint and Coating Manufacturing", code: "325510" },
+          { name: "Adhesive Manufacturing", code: "325520" },
+          { name: "Soap and Other Detergent Manufacturing", code: "325611" },
+          { name: "Toilet Preparation Manufacturing", code: "325620" },
+          { name: "Printing Ink Manufacturing", code: "325910" },
+          { name: "All Other Miscellaneous Chemical Product and Preparation Manufacturing", code: "325998" },
+      ]},
+      { name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [
+          { name: "Plastics Packaging Materials and Unlaminated Film and Sheet Manufacturing", code: "32611" },
+          { name: "Plastics Pipe, Pipe Fitting, and Unlaminated Profile Shape Manufacturing", code: "32612" },
+          { name: "Polystyrene Foam Product Manufacturing", code: "326140" },
+          { name: "All Other Plastics Product Manufacturing", code: "326199" },
+          { name: "Tire Manufacturing (except Retreading)", code: "326211" },
+          { name: "Rubber and Plastics Hoses and Belting Manufacturing", code: "326220" },
+          { name: "All Other Rubber Product Manufacturing", code: "326299" },
+      ]},
+      { name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [
+          { name: "Pottery, Ceramics, and Plumbing Fixture Manufacturing", code: "327110" },
+          { name: "Clay Building Material and Refractories Manufacturing", code: "327120" },
+          { name: "Flat Glass Manufacturing", code: "327211" },
+          { name: "Cement Manufacturing", code: "327310" },
+          { name: "Ready-Mix Concrete Manufacturing", code: "327320" },
+          { name: "Lime Manufacturing", code: "327410" },
+          { name: "Gypsum Product Manufacturing", code: "327420" },
+          { name: "Abrasive Product Manufacturing", code: "327910" },
+      ]},
+      { name: "Primary Metal Manufacturing", code: "331", industries: [
+          { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "331110" },
+          { name: "Steel Product Manufacturing from Purchased Steel", code: "3312" },
+          { name: "Alumina Refining and Primary Aluminum Production", code: "331313" },
+          { name: "Copper Rolling, Drawing, Extruding, and Alloying", code: "331420" },
+          { name: "Iron Foundries", code: "331511" },
+      ]},
+      { name: "Fabricated Metal Product Manufacturing", code: "332", industries: [
+          { name: "Iron and Steel Forging", code: "332111" },
+          { name: "Cutlery and Handtool Manufacturing", code: "33221" },
+          { name: "Architectural and Structural Metals Manufacturing", code: "3323" },
+          { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "3324" },
+          { name: "Hardware Manufacturing", code: "332510" },
+          { name: "Spring and Wire Product Manufacturing", code: "33261" },
+          { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "3327" },
+          { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "33281" },
+          { name: "All Other Fabricated Metal Product Manufacturing", code: "33299" },
+      ]},
+      { name: "Machinery Manufacturing", code: "333", industries: [
+          { name: "Agricultural Implement Manufacturing", code: "33311" },
+          { name: "Construction Machinery Manufacturing", code: "333120" },
+          { name: "Mining and Oil and Gas Field Machinery Manufacturing", code: "33313" },
+          { name: "Industrial Machinery Manufacturing", code: "33324" },
+          { name: "Commercial and Service Industry Machinery Manufacturing", code: "333310" },
+          { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "33341" },
+          { name: "Metalworking Machinery Manufacturing", code: "33351" },
+          { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "33361" },
+          { name: "Other General Purpose Machinery Manufacturing", code: "3339" },
+      ]},
+      { name: "Computer and Electronic Product Manufacturing", code: "334", industries: [
+          { name: "Electronic Computer Manufacturing", code: "334111" },
+          { name: "Computer Peripheral Equipment Manufacturing", code: "33411" },
+          { name: "Telephone Apparatus Manufacturing", code: "334210" },
+          { name: "Radio and Television Broadcasting and Wireless Communications Equipment Manufacturing", code: "334220" },
+          { name: "Audio and Video Equipment Manufacturing", code: "334310" },
+          { name: "Semiconductor and Other Electronic Component Manufacturing", code: "33441" },
+          { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "33451" },
+          { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "334610" },
+      ]},
+      { name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [
+          { name: "Electric Lighting Equipment Manufacturing", code: "33513" },
+          { name: "Household Appliance Manufacturing", code: "3352" },
+          { name: "Electrical Equipment Manufacturing", code: "33531" },
+          { name: "Battery Manufacturing", code: "335910" },
+          { name: "Communication and Energy Wire and Cable Manufacturing", code: "33592" },
+          { name: "Wiring Device Manufacturing", code: "33593" },
+          { name: "All Other Electrical Equipment and Component Manufacturing", code: "33599" },
+      ]},
+      { name: "Transportation Equipment Manufacturing", code: "336", industries: [
+          { name: "Automobile and Light Duty Motor Vehicle Manufacturing", code: "336110" },
+          { name: "Heavy Duty Truck Manufacturing", code: "336120" },
+          { name: "Motor Vehicle Body Manufacturing", code: "336211" },
+          { name: "Motor Vehicle Parts Manufacturing", code: "3363" },
+          { name: "Aerospace Product and Parts Manufacturing", code: "33641" },
+          { name: "Railroad Rolling Stock Manufacturing", code: "336510" },
+          { name: "Ship and Boat Building", code: "33661" },
+          { name: "Other Transportation Equipment Manufacturing", code: "33699" },
+      ]},
+      { name: "Furniture and Related Product Manufacturing", code: "337", industries: [
+          { name: "Wood Kitchen Cabinet and Countertop Manufacturing", code: "337110" },
+          { name: "Household and Institutional Furniture Manufacturing", code: "33712" },
+          { name: "Office Furniture (including Fixtures) Manufacturing", code: "33721" },
+          { name: "Mattress Manufacturing", code: "337910" },
+          { name: "Blind and Shade Manufacturing", code: "337920" },
+      ]},
+      { name: "Miscellaneous Manufacturing", code: "339", industries: [
+          { name: "Surgical and Medical Instrument Manufacturing", code: "339112" },
+          { name: "Sporting and Athletic Goods Manufacturing", code: "339920" },
+          { name: "Doll, Toy, and Game Manufacturing", code: "339930" },
+          { name: "Sign Manufacturing", code: "339950" },
+          { name: "All Other Miscellaneous Manufacturing", code: "33999" },
+      ]},
     ]
   },
   {
@@ -278,89 +445,90 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Finance and Insurance", code: "52", description: "Establishments primarily engaged in financial transactions or in facilitating financial transactions.",
     subSectors: [
-      { name: "Monetary Authorities - Central Bank", code: "521", industries: [{ name: "Monetary Authorities - Central Bank", code: "5211" }] },
-      { name: "Credit Intermediation and Related Activities", code: "522", industries: [{ name: "Depository Credit Intermediation", code: "5221" }, { name: "Nondepository Credit Intermediation", code: "5222" }, { name: "Activities Related to Credit Intermediation", code: "5223" }] },
-      { name: "Securities, Commodity Contracts, and Other Financial Investments and Related Activities", code: "523", industries: [{ name: "Securities and Commodity Contracts Intermediation and Brokerage", code: "5231" }, { name: "Securities and Commodity Exchanges", code: "5232" }] },
-      { name: "Insurance Carriers and Related Activities", code: "524", industries: [{ name: "Insurance Carriers", code: "5241" }, { name: "Agencies, Brokerages, and Other Insurance Related Activities", code: "5242" }] },
+      { name: "Monetary Authorities - Central Bank", code: "521", industries: [{ name: "Monetary Authorities - Central Bank", code: "521110" }] },
+      { name: "Credit Intermediation and Related Activities", code: "522", industries: [{ name: "Commercial Banking", code: "522110" }, { name: "Savings Institutions", code: "522120" }, { name: "Credit Unions", code: "522130" }, { name: "Sales Financing", code: "522220" }, { name: "Consumer Lending", code: "522291" }] },
+      { name: "Securities, Commodity Contracts, and Other Financial Investments and Related Activities", code: "523", industries: [{ name: "Investment Banking and Securities Dealing", code: "523110" }, { name: "Securities Brokerage", code: "523120" }, { name: "Commodity Contracts Dealing", code: "523130" } ] },
+      { name: "Insurance Carriers and Related Activities", code: "524", industries: [{ name: "Direct Life Insurance Carriers", code: "524113" }, { name: "Direct Health and Medical Insurance Carriers", code: "524114" }, { name: "Direct Property and Casualty Insurance Carriers", code: "524126" }, { name: "Insurance Agencies and Brokerages", code: "524210" }] },
     ]
   },
   {
     name: "Real Estate and Rental and Leasing", code: "53", description: "Establishments primarily engaged in renting, leasing, or otherwise allowing the use of tangible or intangible assets.",
     subSectors: [
-      { name: "Real Estate", code: "531", industries: [{ name: "Lessors of Real Estate", code: "5311" }, { name: "Offices of Real Estate Agents and Brokers", code: "5312" }, { name: "Activities Related to Real Estate", code: "5313" }] },
-      { name: "Rental and Leasing Services", code: "532", industries: [{ name: "Automotive Equipment Rental and Leasing", code: "5321" }, { name: "Consumer Goods Rental", code: "5322" }, { name: "General Rental Centers", code: "5323" }] },
-      { name: "Lessors of Nonfinancial Intangible Assets (except Copyrighted Works)", code: "533", industries: [{ name: "Lessors of Nonfinancial Intangible Assets (except Copyrighted Works)", code: "5331" }] },
+      { name: "Real Estate", code: "531", industries: [{ name: "Lessors of Residential Buildings and Dwellings", code: "531110" }, { name: "Offices of Real Estate Agents and Brokers", code: "531210" }, { name: "Real Estate Property Managers", code: "53131" }] },
+      { name: "Rental and Leasing Services", code: "532", industries: [{ name: "Automotive Equipment Rental and Leasing", code: "5321" }, { name: "Consumer Goods Rental", code: "5322" }, { name: "General Rental Centers", code: "532310" }] },
+      { name: "Lessors of Nonfinancial Intangible Assets (except Copyrighted Works)", code: "533", industries: [{ name: "Lessors of Nonfinancial Intangible Assets (except Copyrighted Works)", code: "533110" }] },
     ]
   },
   {
     name: "Professional, Scientific, and Technical Services", code: "54", description: "Establishments that specialize in performing professional, scientific, and technical activities for others.",
     subSectors: [
-      { name: "Legal Services", code: "541", industries: [{ name: "Offices of Lawyers", code: "541110" }, { name: "Other Legal Services", code: "54119" }] },
-      { name: "Accounting, Tax Preparation, Bookkeeping, and Payroll Services", code: "541", industries: [{ name: "Accounting, Tax Preparation, Bookkeeping, and Payroll Services", code: "54121" }] },
-      { name: "Architectural, Engineering, and Related Services", code: "541", industries: [{ name: "Architectural Services", code: "541310" }, { name: "Engineering Services", code: "541330" }, { name: "Geophysical Surveying and Mapping Services", code: "541360" }] },
-      { name: "Computer Systems Design and Related Services", code: "541", industries: [{ name: "Computer Systems Design and Related Services", code: "54151" }] },
-      { name: "Management, Scientific, and Technical Consulting Services", code: "541", industries: [{ name: "Management Consulting Services", code: "54161" }, { name: "Environmental Consulting Services", code: "541620" }] },
+      { name: "Legal Services", code: "5411", industries: [{ name: "Offices of Lawyers", code: "541110" }, { name: "Other Legal Services", code: "54119" }] },
+      { name: "Accounting, Tax Preparation, Bookkeeping, and Payroll Services", code: "5412", industries: [{ name: "Offices of Certified Public Accountants", code: "541211" }, { name: "Tax Preparation Services", code: "541213" }] },
+      { name: "Architectural, Engineering, and Related Services", code: "5413", industries: [{ name: "Architectural Services", code: "541310" }, { name: "Engineering Services", code: "541330" }, { name: "Geophysical Surveying and Mapping Services", code: "541360" }, { name: "Testing Laboratories and Services", code: "541380" }] },
+      { name: "Computer Systems Design and Related Services", code: "5415", industries: [{ name: "Custom Computer Programming Services", code: "541511" }, { name: "Computer Systems Design Services", code: "541512" }, { name: "Computer Facilities Management Services", code: "541513" }] },
+      { name: "Management, Scientific, and Technical Consulting Services", code: "5416", industries: [{ name: "Management Consulting Services", code: "54161" }, { name: "Environmental Consulting Services", code: "541620" }] },
+      { name: "Advertising, Public Relations, and Related Services", code: "5418", industries: [{name: "Advertising Agencies", code: "541810"}, {name: "Public Relations Agencies", code: "541820"}] },
     ]
   },
   {
     name: "Management of Companies and Enterprises", code: "55", description: "Establishments that hold the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions.",
     subSectors: [
-      { name: "Management of Companies and Enterprises", code: "551", industries: [{ name: "Offices of Bank Holding Companies", code: "551111" }, { name: "Offices of Other Holding Companies", code: "551112" }] },
+      { name: "Management of Companies and Enterprises", code: "5511", industries: [{ name: "Offices of Bank Holding Companies", code: "551111" }, { name: "Offices of Other Holding Companies", code: "551112" }] },
     ]
   },
   {
     name: "Administrative and Support and Waste Management and Remediation Services", code: "56", description: "Establishments performing routine support activities for the day-to-day operations of other organizations or managing waste.",
     subSectors: [
-      { name: "Administrative and Support Services", code: "561", industries: [{ name: "Office Administrative Services", code: "5611" }, { name: "Facilities Support Services", code: "5612" }, { name: "Employment Services", code: "5613" }, { name: "Investigation and Security Services", code: "5616" }] },
-      { name: "Waste Management and Remediation Services", code: "562", industries: [{ name: "Waste Collection", code: "5621" }, { name: "Waste Treatment and Disposal", code: "5622" }, { name: "Remediation and Other Waste Management Services", code: "5629" }] },
+      { name: "Administrative and Support Services", code: "561", industries: [{ name: "Office Administrative Services", code: "561110" }, { name: "Facilities Support Services", code: "561210" }, { name: "Employment Services", code: "5613" }, { name: "Investigation and Security Services", code: "5616" }, {"name": "Document Preparation Services", code: "561410"}, {"name": "Travel Arrangement and Reservation Services", code: "5615"}] },
+      { name: "Waste Management and Remediation Services", code: "562", industries: [{ name: "Waste Collection", code: "56211" }, { name: "Waste Treatment and Disposal", code: "56221" }, { name: "Remediation Services", code: "562910" }] },
     ]
   },
   {
     name: "Educational Services", code: "61", description: "Establishments that provide instruction and training in a wide variety of subjects.",
     subSectors: [
-      { name: "Elementary and Secondary Schools", code: "611", industries: [{ name: "Elementary and Secondary Schools", code: "6111" }] },
-      { name: "Junior Colleges", code: "611", industries: [{ name: "Junior Colleges", code: "6112" }] },
-      { name: "Colleges, Universities, and Professional Schools", code: "611", industries: [{ name: "Colleges, Universities, and Professional Schools", code: "6113" }] },
-      { name: "Other Schools and Instruction", code: "611", industries: [{ name: "Business and Secretarial Schools", code: "611410" }, { name: "Fine Arts Schools", code: "611610" }] },
+      { name: "Elementary and Secondary Schools", code: "6111", industries: [{ name: "Elementary and Secondary Schools", code: "611110" }] },
+      { name: "Junior Colleges", code: "6112", industries: [{ name: "Junior Colleges", code: "611210" }] },
+      { name: "Colleges, Universities, and Professional Schools", code: "6113", industries: [{ name: "Colleges, Universities, and Professional Schools", code: "611310" }] },
+      { name: "Other Schools and Instruction", code: "6116", industries: [{ name: "Fine Arts Schools", code: "611610" }, { name: "Sports and Recreation Instruction", code: "611620" }, { name: "Language Schools", code: "611630"}] },
     ]
   },
   {
     name: "Health Care and Social Assistance", code: "62", description: "Establishments providing health care and social assistance for individuals.",
     subSectors: [
-      { name: "Ambulatory Health Care Services", code: "621", industries: [{ name: "Offices of Physicians", code: "6211" }, { name: "Offices of Dentists", code: "6212" }, { name: "Medical and Diagnostic Laboratories", code: "6215" }] },
-      { name: "Hospitals", code: "622", industries: [{ name: "General Medical and Surgical Hospitals", code: "6221" }, { name: "Psychiatric and Substance Abuse Hospitals", code: "6222" }] },
-      { name: "Nursing and Residential Care Facilities", code: "623", industries: [{ name: "Nursing Care Facilities (Skilled Nursing Facilities)", code: "6231" }, { name: "Residential Intellectual and Developmental Disability, Mental Health, and Substance Abuse Facilities", code: "6232" }] },
+      { name: "Ambulatory Health Care Services", code: "621", industries: [{ name: "Offices of Physicians", code: "6211" }, { name: "Offices of Dentists", code: "621210" }, { name: "Offices of Other Health Practitioners", code: "6213" }, { name: "Medical and Diagnostic Laboratories", code: "62151" }] },
+      { name: "Hospitals", code: "622", industries: [{ name: "General Medical and Surgical Hospitals", code: "622110" }, { name: "Psychiatric and Substance Abuse Hospitals", code: "622210" }] },
+      { name: "Nursing and Residential Care Facilities", code: "623", industries: [{ name: "Nursing Care Facilities (Skilled Nursing Facilities)", code: "623110" }, { name: "Residential Intellectual and Developmental Disability, Mental Health, and Substance Abuse Facilities", code: "6232" }] },
       { name: "Social Assistance", code: "624", industries: [{ name: "Individual and Family Services", code: "6241" }, { name: "Community Food and Housing, and Emergency and Other Relief Services", code: "6242" }] },
     ]
   },
   {
     name: "Arts, Entertainment, and Recreation", code: "71", description: "Establishments that operate facilities or provide services to meet varied cultural, entertainment, and recreational interests.",
     subSectors: [
-      { name: "Performing Arts, Spectator Sports, and Related Industries", code: "711", industries: [{ name: "Performing Arts Companies", code: "7111" }, { name: "Spectator Sports", code: "7112" }, { name: "Promoters of Performing Arts, Sports, and Similar Events", code: "7113" }] },
-      { name: "Museums, Historical Sites, and Similar Institutions", code: "712", industries: [{ name: "Museums, Historical Sites, and Similar Institutions", code: "7121" }] },
-      { name: "Amusement, Gambling, and Recreation Industries", code: "713", industries: [{ name: "Amusement Parks and Arcades", code: "7131" }, { name: "Gambling Industries", code: "7132" }, { name: "Other Amusement and Recreation Industries", code: "7139" }] },
+      { name: "Performing Arts, Spectator Sports, and Related Industries", code: "711", industries: [{ name: "Performing Arts Companies", code: "7111" }, { name: "Spectator Sports", code: "7112" }, { name: "Promoters of Performing Arts, Sports, and Similar Events", code: "7113" }, {"name": "Agents and Managers for Artists, Athletes, Entertainers, and Other Public Figures", code: "711410"}] },
+      { name: "Museums, Historical Sites, and Similar Institutions", code: "712", industries: [{ name: "Museums", code: "712110" }, {"name": "Historical Sites", code: "712120"}] },
+      { name: "Amusement, Gambling, and Recreation Industries", code: "713", industries: [{ name: "Amusement Parks and Arcades", code: "7131" }, { name: "Gambling Industries", code: "7132" }, { name: "Other Amusement and Recreation Industries (except Gambling)", code: "7139" }] },
     ]
   },
   {
     name: "Accommodation and Food Services", code: "72", description: "Establishments providing customers with lodging and/or preparing meals, snacks, and beverages for immediate consumption.",
     subSectors: [
-      { name: "Accommodation", code: "721", industries: [{ name: "Traveler Accommodation", code: "7211" }, { name: "RV (Recreational Vehicle) Parks and Recreational Camps", code: "7212" }, { name: "Rooming and Boarding Houses, Dormitories, and Workers' Camps", code: "7213" }] },
-      { name: "Food Services and Drinking Places", code: "722", industries: [{ name: "Full-Service Restaurants", code: "722511" }, { name: "Limited-Service Restaurants", code: "722513" }, { name: "Special Food Services", code: "7223" }, { name: "Drinking Places (Alcoholic Beverages)", code: "7224" }] },
+      { name: "Accommodation", code: "721", industries: [{ name: "Hotels (except Casino Hotels) and Motels", code: "721110" }, { name: "RV (Recreational Vehicle) Parks and Recreational Camps", code: "721211" }, { name: "Rooming and Boarding Houses, Dormitories, and Workers' Camps", code: "721310" }] },
+      { name: "Food Services and Drinking Places", code: "722", industries: [{ name: "Full-Service Restaurants", code: "722511" }, { name: "Limited-Service Restaurants", code: "722513" }, { name: "Cafeterias, Grill Buffets, and Buffets", code: "722514"}, { name: "Snack and Nonalcoholic Beverage Bars", code: "722515"}, { name: "Food Service Contractors", code: "722310" }, { name: "Caterers", code: "722320" }, { name: "Drinking Places (Alcoholic Beverages)", code: "722410" }] },
     ]
   },
   {
     name: "Other Services (except Public Administration)", code: "81", description: "Establishments engaged in providing services not elsewhere classified.",
     subSectors: [
-      { name: "Repair and Maintenance", code: "811", industries: [{ name: "Automotive Repair and Maintenance", code: "8111" }, { name: "Electronic and Precision Equipment Repair and Maintenance", code: "8112" }, { name: "Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance", code: "8113" }] },
-      { name: "Personal and Laundry Services", code: "812", industries: [{ name: "Personal Care Services", code: "8121" }, { name: "Drycleaning and Laundry Services", code: "8123" }, { name: "Other Personal Services", code: "8129" }] },
-      { name: "Religious, Grantmaking, Civic, Professional, and Similar Organizations", code: "813", industries: [{ name: "Religious Organizations", code: "8131" }, { name: "Grantmaking and Giving Services", code: "8132" }, { name: "Social Advocacy Organizations", code: "8133" }] },
+      { name: "Repair and Maintenance", code: "811", industries: [{ name: "Automotive Repair and Maintenance", code: "8111" }, { name: "Electronic and Precision Equipment Repair and Maintenance", code: "81121" }, { name: "Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance", code: "811310" }] },
+      { name: "Personal and Laundry Services", code: "812", industries: [{ name: "Personal Care Services (e.g., hair, skin, nail)", code: "8121" }, { name: "Drycleaning and Laundry Services", code: "8123" }, { name: "Other Personal Services (e.g., pet care, photofinishing)", code: "8129" }] },
+      { name: "Religious, Grantmaking, Civic, Professional, and Similar Organizations", code: "813", industries: [{ name: "Religious Organizations", code: "813110" }, { name: "Grantmaking and Giving Services", code: "8132" }, { name: "Social Advocacy Organizations", code: "8133" }, {"name": "Business Associations", code: "813910"}] },
     ]
   },
   {
     name: "Public Administration", code: "92", description: "Establishments of federal, state, and local government agencies that administer, oversee, and manage public programs.",
     subSectors: [
-      { name: "Executive, Legislative, and Other General Government Support", code: "921", industries: [{ name: "Executive Offices", code: "921110" }, { name: "Legislative Bodies", code: "921120" }] },
-      { name: "Justice, Public Order, and Safety Activities", code: "922", industries: [{ name: "Courts", code: "922110" }, { name: "Police Protection", code: "922120" }, { name: "Correctional Institutions", code: "922140" }] },
+      { name: "Executive, Legislative, and Other General Government Support", code: "921", industries: [{ name: "Executive Offices", code: "921110" }, { name: "Legislative Bodies", code: "921120" }, { name: "Public Finance Activities", code: "921130"}] },
+      { name: "Justice, Public Order, and Safety Activities", code: "922", industries: [{ name: "Courts", code: "922110" }, { name: "Police Protection", code: "922120" }, { name: "Correctional Institutions", code: "922140" }, {"name": "Fire Protection", code: "922160"}] },
       { name: "National Security and International Affairs", code: "928", industries: [{ name: "National Security", code: "928110" }, { name: "International Affairs", code: "928120" }] },
     ]
   },
@@ -382,6 +550,26 @@ export const formSectors = detailedSectorsData.map(sector => ({
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
+
+const DynamicCreatePostForm = dynamic(() =>
+  import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
+  { loading: () => <p>Loading form...</p> }
+);
+
+const DynamicRequestHelpForm = dynamic(() =>
+  import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm), // Use CreatePostForm for help requests too
+  { loading: () => <p>Loading form...</p> }
+);
+
+const DynamicThemeToggle = dynamic(() =>
+  import('@/components/ThemeToggle').then((mod) => mod.ThemeToggle),
+  { loading: () => <DropdownMenuItem disabled>Theme...</DropdownMenuItem> }
+);
+
+const DynamicNotificationDropdown = dynamic(() =>
+  import('@/components/notifications/NotificationDropdown').then((mod) => mod.NotificationDropdown),
+  { loading: () => <Button variant="ghost" size="icon" className="h-8 w-8" disabled><Bell className="h-5 w-5" /></Button> }
+);
 
 
 export default function MainLayout({
@@ -405,6 +593,27 @@ export default function MainLayout({
   const queryClient = useQueryClient();
 
   useEffect(() => {
+    const setVisualViewportHeight = () => {
+      if (typeof window !== 'undefined') {
+        const vh = window.innerHeight * 0.01;
+        document.documentElement.style.setProperty('--vh-dynamic', `${vh}px`);
+      }
+    };
+    if (isMobile) {
+      setVisualViewportHeight();
+      window.addEventListener('resize', setVisualViewportHeight);
+      window.addEventListener('orientationchange', setVisualViewportHeight);
+    }
+    return () => {
+      if (isMobile) {
+        window.removeEventListener('resize', setVisualViewportHeight);
+        window.removeEventListener('orientationchange', setVisualViewportHeight);
+      }
+    };
+  }, [isMobile]);
+
+
+  useEffect(() => {
     if (isCreatePostOpen) setIsCreatePostOpen(false);
     if (isRequestHelpDialogOpen) setIsRequestHelpDialogOpen(false);
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -416,6 +625,7 @@ export default function MainLayout({
       imageFile?: File | null | undefined; mentionedUserIds?: string[]
     }) => {
       if (!user) {
+        console.error("[MainLayout] addPostMutation: User not authenticated.");
         throw new Error("User not authenticated to create post.");
       }
       let uploadedImageUrls: string[] = [];
@@ -431,7 +641,7 @@ export default function MainLayout({
           uploadedImageUrls.push(singleUploadedUrl);
         } catch (uploadError) {
           console.error("[MainLayout] Image upload failed in mutationFn:", uploadError);
-          throw uploadError; 
+          throw uploadError;
         }
       } else {
         console.log("[MainLayout] No image file to upload.");
@@ -440,10 +650,14 @@ export default function MainLayout({
       const finalImageUrls = uploadedImageUrls.length > 0 ? uploadedImageUrls : [];
       const { imageFile, ...postDataForFirestoreBase } = newPostDataWithImage;
 
+      const mentionedUserIds = Array.isArray(newPostDataWithImage.mentionedUserIds) ? newPostDataWithImage.mentionedUserIds : [];
+
+
       const postDataForFirestore: NewPostData = {
         ...postDataForFirestoreBase,
         imageUrls: finalImageUrls,
-        mentionedUserIds: newPostDataWithImage.mentionedUserIds || [],
+        mentionedUserIds: mentionedUserIds,
+        requestType: postDataForFirestoreBase.requestType || 'post',
       };
 
       console.log("[MainLayout] Data for Firestore (addPostMutation):", JSON.stringify(postDataForFirestore, null, 2));
@@ -465,7 +679,7 @@ export default function MainLayout({
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
         console.log(`[MainLayout] Post/Request created, triggering notifications for ${variables.mentionedUserIds.length} mentions.`);
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) { 
+          if (mentionedUid !== user.uid) {
             try {
               await createNotification({
                 userId: mentionedUid,
@@ -493,71 +707,77 @@ export default function MainLayout({
     },
   });
 
-  const handleAddPost = (formData: CreatePostFormData) => {
-    if (!user) {
-      toast({
-        variant: "destructive",
-        title: "Authentication Required",
-        description: "You must be logged in to create a post.",
-      });
-      return;
-    }
+  const handleAddPost = useCallback(
+    (formData: CreatePostFormData) => {
+      if (!user) {
+        toast({
+          variant: "destructive",
+          title: "Authentication Required",
+          description: "You must be logged in to create a post.",
+        });
+        return;
+      }
 
-    const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
-    const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
-    const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
+      const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
+      const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
+      const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
 
-    const newPostDataForService: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
-      question: formData.question,
-      description: formData.description,
-      tags: formData.tags || [],
-      sector: mainSectorDetails?.name || formData.sector,
-      subSector: subSectorDetails?.name || formData.subSector,
-      industry: industryDetails?.name || formData.industry,
-      naicsCode: formData.industry || formData.subSector || formData.sector,
-      userId: user.uid,
-      businessType: "Startup", 
-      safetyIndicator: "Medium", 
-      ratingScore: Math.floor(Math.random() * 3) + 3, 
-      imageFile: formData.imageFile,
-      imageUrls: [], 
-      mentionedUserIds: formData.mentionedUserIds || [],
-      requestType: 'post', 
-    };
+      const newPostDataForService: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
+        question: formData.question,
+        description: formData.description,
+        tags: formData.tags || [],
+        sector: mainSectorDetails?.name || formData.sector,
+        subSector: subSectorDetails?.name || formData.subSector,
+        industry: industryDetails?.name || formData.industry,
+        naicsCode: formData.industry || formData.subSector || formData.sector,
+        userId: user.uid,
+        businessType: "Startup",
+        safetyIndicator: "Medium",
+        ratingScore: Math.floor(Math.random() * 3) + 3,
+        imageFile: formData.imageFile,
+        imageUrls: [],
+        mentionedUserIds: formData.mentionedUserIds || [],
+        requestType: 'post',
+      };
 
-    console.log("[MainLayout] Calling addPostMutation.mutate with (regular post):", newPostDataForService);
-    addPostMutation.mutate(newPostDataForService);
-  };
+      console.log("[MainLayout] Calling addPostMutation.mutate with (regular post):", newPostDataForService);
+      addPostMutation.mutate(newPostDataForService);
+    },
+    [user, toast, addPostMutation, queryClient]
+  );
 
-  const handleRequestHelpSubmit = (formData: CreatePostFormData) => {
-    if (!user) {
-      toast({ variant: "destructive", title: "Authentication Required" });
-      return;
-    }
-    const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
-    const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
-    const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
+  const handleRequestHelpSubmit = useCallback(
+    (formData: CreatePostFormData) => {
+      if (!user) {
+        toast({ variant: "destructive", title: "Authentication Required" });
+        return;
+      }
+      const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
+      const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
+      const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
 
-    const newHelpRequestData: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
-      question: formData.question,
-      description: formData.description,
-      tags: formData.tags || [],
-      sector: mainSectorDetails?.name || formData.sector,
-      subSector: subSectorDetails?.name || formData.subSector,
-      industry: industryDetails?.name || formData.industry,
-      naicsCode: formData.industry || formData.subSector || formData.sector,
-      userId: user.uid,
-      businessType: "Project", 
-      safetyIndicator: "Medium",
-      ratingScore: 0, 
-      imageFile: formData.imageFile,
-      imageUrls: [],
-      mentionedUserIds: formData.mentionedUserIds || [],
-      requestType: 'help_request', 
-    };
-    console.log("[MainLayout] Calling addHelpRequestMutation (same as addPostMutation) with (help request):", newHelpRequestData);
-    addPostMutation.mutate(newHelpRequestData); 
-  };
+      const newHelpRequestData: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
+        question: formData.question,
+        description: formData.description,
+        tags: formData.tags || [],
+        sector: mainSectorDetails?.name || formData.sector,
+        subSector: subSectorDetails?.name || formData.subSector,
+        industry: industryDetails?.name || formData.industry,
+        naicsCode: formData.industry || formData.subSector || formData.sector,
+        userId: user.uid,
+        businessType: "Project",
+        safetyIndicator: "Medium",
+        ratingScore: 0,
+        imageFile: formData.imageFile,
+        imageUrls: [],
+        mentionedUserIds: formData.mentionedUserIds || [],
+        requestType: 'help_request',
+      };
+      console.log("[MainLayout] Calling addPostMutation (as addHelpRequestMutation) with (help request):", newHelpRequestData);
+      addPostMutation.mutate(newHelpRequestData);
+    },
+    [user, toast, addPostMutation, queryClient]
+  );
 
 
   const handleLogout = async () => {
@@ -578,182 +798,198 @@ export default function MainLayout({
     }
   };
 
+  const rootLayoutClasses = cn(
+    "flex flex-col",
+    isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen",
+    "bg-background"
+  );
+
+  const hideAppChrome = isMobile && pathname === '/contracts';
+
+
   return (
-    <div className="flex flex-col min-h-screen bg-background">
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
-          <div className="mr-4 hidden md:flex">
-            <Link href="/" className="mr-6 flex items-center space-x-2">
-              <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
-                AnonyCollab
-              </span>
-            </Link>
-            <nav className="flex items-center gap-4 text-sm lg:gap-6">
-              {navItems.map((item) => (
-                <Link
-                  key={item.title}
-                  href={item.href}
-                  className={cn(
-                    "transition-colors hover:text-foreground/80 flex items-center",
-                    pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
-                  )}
-                >
-                  <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
-                  {item.title}
-                </Link>
-              ))}
-            </nav>
+    <div className={rootLayoutClasses}>
+      {!hideAppChrome && (
+        <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+            <div className="mr-4 hidden md:flex">
+              <Link href="/" className="mr-6 flex items-center space-x-2">
+                <Factory className="h-6 w-6 text-primary" />
+                <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
+                  AnonyCollab
+                </span>
+              </Link>
+              <nav className="flex items-center gap-4 text-sm lg:gap-6">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.title}
+                    href={item.href}
+                    className={cn(
+                      "transition-colors hover:text-foreground/80 flex items-center",
+                      pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
+                    )}
+                  >
+                    <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
+                    {item.title}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+            <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+              {user && (
+                <>
+                  <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
+                      <DialogTrigger asChild>
+                          <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                          <PlusCircle className="mr-2 h-4 w-4" />
+                          Create Post
+                          </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                          <DialogHeader className="p-6 pb-4 border-b">
+                          <DialogTitle>Create a New Post</DialogTitle>
+                          <DialogDescription>
+                              Share your question or need with the community. Keep it anonymous.
+                          </DialogDescription>
+                          </DialogHeader>
+                          <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                          {isCreatePostOpen && user && (
+                              <DynamicCreatePostForm
+                                  onSubmit={handleAddPost}
+                                  availableTags={availableTags}
+                                  detailedSectorsData={detailedSectorsData}
+                                  isSubmitting={addPostMutation.isPending && addPostMutation.variables?.requestType === 'post'}
+                                  currentUserId={user.uid}
+                              />
+                          )}
+                          </div>
+                      </DialogContent>
+                  </Dialog>
+
+                  <Dialog open={isRequestHelpDialogOpen} onOpenChange={setIsRequestHelpDialogOpen}>
+                      <DialogTrigger asChild>
+                          <Button variant="secondary" size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
+                            <Handshake className="mr-2 h-4 w-4" />
+                            Request Help
+                          </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                          <DialogHeader className="p-6 pb-4 border-b">
+                          <DialogTitle>Request Assistance</DialogTitle>
+                          <DialogDescription>
+                              Describe the help you need. This will be posted to the board.
+                          </DialogDescription>
+                          </DialogHeader>
+                          <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                          {isRequestHelpDialogOpen && user && (
+                              <DynamicRequestHelpForm // Changed to DynamicCreatePostForm as per previous logic
+                                  onSubmit={handleRequestHelpSubmit}
+                                  availableTags={availableTags}
+                                  detailedSectorsData={detailedSectorsData}
+                                  isSubmitting={addPostMutation.isPending && addPostMutation.variables?.requestType === 'help_request'}
+                                  currentUserId={user.uid}
+                              />
+                          )}
+                          </div>
+                      </DialogContent>
+                  </Dialog>
+                </>
+              )}
+
+              {user ? (
+                <div className="flex items-center gap-2">
+                  {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName || user.email || "User"} />
+                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                            {getInitials(user.displayName || user.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel className="font-normal">
+                        <div className="flex flex-col space-y-1">
+                          <p className="text-sm font-medium leading-none">{user.displayName || 'User'}</p>
+                          <p className="text-xs leading-none text-muted-foreground">
+                            {user.email}
+                          </p>
+                        </div>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                        <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer">
+                          <User className="mr-2 h-4 w-4" />
+                          <span>Profile</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                        <Link href="/subscription" className="w-full cursor-pointer">
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          <span>Subscription</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
+                        <Link href="/settings/profile" className="w-full cursor-pointer">
+                          <Settings className="mr-2 h-4 w-4" />
+                          <span>Settings</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DynamicThemeToggle />
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        <span>Log out</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/login">Login</Link>
+                  </Button>
+                  <Button variant="default" size="sm" asChild>
+                    <Link href="/signup">Sign Up</Link>
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-          <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
-            {user && (
-              <>
-                <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                      <PlusCircle className="mr-2 h-4 w-4" />
-                      Create Post
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                    <DialogHeader className="p-6 pb-4 border-b">
-                      <DialogTitle>Create a New Post</DialogTitle>
-                      <DialogDescription>
-                        Share your question or need with the community. Keep it anonymous.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                      {isCreatePostOpen && (
-                        <CreatePostForm
-                          onSubmit={handleAddPost}
-                          availableTags={availableTags}
-                          detailedSectorsData={detailedSectorsData}
-                          isSubmitting={addPostMutation.isPending && addPostMutation.variables?.requestType === 'post'}
-                          currentUserId={user.uid}
-                        />
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
+        </header>
+      )}
 
-                <Dialog open={isRequestHelpDialogOpen} onOpenChange={setIsRequestHelpDialogOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="secondary" size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
-                      <Handshake className="mr-2 h-4 w-4" />
-                      Request Help
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                    <DialogHeader className="p-6 pb-4 border-b">
-                      <DialogTitle>Request Assistance</DialogTitle>
-                      <DialogDescription>
-                        Describe the help you need. This will be posted to the board.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                      {isRequestHelpDialogOpen && (
-                        <CreatePostForm 
-                          onSubmit={handleRequestHelpSubmit}
-                          availableTags={availableTags}
-                          detailedSectorsData={detailedSectorsData}
-                          isSubmitting={addPostMutation.isPending && addPostMutation.variables?.requestType === 'help_request'}
-                          currentUserId={user.uid}
-                        />
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </>
-            )}
-
-            {user ? (
-              <div className="flex items-center gap-2">
-                {user.uid && <NotificationDropdown userId={user.uid} />}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName ?? "User"} />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                          {getInitials(user.displayName || user.email)}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel className="font-normal">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">{user.displayName || 'User'}</p>
-                        <p className="text-xs leading-none text-muted-foreground">
-                          {user.email}
-                        </p>
-                      </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
-                      <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer">
-                        <User className="mr-2 h-4 w-4" />
-                        <span>Profile</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
-                      <Link href="/subscription" className="w-full cursor-pointer">
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        <span>Subscription</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
-                      <Link href="/settings/profile" className="w-full cursor-pointer">
-                        <Settings className="mr-2 h-4 w-4" />
-                        <span>Settings</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <ThemeToggle />
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Log out</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/login">Login</Link>
-                </Button>
-                <Button variant="default" size="sm" asChild>
-                  <Link href="/signup">Sign Up</Link>
-                </Button>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
-
-      <main className="flex-1 flex flex-col pb-14 md:pb-0"> {/* Ensure main can grow and provide height context */}
+      <main className={cn(
+        "flex-1 flex flex-col",
+        hideAppChrome ? "h-full" : (isMobile ? "pb-14" : "pb-0")
+      )}>
         {children}
       </main>
 
-      {/* Bottom Navigation for Mobile */}
-      <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border md:hidden h-14">
-        <div className="container mx-auto flex justify-around items-center h-full">
-          {navItems.map((item) => (
-            <Link
-              key={`mobile-${item.title}`}
-              href={item.href}
-              className={cn(
-                "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
-                pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
-              )}
-            >
-              <item.icon className="h-5 w-5 mb-0.5" />
-              <span>{item.title}</span>
-            </Link>
-          ))}
-        </div>
-      </nav>
+      {!hideAppChrome && isMobile && (
+            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border md:hidden h-14">
+                <div className="container mx-auto flex justify-around items-center h-full">
+                {navItems.map((item) => (
+                    <Link
+                    key={`mobile-${item.title}`}
+                    href={item.href}
+                    className={cn(
+                        "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
+                        pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
+                    )}
+                    >
+                    <item.icon className="h-5 w-5 mb-0.5" />
+                    <span>{item.title}</span>
+                    </Link>
+                ))}
+                </div>
+            </nav>
+        )}
 
-      {!isMobile && (
+       {!hideAppChrome && !isMobile && (
           <footer className="py-4 border-t mt-auto">
             <div className="container mx-auto text-center text-sm text-muted-foreground">
               © {new Date().getFullYear()} AnonyCollab. All rights reserved.
