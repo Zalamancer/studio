@@ -39,8 +39,9 @@ import { Input } from "@/components/ui/input";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Import Tabs
 import { cn } from "@/lib/utils";
-import { Loader2, Trash2, HandHelping, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, Trash, DollarSign, CalendarDays, Heart, Sparkles, AtSign, UserCircle, CornerDownRight, HelpingHand } from "lucide-react";
+import { Loader2, Trash2, HandHelping, FileText, Network, Home, Eye, Building, Link2, MessageCircle, Send, CornerDownRight, Trash, DollarSign, CalendarDays, Heart, Sparkles, AtSign, UserCircle, Briefcase, Lightbulb, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { Post } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
@@ -55,18 +56,16 @@ import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData
 import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { availableTags } from '@/components/layout/MainLayout';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils'; 
+import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 
 const IS_UID_REGEX_PAGE = /^[a-zA-Z0-9]{20,}$/;
 
-// Use the shared getInitials
 const getInitials = (displayNameOrUid: string | undefined | null): string => {
     return getSharedInitials(displayNameOrUid);
 };
 
-
 const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: string, mentionedUserIds?: string[] }) => {
-    const { data: mentionProfilesMap = new Map<string, UserProfileBasic | null>(), isLoading: isLoadingMentions } = useQuery<Map<string, UserProfileBasic | null>>({
+    const { data: mentionProfilesMap = new Map<string, UserProfileBasic | null>() } = useQuery<Map<string, UserProfileBasic | null>>({
         queryKey: ['mentionProfiles', mentionedUserIds.join(',')],
         queryFn: async () => {
             const profiles = new Map<string, UserProfileBasic | null>();
@@ -81,14 +80,14 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
                         profiles.set(userId, profile);
                     } catch (error) {
                         console.error(`[TextWithMentions] Error fetching profile for UID ${userId}:`, error);
-                        profiles.set(userId, null); 
+                        profiles.set(userId, null);
                     }
                 })
             );
             return profiles;
         },
         enabled: mentionedUserIds && mentionedUserIds.length > 0 && mentionedUserIds.some(id => id && IS_UID_REGEX_PAGE.test(id)),
-        staleTime: 5 * 60 * 1000, 
+        staleTime: 5 * 60 * 1000,
     });
 
     const renderableParts: (string | JSX.Element)[] = [];
@@ -97,13 +96,12 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
     if (typeof text !== 'string') {
         return <>{text}</>;
     }
-    
-    // Regex to find @ColorAnimalNumber format or @UID format
+
     const mentionRegexGlobal = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,})/g;
 
     for (const match of text.matchAll(mentionRegexGlobal)) {
-        const mentionWithAt = match[0]; 
-        const textualMention = match[1]; // e.g., "BlueWhale123" or a UID
+        const mentionWithAt = match[0];
+        const textualMention = match[1];
         const startIndex = match.index!;
 
         if (startIndex > lastIndex) {
@@ -112,20 +110,18 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
 
         let profileToLink: UserProfileBasic | null | undefined = undefined;
 
-        if (mentionProfilesMap.size > 0 && mentionedUserIds.length > 0) {
-            if (IS_UID_REGEX_PAGE.test(textualMention) && mentionProfilesMap.has(textualMention)) {
-                profileToLink = mentionProfilesMap.get(textualMention);
-            } else {
-                const textualMentionLower = textualMention.toLowerCase();
-                for (const profile of mentionProfilesMap.values()) {
-                    if (profile && profile.mentionName?.toLowerCase() === textualMentionLower) {
-                        profileToLink = profile;
-                        break;
-                    }
+        if (IS_UID_REGEX_PAGE.test(textualMention)) { // If @mention is a UID
+            profileToLink = mentionProfilesMap.get(textualMention);
+        } else { // If @mention is a ColorAnimalNumber
+            const textualMentionLower = textualMention.toLowerCase();
+            for (const profile of mentionProfilesMap.values()) {
+                if (profile && profile.mentionName?.toLowerCase() === textualMentionLower) {
+                    profileToLink = profile;
+                    break;
                 }
             }
         }
-
+        
         if (profileToLink && profileToLink.userId && IS_UID_REGEX_PAGE.test(profileToLink.userId)) {
             renderableParts.push(
                 <Link
@@ -139,10 +135,10 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
             );
         } else {
              renderableParts.push(
-                <span 
-                    key={`unresolved-${startIndex}`} 
-                    className="text-primary cursor-default"
-                    title={`Unresolved mention: ${mentionWithAt}`}
+                <span
+                    key={`unresolved-${startIndex}`}
+                    className="text-primary cursor-pointer" // Make all @mentions look clickable
+                    title={`Mention: ${mentionWithAt}`}
                 >
                     {mentionWithAt}
                 </span>
@@ -154,13 +150,12 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
     if (lastIndex < text.length) {
         renderableParts.push(text.substring(lastIndex));
     }
-
-    return <>{renderableParts}</>;
+    return <>{renderableParts.map((part, index) => <React.Fragment key={index}>{part}</React.Fragment>)}</>;
 });
 TextWithMentions.displayName = 'TextWithMentions';
 
 
-const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void }) => {
+const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: (post: Post) => void }) => {
    const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
     : post.createdAt && typeof post.createdAt === 'object' && 'seconds' in post.createdAt
@@ -174,22 +169,27 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
       <Card
         className={cn(
             "mb-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer break-inside-avoid bg-card",
-            post.requestType === 'help_request' && "border-2 border-amber-500"
+            post.requestType === 'help_request' && "border-2 border-amber-500 ring-1 ring-amber-500"
         )}
-        onClick={onOpen}
+        onClick={() => onOpen(post)}
         aria-label={`View details for post: ${post.question}`}
         tabIndex={0}
-        onKeyDown={(e) => e.key === 'Enter' && onOpen()}
+        onKeyDown={(e) => e.key === 'Enter' && onOpen(post)}
       >
         <CardHeader className="p-4">
-           <div className="flex flex-wrap gap-1 mb-2">
-                {post.requestType === 'help_request' && (
-                    <Badge variant="destructive" className="text-xs cursor-default bg-amber-500 hover:bg-amber-600 text-white">
-                        Help Request
+           <div className="flex flex-wrap items-center gap-2 mb-2">
+                 {post.requestType === 'help_request' && (
+                    <Badge variant="default" className="text-xs cursor-default bg-amber-500 hover:bg-amber-600 text-white">
+                        <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
                     </Badge>
                 )}
+                {post.requestType === 'help_request' && post.paymentAmount && (
+                     <Badge variant="secondary" className="text-xs cursor-default">
+                         <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Offering: ${post.paymentAmount.toLocaleString()}
+                     </Badge>
+                 )}
                 {post.tags?.map((tag, index) => (
-                 <Badge key={`${post.id}-tag-${index}`} variant="secondary" className="text-xs cursor-default">
+                 <Badge key={`${post.id}-tag-${index}`} variant="outline" className="text-xs cursor-default">
                    {tag}
                  </Badge>
                 ))}
@@ -207,11 +207,16 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
                />
              </div>
            )}
-           {post.description && (
+           {post.requestType !== 'help_request' && post.description && (
              <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
                <TextWithMentions text={post.description} mentionedUserIds={post.mentionedUserIds || []} />
              </p>
-          )}
+           )}
+           {post.requestType === 'help_request' && post.descriptionDetails && (
+                <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+                   <TextWithMentions text={post.descriptionDetails} mentionedUserIds={post.mentionedUserIds || []} />
+                </p>
+           )}
            <p className="mt-2 text-xs text-muted-foreground/80">
               Posted: {postDate}
            </p>
@@ -221,7 +226,7 @@ const PostCard = React.memo(({ post, onOpen }: { post: Post, onOpen: () => void 
 });
 PostCard.displayName = 'PostCard';
 
-const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentId, onDelete }: { subComment: ClientSubComment, currentUserId: string | null, postId: string, commentId: string, onDelete: () => void }) => {
+const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentId, onDelete, onStartReply }: { subComment: ClientSubComment, currentUserId: string | null, postId: string, commentId: string, onDelete: () => void, onStartReply: (replyTo: ClientSubComment) => void }) => {
     const { toast } = useToast();
     const queryClient = useQueryClient();
     const { user } = useAuth();
@@ -229,10 +234,10 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
     const [isLiking, setIsLiking] = useState(false);
     const hasLiked = !!(currentUserId && subComment.likedBy?.includes(currentUserId));
     const [isDeleting, setIsDeleting] = useState(false);
-    const displayAnonymousName = subComment.userName || generateAnonymousName(subComment.userId); 
+    const displayAnonymousName = generateAnonymousName(subComment.userId);
 
 
-    const handleDeleteClick = async () => {
+    const handleDeleteClick = useCallback(async () => {
         if (isDeleting) return;
         setIsDeleting(true);
         try {
@@ -240,7 +245,7 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
             toast({ title: "Reply Deleted" });
             onDelete();
         } catch (error: any) {
-            console.error("Error deleting subcomment:", error);
+            console.error("[SubCommentItem] Error deleting subcomment:", error);
             toast({
                 variant: "destructive",
                 title: "Delete Failed",
@@ -249,9 +254,9 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
         } finally {
             setIsDeleting(false);
         }
-    };
+    }, [isDeleting, postId, commentId, subComment.id, toast, onDelete]);
 
-    const handleLikeClick = async () => {
+    const handleLikeClick = useCallback(async () => {
         if (!user || isLiking) return;
         setIsLiking(true);
         const previousSubComments = queryClient.getQueryData<ClientSubComment[]>(['subComments', postId, commentId]);
@@ -275,16 +280,17 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
         try {
             await toggleLikeSubComment(postId, commentId, subComment.id, user.uid);
         } catch (err) {
-            console.error("Error toggling subcomment like:", err);
+            console.error("[SubCommentItem] Error toggling subcomment like:", err);
             toast({ variant: "destructive", title: "Like Failed", description: "Could not update like." });
             if (previousSubComments) {
                 queryClient.setQueryData(['subComments', postId, commentId], previousSubComments);
             }
         } finally {
             setIsLiking(false);
-             queryClient.invalidateQueries({ queryKey: ['subComments', postId, commentId] });
+            queryClient.invalidateQueries({ queryKey: ['subComments', postId, commentId] });
         }
-    };
+    }, [user, isLiking, queryClient, postId, commentId, subComment.id, subComment.likedBy, toast]);
+
 
     return (
         <div key={subComment.id} className="flex items-start gap-2 group">
@@ -381,16 +387,18 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
     const [isReplying, setIsReplying] = useState(false);
     const [isSubmittingReply, setIsSubmittingReply] = useState(false);
     const [isLiking, setIsLiking] = useState(false);
-    
+
     const [mentionQuery, setMentionQuery] = useState('');
     const [debouncedMentionQuery, setDebouncedMentionQuery] = useState('');
     const [showSuggestions, setShowSuggestions] = useState(false);
     const replyInputRef = useRef<HTMLInputElement>(null);
     const suggestionsPopoverRef = useRef<HTMLDivElement>(null);
-    
+    const [replyingToSubComment, setReplyingToSubComment] = useState<ClientSubComment | null>(null);
+
+
     const hasLiked = !!(currentUserId && comment.likedBy?.includes(currentUserId));
     const [isDeleting, setIsDeleting] = useState(false);
-    const displayAnonymousName = generateAnonymousName(comment.userId); // Always use generated name for display
+    const displayAnonymousName = generateAnonymousName(comment.userId);
 
 
     useEffect(() => {
@@ -412,17 +420,15 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         enabled: showReplies,
         staleTime: 1000 * 60 * 1,
     });
-    
+
      const { data: suggestedProfilesForReply = [], isLoading: isLoadingProfilesForReply } = useQuery<UserProfileBasic[]>({
         queryKey: ['suggestibleUsersForReply', comment.id, debouncedMentionQuery, currentUserId],
         queryFn: async () => {
-            console.log(`%c[CommentItem ${comment.id}] suggestibleUsersForReply QueryFn: Fetching with debouncedQuery: "${debouncedMentionQuery}"`, "color: mediumpurple;");
             const users = await getSuggestibleUsers(debouncedMentionQuery, debouncedMentionQuery ? 10 : 25);
-            console.log(`%c[CommentItem ${comment.id}] suggestibleUsersForReply QueryFn: Fetched ${users.length} users.`, "color: mediumpurple;", users.slice(0,5));
             return users;
         },
-        enabled: isReplying && showSuggestions && !!currentUserId, 
-        staleTime: 1000 * 60 * 1, 
+        enabled: isReplying && showSuggestions && !!currentUserId,
+        staleTime: 1000 * 60 * 1,
         retry: 1,
     });
 
@@ -430,23 +436,23 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
      const filteredSuggestionsForReply = useMemo(() => {
         if (!showSuggestions || !isReplying) return [];
         if (isLoadingProfilesForReply) {
-            return [{ userId: 'loading-reply', mentionName: 'loading-reply', displayName: 'Loading users...' } as UserProfileBasic];
+            return [{ userId: 'loading-reply', mentionName: 'loading-reply', actualDisplayName: 'Loading users...' } as UserProfileBasic];
         }
-        
+
         const profilesSource = suggestedProfilesForReply.filter(p => p.userId !== currentUserId && !!p.mentionName);
-        
+
         if (profilesSource.length === 0 && mentionQuery.trim() !== '') {
-            return [{ userId: 'no-match-reply', mentionName:'no-match-reply', displayName: `No users matching "@${mentionQuery}"` } as UserProfileBasic];
+            return [{ userId: 'no-match-reply', mentionName:'no-match-reply', actualDisplayName: `No users matching "@${mentionQuery}"` } as UserProfileBasic];
         }
         if (profilesSource.length === 0) {
-            return [{ userId: 'no-users-reply', mentionName: 'no-users-reply', displayName: 'No users to suggest.' } as UserProfileBasic];
+            return [{ userId: 'no-users-reply', mentionName: 'no-users-reply', actualDisplayName: 'No users to suggest.' } as UserProfileBasic];
         }
-        
+
         return profilesSource;
-    }, [mentionQuery, suggestedProfilesForReply, isLoadingProfilesForReply, showSuggestions, isReplying, currentUserId, comment.id]);
+    }, [mentionQuery, suggestedProfilesForReply, isLoadingProfilesForReply, showSuggestions, isReplying, currentUserId]);
 
 
-    const handleDeleteClick = async () => {
+    const handleDeleteClick = useCallback(async () => {
         if (isDeleting) return;
         setIsDeleting(true);
         try {
@@ -454,7 +460,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
             toast({ title: "Comment Deleted" });
             onDelete();
         } catch (error: any) {
-            console.error("Error deleting comment:", error);
+            console.error("[CommentItem] Error deleting comment:", error);
             toast({
                 variant: "destructive",
                 title: "Delete Failed",
@@ -463,31 +469,27 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         } finally {
             setIsDeleting(false);
         }
-    };
+    },[isDeleting, postId, comment.id, toast, onDelete]);
 
-    const handleReplySubmit = async (e: React.FormEvent) => {
+    const handleReplySubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user || !newReply.trim() || isSubmittingReply) return;
         setIsSubmittingReply(true);
-        
-        const profilesToSearch: UserProfileBasic[] = [...suggestedProfilesForReply];
-        // Add self, original commenter, post author if not already in the list of suggestions
+
+        const profilesToSearch: UserProfileBasic[] = [...(suggestedProfilesForReply || [])];
         const allKnownUserIds = new Set(profilesToSearch.map(p => p.userId));
 
-        if (user && !allKnownUserIds.has(user.uid)) {
-            const currentUserProfile = await fetchUserProfileBasic(user.uid);
-            if (currentUserProfile) { profilesToSearch.push(currentUserProfile); allKnownUserIds.add(user.uid); }
-        }
-        if (!allKnownUserIds.has(comment.userId)) {
-            const originalCommenterProfile = await fetchUserProfileBasic(comment.userId);
-            if(originalCommenterProfile) { profilesToSearch.push(originalCommenterProfile); allKnownUserIds.add(comment.userId); }
-        }
-        const postData = queryClient.getQueryData<Post>(['post', postId]); // This is a RQ query, not Firestore
-        const postAuthorId = postData?.userId;
-        if(postAuthorId && !allKnownUserIds.has(postAuthorId)){
-            const postAuthorProfile = await fetchUserProfileBasic(postAuthorId);
-            if(postAuthorProfile) { profilesToSearch.push(postAuthorProfile); allKnownUserIds.add(postAuthorId); }
-        }
+        const addProfileIfMissing = async (uid: string) => {
+            if (uid && !allKnownUserIds.has(uid)) {
+                const profile = await fetchUserProfileBasic(uid);
+                if (profile) { profilesToSearch.push(profile); allKnownUserIds.add(uid); }
+            }
+        };
+
+        await addProfileIfMissing(user.uid);
+        await addProfileIfMissing(comment.userId);
+        const postData = queryClient.getQueryData<Post>(['post', postId]);
+        if (postData?.userId) await addProfileIfMissing(postData.userId);
 
 
         const mentionedUserUids = await extractMentionedUids(newReply.trim(), profilesToSearch);
@@ -510,7 +512,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                 refetchSubComments();
             }
         } catch (error: any) {
-            console.error("Error adding reply:", error);
+            console.error("[CommentItem] Error adding reply:", error);
             toast({
                 variant: "destructive",
                 title: "Reply Failed",
@@ -519,9 +521,9 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         } finally {
             setIsSubmittingReply(false);
         }
-    };
+    },[user, newReply, isSubmittingReply, suggestedProfilesForReply, postId, comment.id, comment.userId, queryClient, showReplies, refetchSubComments, toast]);
 
-    const handleMentionInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleMentionInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setNewReply(value);
         const cursorPosition = e.target.selectionStart || 0;
@@ -530,7 +532,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
 
         if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
             const currentQuery = textBeforeCursor.substring(lastAtIndex + 1);
-            if (!/\s/.test(currentQuery)) { 
+            if (!/\s/.test(currentQuery)) {
                 setMentionQuery(currentQuery);
                 setShowSuggestions(true);
                 return;
@@ -538,10 +540,10 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         }
         setMentionQuery('');
         setShowSuggestions(false);
-    };
+    },[]);
 
 
-    const handleSelectSuggestion = (profile: UserProfileBasic) => {
+    const handleSelectSuggestion = useCallback((profile: UserProfileBasic) => {
         if (!replyInputRef.current || !profile.mentionName) return;
         const currentValue = newReply;
         const cursorPosition = replyInputRef.current.selectionStart || 0;
@@ -551,9 +553,9 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         if (lastAtIndex > -1) {
             const textBeforeMention = currentValue.substring(0, lastAtIndex);
             const textAfterCursor = currentValue.substring(cursorPosition);
-            const mentionToInsert = profile.mentionName; 
+            const mentionToInsert = profile.mentionName;
             setNewReply(`${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`);
-            
+
             const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
             setTimeout(() => {
                 replyInputRef.current?.focus();
@@ -562,7 +564,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         }
         setShowSuggestions(false);
         setMentionQuery('');
-    };
+    },[newReply]);
 
 
      useEffect(() => {
@@ -585,7 +587,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
          };
      }, [showSuggestions]);
 
-    const handleLikeClick = async () => {
+    const handleLikeClick = useCallback(async () => {
         if (!user || isLiking) return;
         setIsLiking(true);
         const previousComments = queryClient.getQueryData<ClientComment[]>(['comments', postId]);
@@ -607,7 +609,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         try {
             await toggleLikeComment(postId, comment.id, user.uid);
         } catch (err) {
-            console.error("Error toggling like:", err);
+            console.error("[CommentItem] Error toggling like:", err);
             toast({ variant: "destructive", title: "Like Failed", description: "Could not update like." });
             if (previousComments) {
                 queryClient.setQueryData(['comments', postId], previousComments);
@@ -616,11 +618,11 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
             setIsLiking(false);
              queryClient.invalidateQueries({ queryKey: ['comments', postId] });
         }
-    };
-    
+    },[user, isLiking, queryClient, postId, comment.id, comment.likedBy, toast]);
 
-    const toggleShowReplies = () => setShowReplies(prev => !prev);
-    const toggleReplyForm = () => {
+
+    const toggleShowReplies = useCallback(() => setShowReplies(prev => !prev), []);
+    const toggleReplyForm = useCallback(() => {
         setIsReplying(prev => !prev);
         if (!isReplying) {
              setTimeout(() => replyInputRef.current?.focus(), 0);
@@ -628,8 +630,23 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
             setShowSuggestions(false);
             setMentionQuery('');
         }
-    };
-    const handleSubCommentDeleted = () => refetchSubComments();
+    },[isReplying]);
+
+    const handleSubCommentDeleted = useCallback(() => refetchSubComments(), [refetchSubComments]);
+
+    const handleStartSubCommentReply = useCallback((subCommentToReplyTo: ClientSubComment) => {
+        if (!user) return;
+        setIsReplying(true);
+        setNewReply(`@${generateAnonymousName(subCommentToReplyTo.userId)} `);
+        setReplyingToSubComment(subCommentToReplyTo); // Track this if you want to show "Replying to SubComment X"
+        setTimeout(() => {
+            replyInputRef.current?.focus();
+            if (replyInputRef.current) {
+                replyInputRef.current.setSelectionRange(newReply.length, newReply.length);
+            }
+        }, 0);
+    }, [user, setNewReply, setIsReplying, newReply]);
+
 
     return (
         <div className="group border-b border-border/50 pb-4">
@@ -646,7 +663,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                     <div className="flex justify-between items-center mb-1">
                          <Link href={`/profile/${comment.userId}`} passHref>
                              <p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">
-                                 {displayAnonymousName} {/* Always display generated name */}
+                                 {displayAnonymousName}
                              </p>
                          </Link>
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
@@ -760,13 +777,13 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                         onOpenAutoFocus={(e) => e.preventDefault()}
                     >
                          {filteredSuggestionsForReply.map(profile => {
-                             const displayableName = profile.displayName; // actualDisplayName || companyName || mentionName
-                             const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
-                            
+                            const displayableName = profile.actualDisplayName || profile.companyName;
+                            const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
+
                             return (
                                  profile.userId === 'loading-reply' || profile.userId === 'no-users-reply' || profile.userId === 'no-match-reply' ? (
                                     <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
-                                        {profile.displayName}
+                                        {profile.actualDisplayName}
                                     </div>
                                  ) : (
                                     <Button
@@ -815,6 +832,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                                 postId={postId}
                                 commentId={comment.id}
                                 onDelete={handleSubCommentDeleted}
+                                onStartReply={handleStartSubCommentReply}
                             />
                         ))
                     )}
@@ -827,6 +845,7 @@ CommentItem.displayName = 'CommentItem';
 
 function BoardPageContent() {
   const { user, loading: authLoading } = useAuth();
+  const [activeTab, setActiveTab] = useState<string>("recommended");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [newComment, setNewComment] = useState('');
@@ -841,7 +860,7 @@ function BoardPageContent() {
   const [showNewCommentSuggestions, setShowNewCommentSuggestions] = useState(false);
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
-  
+
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -860,29 +879,24 @@ function BoardPageContent() {
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 1, 
+    staleTime: 1000 * 60 * 1,
     refetchOnWindowFocus: true,
-    enabled: !!user, 
+    enabled: !!user,
   });
 
- 
-  useEffect(() => {
-    console.log("[BoardPageContent] useEffect for URL postId. searchParams:", searchParams?.toString());
-    const postIdFromUrl = searchParams?.get('postId');
-    console.log("[BoardPageContent] postIdFromUrl:", postIdFromUrl, "Posts loaded:", posts.length > 0);
 
+  useEffect(() => {
+    const postIdFromUrl = searchParams?.get('postId');
     if (postIdFromUrl && posts.length > 0) {
         const postToOpen = posts.find(p => p.id === postIdFromUrl);
         if (postToOpen) {
-            console.log("[BoardPageContent] Opening post from URL:", postToOpen.id);
             setSelectedPost(postToOpen);
-            router.replace('/', { shallow: true }); 
+            router.replace('/', { shallow: true });
         } else {
-            console.warn("[BoardPageContent] PostId from URL not found:", postIdFromUrl);
-            router.replace('/', { shallow: true }); 
+            router.replace('/', { shallow: true });
         }
     }
-}, [searchParams, posts, router]);
+}, [searchParams, posts, router]); // Removed selectedPost from dependencies
 
 
   const deletePostMutation = useMutation({
@@ -896,7 +910,6 @@ function BoardPageContent() {
       setSelectedPost(null);
     },
     onError: (error: Error) => {
-      console.error("Delete Post Mutation failed:", error);
       toast({
         variant: "destructive",
         title: "Deletion Failed",
@@ -905,7 +918,7 @@ function BoardPageContent() {
     },
   });
 
-  const handleDeletePost = (postId: string | undefined) => {
+  const handleDeletePost = useCallback((postId: string | undefined) => {
     if (!postId) {
       toast({ variant: "destructive", title: "Error", description: "Post ID is missing." });
       return;
@@ -915,9 +928,9 @@ function BoardPageContent() {
       return;
     }
     deletePostMutation.mutate(postId);
-  };
+  },[user, deletePostMutation, toast]);
 
-  const handleOfferHelp = async (postOwnerId: string, postId: string | undefined) => {
+  const handleOfferHelp = useCallback(async (postOwnerId: string, postId: string | undefined) => {
     if (!user) {
       toast({ variant: "destructive", title: "Authentication Required", description: "Please log in to offer help." });
       return;
@@ -933,31 +946,31 @@ function BoardPageContent() {
     try {
       const conversationId = await findOrCreateConversation(user.uid, postOwnerId, postId);
       if (conversationId) {
-        toast({ title: "Conversation Started", description: "Redirecting to Contracts..." });
-        router.push(`/contracts?postId=${postId}&conversationId=${conversationId}`);
+        toast({ title: "Conversation Started", description: "Redirecting to Messages..." });
+        router.push(`/contracts?conversationId=${conversationId}`);
         setSelectedPost(null);
       } else {
         throw new Error("Failed to get conversation ID.");
       }
     } catch (error: any) {
-      console.error("Error starting conversation:", error);
+      console.error("[BoardPageContent] Error starting conversation:", error);
       toast({
         variant: "destructive",
         title: "Failed to Start Conversation",
         description: error.message || "Could not start the conversation. Please try again.",
       });
     }
-  };
+  },[user, router, toast]);
 
-  const handleTagClick = (tag: string) => {
+  const handleTagClick = useCallback((tag: string) => {
     setSelectedTags(prevTags =>
       prevTags.includes(tag)
         ? prevTags.filter(t => t !== tag)
         : [...prevTags, tag]
     );
-  };
+  },[]);
 
-  const filteredPosts = useMemo(() => {
+  const filteredPostsByTags = useMemo(() => {
     if (!Array.isArray(posts)) {
       return [];
     }
@@ -967,13 +980,17 @@ function BoardPageContent() {
           Array.isArray(post.tags) &&
           selectedTags.every(tag => post.tags.includes(tag))
         );
-    
+
     return filtered.sort((a, b) => {
       const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : (typeof a.createdAt === 'object' && a.createdAt && 'seconds' in a.createdAt ? new Timestamp(a.createdAt.seconds, a.createdAt.nanoseconds).toMillis() : (typeof a.createdAt === 'number' ? a.createdAt : 0));
       const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : (typeof b.createdAt === 'object' && b.createdAt && 'seconds' in b.createdAt ? new Timestamp(b.createdAt.seconds, b.createdAt.nanoseconds).toMillis() : (typeof b.createdAt === 'number' ? b.createdAt : 0));
       return timeB - timeA;
     });
   }, [posts, selectedTags]);
+
+  const helpRequestPosts = useMemo(() => filteredPostsByTags.filter(post => post.requestType === 'help_request'), [filteredPostsByTags]);
+  const opportunitiesPosts = useMemo(() => filteredPostsByTags.filter(post => post.requestType === 'post' || !post.requestType), [filteredPostsByTags]);
+
 
   const {
     data: comments = [],
@@ -984,37 +1001,37 @@ function BoardPageContent() {
     queryKey: ['comments', selectedPost?.id],
     queryFn: () => selectedPost?.id ? getCommentsForPost(selectedPost.id) : Promise.resolve([]),
     enabled: !!selectedPost && !!selectedPost.id,
-    staleTime: 1000 * 60 * 1, 
+    staleTime: 1000 * 60 * 1,
     refetchOnWindowFocus: true,
   });
 
   const { data: generalSuggestibleUsers = [], isLoading: isLoadingGeneralSuggestions } = useQuery<UserProfileBasic[]>({
-    queryKey: ['generalSuggestibleUsers', debouncedNewCommentMentionQuery, user?.uid], 
+    queryKey: ['generalSuggestibleUsersForBoard', debouncedNewCommentMentionQuery, user?.uid],
     queryFn: () => getSuggestibleUsers(debouncedNewCommentMentionQuery, debouncedNewCommentMentionQuery ? 10 : 25),
-    enabled: showNewCommentSuggestions && !!user,
-    staleTime: 1000 * 60 * 1, 
+    enabled: !!selectedPost && !!user && showNewCommentSuggestions,
+    staleTime: 1000 * 60 * 1,
     retry: 1,
   });
 
    const filteredNewCommentSuggestions = useMemo(() => {
-    if (!showNewCommentSuggestions) return [];
-    if (isLoadingGeneralSuggestions) {
-        return [{ userId: 'loading-nc', mentionName: 'loading-nc', displayName: 'Loading users...' } as UserProfileBasic];
-    }
-    
-    const profilesSource = generalSuggestibleUsers.filter(p => p.userId !== user?.uid && !!p.mentionName);
+        if (!showNewCommentSuggestions) return [];
+        if (isLoadingGeneralSuggestions) {
+            return [{ userId: 'loading-nc', mentionName: 'loading-nc', actualDisplayName: 'Loading users...' } as UserProfileBasic];
+        }
 
-    if (profilesSource.length === 0 && newCommentMentionQuery.trim() !== '') {
-      return [{ userId: 'no-match-nc', mentionName:'no-match-nc', displayName: `No users matching "@${newCommentMentionQuery}"` } as UserProfileBasic];
-    }
-    if (profilesSource.length === 0) {
-        return [{ userId: 'no-users-nc', mentionName: 'no-users-nc', displayName: 'No users to suggest.' } as UserProfileBasic];
-    }
-    return profilesSource;
+        const profilesSource = generalSuggestibleUsers.filter(p => p.userId !== user?.uid && !!p.mentionName);
+
+        if (profilesSource.length === 0 && newCommentMentionQuery.trim() !== '') {
+          return [{ userId: 'no-match-nc', mentionName:'no-match-nc', actualDisplayName: `No users matching "@${newCommentMentionQuery}"` } as UserProfileBasic];
+        }
+        if (profilesSource.length === 0) {
+            return [{ userId: 'no-users-nc', mentionName: 'no-users-nc', actualDisplayName: 'No users to suggest.' } as UserProfileBasic];
+        }
+        return profilesSource;
    }, [newCommentMentionQuery, generalSuggestibleUsers, isLoadingGeneralSuggestions, showNewCommentSuggestions, user?.uid]);
 
 
-  const handleNewCommentMentionInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleNewCommentMentionInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setNewComment(value);
         const cursorPosition = e.target.selectionStart || 0;
@@ -1030,9 +1047,9 @@ function BoardPageContent() {
         }
         setNewCommentMentionQuery('');
         setShowNewCommentSuggestions(false);
-  };
+  },[]);
 
-  const handleSelectNewCommentSuggestion = (profile: UserProfileBasic) => {
+  const handleSelectNewCommentSuggestion = useCallback((profile: UserProfileBasic) => {
         if (!newCommentInputRef.current || !profile.mentionName) return;
         const currentValue = newComment;
         const cursorPosition = newCommentInputRef.current.selectionStart || 0;
@@ -1042,9 +1059,9 @@ function BoardPageContent() {
         if (lastAtIndex > -1) {
             const textBeforeMention = currentValue.substring(0, lastAtIndex);
             const textAfterCursor = currentValue.substring(cursorPosition);
-            const mentionToInsert = profile.mentionName; 
+            const mentionToInsert = profile.mentionName;
             setNewComment(`${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`);
-            
+
             const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
             setTimeout(() => {
                 newCommentInputRef.current?.focus();
@@ -1053,7 +1070,7 @@ function BoardPageContent() {
         }
         setShowNewCommentSuggestions(false);
         setNewCommentMentionQuery('');
-  };
+  }, [newComment]);
 
    useEffect(() => {
        const handleClickOutside = (event: MouseEvent) => {
@@ -1072,20 +1089,25 @@ function BoardPageContent() {
    }, [showNewCommentSuggestions]);
 
 
-  const handleCommentSubmit = async (e: React.FormEvent) => {
+  const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || !selectedPost || !newComment.trim() || isSubmittingComment) return;
     setIsSubmittingComment(true);
-    
-    const profilesToSearch: UserProfileBasic[] = [...generalSuggestibleUsers]; 
-    if(user && !profilesToSearch.find(p => p.userId === user.uid)) {
-        const currentUserProfile = await fetchUserProfileBasic(user.uid);
-        if(currentUserProfile) profilesToSearch.push(currentUserProfile);
-    }
-    if (selectedPost && selectedPost.userId && !profilesToSearch.find(p => p.userId === selectedPost.userId)) {
-        const postAuthorProfile = await fetchUserProfileBasic(selectedPost.userId);
-        if (postAuthorProfile) profilesToSearch.push(postAuthorProfile);
-    }
+
+    const profilesToSearch: UserProfileBasic[] = [...(generalSuggestibleUsers || [])];
+    const allKnownUserIds = new Set(profilesToSearch.map(p => p.userId));
+
+    const addProfileIfMissing = async (uid: string) => {
+        if (uid && !allKnownUserIds.has(uid)) {
+            const profile = await fetchUserProfileBasic(uid);
+            if (profile) { profilesToSearch.push(profile); allKnownUserIds.add(uid); }
+        }
+    };
+
+    if (user) await addProfileIfMissing(user.uid);
+    if (selectedPost?.userId) await addProfileIfMissing(selectedPost.userId);
+    comments.forEach(c => { if (c.userId) addProfileIfMissing(c.userId); });
+
 
     const finalMentionedUids = await extractMentionedUids(newComment.trim(), profilesToSearch);
 
@@ -1102,7 +1124,7 @@ function BoardPageContent() {
       setShowNewCommentSuggestions(false);
       toast({ title: "Comment Added" });
     } catch (error: any) {
-      console.error("Error submitting comment:", error);
+      console.error("[BoardPageContent] Error submitting comment:", error);
       toast({
         variant: "destructive",
         title: "Comment Failed",
@@ -1111,9 +1133,13 @@ function BoardPageContent() {
     } finally {
       setIsSubmittingComment(false);
     }
-  };
+  },[user, selectedPost, newComment, isSubmittingComment, generalSuggestibleUsers, comments, queryClient, toast]);
 
-  const handleCommentDeleted = () => refetchComments();
+  const handleCommentDeleted = useCallback(() => refetchComments(), [refetchComments]);
+
+  const openPostCallback = useCallback((postToOpen: Post) => {
+    setSelectedPost(postToOpen);
+  }, []);
 
 
   if (authLoading || (isLoadingPosts && !posts?.length && user)) {
@@ -1137,6 +1163,25 @@ function BoardPageContent() {
       </div>
     );
   }
+
+  const renderPosts = (postsToRender: Post[]) => (
+    <div className="masonry-grid">
+      {postsToRender.length > 0 ? (
+        postsToRender.map((post) => (
+          <PostCard key={post.id} post={post} onOpen={openPostCallback} />
+        ))
+      ) : (
+        <div className="col-span-full text-center py-10">
+          <p className="text-muted-foreground">
+            {selectedTags.length > 0
+              ? "No posts found matching the selected tags."
+              : "No posts available in this category yet."
+            }
+          </p>
+        </div>
+      )}
+    </div>
+  );
 
   return (
     <div className="container mx-auto p-4 pt-6">
@@ -1171,35 +1216,45 @@ function BoardPageContent() {
         )}
       </div>
 
-      <div className="masonry-grid">
-        {isLoadingPosts && filteredPosts.length === 0 && user && (
-          <div className="col-span-full text-center py-10 flex justify-center items-center">
-            <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
-            <p className="text-muted-foreground">Loading posts...</p>
-          </div>
-        )}
-        {!isLoadingPosts && postsError && user &&(
-          <div className="col-span-full text-center py-10 text-destructive">
-            <p>Error loading posts.</p>
-          </div>
-        )}
-        {!isLoadingPosts && !postsError && user && filteredPosts.length > 0 ? (
-          filteredPosts.map((post) => (
-            <PostCard key={post.id} post={post} onOpen={() => setSelectedPost(post)} />
-          ))
-        ) : (
-          !isLoadingPosts && !postsError && user && (
-            <div className="col-span-full text-center py-10">
-              <p className="text-muted-foreground">
-                {selectedTags.length > 0
-                  ? "No posts found matching the selected tags."
-                  : "No posts available yet. Be the first to create one!"
-                }
-              </p>
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+        <TabsList className="grid w-full grid-cols-3 mb-6">
+          <TabsTrigger value="recommended" className="flex items-center gap-2">
+            <Sparkles className="h-4 w-4" /> Recommended
+          </TabsTrigger>
+          <TabsTrigger value="help_requests" className="flex items-center gap-2">
+             <HandHelping className="h-4 w-4" /> Help Requests
+          </TabsTrigger>
+          <TabsTrigger value="opportunities" className="flex items-center gap-2">
+             <Briefcase className="h-4 w-4" /> Opportunities
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="recommended">
+          {isLoadingPosts && filteredPostsByTags.length === 0 && user ? (
+            <div className="col-span-full text-center py-10 flex justify-center items-center">
+              <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
+              <p className="text-muted-foreground">Loading posts...</p>
             </div>
-          )
-        )}
-      </div>
+          ) : renderPosts(filteredPostsByTags) /* Shows all posts filtered by tags for now */ }
+        </TabsContent>
+        <TabsContent value="help_requests">
+           {isLoadingPosts && helpRequestPosts.length === 0 && user ? (
+            <div className="col-span-full text-center py-10 flex justify-center items-center">
+              <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
+              <p className="text-muted-foreground">Loading help requests...</p>
+            </div>
+          ) : renderPosts(helpRequestPosts) }
+        </TabsContent>
+        <TabsContent value="opportunities">
+           {isLoadingPosts && opportunitiesPosts.length === 0 && user ? (
+            <div className="col-span-full text-center py-10 flex justify-center items-center">
+              <Loader2 className="h-6 w-6 animate-spin mr-2 text-primary" />
+              <p className="text-muted-foreground">Loading opportunities...</p>
+            </div>
+          ) : renderPosts(opportunitiesPosts) }
+        </TabsContent>
+      </Tabs>
+
 
       <Sheet open={!!selectedPost} onOpenChange={(open) => {
         if (!open) {
@@ -1218,8 +1273,8 @@ function BoardPageContent() {
                     <SheetTitle className="text-xl font-semibold">{selectedPost.question}</SheetTitle>
                      <div className="flex flex-wrap items-center gap-2 pt-1">
                         {selectedPost.requestType === 'help_request' && (
-                            <Badge variant="destructive" className="text-xs bg-amber-500 hover:bg-amber-600 text-white">
-                                Help Request
+                            <Badge variant="default" className="text-xs cursor-default bg-amber-500 hover:bg-amber-600 text-white">
+                                <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
                             </Badge>
                         )}
                         {selectedPost.tags?.map((tag, index) => (
@@ -1262,14 +1317,46 @@ function BoardPageContent() {
                   )}
 
                   <div className="space-y-4 text-sm mb-6">
-                    {selectedPost.description && (
-                      <div>
-                        <strong className="text-foreground">Details:</strong>
-                         <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
-                           <TextWithMentions text={selectedPost.description} mentionedUserIds={selectedPost.mentionedUserIds || []} />
-                         </p>
-                      </div>
-                    )}
+                    {selectedPost.requestType === 'help_request' ? (
+                        <div className="mt-4">
+                            <Tabs defaultValue="details" className="w-full">
+                            <TabsList className="grid w-full grid-cols-3 bg-muted/60 p-1 h-auto rounded-md">
+                                <TabsTrigger value="details" className="text-xs px-2 py-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-sm">Problem Details</TabsTrigger>
+                                <TabsTrigger value="tried" disabled={!selectedPost.descriptionTried} className="text-xs px-2 py-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-sm">What I've Tried</TabsTrigger>
+                                <TabsTrigger value="outcome" disabled={!selectedPost.descriptionOutcome} className="text-xs px-2 py-1.5 data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-sm">Expected Outcome</TabsTrigger>
+                            </TabsList>
+                            <TabsContent value="details" className="mt-2 border rounded-md p-3 bg-card min-h-[100px] text-sm">
+                                {selectedPost.descriptionDetails ? (
+                                <p className="text-muted-foreground whitespace-pre-wrap">
+                                    <TextWithMentions text={selectedPost.descriptionDetails} mentionedUserIds={selectedPost.mentionedUserIds || []} />
+                                </p>
+                                ) : (
+                                <p className="text-muted-foreground italic">No details provided.</p>
+                                )}
+                            </TabsContent>
+                            {selectedPost.descriptionTried && (
+                                <TabsContent value="tried" className="mt-2 border rounded-md p-3 bg-card min-h-[100px] text-sm">
+                                <p className="text-muted-foreground whitespace-pre-wrap">{selectedPost.descriptionTried}</p>
+                                </TabsContent>
+                            )}
+                            {selectedPost.descriptionOutcome && (
+                                <TabsContent value="outcome" className="mt-2 border rounded-md p-3 bg-card min-h-[100px] text-sm">
+                                <p className="text-muted-foreground whitespace-pre-wrap">{selectedPost.descriptionOutcome}</p>
+                                </TabsContent>
+                            )}
+                            </Tabs>
+                        </div>
+                        ) : (
+                        selectedPost.description && (
+                            <div>
+                            <strong className="text-foreground">Details:</strong>
+                            <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
+                                <TextWithMentions text={selectedPost.description} mentionedUserIds={selectedPost.mentionedUserIds || []} />
+                            </p>
+                            </div>
+                        )
+                        )}
+
 
                     <div className="grid grid-cols-1 gap-y-2 mt-4 border-t pt-4">
                        <div>
@@ -1328,16 +1415,16 @@ function BoardPageContent() {
                            <div className="flex items-center gap-1">
                                <CalendarDays className="h-4 w-4 text-muted-foreground" />
                                <strong className="text-foreground">Deadline:</strong>
-                               <span>{new Date(selectedPost.deadline).toLocaleDateString()}</span>
+                               <span>{selectedPost.deadline instanceof Date ? selectedPost.deadline.toLocaleDateString() : new Date(selectedPost.deadline as any).toLocaleDateString()}</span>
                            </div>
                        )}
                     </div>
-                    {user && selectedPost.userId !== user.uid && IS_UID_REGEX_PAGE.test(selectedPost.userId) && (
+                    {user && selectedPost.userId && selectedPost.userId !== user.uid && IS_UID_REGEX_PAGE.test(selectedPost.userId) && (
                       <div className="mt-4 border-t pt-4">
                         <Link
                           href={`/profile/${selectedPost.userId}`}
                           passHref
-                          legacyBehavior={false} 
+                          legacyBehavior={false}
                         >
                           <Button variant="link" size="sm" className="text-primary p-0 h-auto flex items-center gap-1">
                             <Building className="h-4 w-4" /> View Business Profile
@@ -1382,8 +1469,8 @@ function BoardPageContent() {
 
               <SheetFooter className="p-6 border-t bg-background mt-auto sticky bottom-0">
                 <div className="w-full space-y-4">
-                  <Popover 
-                    open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && (filteredNewCommentSuggestions[0]?.userId !== 'loading-nc' && filteredNewCommentSuggestions[0]?.userId !== 'no-users-nc' && filteredNewCommentSuggestions[0]?.userId !== 'no-match-nc')} 
+                  <Popover
+                    open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && (filteredNewCommentSuggestions[0]?.userId !== 'loading-nc' && filteredNewCommentSuggestions[0]?.userId !== 'no-users-nc' && filteredNewCommentSuggestions[0]?.userId !== 'no-match-nc')}
                     onOpenChange={setShowNewCommentSuggestions}
                   >
                       <PopoverTrigger asChild>
@@ -1413,13 +1500,13 @@ function BoardPageContent() {
                           onOpenAutoFocus={(e) => e.preventDefault()}
                       >
                           {filteredNewCommentSuggestions.map(profile => {
-                               const displayableName = profile.displayName; // This is already actualDisplayName || companyName || mentionName
-                               const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
-                                
+                               const displayableName = profile.actualDisplayName || profile.mentionName;
+                               const showSecondaryNameLine = profile.actualDisplayName && profile.mentionName && profile.actualDisplayName.toLowerCase() !== profile.mentionName.toLowerCase();
+
                                 return (
                                   profile.userId === 'loading-nc' || profile.userId === 'no-users-nc' || profile.userId === 'no-match-nc' ? (
                                       <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
-                                          {profile.displayName} 
+                                          {profile.actualDisplayName}
                                       </div>
                                   ) : (
                                       <Button
@@ -1448,12 +1535,12 @@ function BoardPageContent() {
                       </PopoverContent>
                   </Popover>
                   <div className="flex justify-end gap-2">
-                    {user && selectedPost.userId !== user.uid && (
+                    {user && selectedPost.userId && selectedPost.userId !== user.uid && (
                       <>
                         <Button
                           variant="outline"
                           size="sm"
-                          onClick={() => handleOfferHelp(selectedPost.userId, selectedPost.id)}
+                          onClick={() => handleOfferHelp(selectedPost.userId!, selectedPost.id)}
                           disabled={deletePostMutation.isPending}
                         >
                           <HandHelping className="mr-2 h-4 w-4" /> Offer Help
@@ -1522,44 +1609,27 @@ function BoardPageContent() {
 }
 
 export const extractMentionedUids = async (text: string, profilesToSearch: UserProfileBasic[]): Promise<string[]> => {
-  console.log(`%c[page.tsx] extractMentionedUids - Input Text: "${text.substring(0, 100)}..."`, "color: orange");
-  console.log(`%c[page.tsx] extractMentionedUids - Profiles to Search In (count: ${profilesToSearch.length}):`, "color: orange;", profilesToSearch.map(p => ({ uid: p.userId, actualDisplayName: p.actualDisplayName, companyName: p.companyName, mentionName: p.mentionName })).slice(0, 10));
-
-  const mentionRegex = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,})/g; 
-  const textualMentions = new Set<string>(); 
-  for (const match of text.matchAll(mentionRegex)) {
-    if (match[1]) {
-      textualMentions.add(match[1].trim());
-    }
+  const textualMentions = new Set<string>();
+  const mentionRegexGlobal = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,})/g;
+  for (const match of text.matchAll(mentionRegexGlobal)) {
+    if (match[1]) textualMentions.add(match[1].trim());
   }
-  console.log(`%c[page.tsx] extractMentionedUids - Extracted Textual Mentions (ColorAnimalNumbers or UIDs):`, "color: orange", Array.from(textualMentions));
+
+  if (textualMentions.size === 0) return [];
 
   const resolvedUids = new Set<string>();
   textualMentions.forEach(textualMention => {
-    const textualMentionLower = textualMention.toLowerCase();
     let foundProfile: UserProfileBasic | undefined = undefined;
-
-    // Strategy 1: Match textualMention (ColorAnimalNumber) against profile.mentionName
-    foundProfile = profilesToSearch.find(p => p.mentionName?.toLowerCase() === textualMentionLower);
-    if (foundProfile) {
-      console.log(`%c[page.tsx] extractMentionedUids - Resolved (mentionName Match): "${textualMention}" to UID "${foundProfile.userId}"`, "color: green");
-    }
-
-    // Strategy 2: Fallback - if textualMention itself IS a UID
-    if (!foundProfile && IS_UID_REGEX_PAGE.test(textualMention)) {
-      foundProfile = profilesToSearch.find(p => p.userId === textualMention);
-      if (foundProfile) {
-        console.log(`%c[page.tsx] extractMentionedUids - Resolved (Direct UID Match): "${textualMention}" to UID "${foundProfile.userId}"`, "color: green");
-      }
-    }
+    // Prioritize matching against mentionName (ColorAnimalNumber)
+    foundProfile = profilesToSearch.find(p => p.mentionName?.toLowerCase() === textualMention.toLowerCase());
 
     if (foundProfile && IS_UID_REGEX_PAGE.test(foundProfile.userId)) {
       resolvedUids.add(foundProfile.userId);
-    } else {
-      console.warn(`%c[page.tsx] extractMentionedUids: Could not resolve textual mention "${textualMention}" to a valid UID from the provided profiles list.`, "color: red");
+    } else if (IS_UID_REGEX_PAGE.test(textualMention)) { // Fallback: if the mention itself is a UID
+      const profileByUid = profilesToSearch.find(p => p.userId === textualMention);
+      if (profileByUid) resolvedUids.add(profileByUid.userId);
     }
   });
-  console.log(`%c[page.tsx] extractMentionedUids - Final Resolved UIDs:`, "color: green; font-weight: bold;", Array.from(resolvedUids));
   return Array.from(resolvedUids);
 };
 
