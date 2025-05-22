@@ -19,6 +19,7 @@ const postsCollectionRef = collection(db, 'posts');
 
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
+    // Ensure all optional fields that might be undefined are set to null for Firestore
     const dataForFirestore: { [key: string]: any } = {
       question: postData.question,
       tags: postData.tags || [],
@@ -33,30 +34,34 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       imageUrls: Array.isArray(postData.imageUrls) ? postData.imageUrls : [],
       mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
       requestType: postData.requestType || 'post',
-      maxBudget: postData.maxBudget === undefined ? null : postData.maxBudget, // Handle maxBudget
-      deadline: postData.deadline instanceof Date ? Timestamp.fromDate(postData.deadline) : null, // Convert Date to Timestamp
+      maxBudget: postData.maxBudget === undefined ? null : postData.maxBudget,
+      deadline: postData.deadline instanceof Date 
+        ? Timestamp.fromDate(postData.deadline) 
+        : (postData.deadline === null ? null : (postData.deadline || null)), // Handle null explicitly or if undefined
       createdAt: serverTimestamp(),
     };
 
+    // Specific handling for description fields based on requestType
     if (postData.requestType === 'help_request') {
-      dataForFirestore.descriptionDetails = postData.descriptionDetails || "";
+      dataForFirestore.descriptionDetails = postData.descriptionDetails || ""; // Mandatory for help_request
       dataForFirestore.descriptionTried = postData.descriptionTried || null;
       dataForFirestore.descriptionOutcome = postData.descriptionOutcome || null;
-      dataForFirestore.description = null;
-    } else {
+      dataForFirestore.description = null; // Ensure general description is null for help requests
+    } else { // 'post' or default
       dataForFirestore.description = postData.description || null;
       dataForFirestore.descriptionDetails = null;
       dataForFirestore.descriptionTried = null;
       dataForFirestore.descriptionOutcome = null;
     }
     
+    // Ensure no undefined values are sent (Firestore doesn't allow them)
     Object.keys(dataForFirestore).forEach(key => {
       if (dataForFirestore[key] === undefined) {
         dataForFirestore[key] = null;
       }
     });
 
-    console.log("[postService] Data being sent to Firestore:", dataForFirestore);
+    console.log("[postService] Data being sent to Firestore:", JSON.stringify(dataForFirestore, null, 2));
 
     const docRef = await addDoc(postsCollectionRef, dataForFirestore);
     console.log("[postService] Post added successfully with ID: ", docRef.id);
@@ -90,10 +95,10 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             userId: data.userId,
             tags: data.tags || [],
             question: data.question || "",
-            description: data.description,
-            descriptionDetails: data.descriptionDetails,
-            descriptionTried: data.descriptionTried,
-            descriptionOutcome: data.descriptionOutcome,
+            description: data.description, // Will be undefined if not present
+            descriptionDetails: data.descriptionDetails, // Will be undefined if not present
+            descriptionTried: data.descriptionTried, // Will be undefined if not present
+            descriptionOutcome: data.descriptionOutcome, // Will be undefined if not present
             sector: data.sector || "",
             subSector: data.subSector,
             industry: data.industry,
@@ -105,8 +110,8 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
             mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
             requestType: data.requestType || 'post',
-            maxBudget: data.maxBudget, // Fetch maxBudget
-            deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined, // Convert Timestamp to Date
+            maxBudget: data.maxBudget,
+            deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined,
        } as Post;
     });
     console.log(`[postService] Fetched ${posts.length} posts from Firestore.`);
@@ -182,8 +187,8 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
         mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
         requestType: data.requestType || 'post',
-        maxBudget: data.maxBudget, // Fetch maxBudget
-        deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined, // Convert Timestamp to Date
+        maxBudget: data.maxBudget,
+        deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined,
       } as Post;
     });
 

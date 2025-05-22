@@ -7,6 +7,7 @@ export interface Post {
   tags: string[];
   question: string;
   description?: string; // For 'post' type
+
   // For 'help_request' type
   descriptionDetails?: string;
   descriptionTried?: string;
@@ -23,20 +24,19 @@ export interface Post {
   imageUrls?: string[];
   mentionedUserIds?: string[];
   requestType?: 'post' | 'help_request';
-  maxBudget?: number; // Changed from paymentAmount
-  deadline?: Date; // For help_request deadline
+  maxBudget?: number; // Renamed from paymentAmount
+  deadline?: Date; // For help_request deadline, stored as Date on client, converted to Timestamp for Firestore
 }
 
 // Type for data being added
 export type NewPostData = Omit<Post, 'id' | 'createdAt' | 'deadline'> & {
     createdAt?: Timestamp; // Allow serverTimestamp
-    deadline?: Date | Timestamp; // Allow Date from client, convert to Timestamp in service
+    deadline?: Date | Timestamp | null; // Allow Date from client, convert to Timestamp in service, or null
     // All other fields are optional for NewPostData if they are optional in Post, or will be set by service
 };
 
-// --- Bid System (Future Implementation) ---
-// This is a placeholder for when we implement bidding.
-// It's not used by the current changes but good to define early.
+
+// --- Bid System ---
 export interface Bid {
   id: string; // Firestore document ID
   postId: string; // ID of the help request post this bid is for
@@ -46,10 +46,10 @@ export interface Bid {
   bidAmount: number;
   bidMessage?: string; // Optional message accompanying the bid
   timestamp: Timestamp; // Firestore Timestamp when bid was placed
-  status: 'pending' | 'accepted' | 'rejected'; // Status of the bid
+  // status: 'pending' | 'accepted' | 'rejected'; // Status of the bid - for future use
 }
 
-export type NewBidData = Omit<Bid, 'id' | 'timestamp' | 'bidderName' | 'bidderAvatar' | 'status'>;
+export type NewBidData = Omit<Bid, 'id' | 'timestamp' | 'bidderName' | 'bidderAvatar'>;
 
 export interface ClientBid extends Omit<Bid, 'timestamp'> {
   timestamp: number; // Milliseconds since epoch

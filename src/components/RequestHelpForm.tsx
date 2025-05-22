@@ -41,7 +41,7 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
@@ -65,24 +65,16 @@ const requestHelpFormSchema = z.object({
       file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
       "Only .jpg, .jpeg, .png and .gif formats are supported."
     ),
-  maxBudget: z.coerce.number().positive({ message: "Maximum budget must be positive." }).optional(), // Changed from paymentAmount
-  deadline: z.date().optional(),
+  maxBudget: z.coerce.number().positive({ message: "Maximum budget must be positive." }).optional(),
+  deadline: z.date().optional().nullable(),
 });
 
-export interface RequestHelpFormData {
-  question: string;
-  descriptionDetails: string;
-  descriptionTried?: string;
-  descriptionOutcome?: string;
-  tags: string[];
-  sector: string;
-  subSector?: string;
-  industry?: string;
-  imageFile?: File | null;
-  mentionedUserIds: string[];
-  maxBudget?: number; // Changed from paymentAmount
-  deadline?: Date;
+export interface RequestHelpFormData extends z.infer<typeof requestHelpFormSchema> {
+  // No need to redefine fields here, z.infer does it.
+  // Just ensure mentionedUserIds is handled if needed.
+  mentionedUserIds?: string[]; // Added this to ensure it can be passed if logic exists
 }
+
 
 interface RequestHelpFormProps {
   onSubmit: (data: RequestHelpFormData) => void;
@@ -105,7 +97,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
       subSector: "",
       industry: "",
       image: null,
-      maxBudget: undefined, // Changed from paymentAmount
+      maxBudget: undefined,
       deadline: undefined,
     },
   });
@@ -150,27 +142,29 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
     if (selectedSectorCode) {
       const selectedMainSector = detailedSectorsData.find(s => s.code === selectedSectorCode);
       setCurrentSubSectors(selectedMainSector?.subSectors || []);
-      form.resetField("subSector", { defaultValue: "" });
-      form.resetField("industry", { defaultValue: "" });
+      form.setValue("subSector", "", { shouldValidate: true });
+      form.setValue("industry", "", { shouldValidate: true });
       setCurrentIndustries([]);
     } else {
       setCurrentSubSectors([]);
       setCurrentIndustries([]);
-      form.resetField("subSector", { defaultValue: "" });
-      form.resetField("industry", { defaultValue: "" });
+      form.setValue("subSector", "", { shouldValidate: true });
+      form.setValue("industry", "", { shouldValidate: true });
     }
-  }, [selectedSectorCode, detailedSectorsData, form]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSectorCode, detailedSectorsData]); // form is not needed here
 
   useEffect(() => {
     if (selectedSubSectorCode) {
       const selectedSub = currentSubSectors.find(ss => ss.code === selectedSubSectorCode);
       setCurrentIndustries(selectedSub?.industries || []);
-      form.resetField("industry", { defaultValue: "" });
+      form.setValue("industry", "", { shouldValidate: true });
     } else {
       setCurrentIndustries([]);
-      form.resetField("industry", { defaultValue: "" });
+      form.setValue("industry", "", { shouldValidate: true });
     }
-  }, [selectedSubSectorCode, currentSubSectors, form]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSubSectorCode, currentSubSectors]); // form is not needed here
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -194,7 +188,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
         return;
       }
       setSelectedImageFile(file);
-      form.setValue("image", file);
+      form.setValue("image", file, { shouldValidate: true });
       const reader = new FileReader();
       reader.onloadend = () => setImagePreviewUrl(reader.result as string);
       reader.readAsDataURL(file);
@@ -213,7 +207,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
         useWebWorker: true,
       });
       setSelectedImageFile(compressedFile);
-      form.setValue("image", compressedFile);
+      form.setValue("image", compressedFile, { shouldValidate: true });
       const reader = new FileReader();
       reader.onloadend = () => setImagePreviewUrl(reader.result as string);
       reader.readAsDataURL(compressedFile);
@@ -243,23 +237,18 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
   const handleSubmitForm = (values: z.infer<typeof requestHelpFormSchema>) => {
     console.log("[RequestHelpForm] Values submitted:", JSON.stringify(values, null, 2));
     const submitData: RequestHelpFormData = {
-        question: values.question,
-        descriptionDetails: values.descriptionDetails,
-        descriptionTried: values.descriptionTried,
-        descriptionOutcome: values.descriptionOutcome,
-        tags: values.tags,
-        sector: values.sector,
-        subSector: values.subSector,
-        industry: values.industry,
+        ...values, // Spread all validated form values
         imageFile: selectedImageFile,
         mentionedUserIds: Array.from(selectedMentionedUserIds),
-        maxBudget: values.maxBudget, // Changed from paymentAmount
-        deadline: values.deadline,
+        // maxBudget and deadline are already part of `values` from Zod schema
     };
     onSubmit(submitData);
     setSelectedMentionedUserIds(new Set());
     setDescriptionDetailsMentionQuery('');
     setShowDescriptionDetailsSuggestions(false);
+    form.reset();
+    setImagePreviewUrl(null);
+    setSelectedImageFile(null);
   };
 
   const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
@@ -279,7 +268,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
 
   const handleDescriptionDetailsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
-    form.setValue("descriptionDetails", value);
+    form.setValue("descriptionDetails", value, { shouldValidate: true });
     if (descriptionDetailsTextareaRef.current) {
         evaluateMentionState(value, descriptionDetailsTextareaRef.current.selectionStart || 0);
     }
@@ -381,7 +370,9 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Question / Need <span className="text-destructive">*</span></FormLabel>
-                  <Input placeholder="e.g., Seeking expertise in B2B marketing automation" {...field} disabled={isSubmitting} />
+                  <FormControl>
+                    <Input placeholder="e.g., Seeking expertise in B2B marketing automation" {...field} disabled={isSubmitting} />
+                  </FormControl>
                   <FormDescription>Keep it concise and clear.</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -430,23 +421,25 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                             }}
                           >
                             <PopoverTrigger asChild>
-                                <Textarea
-                                  placeholder="Provide full details about the problem or need... (@mention users)"
-                                  className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
-                                  {...field}
-                                  ref={(e) => {
-                                    field.ref(e);
-                                    descriptionDetailsTextareaRef.current = e;
-                                  }}
-                                  onChange={handleDescriptionDetailsChange}
-                                  onFocus={handleDescriptionDetailsFocus}
-                                  onBlurCapture={() => setTimeout(() => {
-                                    if (descriptionDetailsSuggestionsPopoverRef.current && !descriptionDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && descriptionDetailsTextareaRef.current !== document.activeElement) {
-                                      setShowDescriptionDetailsSuggestions(false);
-                                    }
-                                  }, 150)}
-                                  disabled={isSubmitting}
-                                />
+                                <FormControl>
+                                  <Textarea
+                                    placeholder="Provide full details about the problem or need... (@mention users)"
+                                    className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
+                                    {...field}
+                                    ref={(e) => {
+                                      field.ref(e);
+                                      descriptionDetailsTextareaRef.current = e;
+                                    }}
+                                    onChange={handleDescriptionDetailsChange}
+                                    onFocus={handleDescriptionDetailsFocus}
+                                    onBlurCapture={() => setTimeout(() => {
+                                      if (descriptionDetailsSuggestionsPopoverRef.current && !descriptionDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && descriptionDetailsTextareaRef.current !== document.activeElement) {
+                                        setShowDescriptionDetailsSuggestions(false);
+                                      }
+                                    }, 150)}
+                                    disabled={isSubmitting}
+                                  />
+                                </FormControl>
                             </PopoverTrigger>
                             <PopoverContent
                                 ref={descriptionDetailsSuggestionsPopoverRef}
@@ -475,7 +468,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                                             >
                                                 <Avatar className="h-5 w-5 mr-2">
                                                     <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
-                                                    <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
+                                                    <AvatarFallback className="text-xs">{getSharedInitials(profile.mentionName)}</AvatarFallback>
                                                 </Avatar>
                                                 <div className="flex flex-col items-start">
                                                   {showSecondaryNameLine && (
@@ -504,13 +497,15 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                       render={({ field }) => (
                         <FormItem className="flex-grow flex flex-col">
                           <FormLabel className="sr-only">What I've Tried</FormLabel>
-                          <Textarea
-                            placeholder="Describe any solutions or approaches you've already attempted..."
-                            className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
-                            value={field.value || ''}
-                            onChange={field.onChange}
-                            disabled={isSubmitting}
-                          />
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe any solutions or approaches you've already attempted..."
+                              className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
+                              value={field.value || ''}
+                              onChange={field.onChange}
+                              disabled={isSubmitting}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -524,13 +519,15 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                       render={({ field }) => (
                         <FormItem className="flex-grow flex flex-col">
                           <FormLabel className="sr-only">Expected Outcome</FormLabel>
-                          <Textarea
-                            placeholder="What is the ideal result or solution you're looking for?"
-                            className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
-                            value={field.value || ''}
-                            onChange={field.onChange}
-                            disabled={isSubmitting}
-                          />
+                          <FormControl>
+                            <Textarea
+                              placeholder="What is the ideal result or solution you're looking for?"
+                              className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
+                              value={field.value || ''}
+                              onChange={field.onChange}
+                              disabled={isSubmitting}
+                            />
+                          </FormControl>
                           <FormMessage />
                         </FormItem>
                       )}
@@ -542,7 +539,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
             <FormField
                 control={form.control}
                 name="image"
-                render={() => (
+                render={({ field }) => ( // Destructure field here
                     <FormItem>
                         <FormLabel>Image (Optional)</FormLabel>
                         <FormControl>
@@ -550,7 +547,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                                 type="file"
                                 accept="image/png, image/jpeg, image/gif"
                                 ref={fileInputRef}
-                                onChange={handleImageChange}
+                                onChange={handleImageChange} // field.onChange is not directly used for file inputs with RHF like this
                                 className="hidden"
                                 disabled={isSubmitting || isCompressing}
                             />
@@ -577,7 +574,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                             </div>
                         )}
                         <FormDescription>Max 2MB. JPG, PNG, GIF accepted.</FormDescription>
-                        <FormMessage />
+                        <FormMessage /> {/* This will show errors for field.name="image" */}
                     </FormItem>
                 )}
              />
@@ -586,24 +583,26 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
           <div className="space-y-6">
              <FormField
               control={form.control}
-              name="maxBudget" // Changed from paymentAmount
+              name="maxBudget"
               render={({ field }) => (
                 <FormItem>
                   <FormLabel className="flex items-center gap-1">
                     <DollarSign className="h-4 w-4 text-green-600" />
                     Maximum Budget (Optional)
                   </FormLabel>
-                  <Input
-                    type="number"
-                    placeholder="e.g., 500 (USD)"
-                    {...field}
-                    value={field.value === undefined || field.value === null ? '' : String(field.value)}
-                    onChange={e => {
-                        const value = e.target.value;
-                        field.onChange(value === '' ? undefined : parseFloat(value));
-                    }}
-                    disabled={isSubmitting}
-                  />
+                  <FormControl>
+                    <Input
+                      type="number"
+                      placeholder="e.g., 500 (USD)"
+                      {...field}
+                      value={field.value === undefined || field.value === null ? '' : String(field.value)}
+                      onChange={e => {
+                          const value = e.target.value;
+                          field.onChange(value === '' ? undefined : parseFloat(value));
+                      }}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
                   <FormDescription>Specify the maximum amount you're willing to offer.</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -621,6 +620,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                   </FormLabel>
                   <Popover>
                     <PopoverTrigger asChild>
+                      {/* No FormControl needed here for PopoverTrigger with Button */}
                       <Button
                         variant={"outline"}
                         className={cn(
@@ -641,7 +641,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                     <PopoverContent className="w-auto p-0" align="start">
                       <Calendar
                         mode="single"
-                        selected={field.value}
+                        selected={field.value || undefined}
                         onSelect={field.onChange}
                         disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) || isSubmitting}
                         initialFocus
