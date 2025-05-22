@@ -26,7 +26,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
+  DialogTrigger, // Ensured DialogTrigger is here
+  DialogClose
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -34,6 +35,7 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuTrigger // Added missing import
 } from "@/components/ui/dropdown-menu";
 import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, HelpingHand, Factory } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
@@ -85,7 +87,6 @@ export interface SectorWithSubSectors {
   subSectors: SubSector[];
 }
 
-// This data is now more comprehensive
 export const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Agriculture, Forestry, Fishing and Hunting",
@@ -462,10 +463,9 @@ export default function MainLayout({
 
 
   useEffect(() => {
-    if (isCreatePostOpen) setIsCreatePostOpen(false);
-    if (isRequestHelpDialogOpen) setIsRequestHelpDialogOpen(false);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname]);
+    if (isCreatePostOpen && !user) setIsCreatePostOpen(false);
+    if (isRequestHelpDialogOpen && !user) setIsRequestHelpDialogOpen(false);
+  }, [user, isCreatePostOpen, isRequestHelpDialogOpen]);
 
 
   const addPostMutation = useMutation({
@@ -571,8 +571,8 @@ export default function MainLayout({
               imageUrls: finalImageUrls,
               mentionedUserIds: mentionedUserIds,
               requestType: 'help_request',
-              deadline: newHelpRequestDataWithImage.deadline ? Timestamp.fromDate(newHelpRequestDataWithImage.deadline as Date) : null,
               maxBudget: newHelpRequestDataWithImage.maxBudget === undefined ? null : newHelpRequestDataWithImage.maxBudget,
+              deadline: newHelpRequestDataWithImage.deadline ? Timestamp.fromDate(newHelpRequestDataWithImage.deadline as Date) : null,
           };
           console.log("[MainLayout] addHelpRequestMutation - data for Firestore:", postDataForFirestore);
           return addPostToFirestore(postDataForFirestore);
@@ -627,6 +627,7 @@ export default function MainLayout({
         });
         return;
       }
+      console.log("[MainLayout] handleAddPost formData RECEIVED:", JSON.stringify(formData, null, 2));
 
       const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
       const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
@@ -649,6 +650,7 @@ export default function MainLayout({
         mentionedUserIds: formData.mentionedUserIds,
         requestType: 'post',
       };
+      console.log("[MainLayout] handleAddPost newPostDataForService PREPARED:", JSON.stringify(newPostDataForService, null, 2));
       addPostMutation.mutate(newPostDataForService);
     },
     [user, toast, addPostMutation, queryClient]
@@ -658,7 +660,7 @@ export default function MainLayout({
     (formData: RequestHelpFormData) => {
       console.log("[MainLayout] handleRequestHelpSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       if (!user) {
-        toast({ variant: "destructive", title: "Authentication Required" });
+        toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in to submit a help request." });
         return;
       }
       const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
@@ -670,7 +672,6 @@ export default function MainLayout({
         descriptionDetails: formData.descriptionDetails,
         descriptionTried: formData.descriptionTried,
         descriptionOutcome: formData.descriptionOutcome,
-        description: undefined,
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
@@ -685,7 +686,7 @@ export default function MainLayout({
         mentionedUserIds: formData.mentionedUserIds,
         requestType: 'help_request',
         maxBudget: formData.maxBudget,
-        deadline: formData.deadline,
+        deadline: formData.deadline instanceof Date ? formData.deadline : null,
       };
       console.log("[MainLayout] handleRequestHelpSubmit newHelpRequestData PREPARED:", JSON.stringify(newHelpRequestData, null, 2));
       addHelpRequestMutation.mutate(newHelpRequestData);
@@ -713,15 +714,13 @@ export default function MainLayout({
   };
 
   const rootLayoutClasses = cn(
-    "flex flex-col bg-background min-h-screen", // Keep min-h-screen for desktop
-    isMobile && "h-[calc(var(--vh-dynamic,1vh)*100)]" // Apply dynamic full height for mobile
+    "flex flex-col bg-background",
+    isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
   );
 
-  const hideAppChrome = isMobile && pathname === '/contracts';
 
   return (
     <div className={rootLayoutClasses}>
-      {!hideAppChrome && (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
             <div className="mr-4 hidden md:flex">
@@ -780,7 +779,7 @@ export default function MainLayout({
 
                   <Dialog open={isRequestHelpDialogOpen} onOpenChange={setIsRequestHelpDialogOpen}>
                     <DialogTrigger asChild>
-                      <Button variant="secondary" size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
+                       <Button variant="secondary" size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
                         <Handshake className="mr-2 h-4 w-4" />
                         Request Help
                       </Button>
@@ -872,16 +871,15 @@ export default function MainLayout({
             </div>
           </div>
         </header>
-      )}
 
       <main className={cn(
         "flex-1 flex flex-col",
-        hideAppChrome ? "h-full" : (isMobile ? "pb-14" : "md:pb-0")
+        isMobile ? "pb-14" : "md:pb-0"
       )}>
         {children}
       </main>
 
-      {!hideAppChrome && isMobile && (
+      {isMobile && (
         <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border md:hidden h-14">
           <div className="container mx-auto flex justify-around items-center h-full">
             {navItems.map((item) => (
@@ -901,7 +899,7 @@ export default function MainLayout({
         </nav>
       )}
 
-      {!hideAppChrome && !isMobile && (
+      {!isMobile && (
         <footer className="py-4 border-t md:mt-auto">
           <div className="container mx-auto text-center text-sm text-muted-foreground">
             © {new Date().getFullYear()} AnonyCollab. All rights reserved.
