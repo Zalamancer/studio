@@ -26,8 +26,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { detailedSectorsData } from '@/components/layout/MainLayout';
 import { updateUserProfileDetails, fetchFullUserProfile } from '@/services/connectionService';
 import type { UserProfileData, VisibilitySetting } from '@/types/connection';
-import { getInitials } from '@/lib/pseudonymUtils';
-import { uploadPostImage } from '@/services/storageService';
+import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
+import { uploadPostImage } from '@/services/storageService'; // Assuming this is for avatar uploads
 
 const MAX_FILE_SIZE_MB = 1;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -53,14 +53,13 @@ const ProfileSettingsPage = () => {
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // State for editable fields
   const [industry, setIndustry] = useState('');
   const [description, setDescription] = useState('');
   const [descriptionVisibility, setDescriptionVisibility] = useState<VisibilitySetting>('everyone');
   const [incomeRange, setIncomeRange] = useState<string>("Prefer not to say");
 
-  // State for read-only display from fetched profile
   const [fetchedCompanyName, setFetchedCompanyName] = useState('');
+  const [fetchedActualDisplayName, setFetchedActualDisplayName] = useState('');
   const [fetchedMentionName, setFetchedMentionName] = useState('');
   
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -68,79 +67,89 @@ const ProfileSettingsPage = () => {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [originalFile, setOriginalFile] = useState<File | null>(null);
 
-  const [isFetchingProfile, setIsFetchingProfile] = useState(false);
+  const [isFetchingProfile, setIsFetchingProfile] = useState(false); // Initialize to false
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
 
   const availableIndustries = detailedSectorsData.map(sector => sector.name);
 
+  // Fetch profile data when user is available
   useEffect(() => {
-    const fetchProfile = async () => {
-      if (authLoading) {
-        console.log("[ProfileSettingsPage] Auth is loading, waiting...");
-        return;
-      }
-      if (!user && !authLoading) {
-         console.log("[ProfileSettingsPage] No user and auth not loading. Clearing fields.");
-         setIndustry('');
-         setDescription('');
-         setDescriptionVisibility('everyone');
-         setIncomeRange("Prefer not to say");
-         setFetchedCompanyName('');
-         setFetchedMentionName('');
-         setPreviewUrl(null);
-         setCurrentDbAvatarUrl(null);
-         setIsFetchingProfile(false);
-         return;
-      }
+    // If auth is still loading, don't do anything yet
+    if (authLoading) {
+      console.log("[ProfileSettingsPage] useEffect: Auth is loading, waiting...");
+      return;
+    }
 
-      if (user && !isFetchingProfile && !authLoading) {
-        setIsFetchingProfile(true);
-        console.log("[ProfileSettingsPage] Fetching profile for user:", user.uid);
+    // If auth is resolved, but no user, clear fields and stop.
+    if (!user) {
+      console.log("[ProfileSettingsPage] useEffect: No user, clearing form and stopping fetch.");
+      setIndustry('');
+      setDescription('');
+      setDescriptionVisibility('everyone');
+      setIncomeRange("Prefer not to say");
+      setPreviewUrl(null);
+      setCurrentDbAvatarUrl(null);
+      setFetchedCompanyName('');
+      setFetchedActualDisplayName('');
+      setFetchedMentionName('');
+      setIsFetchingProfile(false); // Ensure this is false
+      return;
+    }
+
+    // If user is present and we are not already fetching
+    if (user && !isFetchingProfile) {
+      const fetchProfile = async () => {
+        setIsFetchingProfile(true); // Set fetching to true *before* the async operation
+        console.log("[ProfileSettingsPage] useEffect: Fetching profile for user:", user.uid);
         try {
           const fullProfileData = await fetchFullUserProfile(user.uid);
-          console.log("[ProfileSettingsPage] Raw fullProfileData from service:", fullProfileData);
+          console.log("[ProfileSettingsPage] useEffect: Raw fullProfileData from service:", fullProfileData);
 
           if (fullProfileData) {
             setIndustry(fullProfileData.industry || '');
             setDescription(fullProfileData.description || '');
             setDescriptionVisibility(fullProfileData.descriptionVisibility || 'everyone');
             setIncomeRange(fullProfileData.incomeRange || "Prefer not to say");
-
+            
             setFetchedCompanyName(fullProfileData.companyName || '');
-            setFetchedMentionName(fullProfileData.mentionName || '');
+            // actualDisplayName is no longer a direct field in UserProfileData
+            // We derive a display name for avatar from companyName or mentionName
+            setFetchedActualDisplayName(fullProfileData.companyName || ''); // Or a different logic if needed
+            setFetchedMentionName(fullProfileData.mentionName || generateAnonymousName(user.uid));
 
             const avatarToDisplay = fullProfileData.avatarUrl || null;
             setPreviewUrl(avatarToDisplay);
             setCurrentDbAvatarUrl(avatarToDisplay);
-            console.log("[ProfileSettingsPage] Full profile data loaded.");
+            console.log("[ProfileSettingsPage] Full profile data loaded and state set.");
           } else {
-             setIndustry('');
-             setDescription('');
-             setDescriptionVisibility('everyone');
-             setIncomeRange("Prefer not to say");
-             setFetchedCompanyName('');
-             setFetchedMentionName('');
-             setPreviewUrl(null);
-             setCurrentDbAvatarUrl(null);
-             console.warn("[ProfileSettingsPage] No full profile document found after fetch attempt, using fallbacks.");
+            console.warn("[ProfileSettingsPage] No full profile document found, setting defaults.");
+            setIndustry('');
+            setDescription('');
+            setDescriptionVisibility('everyone');
+            setIncomeRange("Prefer not to say");
+            setPreviewUrl(null);
+            setCurrentDbAvatarUrl(null);
+            setFetchedCompanyName('');
+            setFetchedActualDisplayName('');
+            setFetchedMentionName(generateAnonymousName(user.uid));
           }
+          // Removed toast for profile loaded to reduce noise during debugging loop
         } catch (error) {
-          console.error("[ProfileSettingsPage] Error fetching profile:", error);
-          toast({
-            variant: "destructive",
-            title: "Error Fetching Profile",
-            description: "Could not load your profile data.",
-          });
+          console.error("[ProfileSettingsPage] useEffect: Error fetching profile:", error);
+          toast({ variant: "destructive", title: "Error Fetching Profile", description: "Could not load your profile data." });
+          setFetchedMentionName(generateAnonymousName(user.uid));
         } finally {
           setIsFetchingProfile(false);
-          console.log("[ProfileSettingsPage] Finished fetching profile attempt.");
+          console.log("[ProfileSettingsPage] useEffect: Finished fetching profile attempt, isFetchingProfile set to false.");
         }
-      }
-    };
-    fetchProfile();
-   }, [user, authLoading, toast, isFetchingProfile]); // isFetchingProfile removed from deps as it caused loops. Corrected.
+      };
+      fetchProfile();
+    }
+  // The effect should run when authLoading completes, or when the user object reference changes.
+  // isFetchingProfile is managed internally to prevent re-fetch loops.
+  }, [user, authLoading, toast]);
 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -204,9 +213,12 @@ const ProfileSettingsPage = () => {
 
     try {
         if (selectedFile) { 
+            console.log("[ProfileSettingsPage] handleSubmit: Uploading new avatar...");
             newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid);
+            console.log("[ProfileSettingsPage] handleSubmit: New avatar URL:", newAvatarUrlForFirestore);
         } else if (previewUrl === null && currentDbAvatarUrl !== null) { 
-            newAvatarUrlForFirestore = null;
+            console.log("[ProfileSettingsPage] handleSubmit: Avatar explicitly removed by user.");
+            newAvatarUrlForFirestore = null; // User explicitly cleared the avatar
         }
         
         const profileDataToUpdate: Partial<UserProfileData> = {
@@ -214,13 +226,18 @@ const ProfileSettingsPage = () => {
             description: description || null,
             descriptionVisibility: descriptionVisibility,
             incomeRange: incomeRange === "Prefer not to say" ? null : incomeRange,
-            ...(newAvatarUrlForFirestore !== undefined && { avatarUrl: newAvatarUrlForFirestore }),
         };
 
+        if (newAvatarUrlForFirestore !== undefined) {
+            profileDataToUpdate.avatarUrl = newAvatarUrlForFirestore;
+        }
+        
+        console.log("[ProfileSettingsPage] handleSubmit: Data to update in Firestore:", profileDataToUpdate);
         await updateUserProfileDetails(user.uid, profileDataToUpdate);
 
         if (newAvatarUrlForFirestore !== undefined) {
             setCurrentDbAvatarUrl(newAvatarUrlForFirestore); 
+            setPreviewUrl(newAvatarUrlForFirestore);
         }
         setSelectedFile(null); 
         setOriginalFile(null);
@@ -250,7 +267,8 @@ const ProfileSettingsPage = () => {
           </Card>
       );
   }
-  if (isFetchingProfile && !authLoading) { // Only show this if auth is done but profile fetch is ongoing
+   // This spinner will only show if authLoading is false, but we are actively fetching profile data
+  if (isFetchingProfile) {
       return (
           <Card>
               <CardHeader><CardTitle>Profile Settings</CardTitle><CardDescription>Manage your public business profile.</CardDescription></CardHeader>
@@ -261,8 +279,7 @@ const ProfileSettingsPage = () => {
       );
   }
 
-
-  if (!user && !authLoading) {
+  if (!user) {
       return (
           <Card>
               <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
@@ -292,7 +309,7 @@ const ProfileSettingsPage = () => {
     </div>
   );
 
-  const nameForAvatar = fetchedCompanyName || fetchedMentionName || user?.email || 'U';
+  const nameForAvatar = fetchedCompanyName || fetchedActualDisplayName || fetchedMentionName || user?.email || 'U';
 
   return (
     <Card className="shadow-md border-border">
@@ -333,14 +350,17 @@ const ProfileSettingsPage = () => {
                 <Input id="mentionName" value={fetchedMentionName ? `@${fetchedMentionName}` : "Not generated"} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
                 <p className="text-xs text-muted-foreground">Your unique anonymous identifier for mentions. This is automatically generated and cannot be changed.</p>
             </div>
-
+            
             {fetchedCompanyName && (
-              <div className="space-y-1 p-4 border rounded-md bg-muted/20">
-                  <Label htmlFor="displayCompanyName" className="text-base font-medium">Company Name</Label>
-                  <Input id="displayCompanyName" value={fetchedCompanyName} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
-                  <p className="text-xs text-muted-foreground">Your registered company name. (Set during sign-up for email accounts)</p>
-              </div>
+                <div className="space-y-1 p-4 border rounded-md bg-muted/20">
+                    <Label htmlFor="displayCompanyName" className="text-base font-medium">Company Name</Label>
+                    <Input id="displayCompanyName" value={fetchedCompanyName} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
+                    <p className="text-xs text-muted-foreground">Your registered company name (from sign-up or Google). Not editable here. Always visible if set.</p>
+                </div>
             )}
+
+            {/* Removed actualDisplayName field and its visibility as per previous request to simplify */}
+
 
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
             <Label htmlFor="industry" className="text-base font-medium">Industry</Label>
@@ -370,8 +390,7 @@ const ProfileSettingsPage = () => {
                     ))}
                 </SelectContent>
             </Select>
-            <p className="text-xs text-muted-foreground pt-1">This information is optional and its visibility can be controlled on your public profile.</p>
-            {/* Placeholder for income range visibility if needed later */}
+            <p className="text-xs text-muted-foreground pt-1">This information is optional. Its visibility on your public profile can be controlled if such a feature is added later.</p>
           </div>
 
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
