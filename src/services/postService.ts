@@ -19,30 +19,45 @@ const postsCollectionRef = collection(db, 'posts');
 
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
-    const dataForFirestore: { [key: string]: any } = {};
-    
-    // Iterate over postData and copy defined values
-    for (const key in postData) {
-        if (Object.prototype.hasOwnProperty.call(postData, key)) {
-            const value = postData[key as keyof NewPostData];
-            if (value !== undefined) {
-                dataForFirestore[key] = value;
-            }
-        }
+    const dataForFirestore: { [key: string]: any } = {
+      // Initialize with common fields
+      question: postData.question,
+      tags: postData.tags || [],
+      sector: postData.sector,
+      subSector: postData.subSector || null,
+      industry: postData.industry || null,
+      userId: postData.userId,
+      businessType: postData.businessType || "Startup", // Default if not provided
+      safetyIndicator: postData.safetyIndicator || "Medium", // Default
+      ratingScore: postData.ratingScore || 0, // Default
+      naicsCode: postData.naicsCode || null,
+      imageUrls: Array.isArray(postData.imageUrls) ? postData.imageUrls : [],
+      mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
+      requestType: postData.requestType || 'post', // Default to 'post'
+      createdAt: serverTimestamp(),
+    };
+
+    if (postData.requestType === 'help_request') {
+      dataForFirestore.descriptionDetails = postData.descriptionDetails || ""; // Mandatory for help_request
+      dataForFirestore.descriptionTried = postData.descriptionTried || null;
+      dataForFirestore.descriptionOutcome = postData.descriptionOutcome || null;
+      dataForFirestore.description = null; // Ensure general description is null for help requests
+    } else {
+      // For 'post' type or undefined requestType
+      dataForFirestore.description = postData.description || null;
+      dataForFirestore.descriptionDetails = null;
+      dataForFirestore.descriptionTried = null;
+      dataForFirestore.descriptionOutcome = null;
     }
-
-    // Ensure imageUrls and mentionedUserIds are arrays, even if empty.
-    dataForFirestore.imageUrls = Array.isArray(dataForFirestore.imageUrls) ? dataForFirestore.imageUrls : [];
-    dataForFirestore.mentionedUserIds = Array.isArray(dataForFirestore.mentionedUserIds) ? dataForFirestore.mentionedUserIds : [];
     
-    // Set requestType, defaulting to 'post' if not provided
-    dataForFirestore.requestType = postData.requestType || 'post';
+    // Clean up any explicitly undefined values that might have come from postData
+    // This step might be redundant if all defaults are handled above, but as a safeguard:
+    Object.keys(dataForFirestore).forEach(key => {
+      if (dataForFirestore[key] === undefined) {
+        dataForFirestore[key] = null;
+      }
+    });
 
-    // Remove paymentAmount and deadline as they are no longer part of NewPostData
-    // delete dataForFirestore.paymentAmount; 
-    // delete dataForFirestore.deadline; 
-
-    dataForFirestore.createdAt = serverTimestamp();
     console.log("[postService] Data being sent to Firestore:", dataForFirestore);
 
     const docRef = await addDoc(postsCollectionRef, dataForFirestore);
@@ -57,7 +72,7 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
         throw new Error('Permission denied. You might need to adjust Firestore security rules.');
     }
     if (error.message && error.message.includes("Unsupported field value: undefined")) {
-        console.error("Attempted to write undefined field to Firestore. Payload:", postData);
+        console.error("Attempted to write undefined field to Firestore. Payload (dataForFirestore):", dataForFirestore, "Original postData:", postData);
          throw new Error(`Failed to add post: Firestore received an undefined field value. ${error.message}`);
     }
     throw new Error(`Failed to add post: ${error.message}`);
@@ -74,12 +89,24 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
 
        return {
             id: docSnap.id,
-            ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls' | 'mentionedUserIds' | 'deadline'>),
+            userId: data.userId,
+            tags: data.tags || [],
+            question: data.question || "",
+            description: data.description, // Will be null/undefined if help_request
+            descriptionDetails: data.descriptionDetails, // Explicitly map
+            descriptionTried: data.descriptionTried,       // Explicitly map
+            descriptionOutcome: data.descriptionOutcome,   // Explicitly map
+            sector: data.sector || "",
+            subSector: data.subSector,
+            industry: data.industry,
+            businessType: data.businessType || "",
+            safetyIndicator: data.safetyIndicator || "Medium",
+            ratingScore: data.ratingScore || 0,
+            createdAt: createdAt,
+            naicsCode: data.naicsCode,
             imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
             mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
-            requestType: data.requestType || 'post', // Default to 'post' if not present
-            // deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined, // Removed
-            createdAt: createdAt,
+            requestType: data.requestType || 'post',
        } as Post;
     });
     console.log(`[postService] Fetched ${posts.length} posts from Firestore.`);
@@ -137,12 +164,24 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
 
       return {
         id: docSnap.id,
-        ...(data as Omit<Post, 'id' | 'createdAt' | 'imageUrls' | 'mentionedUserIds' | 'deadline'>),
+        userId: data.userId,
+        tags: data.tags || [],
+        question: data.question || "",
+        description: data.description,
+        descriptionDetails: data.descriptionDetails, // Explicitly map
+        descriptionTried: data.descriptionTried,       // Explicitly map
+        descriptionOutcome: data.descriptionOutcome,   // Explicitly map
+        sector: data.sector || "",
+        subSector: data.subSector,
+        industry: data.industry,
+        businessType: data.businessType || "",
+        safetyIndicator: data.safetyIndicator || "Medium",
+        ratingScore: data.ratingScore || 0,
+        createdAt: createdAt,
+        naicsCode: data.naicsCode,
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
         mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
-        requestType: data.requestType || 'post', // Default to 'post' if not present
-        // deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined, // Removed
-        createdAt: createdAt,
+        requestType: data.requestType || 'post',
       } as Post;
     });
 
