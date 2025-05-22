@@ -35,38 +35,36 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"; // Import Dropdown components
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, HelpingHand } from "lucide-react"; // Changed LineChart to Compass
-import { signOut } from '@/lib/firebase/auth'; // Import auth and signOut
+} from "@/components/ui/dropdown-menu";
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, HelpingHand, Factory } from "lucide-react"; // Added Factory
+import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import type {
   CreatePostFormData
 } from '@/components/CreatePostForm';
-import type { RequestHelpFormData } from '@/components/RequestHelpForm'; // Import RequestHelpFormData
+import type { RequestHelpFormData } from '@/components/RequestHelpForm';
 import type {
-  NewPostData,
-  Post
+  NewPostData
 } from '@/types/post';
 import {
   addPostToFirestore
 } from '@/services/postService';
 import {
   uploadPostImage
-} from '@/services/storageService'; // Import storage service
+} from '@/services/storageService';
 import {
   useMutation,
   useQueryClient
 } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'; // Corrected dynamic import to static
+import { NotificationDropdown } from '@/components/notifications/NotificationDropdown';
 import { createNotification } from '@/services/notificationService';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
 import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 
-// This data is now the single source of truth for sector hierarchy.
 export interface Industry {
   name: string;
   code: string;
@@ -506,11 +504,6 @@ const navItems = [
   { title: "Contracts", href: "/contracts", icon: FileText },
 ];
 
-// export const formSectors = detailedSectorsData.map(sector => ({
-//   name: sector.name,
-//   code: sector.code,
-// }));
-
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
@@ -518,24 +511,18 @@ export const availableTags = [
 // Dynamically import forms
 const DynamicCreatePostForm = dynamic(() =>
   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-  { loading: () => <p className="p-4 text-center">Loading form...</p>, ssr: false }
+  { loading: () => <p className="p-4 text-center">Loading form...</p> }
 );
 
 const DynamicRequestHelpForm = dynamic(() =>
-  import('@/components/RequestHelpForm').then((mod) => mod.RequestHelpForm), // Corrected import
-  { loading: () => <p className="p-4 text-center">Loading form...</p>, ssr: false }
+  import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
+  { loading: () => <p className="p-4 text-center">Loading form...</p> }
 );
 
 const DynamicThemeToggle = dynamic(() =>
   import('@/components/ThemeToggle').then((mod) => mod.ThemeToggle),
-  { loading: () => <DropdownMenuItem disabled>Theme...</DropdownMenuItem>, ssr: false }
+  { loading: () => <DropdownMenuItem disabled>Theme...</DropdownMenuItem> }
 );
-
-// const DynamicNotificationDropdown = dynamic(() =>
-//   import('@/components/notifications/NotificationDropdown').then((mod) => mod.NotificationDropdown),
-//   { loading: () => <Button variant="ghost" size="icon" className="h-8 w-8" disabled><Bell className="h-5 w-5" /></Button>, ssr: false }
-// );
-
 
 export default function MainLayout({
   children
@@ -587,20 +574,16 @@ export default function MainLayout({
 
   const addPostMutation = useMutation({
     mutationFn: async (newPostDataWithImage: NewPostData & {
-      imageFile?: File | null | undefined; mentionedUserIds?: string[];
+      imageFile?: File | null | undefined;
     }) => {
       if (!user) {
-        console.error("[MainLayout] addPostMutation: User not authenticated.");
         throw new Error("User not authenticated to create post.");
       }
       let uploadedImageUrls: string[] = [];
       if (newPostDataWithImage.imageFile) {
-        console.log("[MainLayout] Attempting to upload image:", newPostDataWithImage.imageFile.name);
         try {
           const singleUploadedUrl = await uploadPostImage(newPostDataWithImage.imageFile, user.uid);
-          console.log("[MainLayout] Image uploaded successfully, URL:", singleUploadedUrl);
           if (!singleUploadedUrl) {
-            console.error("[MainLayout] uploadPostImage returned null/undefined without throwing an error.");
             throw new Error("Image upload succeeded but returned no URL.");
           }
           uploadedImageUrls.push(singleUploadedUrl);
@@ -608,8 +591,6 @@ export default function MainLayout({
           console.error("[MainLayout] Image upload failed in mutationFn:", uploadError);
           throw uploadError;
         }
-      } else {
-        console.log("[MainLayout] No image file to upload.");
       }
 
       const finalImageUrls = uploadedImageUrls.length > 0 ? uploadedImageUrls : [];
@@ -617,45 +598,28 @@ export default function MainLayout({
 
       const mentionedUserIds = Array.isArray(newPostDataWithImage.mentionedUserIds) ? newPostDataWithImage.mentionedUserIds : [];
 
-
       const postDataForFirestore: NewPostData = {
         ...postDataForFirestoreBase,
         imageUrls: finalImageUrls,
         mentionedUserIds: mentionedUserIds,
-        requestType: postDataForFirestoreBase.requestType || 'post',
-        // Remove deadline and paymentAmount for 'post' type explicitly if needed, or rely on service to handle
+        requestType: 'post', // Regular post
       };
-      if (postDataForFirestore.requestType !== 'help_request') {
-        delete postDataForFirestore.paymentAmount;
-        delete postDataForFirestore.deadline;
-        delete postDataForFirestore.descriptionDetails;
-        delete postDataForFirestore.descriptionTried;
-        delete postDataForFirestore.descriptionOutcome;
-      } else {
-         delete postDataForFirestore.description; // Ensure general description is not saved for help requests
-      }
-
-
-      console.log("[MainLayout] Data for Firestore (addPostMutation):", JSON.stringify(postDataForFirestore, null, 2));
       return addPostToFirestore(postDataForFirestore);
     },
     onSuccess: (newlyCreatedPostId, variables) => {
-      console.log("[MainLayout] addPostMutation onSuccess. Newly created Post ID:", newlyCreatedPostId, "Variables:", variables);
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
       toast({
-        title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created",
-        description: variables.requestType === 'help_request' ? "Your request for help has been posted." : "Your post has been added to the board.",
+        title: "Post Created",
+        description: "Your post has been added to the board.",
       });
       setIsCreatePostOpen(false);
-      setIsRequestHelpDialogOpen(false);
 
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        console.log(`[MainLayout] Post/Request created, triggering notifications for ${variables.mentionedUserIds.length} mentions.`);
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) { // Don't notify self for mentioning self in post
+          if (mentionedUid !== user.uid) {
             try {
               await createNotification({
                 userId: mentionedUid,
@@ -663,25 +627,97 @@ export default function MainLayout({
                 senderId: user.uid,
                 postId: newlyCreatedPostId,
                 postQuestion: variables.question,
-                textSnippet: variables.description ? variables.description.substring(0, 100) : (variables.requestType === 'help_request' && variables.descriptionDetails ? variables.descriptionDetails.substring(0,100) : "You were mentioned!"),
+                textSnippet: variables.description ? variables.description.substring(0, 100) : "You were mentioned!",
               });
-              console.log(`[MainLayout] Mention notification created for user ${mentionedUid} in post/request ${newlyCreatedPostId}`);
             } catch (notifyError) {
-              console.error(`[MainLayout] Failed to create mention notification for user ${mentionedUid} in post/request ${newlyCreatedPostId}:`, notifyError);
+              console.error(`[MainLayout] Failed to create mention notification for post ${newlyCreatedPostId}:`, notifyError);
             }
           }
         });
       }
     },
-    onError: (error: Error, variables) => {
-      console.error("[MainLayout] addPostMutation onError. Error:", error, "Variables:", variables);
+    onError: (error: Error) => {
       toast({
         variant: "destructive",
-        title: variables.requestType === 'help_request' ? "Request Failed" : "Post Failed",
-        description: `Could not submit your ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.`,
+        title: "Post Failed",
+        description: `Could not submit your post: ${error.message}.`,
       });
     },
   });
+
+  const addHelpRequestMutation = useMutation({
+      mutationFn: async (newHelpRequestDataWithImage: NewPostData & {
+          imageFile?: File | null | undefined;
+      }) => {
+          if (!user) {
+              throw new Error("User not authenticated to request help.");
+          }
+          let uploadedImageUrls: string[] = [];
+          if (newHelpRequestDataWithImage.imageFile) {
+              try {
+                  const singleUploadedUrl = await uploadPostImage(newHelpRequestDataWithImage.imageFile, user.uid);
+                  if (!singleUploadedUrl) {
+                      throw new Error("Image upload succeeded but returned no URL for help request.");
+                  }
+                  uploadedImageUrls.push(singleUploadedUrl);
+              } catch (uploadError) {
+                  console.error("[MainLayout] Image upload failed for help request in mutationFn:", uploadError);
+                  throw uploadError;
+              }
+          }
+
+          const finalImageUrls = uploadedImageUrls.length > 0 ? uploadedImageUrls : [];
+          const { imageFile, ...postDataForFirestoreBase } = newHelpRequestDataWithImage;
+
+          const mentionedUserIds = Array.isArray(newHelpRequestDataWithImage.mentionedUserIds) ? newHelpRequestDataWithImage.mentionedUserIds : [];
+
+
+          const postDataForFirestore: NewPostData = {
+              ...postDataForFirestoreBase,
+              imageUrls: finalImageUrls,
+              mentionedUserIds: mentionedUserIds,
+              requestType: 'help_request',
+          };
+          return addPostToFirestore(postDataForFirestore);
+      },
+      onSuccess: (newlyCreatedPostId, variables) => {
+          queryClient.invalidateQueries({ queryKey: ['posts'] });
+          queryClient.invalidateQueries({ queryKey: ['userPosts'] });
+          queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
+          toast({
+              title: "Help Request Submitted",
+              description: "Your request for help has been posted.",
+          });
+          setIsRequestHelpDialogOpen(false);
+
+          if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
+              variables.mentionedUserIds.forEach(async (mentionedUid) => {
+                  if (mentionedUid !== user.uid) { // Don't notify self for mentioning self in post
+                      try {
+                          await createNotification({
+                              userId: mentionedUid,
+                              type: 'mention',
+                              senderId: user.uid,
+                              postId: newlyCreatedPostId,
+                              postQuestion: variables.question,
+                              textSnippet: variables.descriptionDetails ? variables.descriptionDetails.substring(0, 100) : "You were mentioned in a help request!",
+                          });
+                      } catch (notifyError) {
+                          console.error(`[MainLayout] Failed to create mention notification for help request ${newlyCreatedPostId}:`, notifyError);
+                      }
+                  }
+              });
+          }
+      },
+      onError: (error: Error) => {
+          toast({
+              variant: "destructive",
+              title: "Request Failed",
+              description: `Could not submit your help request: ${error.message}.`,
+          });
+      },
+  });
+
 
   const handleAddPost = useCallback(
     (formData: CreatePostFormData) => {
@@ -698,32 +734,30 @@ export default function MainLayout({
       const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
       const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
 
-      const newPostDataForService: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
+      const newPostDataForService: NewPostData & { imageFile?: File | null } = {
         question: formData.question,
-        description: formData.description, // General description for 'post'
+        description: formData.description,
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
         industry: industryDetails?.name || formData.industry,
         naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Startup", // Example, adjust as needed
-        safetyIndicator: "Medium", // Example
-        ratingScore: 0, // Example
+        businessType: "Startup",
+        safetyIndicator: "Medium",
+        ratingScore: 0,
         imageFile: formData.imageFile,
         imageUrls: [],
-        mentionedUserIds: formData.mentionedUserIds || [],
+        mentionedUserIds: formData.mentionedUserIds,
         requestType: 'post',
       };
-
-      console.log("[MainLayout] Calling addPostMutation.mutate with (regular post):", newPostDataForService);
       addPostMutation.mutate(newPostDataForService);
     },
     [user, toast, addPostMutation, queryClient]
   );
 
-  const handleAddHelpRequest = useCallback(
-    (formData: RequestHelpFormData) => {
+  const handleRequestHelpSubmit = useCallback(
+    (formData: CreatePostFormData) => { // Using CreatePostFormData as it's a duplicate
       if (!user) {
         toast({ variant: "destructive", title: "Authentication Required" });
         return;
@@ -732,31 +766,26 @@ export default function MainLayout({
       const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
       const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
 
-      const newHelpRequestData: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
+      const newHelpRequestData: NewPostData & { imageFile?: File | null } = {
         question: formData.question,
-        descriptionDetails: formData.descriptionDetails,
-        descriptionTried: formData.descriptionTried,
-        descriptionOutcome: formData.descriptionOutcome,
+        description: formData.description, // From CreatePostForm, will be general description
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
         industry: industryDetails?.name || formData.industry,
         naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Project", // Example
-        safetyIndicator: "Medium", // Example
-        ratingScore: 0, // Example
-        // paymentAmount: formData.paymentAmount, // Removed
-        // deadline: formData.deadline ? Timestamp.fromDate(formData.deadline) : undefined, // Removed
+        businessType: "Project",
+        safetyIndicator: "Medium",
+        ratingScore: 0,
         imageFile: formData.imageFile,
         imageUrls: [],
-        mentionedUserIds: formData.mentionedUserIds || [],
-        requestType: 'help_request',
+        mentionedUserIds: formData.mentionedUserIds,
+        requestType: 'help_request', // Key difference
       };
-      console.log("[MainLayout] Calling addPostMutation (as addHelpRequestMutation) with (help request):", newHelpRequestData);
-      addPostMutation.mutate(newHelpRequestData); // Use the same mutation but with different data structure
+      addHelpRequestMutation.mutate(newHelpRequestData);
     },
-    [user, toast, addPostMutation, queryClient]
+    [user, toast, addHelpRequestMutation, queryClient]
   );
 
 
@@ -779,204 +808,198 @@ export default function MainLayout({
   };
 
   const rootLayoutClasses = cn(
-    "flex flex-col",
-    isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen",
-    "bg-background"
+    "flex flex-col bg-background",
+    isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
   );
-
-  const hideAppChrome = false; // Always show chrome now
 
 
   return (
     <div className={rootLayoutClasses}>
-      {!hideAppChrome && (
-        <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
-            <div className="mr-4 hidden md:flex">
-              <Link href="/" className="mr-6 flex items-center space-x-2">
-                <Factory className="h-6 w-6 text-primary" />
-                <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
-                  AnonyCollab
-                </span>
-              </Link>
-              <nav className="flex items-center gap-4 text-sm lg:gap-6">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.title}
-                    href={item.href}
-                    className={cn(
-                      "transition-colors hover:text-foreground/80 flex items-center",
-                      pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
-                    )}
-                  >
-                    <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
-                    {item.title}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-            <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
-              {user && (
-                <>
-                  <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
-                      <DialogTrigger asChild>
-                          <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                          <PlusCircle className="mr-2 h-4 w-4" />
-                          Create Post
-                          </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                          <DialogHeader className="p-6 pb-4 border-b">
-                          <DialogTitle>Create a New Post</DialogTitle>
-                          <DialogDescription>
-                              Share your question or need with the community. Keep it anonymous.
-                          </DialogDescription>
-                          </DialogHeader>
-                          <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                          {isCreatePostOpen && user && (
-                              <DynamicCreatePostForm
-                                  onSubmit={handleAddPost}
-                                  availableTags={availableTags}
-                                  detailedSectorsData={detailedSectorsData}
-                                  isSubmitting={addPostMutation.isPending && addPostMutation.variables?.requestType === 'post'}
-                                  currentUserId={user.uid}
-                              />
-                          )}
-                          </div>
-                      </DialogContent>
-                  </Dialog>
-
-                  <Dialog open={isRequestHelpDialogOpen} onOpenChange={setIsRequestHelpDialogOpen}>
-                      <DialogTrigger asChild>
-                          <Button variant="secondary" size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
-                            <Handshake className="mr-2 h-4 w-4" />
-                            Request Help
-                          </Button>
-                      </DialogTrigger>
-                      <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                          <DialogHeader className="p-6 pb-4 border-b">
-                          <DialogTitle>Request Assistance</DialogTitle>
-                          <DialogDescription>
-                              Describe the help you need. This will be posted to the board.
-                          </DialogDescription>
-                          </DialogHeader>
-                          <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                          {isRequestHelpDialogOpen && user && (
-                              <DynamicRequestHelpForm // Now correctly pointing to the new form for help requests
-                                  onSubmit={handleAddHelpRequest}
-                                  availableTags={availableTags}
-                                  detailedSectorsData={detailedSectorsData}
-                                  isSubmitting={addPostMutation.isPending && addPostMutation.variables?.requestType === 'help_request'}
-                                  currentUserId={user.uid}
-                              />
-                          )}
-                          </div>
-                      </DialogContent>
-                  </Dialog>
-                </>
-              )}
-
-              {user ? (
-                <div className="flex items-center gap-2">
-                  {user.uid && <NotificationDropdown userId={user.uid} />}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={user.photoURL ?? undefined} alt={user.displayName || user.email || "User"} />
-                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                            {getInitials(user.displayName || user.email)}
-                          </AvatarFallback>
-                        </Avatar>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuLabel className="font-normal">
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium leading-none">{user.displayName || 'User'}</p>
-                          <p className="text-xs leading-none text-muted-foreground">
-                            {user.email}
-                          </p>
-                        </div>
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
-                        <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer">
-                          <User className="mr-2 h-4 w-4" />
-                          <span>Profile</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
-                        <Link href="/subscription" className="w-full cursor-pointer">
-                          <CreditCard className="mr-2 h-4 w-4" />
-                          <span>Subscription</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
-                        <Link href="/settings/profile" className="w-full cursor-pointer">
-                          <Settings className="mr-2 h-4 w-4" />
-                          <span>Settings</span>
-                        </Link>
-                      </DropdownMenuItem>
-                      <DynamicThemeToggle />
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                        <LogOut className="mr-2 h-4 w-4" />
-                        <span>Log out</span>
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/login">Login</Link>
-                  </Button>
-                  <Button variant="default" size="sm" asChild>
-                    <Link href="/signup">Sign Up</Link>
-                  </Button>
-                </div>
-              )}
-            </div>
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+          <div className="mr-4 hidden md:flex">
+            <Link href="/" className="mr-6 flex items-center space-x-2">
+              <Factory className="h-6 w-6 text-primary" />
+              <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
+                AnonyCollab
+              </span>
+            </Link>
+            <nav className="flex items-center gap-4 text-sm lg:gap-6">
+              {navItems.map((item) => (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className={cn(
+                    "transition-colors hover:text-foreground/80 flex items-center",
+                    pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
+                  )}
+                >
+                  <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
+                  {item.title}
+                </Link>
+              ))}
+            </nav>
           </div>
-        </header>
-      )}
+          <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+            {user && (
+              <>
+                <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Create Post
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                    <DialogHeader className="p-6 pb-4 border-b">
+                      <DialogTitle>Create a New Post</DialogTitle>
+                      <DialogDescription>
+                        Share your question or need with the community. Keep it anonymous.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                      {isCreatePostOpen && user && (
+                        <DynamicCreatePostForm
+                          onSubmit={handleAddPost}
+                          availableTags={availableTags}
+                          detailedSectorsData={detailedSectorsData}
+                          isSubmitting={addPostMutation.isPending}
+                          currentUserId={user.uid}
+                        />
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                <Dialog open={isRequestHelpDialogOpen} onOpenChange={setIsRequestHelpDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button variant="secondary" size="sm" className="bg-amber-500 hover:bg-amber-600 text-white">
+                      <Handshake className="mr-2 h-4 w-4" />
+                      Request Help
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                    <DialogHeader className="p-6 pb-4 border-b">
+                      <DialogTitle>Request Assistance</DialogTitle>
+                      <DialogDescription>
+                        Describe the help you need. This will be posted to the board.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                      {isRequestHelpDialogOpen && user && (
+                        <DynamicRequestHelpForm
+                          onSubmit={handleRequestHelpSubmit}
+                          availableTags={availableTags}
+                          detailedSectorsData={detailedSectorsData}
+                          isSubmitting={addHelpRequestMutation.isPending}
+                          currentUserId={user.uid}
+                        />
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+              </>
+            )}
+
+            {user ? (
+              <div className="flex items-center gap-2">
+                {user.uid && <NotificationDropdown userId={user.uid} />}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email)} />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                          {getInitials(user.displayName || user.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">{user.displayName || 'User'}</p>
+                        <p className="text-xs leading-none text-muted-foreground">
+                          {user.email}
+                        </p>
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                      <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer">
+                        <User className="mr-2 h-4 w-4" />
+                        <span>Profile</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                      <Link href="/subscription" className="w-full cursor-pointer">
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        <span>Subscription</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
+                      <Link href="/settings/profile" className="w-full cursor-pointer">
+                        <Settings className="mr-2 h-4 w-4" />
+                        <span>Settings</span>
+                      </Link>
+                    </DropdownMenuItem>
+                    <DynamicThemeToggle />
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                      <LogOut className="mr-2 h-4 w-4" />
+                      <span>Log out</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild>
+                  <Link href="/login">Login</Link>
+                </Button>
+                <Button variant="default" size="sm" asChild>
+                  <Link href="/signup">Sign Up</Link>
+                </Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
 
       <main className={cn(
         "flex-1 flex flex-col",
-        isMobile ? "pb-14" : "pb-0" // Ensure bottom padding for mobile nav
+        isMobile ? "pb-14" : "pb-0"
       )}>
         {children}
       </main>
 
-      {!hideAppChrome && isMobile && (
-            <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border md:hidden h-14">
-                <div className="container mx-auto flex justify-around items-center h-full">
-                {navItems.map((item) => (
-                    <Link
-                    key={`mobile-${item.title}`}
-                    href={item.href}
-                    className={cn(
-                        "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
-                        pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
-                    )}
-                    >
-                    <item.icon className="h-5 w-5 mb-0.5" />
-                    <span>{item.title}</span>
-                    </Link>
-                ))}
-                </div>
-            </nav>
-        )}
+      {isMobile && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border md:hidden h-14">
+          <div className="container mx-auto flex justify-around items-center h-full">
+            {navItems.map((item) => (
+              <Link
+                key={`mobile-${item.title}`}
+                href={item.href}
+                className={cn(
+                  "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
+                  pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
+                )}
+              >
+                <item.icon className="h-5 w-5 mb-0.5" />
+                <span>{item.title}</span>
+              </Link>
+            ))}
+          </div>
+        </nav>
+      )}
 
-       {!hideAppChrome && !isMobile && (
-          <footer className="py-4 border-t mt-auto">
-            <div className="container mx-auto text-center text-sm text-muted-foreground">
-              © {new Date().getFullYear()} AnonyCollab. All rights reserved.
-            </div>
-          </footer>
+      {!isMobile && (
+        <footer className="py-4 border-t md:mt-auto">
+          <div className="container mx-auto text-center text-sm text-muted-foreground">
+            © {new Date().getFullYear()} AnonyCollab. All rights reserved.
+          </div>
+        </footer>
       )}
     </div>
   );
 }
-
