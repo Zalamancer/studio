@@ -6,26 +6,51 @@ export interface Post {
   userId: string; // ID of the user who created the post
   tags: string[];
   question: string;
-  description?: string;
-  sector: string; 
-  subSector?: string; 
-  industry?: string; 
+  description?: string; // For 'post' type
+  // For 'help_request' type
+  descriptionDetails?: string;
+  descriptionTried?: string;
+  descriptionOutcome?: string;
+
+  sector: string;
+  subSector?: string;
+  industry?: string;
   businessType: string;
   safetyIndicator: 'High' | 'Medium' | 'Low';
   ratingScore: number;
   createdAt: Timestamp;
-  naicsCode?: string; 
+  naicsCode?: string;
   imageUrls?: string[];
   mentionedUserIds?: string[];
-  requestType?: 'post' | 'help_request'; // New field
-  // paymentAmount?: number; // Removed
-  // deadline?: Date; // Changed from Timestamp to Date for client-side form, service will convert
+  requestType?: 'post' | 'help_request';
+  maxBudget?: number; // Changed from paymentAmount
+  deadline?: Date; // For help_request deadline
 }
 
 // Type for data being added
 export type NewPostData = Omit<Post, 'id' | 'createdAt' | 'deadline'> & {
-    createdAt?: Date; 
-    requestType?: 'post' | 'help_request'; // New field
-    // paymentAmount?: number; // Removed
-    // deadline?: Date | Timestamp; // Removed
+    createdAt?: Timestamp; // Allow serverTimestamp
+    deadline?: Date | Timestamp; // Allow Date from client, convert to Timestamp in service
+    // All other fields are optional for NewPostData if they are optional in Post, or will be set by service
 };
+
+// --- Bid System (Future Implementation) ---
+// This is a placeholder for when we implement bidding.
+// It's not used by the current changes but good to define early.
+export interface Bid {
+  id: string; // Firestore document ID
+  postId: string; // ID of the help request post this bid is for
+  bidderId: string; // UID of the user making the bid
+  bidderName?: string; // Anonymous name for display
+  bidderAvatar?: string;
+  bidAmount: number;
+  bidMessage?: string; // Optional message accompanying the bid
+  timestamp: Timestamp; // Firestore Timestamp when bid was placed
+  status: 'pending' | 'accepted' | 'rejected'; // Status of the bid
+}
+
+export type NewBidData = Omit<Bid, 'id' | 'timestamp' | 'bidderName' | 'bidderAvatar' | 'status'>;
+
+export interface ClientBid extends Omit<Bid, 'timestamp'> {
+  timestamp: number; // Milliseconds since epoch
+}

@@ -20,38 +20,36 @@ const postsCollectionRef = collection(db, 'posts');
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
     const dataForFirestore: { [key: string]: any } = {
-      // Initialize with common fields
       question: postData.question,
       tags: postData.tags || [],
       sector: postData.sector,
       subSector: postData.subSector || null,
       industry: postData.industry || null,
       userId: postData.userId,
-      businessType: postData.businessType || "Startup", // Default if not provided
-      safetyIndicator: postData.safetyIndicator || "Medium", // Default
-      ratingScore: postData.ratingScore || 0, // Default
+      businessType: postData.businessType || "Startup",
+      safetyIndicator: postData.safetyIndicator || "Medium",
+      ratingScore: postData.ratingScore || 0,
       naicsCode: postData.naicsCode || null,
       imageUrls: Array.isArray(postData.imageUrls) ? postData.imageUrls : [],
       mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
-      requestType: postData.requestType || 'post', // Default to 'post'
+      requestType: postData.requestType || 'post',
+      maxBudget: postData.maxBudget === undefined ? null : postData.maxBudget, // Handle maxBudget
+      deadline: postData.deadline instanceof Date ? Timestamp.fromDate(postData.deadline) : null, // Convert Date to Timestamp
       createdAt: serverTimestamp(),
     };
 
     if (postData.requestType === 'help_request') {
-      dataForFirestore.descriptionDetails = postData.descriptionDetails || ""; // Mandatory for help_request
+      dataForFirestore.descriptionDetails = postData.descriptionDetails || "";
       dataForFirestore.descriptionTried = postData.descriptionTried || null;
       dataForFirestore.descriptionOutcome = postData.descriptionOutcome || null;
-      dataForFirestore.description = null; // Ensure general description is null for help requests
+      dataForFirestore.description = null;
     } else {
-      // For 'post' type or undefined requestType
       dataForFirestore.description = postData.description || null;
       dataForFirestore.descriptionDetails = null;
       dataForFirestore.descriptionTried = null;
       dataForFirestore.descriptionOutcome = null;
     }
     
-    // Clean up any explicitly undefined values that might have come from postData
-    // This step might be redundant if all defaults are handled above, but as a safeguard:
     Object.keys(dataForFirestore).forEach(key => {
       if (dataForFirestore[key] === undefined) {
         dataForFirestore[key] = null;
@@ -92,10 +90,10 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             userId: data.userId,
             tags: data.tags || [],
             question: data.question || "",
-            description: data.description, // Will be null/undefined if help_request
-            descriptionDetails: data.descriptionDetails, // Explicitly map
-            descriptionTried: data.descriptionTried,       // Explicitly map
-            descriptionOutcome: data.descriptionOutcome,   // Explicitly map
+            description: data.description,
+            descriptionDetails: data.descriptionDetails,
+            descriptionTried: data.descriptionTried,
+            descriptionOutcome: data.descriptionOutcome,
             sector: data.sector || "",
             subSector: data.subSector,
             industry: data.industry,
@@ -107,6 +105,8 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
             mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
             requestType: data.requestType || 'post',
+            maxBudget: data.maxBudget, // Fetch maxBudget
+            deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined, // Convert Timestamp to Date
        } as Post;
     });
     console.log(`[postService] Fetched ${posts.length} posts from Firestore.`);
@@ -168,9 +168,9 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         tags: data.tags || [],
         question: data.question || "",
         description: data.description,
-        descriptionDetails: data.descriptionDetails, // Explicitly map
-        descriptionTried: data.descriptionTried,       // Explicitly map
-        descriptionOutcome: data.descriptionOutcome,   // Explicitly map
+        descriptionDetails: data.descriptionDetails,
+        descriptionTried: data.descriptionTried,
+        descriptionOutcome: data.descriptionOutcome,
         sector: data.sector || "",
         subSector: data.subSector,
         industry: data.industry,
@@ -182,6 +182,8 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
         mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
         requestType: data.requestType || 'post',
+        maxBudget: data.maxBudget, // Fetch maxBudget
+        deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined, // Convert Timestamp to Date
       } as Post;
     });
 
