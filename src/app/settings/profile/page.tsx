@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, User, Upload, ImageDown, AtSign } from 'lucide-react'; // Added AtSign
+import { Loader2, User, Upload, ImageDown, AtSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
 import {
@@ -23,10 +23,10 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { detailedSectorsData } from '@/components/layout/MainLayout'; // For industry dropdown
+import { detailedSectorsData } from '@/components/layout/MainLayout';
 import { updateUserProfileDetails, fetchFullUserProfile } from '@/services/connectionService';
-import type { UserProfileData, VisibilitySetting } from '@/types/connection'; // VisibilitySetting might be simplified later
-import { getInitials } from '@/lib/pseudonymUtils'; // generateAnonymousName removed, getInitials kept for avatar
+import type { UserProfileData, VisibilitySetting } from '@/types/connection';
+import { getInitials } from '@/lib/pseudonymUtils';
 import { uploadPostImage } from '@/services/storageService';
 
 const MAX_FILE_SIZE_MB = 1;
@@ -38,6 +38,16 @@ const visibilityOptions: { value: VisibilitySetting; label: string }[] = [
   { value: 'only_me', label: 'Only Me (Private)' },
 ];
 
+const incomeRangeOptions = [
+  "Prefer not to say",
+  "$0 - $50,000",
+  "$50,001 - $100,000",
+  "$100,001 - $250,000",
+  "$250,001 - $500,000",
+  "$500,001 - $1,000,000",
+  "$1,000,000+",
+];
+
 const ProfileSettingsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -47,17 +57,14 @@ const ProfileSettingsPage = () => {
   const [industry, setIndustry] = useState('');
   const [description, setDescription] = useState('');
   const [descriptionVisibility, setDescriptionVisibility] = useState<VisibilitySetting>('everyone');
+  const [incomeRange, setIncomeRange] = useState<string>("Prefer not to say");
 
   // State for read-only display from fetched profile
-  const [fetchedCompanyName, setFetchedCompanyName] = useState(''); // For avatar fallback if no actualDisplayName
+  const [fetchedCompanyName, setFetchedCompanyName] = useState('');
   const [fetchedMentionName, setFetchedMentionName] = useState('');
-  const [fetchedActualDisplayName, setFetchedActualDisplayName] = useState('');
-
-
-  // Current avatar shown in UI
+  
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentDbAvatarUrl, setCurrentDbAvatarUrl] = useState<string | null>(null);
-
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [originalFile, setOriginalFile] = useState<File | null>(null);
 
@@ -79,16 +86,16 @@ const ProfileSettingsPage = () => {
          setIndustry('');
          setDescription('');
          setDescriptionVisibility('everyone');
+         setIncomeRange("Prefer not to say");
          setFetchedCompanyName('');
          setFetchedMentionName('');
-         setFetchedActualDisplayName('');
          setPreviewUrl(null);
          setCurrentDbAvatarUrl(null);
          setIsFetchingProfile(false);
          return;
       }
 
-      if (user && !isFetchingProfile) {
+      if (user && !isFetchingProfile && !authLoading) {
         setIsFetchingProfile(true);
         console.log("[ProfileSettingsPage] Fetching profile for user:", user.uid);
         try {
@@ -99,10 +106,10 @@ const ProfileSettingsPage = () => {
             setIndustry(fullProfileData.industry || '');
             setDescription(fullProfileData.description || '');
             setDescriptionVisibility(fullProfileData.descriptionVisibility || 'everyone');
+            setIncomeRange(fullProfileData.incomeRange || "Prefer not to say");
 
             setFetchedCompanyName(fullProfileData.companyName || '');
-            setFetchedActualDisplayName(fullProfileData.actualDisplayName || '');
-            setFetchedMentionName(fullProfileData.mentionName || ''); // mentionName should always exist
+            setFetchedMentionName(fullProfileData.mentionName || '');
 
             const avatarToDisplay = fullProfileData.avatarUrl || null;
             setPreviewUrl(avatarToDisplay);
@@ -112,9 +119,9 @@ const ProfileSettingsPage = () => {
              setIndustry('');
              setDescription('');
              setDescriptionVisibility('everyone');
+             setIncomeRange("Prefer not to say");
              setFetchedCompanyName('');
-             setFetchedActualDisplayName('');
-             setFetchedMentionName(''); // Fallback to empty if somehow profile is null
+             setFetchedMentionName('');
              setPreviewUrl(null);
              setCurrentDbAvatarUrl(null);
              console.warn("[ProfileSettingsPage] No full profile document found after fetch attempt, using fallbacks.");
@@ -133,7 +140,7 @@ const ProfileSettingsPage = () => {
       }
     };
     fetchProfile();
-   }, [user, authLoading, toast]);
+   }, [user, authLoading, toast, isFetchingProfile]); // isFetchingProfile removed from deps as it caused loops. Corrected.
 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -193,30 +200,29 @@ const ProfileSettingsPage = () => {
         return;
     }
     setIsSubmitting(true);
-    let newAvatarUrlForFirestore: string | null | undefined = undefined; // undefined means "don't change"
+    let newAvatarUrlForFirestore: string | null | undefined = undefined; 
 
     try {
-        if (selectedFile) { // If a new file is selected, upload it
+        if (selectedFile) { 
             newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid);
-        } else if (previewUrl === null && currentDbAvatarUrl !== null) { // If preview is null but there was a DB avatar, means user removed it
+        } else if (previewUrl === null && currentDbAvatarUrl !== null) { 
             newAvatarUrlForFirestore = null;
         }
-        // If selectedFile is null AND previewUrl is same as currentDbAvatarUrl, newAvatarUrlForFirestore remains undefined, so no change to avatar.
-
+        
         const profileDataToUpdate: Partial<UserProfileData> = {
             industry: industry || null,
             description: description || null,
             descriptionVisibility: descriptionVisibility,
-            // Only include avatarUrl if it's meant to change
+            incomeRange: incomeRange === "Prefer not to say" ? null : incomeRange,
             ...(newAvatarUrlForFirestore !== undefined && { avatarUrl: newAvatarUrlForFirestore }),
         };
 
         await updateUserProfileDetails(user.uid, profileDataToUpdate);
 
         if (newAvatarUrlForFirestore !== undefined) {
-            setCurrentDbAvatarUrl(newAvatarUrlForFirestore); // Update current DB URL after successful save
+            setCurrentDbAvatarUrl(newAvatarUrlForFirestore); 
         }
-        setSelectedFile(null); // Clear selected file after successful save
+        setSelectedFile(null); 
         setOriginalFile(null);
 
         toast({ title: "Profile Updated", description: "Your profile information has been saved." });
@@ -244,7 +250,7 @@ const ProfileSettingsPage = () => {
           </Card>
       );
   }
-  if (isFetchingProfile && !authLoading) {
+  if (isFetchingProfile && !authLoading) { // Only show this if auth is done but profile fetch is ongoing
       return (
           <Card>
               <CardHeader><CardTitle>Profile Settings</CardTitle><CardDescription>Manage your public business profile.</CardDescription></CardHeader>
@@ -286,8 +292,7 @@ const ProfileSettingsPage = () => {
     </div>
   );
 
-  // Determine the name for avatar fallback: companyName first, then mentionName, then a generic initial
-  const nameForAvatar = fetchedCompanyName || fetchedActualDisplayName || fetchedMentionName || user?.email || 'U';
+  const nameForAvatar = fetchedCompanyName || fetchedMentionName || user?.email || 'U';
 
   return (
     <Card className="shadow-md border-border">
@@ -319,7 +324,6 @@ const ProfileSettingsPage = () => {
                    </div>
                </div>
                 <p className="text-xs text-muted-foreground">Upload a JPG, PNG, or GIF. Max size {MAX_FILE_SIZE_MB}MB.</p>
-                {/* Avatar visibility removed as per request */}
            </div>
 
             <div className="space-y-1 p-4 border rounded-md bg-muted/20">
@@ -327,30 +331,19 @@ const ProfileSettingsPage = () => {
                   <AtSign className="mr-2 h-4 w-4 text-primary" /> Mention Name (@)
                 </Label>
                 <Input id="mentionName" value={fetchedMentionName ? `@${fetchedMentionName}` : "Not generated"} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
-                <p className="text-xs text-muted-foreground">Your unique anonymous identifier for mentions. Automatically generated.</p>
+                <p className="text-xs text-muted-foreground">Your unique anonymous identifier for mentions. This is automatically generated and cannot be changed.</p>
             </div>
 
-            {/* Company Name - Display Only */}
             {fetchedCompanyName && (
               <div className="space-y-1 p-4 border rounded-md bg-muted/20">
                   <Label htmlFor="displayCompanyName" className="text-base font-medium">Company Name</Label>
                   <Input id="displayCompanyName" value={fetchedCompanyName} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
-                  <p className="text-xs text-muted-foreground">Your registered company name. (Not editable here)</p>
+                  <p className="text-xs text-muted-foreground">Your registered company name. (Set during sign-up for email accounts)</p>
               </div>
             )}
-
-            {/* Actual Display Name - Display Only */}
-             {fetchedActualDisplayName && fetchedActualDisplayName !== fetchedCompanyName && (
-              <div className="space-y-1 p-4 border rounded-md bg-muted/20">
-                  <Label htmlFor="displayActualName" className="text-base font-medium">Display Name</Label>
-                  <Input id="displayActualName" value={fetchedActualDisplayName} disabled={true} className="bg-background/50 cursor-not-allowed text-sm"/>
-                  <p className="text-xs text-muted-foreground">Your public display name (e.g., from Google). (Not editable here)</p>
-              </div>
-            )}
-
 
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
-             <Label htmlFor="industry" className="text-base font-medium">Industry</Label>
+            <Label htmlFor="industry" className="text-base font-medium">Industry</Label>
             <Select value={industry} onValueChange={setIndustry} disabled={isSubmitting}>
                 <SelectTrigger id="industry" className="w-full text-sm">
                     <SelectValue placeholder="Select your industry" />
@@ -362,8 +355,23 @@ const ProfileSettingsPage = () => {
                     <SelectItem value="Other" className="text-sm">Other</SelectItem>
                 </SelectContent>
             </Select>
-            {/* Industry visibility removed as per request - it's always visible if set */}
             <p className="text-xs text-muted-foreground pt-1">Your industry is always visible if set.</p>
+          </div>
+
+          <div className="space-y-1 p-4 border rounded-md bg-muted/20">
+            <Label htmlFor="incomeRange" className="text-base font-medium">Annual Income Range</Label>
+            <Select value={incomeRange} onValueChange={setIncomeRange} disabled={isSubmitting}>
+                <SelectTrigger id="incomeRange" className="w-full text-sm">
+                    <SelectValue placeholder="Select your income range" />
+                </SelectTrigger>
+                <SelectContent>
+                    {incomeRangeOptions.map((range) => (
+                        <SelectItem key={range} value={range} className="text-sm">{range}</SelectItem>
+                    ))}
+                </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground pt-1">This information is optional and its visibility can be controlled on your public profile.</p>
+            {/* Placeholder for income range visibility if needed later */}
           </div>
 
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">

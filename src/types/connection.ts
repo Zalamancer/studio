@@ -1,43 +1,48 @@
 // src/types/connection.ts
 import type { Timestamp } from 'firebase/firestore';
 
-export type VisibilitySetting = 'everyone' | 'connected' | 'only_me'; // This type might become unused or simplified.
+export type VisibilitySetting = 'everyone' | 'connected' | 'only_me';
 
-// Basic user profile information used in connection lists/requests AND for @mention suggestions
-export interface UserProfileBasic {
-    userId: string;
-    displayName: string;        // Derived: companyName or mentionName
-    mentionName: string;        // The "ColorAnimalNumber" name, always used for @mention text and filtering/linking
-    avatarUrl?: string;
-}
-
-// More detailed user profile data stored in the 'users' collection
+// User profile data stored in Firestore 'users' collection
 export interface UserProfileData {
     uid: string;
     email?: string | null;
-    companyName?: string | null;               // Company name from sign-up form, always visible if present
-    mentionName: string;                // The "ColorAnimalNumber" name, canonical for @mentions. Generated on creation.
-    industry?: string | null;                  // Always visible if present
-    avatarUrl?: string | null;                 // Always visible if present
-    description?: string | null;               // Visibility controlled by `descriptionVisibility`
+    // actualDisplayName?: string | null; // Removed in favor of more specific fields + mentionName
+    // actualDisplayNameVisibility?: VisibilitySetting; // Removed
+
+    companyName?: string | null; // Always visible if set, used as primary display name if actualDisplayName not set
+    // companyNameVisibility?: VisibilitySetting; // Removed
+
+    mentionName: string; // The "ColorAnimalNumber" name, e.g., BlueWhale123 - used for @mentions
+
+    industry?: string | null; // Always visible if set
+    // industryVisibility?: VisibilitySetting; // Removed
+
+    avatarUrl?: string | null; // Always visible if set
+    // avatarVisibility?: VisibilitySetting; // Removed
+
+    description?: string | null;
     descriptionVisibility?: VisibilitySetting; // Visibility for description
+
+    incomeRange?: string | null; // New field for income range
+
     tags?: string[];
     location?: string | null;
     established?: string | null;
-    contactEmail?: string | null;              // Visibility could be controlled by a specific setting if needed later
-    contactEmailVisibility?: VisibilitySetting;
-    contactPhone?: string | null;              // Visibility could be controlled by a specific setting if needed later
-    contactPhoneVisibility?: VisibilitySetting;
+    contactEmail?: string | null;
+    contactPhone?: string | null;
     verified?: boolean;
     createdAt?: Timestamp;
     lastLoginAt?: Timestamp;
     updatedAt?: Timestamp;
+}
 
-    // Removed fields:
-    // actualDisplayName?: string | null;
-    // actualDisplayNameVisibility?: VisibilitySetting;
-    // companyNameVisibility?: VisibilitySetting;
-    // industryVisibility?: VisibilitySetting;
-    // avatarVisibility?: VisibilitySetting;
-    // photoURL?: string | null; // Firebase Auth photoURL, avatarUrl is preferred from storage
+// Basic user profile information, often derived, used for displays and suggestions
+export interface UserProfileBasic {
+    userId: string; // UID
+    displayName: string; // Derived: companyName or mentionName
+    mentionName: string; // The "ColorAnimalNumber" name for @mentions
+    avatarUrl?: string;
+    // companyName?: string; // Redundant if displayName logic covers it
+    // actualDisplayName?: string; // Redundant
 }
