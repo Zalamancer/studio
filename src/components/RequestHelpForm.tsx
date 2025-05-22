@@ -1,3 +1,4 @@
+
 // src/components/RequestHelpForm.tsx
 "use client";
 
@@ -21,7 +22,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Loader2, Upload, XCircle, ImageDown, CalendarDays, AtSign } from 'lucide-react';
+import { Loader2, Upload, XCircle, ImageDown, CalendarDays, AtSign, User } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
@@ -36,8 +37,6 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
@@ -45,24 +44,8 @@ import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 
-export interface Industry {
-  name: string;
-  code: string;
-}
-
-export interface SubSector {
-  name: string;
-  code: string;
-  industries: Industry[];
-}
-
-export interface SectorWithSubSectors {
-  name: string;
-  code: string;
-  description?: string;
-  subSectors: SubSector[];
-}
 
 const getInitials = (name: string | undefined | null): string => {
     return getSharedInitials(name);
@@ -81,8 +64,6 @@ const requestHelpFormSchema = z.object({
   sector: z.string().min(1, "Please select a sector."),
   subSector: z.string().optional(),
   industry: z.string().optional(),
-  // paymentAmount: z.coerce.number({ invalid_type_error: "Must be a number" }).positive({ message: "Amount must be positive" }).optional(), // Removed
-  // deadline: z.date().optional(), // Removed
   image: z.instanceof(File).optional().nullable()
     .refine(file => !file || file.size <= MAX_FILE_SIZE_BYTES, `Max image size is 2MB.`)
     .refine(
@@ -100,8 +81,6 @@ export interface RequestHelpFormData {
   sector: string;
   subSector?: string;
   industry?: string;
-  // paymentAmount?: number; // Removed
-  // deadline?: Date; // Removed
   imageFile?: File | null;
   mentionedUserIds: string[];
 }
@@ -126,8 +105,6 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
       sector: "",
       subSector: "",
       industry: "",
-      // paymentAmount: undefined, // Removed
-      // deadline: undefined, // Removed
       image: null,
     },
   });
@@ -160,7 +137,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
 
 
   const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
-    queryKey: ['suggestibleUsersForHelpRequest', debouncedDescriptionDetailsQuery, currentUserId],
+    queryKey: ['suggestibleUsersForHelpRequestDescription', debouncedDescriptionDetailsQuery, currentUserId],
     queryFn: () => getSuggestibleUsers(debouncedDescriptionDetailsQuery, debouncedDescriptionDetailsQuery ? 10 : 25),
     enabled: showDescriptionDetailsSuggestions && !!currentUserId,
     staleTime: 1000 * 60 * 1,
@@ -266,6 +243,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
   };
 
   const handleSubmitForm = (values: z.infer<typeof requestHelpFormSchema>) => {
+    console.log("[RequestHelpForm] Values submitted:", JSON.stringify(values, null, 2));
     const submitData: RequestHelpFormData = {
         question: values.question,
         descriptionDetails: values.descriptionDetails,
@@ -275,8 +253,6 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
         sector: values.sector,
         subSector: values.subSector,
         industry: values.industry,
-        // paymentAmount: values.paymentAmount, // Removed
-        // deadline: values.deadline, // Removed
         imageFile: selectedImageFile,
         mentionedUserIds: Array.from(selectedMentionedUserIds),
     };
@@ -284,7 +260,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
     setSelectedMentionedUserIds(new Set());
     setDescriptionDetailsMentionQuery('');
     setShowDescriptionDetailsSuggestions(false);
-    form.reset(); 
+    form.reset();
     setImagePreviewUrl(null);
     setSelectedImageFile(null);
   };
@@ -318,7 +294,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
         evaluateMentionState(descriptionDetailsTextareaRef.current.value, descriptionDetailsTextareaRef.current.selectionStart || 0);
     }
   };
-  
+
   const handleSelectDescriptionDetailsSuggestion = (profile: UserProfileBasic) => {
     if (!descriptionDetailsTextareaRef.current || !profile.mentionName) return;
     const currentValue = form.getValues("descriptionDetails") || "";
@@ -329,12 +305,12 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
     if (lastAtIndex > -1) {
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
-        const mentionToInsert = profile.mentionName; 
+        const mentionToInsert = profile.mentionName;
         const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
-        
+
         form.setValue("descriptionDetails", newText, { shouldValidate: true, shouldDirty: true });
         setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId));
-        
+
         const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
         setTimeout(() => {
             descriptionDetailsTextareaRef.current?.focus();
@@ -376,12 +352,12 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
     if (isLoadingSuggestibleUsers) {
         return [{ userId: 'loading-desc', actualDisplayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
     }
-    
+
     const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
     let results: UserProfileBasic[];
 
     if (debouncedDescriptionDetailsQuery.trim() === '') {
-        results = profilesSource.slice(0, 25); 
+        results = profilesSource.slice(0, 25);
     } else {
         const queryLower = debouncedDescriptionDetailsQuery.toLowerCase();
         results = profilesSource.filter(
@@ -443,7 +419,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                   </TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="details" className="mt-0 flex-grow flex flex-col border border-t-0 rounded-b-md p-3">
+                <TabsContent value="details" className="mt-0 flex-grow flex flex-col border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background">
                   <FormField
                     control={form.control}
                     name="descriptionDetails"
@@ -459,7 +435,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                           <PopoverTrigger asChild>
                               <Textarea
                                 placeholder="Provide full details about the problem or need... (@mention users)"
-                                className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
+                                className="resize-y min-h-[150px] flex-1 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:text-sm"
                                 {...field}
                                 ref={(e) => {
                                   field.ref(e);
@@ -485,7 +461,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                             {filteredDescriptionSuggestions.map(profile => {
                                   const displayableName = profile.actualDisplayName || profile.companyName;
                                   const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
-                                  
+
                                   return (
                                       profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
                                           <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
@@ -523,16 +499,19 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                     )}
                   />
                 </TabsContent>
-                <TabsContent value="tried" className="mt-0 flex-grow flex flex-col border border-t-0 rounded-b-md p-3">
+
+                <TabsContent value="tried" className="mt-0 flex-grow flex flex-col border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background">
                   <FormField
                     control={form.control}
                     name="descriptionTried"
                     render={({ field }) => (
                       <FormItem className="flex-grow flex flex-col">
+                        <FormLabel className="sr-only">What I've Tried</FormLabel>
                         <Textarea
                           placeholder="Describe any solutions or approaches you've already attempted..."
-                          className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
-                          {...field}
+                          className="resize-y min-h-[150px] flex-1 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:text-sm"
+                          value={field.value || ''}
+                          onChange={field.onChange}
                           disabled={isSubmitting}
                         />
                         <FormMessage />
@@ -540,16 +519,19 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                     )}
                   />
                 </TabsContent>
-                <TabsContent value="outcome" className="mt-0 flex-grow flex flex-col border border-t-0 rounded-b-md p-3">
+
+                <TabsContent value="outcome" className="mt-0 flex-grow flex flex-col border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background">
                   <FormField
                     control={form.control}
                     name="descriptionOutcome"
                     render={({ field }) => (
                       <FormItem className="flex-grow flex flex-col">
+                        <FormLabel className="sr-only">Expected Outcome</FormLabel>
                         <Textarea
                           placeholder="What is the ideal result or solution you're looking for?"
-                          className="resize-y min-h-[150px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
-                          {...field}
+                          className="resize-y min-h-[150px] flex-1 rounded-md border border-input bg-background px-3 py-2 text-base ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 md:text-sm"
+                          value={field.value || ''}
+                          onChange={field.onChange}
                           disabled={isSubmitting}
                         />
                         <FormMessage />
@@ -559,51 +541,49 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                 </TabsContent>
               </Tabs>
             </div>
-            {/* End Tabbed Description Section */}
-
 
             <FormField
-              control={form.control}
-              name="image"
-              render={() => (
-                <FormItem>
-                  <FormLabel>Image (Optional)</FormLabel>
-                  <FormControl>
-                    <Input
-                      type="file"
-                      accept="image/png, image/jpeg, image/gif"
-                      ref={fileInputRef}
-                      onChange={handleImageChange}
-                      className="hidden"
-                      disabled={isSubmitting || isCompressing}
-                    />
-                  </FormControl>
-                  <div className="mt-2 flex items-center gap-4">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => fileInputRef.current?.click()}
-                      disabled={isSubmitting || isCompressing}
-                    >
-                      {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
-                      {imagePreviewUrl ? "Change Image" : "Upload Image"}
-                    </Button>
-                    {imagePreviewUrl && (
-                      <Button type="button" variant="ghost" size="sm" onClick={handleRemoveImage} disabled={isSubmitting || isCompressing}>
-                        <XCircle className="mr-2 h-4 w-4 text-destructive" /> Remove
-                      </Button>
-                    )}
-                  </div>
-                  {imagePreviewUrl && (
-                    <div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto">
-                      <Image src={imagePreviewUrl} alt="Preview" fill style={{objectFit:"contain"}} className="rounded-md" data-ai-hint="uploaded image"/>
-                    </div>
-                  )}
-                  <FormDescription>Max 2MB. JPG, PNG, GIF accepted.</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+                control={form.control}
+                name="image"
+                render={() => (
+                    <FormItem>
+                        <FormLabel>Image (Optional)</FormLabel>
+                        <FormControl>
+                            <Input
+                                type="file"
+                                accept="image/png, image/jpeg, image/gif"
+                                ref={fileInputRef}
+                                onChange={handleImageChange}
+                                className="hidden"
+                                disabled={isSubmitting || isCompressing}
+                            />
+                        </FormControl>
+                        <div className="mt-2 flex items-center gap-4">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                onClick={() => fileInputRef.current?.click()}
+                                disabled={isSubmitting || isCompressing}
+                            >
+                                {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
+                                {imagePreviewUrl ? "Change Image" : "Upload Image"}
+                            </Button>
+                            {imagePreviewUrl && (
+                                <Button type="button" variant="ghost" size="sm" onClick={handleRemoveImage} disabled={isSubmitting || isCompressing}>
+                                    <XCircle className="mr-2 h-4 w-4 text-destructive" /> Remove
+                                </Button>
+                            )}
+                        </div>
+                        {imagePreviewUrl && (
+                            <div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto">
+                                <Image src={imagePreviewUrl} alt="Preview" fill style={{objectFit:"contain"}} className="rounded-md" data-ai-hint="uploaded image"/>
+                            </div>
+                        )}
+                        <FormDescription>Max 2MB. JPG, PNG, GIF accepted.</FormDescription>
+                        <FormMessage />
+                    </FormItem>
+                )}
+             />
           </div>
 
           <div className="space-y-6">
@@ -667,8 +647,6 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                 </FormItem>
               )}
             />
-            
-            {/* Payment Amount and Deadline fields are removed as per previous user request */}
 
             <FormField
               control={form.control}
