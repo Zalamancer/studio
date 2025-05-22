@@ -36,14 +36,14 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, HelpingHand, Factory } from "lucide-react"; // Added Factory
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, HelpingHand, Factory } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import type {
-  CreatePostFormData
+  CreatePostFormData // This is for the original CreatePostForm
 } from '@/components/CreatePostForm';
-import type { RequestHelpFormData } from '@/components/RequestHelpForm';
+import type { RequestHelpFormData } from '@/components/RequestHelpForm'; // Import RequestHelpFormData
 import type {
   NewPostData
 } from '@/types/post';
@@ -182,15 +182,15 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     subSectors: [
       { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "211111" }, { name: "Natural Gas Liquid Extraction", code: "211130" }] },
       { name: "Coal Mining", code: "2121", industries: [{ name: "Bituminous Coal and Lignite Surface Mining", code: "212111" }, { name: "Bituminous Coal Underground Mining", code: "212112" }, { name: "Anthracite Mining", code: "212113" }] },
-      { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold Ore Mining", code: "212221" }, { name: "Silver Ore Mining", code: "212222" }, { name: "Copper, Nickel, Lead, and Zinc Mining", code: "212230" }] },
-      { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Dimension Stone Mining and Quarrying", code: "212311" }, { name: "Crushed and Broken Limestone Mining and Quarrying", code: "212312" }, { name: "Construction Sand and Gravel Mining", code: "212321" }, { name: "Industrial Sand Mining", code: "212322" }, { name: "Clay and Ceramic and Refractory Minerals Mining", code: "212325" }] },
-      { name: "Support Activities for Mining", code: "213", industries: [{ name: "Drilling Oil and Gas Wells", code: "213111" }, { name: "Support Activities for Oil and Gas Operations", code: "213112" }, { name: "Support Activities for Coal Mining", code: "213113" }] },
+      { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold Ore Mining", code: "212221" }, { name: "Silver Ore Mining", code: "212222" }, { name: "Copper, Nickel, Lead, and Zinc Mining", code: "212230" }, { name: "Uranium-Radium-Vanadium Ore Mining", code: "212291"}, { name: "All Other Metal Ore Mining", code: "212299"}] },
+      { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Dimension Stone Mining and Quarrying", code: "212311" }, { name: "Crushed and Broken Limestone Mining and Quarrying", code: "212312" }, { name: "Other Crushed and Broken Stone Mining and Quarrying", code: "212319"}, { name: "Construction Sand and Gravel Mining", code: "212321" }, { name: "Industrial Sand Mining", code: "212322" }, { name: "Clay and Ceramic and Refractory Minerals Mining", code: "212325" }, { name: "Potash, Soda, and Borate Mineral Mining", code: "212391"}, { name: "Phosphate Rock Mining", code: "212392"}, { name: "Other Chemical and Fertilizer Mineral Mining", code: "212393"}, { name: "All Other Nonmetallic Mineral Mining", code: "212399"}] },
+      { name: "Support Activities for Mining", code: "213", industries: [{ name: "Drilling Oil and Gas Wells", code: "213111" }, { name: "Support Activities for Oil and Gas Operations", code: "213112" }, { name: "Support Activities for Coal Mining", code: "213113" }, { name: "Support Activities for Metal Mining", code: "213114"}, { name: "Support Activities for Nonmetallic Minerals (except Fuels) Mining", code: "213115"} ] },
     ]
   },
   {
     name: "Utilities", code: "22", description: "Establishments engaged in providing utility services such as electric power, natural gas, steam supply, water supply, and sewage removal.",
     subSectors: [
-      { name: "Electric Power Generation, Transmission and Distribution", code: "2211", industries: [{ name: "Hydroelectric Power Generation", code: "221111" }, { name: "Fossil Fuel Electric Power Generation", code: "221112" }, { name: "Nuclear Electric Power Generation", code: "221113" }, { name: "Electric Bulk Power Transmission and Control", code: "221121" }, { name: "Electric Power Distribution", code: "221122" }] },
+      { name: "Electric Power Generation, Transmission and Distribution", code: "2211", industries: [{ name: "Hydroelectric Power Generation", code: "221111" }, { name: "Fossil Fuel Electric Power Generation", code: "221112" }, { name: "Nuclear Electric Power Generation", code: "221113" }, { name: "Solar Electric Power Generation", code: "221114"}, { name: "Wind Electric Power Generation", code: "221115"}, { name: "Geothermal Electric Power Generation", code: "221116"}, { name: "Biomass Electric Power Generation", code: "221117"}, { name: "Other Electric Power Generation", code: "221118"}, { name: "Electric Bulk Power Transmission and Control", code: "221121" }, { name: "Electric Power Distribution", code: "221122" }] },
       { name: "Natural Gas Distribution", code: "2212", industries: [{ name: "Natural Gas Distribution", code: "221210" }] },
       { name: "Water, Sewage and Other Systems", code: "2213", industries: [{ name: "Water Supply and Irrigation Systems", code: "221310" }, { name: "Sewage Treatment Facilities", code: "221320" }, { name: "Steam and Air-Conditioning Supply", code: "221330" }] },
     ]
@@ -198,9 +198,9 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Construction", code: "23", description: "Establishments primarily engaged in the construction of buildings and engineering projects.",
     subSectors: [
-      { name: "Construction of Buildings", code: "236", industries: [{ name: "New Single-Family Housing Construction (except For-Sale Builders)", code: "236115" }, { name: "New Multifamily Housing Construction (except For-Sale Builders)", code: "236116" }, { name: "Industrial Building Construction", code: "236210" }, { name: "Commercial and Institutional Building Construction", code: "236220" }] },
-      { name: "Heavy and Civil Engineering Construction", code: "237", industries: [{ name: "Water and Sewer Line and Related Structures Construction", code: "237110" }, { name: "Oil and Gas Pipeline and Related Structures Construction", code: "237120" }, { name: "Power and Communication Line and Related Structures Construction", code: "237130" }, { name: "Highway, Street, and Bridge Construction", code: "237310" }, { name: "Other Heavy and Civil Engineering Construction", code: "237990"}] },
-      { name: "Specialty Trade Contractors", code: "238", industries: [{ name: "Plumbing, Heating, and Air-Conditioning Contractors", code: "238220" }, { name: "Electrical Contractors and Other Wiring Installation Contractors", code: "238210" }, { name: "Painting and Wall Covering Contractors", code: "238320" }, { name: "Site Preparation Contractors", code: "238910" }, {"name": "Masonry Contractors", code: "238140"}, {"name": "Roofing Contractors", code: "238160"} ] },
+      { name: "Construction of Buildings", code: "236", industries: [{ name: "New Single-Family Housing Construction (except For-Sale Builders)", code: "236115" }, { name: "New Multifamily Housing Construction (except For-Sale Builders)", code: "236116" }, { name: "Residential Remodelers", code: "236118"}, { name: "Industrial Building Construction", code: "236210" }, { name: "Commercial and Institutional Building Construction", code: "236220" }] },
+      { name: "Heavy and Civil Engineering Construction", code: "237", industries: [{ name: "Water and Sewer Line and Related Structures Construction", code: "237110" }, { name: "Oil and Gas Pipeline and Related Structures Construction", code: "237120" }, { name: "Power and Communication Line and Related Structures Construction", code: "237130" }, { name: "Land Subdivision", code: "237210"}, { name: "Highway, Street, and Bridge Construction", code: "237310" }, { name: "Other Heavy and Civil Engineering Construction", code: "237990"}] },
+      { name: "Specialty Trade Contractors", code: "238", industries: [{ name: "Poured Concrete Foundation and Structure Contractors", code: "238110"}, { name: "Structural Steel and Precast Concrete Contractors", code: "238120"}, { name: "Framing Contractors", code: "238130"}, { name: "Masonry Contractors", code: "238140"}, { name: "Glass and Glazing Contractors", code: "238150"}, { name: "Roofing Contractors", code: "238160"}, { name: "Siding Contractors", code: "238170"}, { name: "Other Foundation, Structure, and Building Exterior Contractors", code: "238190"}, { name: "Electrical Contractors and Other Wiring Installation Contractors", code: "238210" }, { name: "Plumbing, Heating, and Air-Conditioning Contractors", code: "238220" }, { name: "Other Building Equipment Contractors", code: "238290"}, { name: "Drywall and Insulation Contractors", code: "238310"}, { name: "Painting and Wall Covering Contractors", code: "238320" }, { name: "Flooring Contractors", code: "238330"}, { name: "Tile and Terrazzo Contractors", code: "238340"}, { name: "Finish Carpentry Contractors", code: "238350"}, { name: "Other Building Finishing Contractors", code: "238390"}, { name: "Site Preparation Contractors", code: "238910" }, {"name": "All Other Specialty Trade Contractors", code: "238990"} ] },
     ]
   },
   {
@@ -262,8 +262,13 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
           { name: "All Other Wood Product Manufacturing", code: "321999" },
       ]},
       { name: "Paper Manufacturing", code: "322", industries: [
-          { name: "Pulp, Paper, and Paperboard Mills", code: "3221" },
-          { name: "Converted Paper Product Manufacturing", code: "3222" },
+          { name: "Pulp Mills", code: "322110" },
+          { name: "Paper Mills", code: "322120" },
+          { name: "Paperboard Mills", code: "322130" },
+          { name: "Paperboard Container Manufacturing", code: "322211"},
+          { name: "Paper Bag and Coated and Treated Paper Manufacturing", code: "322220"},
+          { name: "Stationery Product Manufacturing", code: "322230"},
+          { name: "Other Converted Paper Product Manufacturing", code: "322299"},
       ]},
       { name: "Printing and Related Support Activities", code: "323", industries: [
           { name: "Printing", code: "323111" },
@@ -271,95 +276,132 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       ]},
       { name: "Petroleum and Coal Products Manufacturing", code: "324", industries: [
           { name: "Petroleum Refineries", code: "324110" },
-          { name: "Asphalt Paving, Roofing, and Saturated Materials Manufacturing", code: "32412" },
-          { name: "Other Petroleum and Coal Products Manufacturing", code: "32419" },
+          { name: "Asphalt Paving Mixture and Block Manufacturing", code: "324121" },
+          { name: "Asphalt Shingle and Coating Materials Manufacturing", code: "324122" },
+          { name: "Other Petroleum and Coal Products Manufacturing", code: "324199" },
       ]},
       { name: "Chemical Manufacturing", code: "325", industries: [
-          { name: "Basic Chemical Manufacturing", code: "3251" },
-          { name: "Resin, Synthetic Rubber, and Artificial and Synthetic Fibers and Filaments Manufacturing", code: "3252" },
-          { name: "Pesticide, Fertilizer, and Other Agricultural Chemical Manufacturing", code: "3253" },
-          { name: "Pharmaceutical and Medicine Manufacturing", code: "3254" },
-          { name: "Paint, Coating, and Adhesive Manufacturing", code: "3255" },
-          { name: "Soap, Cleaning Compound, and Toilet Preparation Manufacturing", code: "3256" },
-          { name: "Other Chemical Product and Preparation Manufacturing", code: "3259" },
+          { name: "Petrochemical Manufacturing", code: "325110" },
+          { name: "Industrial Gas Manufacturing", code: "325120" },
+          { name: "Synthetic Dye and Pigment Manufacturing", code: "325130" },
+          { name: "Other Basic Inorganic Chemical Manufacturing", code: "325180"},
+          { name: "Other Basic Organic Chemical Manufacturing", code: "325190"},
+          { name: "Resin and Synthetic Rubber Manufacturing", code: "325210"},
+          { name: "Artificial and Synthetic Fibers and Filaments Manufacturing", code: "325220"},
+          { name: "Pesticide, Fertilizer, and Other Agricultural Chemical Manufacturing", code: "325320" },
+          { name: "Pharmaceutical and Medicine Manufacturing", code: "325410" },
+          { name: "Paint, Coating, and Adhesive Manufacturing", code: "325510" },
+          { name: "Soap, Cleaning Compound, and Toilet Preparation Manufacturing", code: "325610" },
+          { name: "Other Chemical Product and Preparation Manufacturing", code: "325990" },
       ]},
       { name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [
-          { name: "Plastics Product Manufacturing", code: "3261" },
-          { name: "Rubber Product Manufacturing", code: "3262" },
+          { name: "Plastics Packaging Materials and Unlaminated Film and Sheet Manufacturing", code: "326110"},
+          { name: "Plastics Pipe, Pipe Fitting, and Unlaminated Profile Shape Manufacturing", code: "326120"},
+          { name: "Laminated Plastics Plate, Sheet (except Packaging), and Shape Manufacturing", code: "326130"},
+          { name: "Polystyrene Foam Product Manufacturing", code: "326140"},
+          { name: "Urethane and Other Foam Product (except Polystyrene) Manufacturing", code: "326150"},
+          { name: "Plastics Bottle Manufacturing", code: "326160"},
+          { name: "Other Plastics Product Manufacturing", code: "326190"},
+          { name: "Tire Manufacturing", code: "326210"},
+          { name: "Rubber and Plastics Hoses and Belting Manufacturing", code: "326220"},
+          { name: "Other Rubber Product Manufacturing", code: "326290"},
       ]},
       { name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [
-          { name: "Clay Product and Refractory Manufacturing", code: "3271" },
-          { name: "Glass and Glass Product Manufacturing", code: "3272" },
-          { name: "Cement and Concrete Product Manufacturing", code: "3273" },
-          { name: "Lime and Gypsum Product Manufacturing", code: "3274" },
-          { name: "Other Nonmetallic Mineral Product Manufacturing", code: "3279" },
+          { name: "Pottery, Ceramics, and Plumbing Fixture Manufacturing", code: "327110"},
+          { name: "Clay Building Material and Refractories Manufacturing", code: "327120"},
+          { name: "Glass and Glass Product Manufacturing", code: "327210" },
+          { name: "Cement Manufacturing", code: "327310"},
+          { name: "Ready-Mix Concrete Manufacturing", code: "327320"},
+          { name: "Concrete Pipe, Brick, and Block Manufacturing", code: "327330"},
+          { name: "Other Concrete Product Manufacturing", code: "327390"},
+          { name: "Lime and Gypsum Product Manufacturing", code: "327400" },
+          { name: "Other Nonmetallic Mineral Product Manufacturing", code: "327900" },
       ]},
       { name: "Primary Metal Manufacturing", code: "331", industries: [
           { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "331110" },
-          { name: "Steel Product Manufacturing from Purchased Steel", code: "3312" },
-          { name: "Alumina and Aluminum Production and Processing", code: "3313" },
-          { name: "Nonferrous Metal (except Aluminum) Production and Processing", code: "3314" },
-          { name: "Foundries", code: "3315" },
+          { name: "Iron and Steel Pipe and Tube Manufacturing from Purchased Steel", code: "331210"},
+          { name: "Rolling and Drawing of Purchased Steel", code: "331220"},
+          { name: "Alumina Refining and Primary Aluminum Production", code: "331313"},
+          { name: "Other Aluminum Rolling, Drawing, and Extruding", code: "331318"},
+          { name: "Nonferrous Metal (except Aluminum) Smelting and Refining", code: "331410" },
+          { name: "Copper Rolling, Drawing, Extruding, and Alloying", code: "331420"},
+          { name: "Nonferrous Metal (except Copper and Aluminum) Rolling, Drawing, Extruding, and Alloying", code: "331490"},
+          { name: "Ferrous Metal Foundries", code: "331510"},
+          { name: "Nonferrous Metal Foundries", code: "331520"},
       ]},
       { name: "Fabricated Metal Product Manufacturing", code: "332", industries: [
-          { name: "Forging and Stamping", code: "3321" },
-          { name: "Cutlery and Handtool Manufacturing", code: "3322" },
-          { name: "Architectural and Structural Metals Manufacturing", code: "3323" },
-          { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "3324" },
+          { name: "Forging and Stamping", code: "332110" },
+          { name: "Cutlery and Handtool Manufacturing", code: "332210" },
+          { name: "Architectural and Structural Metals Manufacturing", code: "332310" },
+          { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "332410" },
           { name: "Hardware Manufacturing", code: "332510" },
-          { name: "Spring and Wire Product Manufacturing", code: "3326" },
-          { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "3327" },
-          { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "3328" },
-          { name: "Other Fabricated Metal Product Manufacturing", code: "3329" },
+          { name: "Spring and Wire Product Manufacturing", code: "332610" },
+          { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "332710" },
+          { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "332810" },
+          { name: "Other Fabricated Metal Product Manufacturing", code: "332990" },
       ]},
       { name: "Machinery Manufacturing", code: "333", industries: [
-          { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" },
-          { name: "Industrial Machinery Manufacturing", code: "3332" },
-          { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333" },
-          { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334" },
-          { name: "Metalworking Machinery Manufacturing", code: "3335" },
-          { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336" },
-          { name: "Other General Purpose Machinery Manufacturing", code: "3339" },
+          { name: "Agricultural Implement Manufacturing", code: "333110"},
+          { name: "Construction Machinery Manufacturing", code: "333120"},
+          { name: "Mining and Oil and Gas Field Machinery Manufacturing", code: "333130"},
+          { name: "Industrial Machinery Manufacturing", code: "333240" },
+          { name: "Commercial and Service Industry Machinery Manufacturing", code: "333310" },
+          { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "333410" },
+          { name: "Metalworking Machinery Manufacturing", code: "333510" },
+          { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "333610" },
+          { name: "Other General Purpose Machinery Manufacturing", code: "333990" },
       ]},
       { name: "Computer and Electronic Product Manufacturing", code: "334", industries: [
-          { name: "Computer and Peripheral Equipment Manufacturing", code: "3341" },
-          { name: "Communications Equipment Manufacturing", code: "3342" },
+          { name: "Computer and Peripheral Equipment Manufacturing", code: "334110" },
+          { name: "Telephone Apparatus Manufacturing", code: "334210"},
+          { name: "Radio and Television Broadcasting and Wireless Communications Equipment Manufacturing", code: "334220"},
+          { name: "Other Communications Equipment Manufacturing", code: "334290"},
           { name: "Audio and Video Equipment Manufacturing", code: "334310" },
-          { name: "Semiconductor and Other Electronic Component Manufacturing", code: "3344" },
-          { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "3345" },
+          { name: "Semiconductor and Other Electronic Component Manufacturing", code: "334410" },
+          { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "334510" },
           { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "334610" },
       ]},
       { name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [
-          { name: "Electric Lighting Equipment Manufacturing", code: "3351" },
-          { name: "Household Appliance Manufacturing", code: "3352" },
-          { name: "Electrical Equipment Manufacturing", code: "3353" },
-          { name: "Other Electrical Equipment and Component Manufacturing", code: "3359" },
+          { name: "Electric Lighting Equipment Manufacturing", code: "335130"},
+          { name: "Household Appliance Manufacturing", code: "335210" },
+          { name: "Electrical Equipment Manufacturing", code: "335310" },
+          { name: "Communication and Energy Wire and Cable Manufacturing", code: "335920"},
+          { name: "Wiring Device Manufacturing", code: "335930"},
+          { name: "Other Electrical Equipment and Component Manufacturing", code: "335990" },
       ]},
       { name: "Transportation Equipment Manufacturing", code: "336", industries: [
-          { name: "Motor Vehicle Manufacturing", code: "3361" },
-          { name: "Motor Vehicle Body and Trailer Manufacturing", code: "3362" },
-          { name: "Motor Vehicle Parts Manufacturing", code: "3363" },
-          { name: "Aerospace Product and Parts Manufacturing", code: "3364" },
+          { name: "Automobile and Light Duty Motor Vehicle Manufacturing", code: "336110"},
+          { name: "Heavy Duty Truck Manufacturing", code: "336120"},
+          { name: "Motor Vehicle Body and Trailer Manufacturing", code: "336210" },
+          { name: "Motor Vehicle Parts Manufacturing", code: "336310" },
+          { name: "Aerospace Product and Parts Manufacturing", code: "336410" },
           { name: "Railroad Rolling Stock Manufacturing", code: "336510" },
-          { name: "Ship and Boat Building", code: "3366" },
-          { name: "Other Transportation Equipment Manufacturing", code: "3369" },
+          { name: "Ship and Boat Building", code: "336610" },
+          { name: "Other Transportation Equipment Manufacturing", code: "336990" },
       ]},
       { name: "Furniture and Related Product Manufacturing", code: "337", industries: [
-          { name: "Household and Institutional Furniture and Kitchen Cabinet Manufacturing", code: "3371" },
-          { name: "Office Furniture (including Fixtures) Manufacturing", code: "3372" },
-          { name: "Other Furniture Related Product Manufacturing", code: "3379" },
+          { name: "Wood Kitchen Cabinet and Countertop Manufacturing", code: "337110"},
+          { name: "Household and Institutional Furniture Manufacturing", code: "337120" },
+          { name: "Office Furniture (including Fixtures) Manufacturing", code: "337210" },
+          { name: "Mattress Manufacturing", code: "337910"},
+          { name: "Blind and Shade Manufacturing", code: "337920"},
       ]},
       { name: "Miscellaneous Manufacturing", code: "339", industries: [
-          { name: "Medical Equipment and Supplies Manufacturing", code: "3391" },
-          { name: "Other Miscellaneous Manufacturing", code: "3399" },
+          { name: "Medical Equipment and Supplies Manufacturing", code: "339110" },
+          { name: "Jewelry and Silverware Manufacturing", code: "339910" },
+          { name: "Sporting and Athletic Goods Manufacturing", code: "339920"},
+          { name: "Doll, Toy, and Game Manufacturing", code: "339930"},
+          { name: "Office Supplies (except Paper) Manufacturing", code: "339940"},
+          { name: "Sign Manufacturing", code: "339950"},
+          { name: "All Other Miscellaneous Manufacturing", code: "339990"},
       ]},
     ]
   },
   {
     name: "Wholesale Trade", code: "42", description: "Establishments primarily engaged in wholesaling merchandise, generally without transformation.",
     subSectors: [
-      { name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{ name: "Motor Vehicle and Motor Vehicle Parts and Supplies Merchant Wholesalers", code: "4231" }, { name: "Professional and Commercial Equipment and Supplies Merchant Wholesalers", code: "4234" }, { name: "Metal and Mineral (except Petroleum) Merchant Wholesalers", code: "4235" }] },
-      { name: "Merchant Wholesalers, Nondurable Goods", code: "424", industries: [{ name: "Grocery and Related Product Merchant Wholesalers", code: "4244" }, { name: "Petroleum and Petroleum Products Merchant Wholesalers", code: "4247" }, { name: "Alcoholic Beverage Merchant Wholesalers", code: "4248" }] },
+      { name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{ name: "Motor Vehicle and Motor Vehicle Parts and Supplies Merchant Wholesalers", code: "4231" }, { name: "Professional and Commercial Equipment and Supplies Merchant Wholesalers", code: "4234" }, { name: "Metal and Mineral (except Petroleum) Merchant Wholesalers", code: "4235" }, { name: "Household Appliances and Electrical and Electronic Goods Merchant Wholesalers", code: "4236"}, { name: "Hardware, and Plumbing and Heating Equipment and Supplies Merchant Wholesalers", code: "4237"}, { name: "Machinery, Equipment, and Supplies Merchant Wholesalers", code: "4238"}, { name: "Miscellaneous Durable Goods Merchant Wholesalers", code: "4239"}] },
+      { name: "Merchant Wholesalers, Nondurable Goods", code: "424", industries: [{ name: "Paper and Paper Product Merchant Wholesalers", code: "4241"}, { name: "Drugs and Druggists' Sundries Merchant Wholesalers", code: "4242"}, { name: "Apparel, Piece Goods, and Notions Merchant Wholesalers", code: "4243"}, { name: "Grocery and Related Product Merchant Wholesalers", code: "4244" }, { name: "Farm Product Raw Material Merchant Wholesalers", code: "4245"}, { name: "Chemical and Allied Products Merchant Wholesalers", code: "4246"}, { name: "Petroleum and Petroleum Products Merchant Wholesalers", code: "4247" }, { name: "Alcoholic Beverage Merchant Wholesalers", code: "4248" }, { name: "Miscellaneous Nondurable Goods Merchant Wholesalers", code: "4249"}] },
       { name: "Wholesale Electronic Markets and Agents and Brokers", code: "425", industries: [{ name: "Business to Business Electronic Markets", code: "425110" }, { name: "Wholesale Trade Agents and Brokers", code: "425120" }] },
     ]
   },
@@ -368,51 +410,56 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     subSectors: [
       { name: "Motor Vehicle and Parts Dealers", code: "441", industries: [{ name: "Automobile Dealers", code: "4411" }, { name: "Other Motor Vehicle Dealers", code: "4412" }, { name: "Automotive Parts, Accessories, and Tire Retailers", code: "4413" } ] },
       { name: "Furniture, Home Furnishings, Electronics, and Appliance Retailers", code: "449", industries: [{ name: "Furniture Retailers", code: "449110" }, { name: "Home Furnishings Retailers", code: "44912" }, { name: "Electronics and Appliance Retailers", code: "449210" }] },
+      { name: "Building Material and Garden Equipment and Supplies Dealers", code: "444", industries: [{ name: "Building Material and Supplies Dealers", code: "4441"}, { name: "Lawn and Garden Equipment and Supplies Retailers", code: "4442"}]},
       { name: "Food and Beverage Retailers", code: "445", industries: [{ name: "Grocery and Convenience Retailers", code: "4451" }, { name: "Specialty Food Retailers", code: "4452" }, { name: "Beer, Wine, and Liquor Retailers", code: "4453" }] },
+      { name: "Health and Personal Care Retailers", code: "456", industries: [{ name: "Pharmacies and Drug Retailers", code: "456110"}, { name: "Cosmetics, Beauty Supplies, and Perfume Retailers", code: "456120"}, { name: "Optical Goods Retailers", code: "456130"}, { name: "Other Health and Personal Care Retailers", code: "45619"}]},
+      { name: "Gasoline Stations and Fuel Dealers", code: "457", industries: [{ name: "Gasoline Stations with Convenience Stores", code: "457110"}, { name: "Other Gasoline Stations", code: "457120"}, {name: "Fuel Dealers", code: "4572"}]},
+      { name: "Clothing, Clothing Accessories, Shoe, and Jewelry Retailers", code: "458", industries: [{ name: "Clothing and Clothing Accessories Retailers", code: "4581"}, { name: "Shoe Retailers", code: "458210"}, { name: "Jewelry Retailers", code: "458310"}]},
       { name: "General Merchandise Retailers", code: "455", industries: [{ name: "Department Stores ", code: "4551" }, { name: "Warehouse Clubs, Supercenters, and Other General Merchandise Retailers", code: "4552" } ] },
-      { name: "Miscellaneous Store Retailers", code: "459", industries: [{ name: "Sporting Goods, Hobby, and Musical Instrument Retailers", code: "4591" }, { name: "Book Retailers", code: "459210" }] },
+      { name: "Miscellaneous Store Retailers", code: "459", industries: [{ name: "Sporting Goods, Hobby, and Musical Instrument Retailers", code: "4591" }, { name: "Book Retailers", code: "459210" }, { name: "Office Supplies, Stationery, and Gift Retailers", code: "4594"}, { name: "Used Merchandise Retailers", code: "459510"}, { name: "Other Miscellaneous Store Retailers", code: "4599"}] },
     ]
   },
   {
     name: "Transportation and Warehousing", code: "48-49", description: "Establishments providing transportation of passengers and cargo, warehousing and storage for goods.",
     subSectors: [
-      { name: "Air Transportation", code: "481", industries: [{ name: "Scheduled Air Transportation", code: "4811" }, { name: "Nonscheduled Air Transportation", code: "4812" }] },
+      { name: "Air Transportation", code: "481", industries: [{ name: "Scheduled Passenger Air Transportation", code: "481111"}, { name: "Scheduled Freight Air Transportation", code: "481112"}, { name: "Nonscheduled Air Transportation", code: "4812" }] },
       { name: "Rail Transportation", code: "482", industries: [{ name: "Rail Transportation", code: "4821" }] },
       { name: "Water Transportation", code: "483", industries: [{ name: "Deep Sea, Coastal, and Great Lakes Water Transportation", code: "4831" }, { name: "Inland Water Transportation", code: "4832" }] },
       { name: "Truck Transportation", code: "484", industries: [{ name: "General Freight Trucking", code: "4841" }, { name: "Specialized Freight Trucking", code: "4842" }] },
-      { name: "Warehousing and Storage", code: "493", industries: [{ name: "Warehousing and Storage", code: "4931" }] },
-      { name: "Pipeline Transportation", code: "486", industries: [{ name: "Pipeline Transportation of Crude Oil", code: "486110"}, {"name": "Pipeline Transportation of Natural Gas", code: "486210"}]},
-      { name: "Scenic and Sightseeing Transportation", code: "487", industries: [{ name: "Scenic and Sightseeing Transportation, Land", code: "487110"}, {"name": "Scenic and Sightseeing Transportation, Water", code: "487210"}]},
-      { name: "Support Activities for Transportation", code: "488", industries: [{ name: "Support Activities for Air Transportation", code: "4881"}, {"name": "Support Activities for Rail Transportation", code: "488210"}]},
+      { name: "Transit and Ground Passenger Transportation", code: "485", industries: [{ name: "Urban Transit Systems", code: "4851"}, { name: "Interurban and Rural Bus Transportation", code: "4852"}, { name: "Taxi and Limousine Service", code: "4853"}, { name: "School and Employee Bus Transportation", code: "4854"}, { name: "Charter Bus Industry", code: "4855"}, { name: "Other Transit and Ground Passenger Transportation", code: "4859"}]},
+      { name: "Pipeline Transportation", code: "486", industries: [{ name: "Pipeline Transportation of Crude Oil", code: "486110"}, {"name": "Pipeline Transportation of Natural Gas", code: "486210"}, {name: "Other Pipeline Transportation", code: "4869"}]},
+      { name: "Scenic and Sightseeing Transportation", code: "487", industries: [{ name: "Scenic and Sightseeing Transportation, Land", code: "487110"}, {"name": "Scenic and Sightseeing Transportation, Water", code: "487210"}, {name: "Scenic and Sightseeing Transportation, Other", code: "4879"}]},
+      { name: "Support Activities for Transportation", code: "488", industries: [{ name: "Support Activities for Air Transportation", code: "4881"}, {"name": "Support Activities for Rail Transportation", code: "488210"}, { name: "Support Activities for Water Transportation", code: "4883"}, { name: "Support Activities for Road Transportation", code: "4884"}, { name: "Freight Transportation Arrangement", code: "488510"}, { name: "Other Support Activities for Transportation", code: "4889"}]},
       { name: "Couriers and Messengers", code: "492", industries: [{ name: "Couriers and Express Delivery Services", code: "492110"}, {"name": "Local Messengers and Local Delivery", code: "492210"}]},
+      { name: "Warehousing and Storage", code: "493", industries: [{ name: "Warehousing and Storage", code: "4931" }] },
     ]
   },
   {
     name: "Information", code: "51", description: "Establishments engaged in producing and distributing information and cultural products.",
     subSectors: [
-      { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper, Periodical, Book, and Directory Publishers", code: "5131" }, { name: "Software Publishers", code: "5132" }] },
+      { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper, Periodical, Book, and Directory Publishers", code: "5131" }, { name: "Software Publishers", code: "513210" }] },
       { name: "Motion Picture and Sound Recording Industries", code: "512", industries: [{ name: "Motion Picture and Video Industries", code: "5121" }, { name: "Sound Recording Industries", code: "5122" }] },
       { name: "Broadcasting and Content Providers", code: "516", industries: [{ name: "Radio and Television Broadcasting Stations", code: "5161" }, {name: "Content Providers, Web Search Portals, and Data Processing Services", code: "5162"}] },
       { name: "Telecommunications", code: "517", industries: [{ name: "Wired and Wireless Telecommunications Carriers (except Satellite)", code: "5171" }, { name: "Satellite Telecommunications", code: "5174" }, {"name": "Other Telecommunications", code: "5179"}] },
       { name: "Data Processing, Hosting, and Related Services", code: "518", industries: [{ name: "Data Processing, Hosting, and Related Services", code: "518210" }] },
-      { name: "Other Information Services", code: "519", industries: [{ name: "News Syndicates", code: "519210" }, { name: "Libraries and Archives", code: "519220" }] },
+      { name: "Other Information Services", code: "519", industries: [{ name: "News Syndicates", code: "519210" }, { name: "Libraries and Archives", code: "519220" }, { name: "All Other Information Services", code: "519290" }] },
     ]
   },
   {
     name: "Finance and Insurance", code: "52", description: "Establishments primarily engaged in financial transactions or in facilitating financial transactions.",
     subSectors: [
       { name: "Monetary Authorities - Central Bank", code: "521", industries: [{ name: "Monetary Authorities - Central Bank", code: "521110" }] },
-      { name: "Credit Intermediation and Related Activities", code: "522", industries: [{ name: "Commercial Banking", code: "522110" }, { name: "Savings Institutions", code: "522120" }, { name: "Credit Unions", code: "522130" }, { name: "Sales Financing", code: "522220" }, { name: "Consumer Lending", code: "522291" }] },
-      { name: "Securities, Commodity Contracts, and Other Financial Investments and Related Activities", code: "523", industries: [{ name: "Investment Banking and Securities Dealing", code: "523110" }, { name: "Securities Brokerage", code: "523120" }, { name: "Commodity Contracts Dealing", code: "523130" } ] },
-      { name: "Insurance Carriers and Related Activities", code: "524", industries: [{ name: "Direct Life Insurance Carriers", code: "524113" }, { name: "Direct Health and Medical Insurance Carriers", code: "524114" }, { name: "Direct Property and Casualty Insurance Carriers", code: "524126" }, { name: "Insurance Agencies and Brokerages", code: "524210" }] },
-      { name: "Funds, Trusts, and Other Financial Vehicles", code: "525", industries: [{ name: "Pension Funds", code: "525110"}, {"name": "Health and Welfare Funds", code: "525120"}]}
+      { name: "Credit Intermediation and Related Activities", code: "522", industries: [{ name: "Commercial Banking", code: "522110" }, { name: "Savings Institutions", code: "522120" }, { name: "Credit Unions", code: "522130" }, { name: "Other Depository Credit Intermediation", code: "522190"}, { name: "Mortgage and Nonmortgage Loan Brokers", code: "522310"}, { name: "Financial Transactions Processing, Reserve, and Clearinghouse Activities", code: "522320"}, { name: "Other Activities Related to Credit Intermediation", code: "522390"}, { name: "Sales Financing", code: "522220" }, { name: "Consumer Lending", code: "522291" }] },
+      { name: "Securities, Commodity Contracts, and Other Financial Investments and Related Activities", code: "523", industries: [{ name: "Investment Banking and Securities Dealing", code: "523110" }, { name: "Securities Brokerage", code: "523120" }, { name: "Commodity Contracts Dealing", code: "523130" }, { name: "Securities and Commodity Exchanges", code: "523210"}, { name: "Miscellaneous Intermediation", code: "523910"}, { name: "Portfolio Management", code: "523940"}, { name: "Investment Advice", code: "523930"} ] },
+      { name: "Insurance Carriers and Related Activities", code: "524", industries: [{ name: "Direct Life Insurance Carriers", code: "524113" }, { name: "Direct Health and Medical Insurance Carriers", code: "524114" }, { name: "Direct Property and Casualty Insurance Carriers", code: "524126" }, { name: "Reinsurance Carriers", code: "524130"}, { name: "Insurance Agencies and Brokerages", code: "524210" }, { name: "Other Insurance Related Activities", code: "524290"}] },
+      { name: "Funds, Trusts, and Other Financial Vehicles", code: "525", industries: [{ name: "Pension Funds", code: "525110"}, {"name": "Health and Welfare Funds", code: "525120"}, { name: "Other Insurance Funds", code: "525190"}, { name: "Open-End Investment Funds", code: "525910"}, { name: "Trusts, Estates, and Agency Accounts", code: "525920"}, { name: "Real Estate Investment Trusts", code: "525930"}, { name: "Other Financial Vehicles", code: "525990"}]}
     ]
   },
   {
     name: "Real Estate and Rental and Leasing", code: "53", description: "Establishments primarily engaged in renting, leasing, or otherwise allowing the use of tangible or intangible assets.",
     subSectors: [
-      { name: "Real Estate", code: "531", industries: [{ name: "Lessors of Residential Buildings and Dwellings", code: "531110" }, { name: "Offices of Real Estate Agents and Brokers", code: "531210" }, { name: "Real Estate Property Managers", code: "53131" }] },
-      { name: "Rental and Leasing Services", code: "532", industries: [{ name: "Automotive Equipment Rental and Leasing", code: "5321" }, { name: "Consumer Goods Rental", code: "5322" }, { name: "General Rental Centers", code: "532310" }] },
+      { name: "Real Estate", code: "531", industries: [{ name: "Lessors of Residential Buildings and Dwellings", code: "531110" }, { name: "Lessors of Nonresidential Buildings (except Miniwarehouses)", code: "531120"}, { name: "Lessors of Miniwarehouses and Self-Storage Units", code: "531130"}, { name: "Lessors of Other Real Estate Property", code: "531190"}, { name: "Offices of Real Estate Agents and Brokers", code: "531210" }, { name: "Offices of Real Estate Appraisers", code: "531320"}, { name: "Real Estate Property Managers", code: "53131" }, { name: "Other Activities Related to Real Estate", code: "531390"}] },
+      { name: "Rental and Leasing Services", code: "532", industries: [{ name: "Automotive Equipment Rental and Leasing", code: "5321" }, { name: "Consumer Goods Rental", code: "5322" }, { name: "General Rental Centers", code: "532310" }, { name: "Commercial and Industrial Machinery and Equipment Rental and Leasing", code: "5324"}] },
       { name: "Lessors of Nonfinancial Intangible Assets (except Copyrighted Works)", code: "533", industries: [{ name: "Lessors of Nonfinancial Intangible Assets (except Copyrighted Works)", code: "533110" }] },
     ]
   },
@@ -420,12 +467,14 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     name: "Professional, Scientific, and Technical Services", code: "54", description: "Establishments that specialize in performing professional, scientific, and technical activities for others.",
     subSectors: [
       { name: "Legal Services", code: "5411", industries: [{ name: "Offices of Lawyers", code: "541110" }, { name: "Other Legal Services", code: "54119" }] },
-      { name: "Accounting, Tax Preparation, Bookkeeping, and Payroll Services", code: "5412", industries: [{ name: "Offices of Certified Public Accountants", code: "541211" }, { name: "Tax Preparation Services", code: "541213" }] },
-      { name: "Architectural, Engineering, and Related Services", code: "5413", industries: [{ name: "Architectural Services", code: "541310" }, { name: "Engineering Services", code: "541330" }, { name: "Geophysical Surveying and Mapping Services", code: "541360" }, { name: "Testing Laboratories and Services", code: "541380" }] },
-      { name: "Computer Systems Design and Related Services", code: "5415", industries: [{ name: "Custom Computer Programming Services", code: "541511" }, { name: "Computer Systems Design Services", code: "541512" }, { name: "Computer Facilities Management Services", code: "541513" }] },
-      { name: "Management, Scientific, and Technical Consulting Services", code: "5416", industries: [{ name: "Management Consulting Services", code: "54161" }, { name: "Environmental Consulting Services", code: "541620" }] },
-      { name: "Advertising, Public Relations, and Related Services", code: "5418", industries: [{name: "Advertising Agencies", code: "541810"}, {name: "Public Relations Agencies", code: "541820"}] },
-      { name: "Other Professional, Scientific, and Technical Services", code: "5419", industries: [{name: "Marketing Research and Public Opinion Polling", code: "541910"}, {name: "Photographic Services", code: "54192"}, {name: "Translation and Interpretation Services", code: "541930"}, {name: "Veterinary Services", code: "541940"}] },
+      { name: "Accounting, Tax Preparation, Bookkeeping, and Payroll Services", code: "5412", industries: [{ name: "Offices of Certified Public Accountants", code: "541211" }, { name: "Tax Preparation Services", code: "541213" }, { name: "Bookkeeping, Compilation, and Payroll Services", code: "541214"}, { name: "Other Accounting Services", code: "541219"}] },
+      { name: "Architectural, Engineering, and Related Services", code: "5413", industries: [{ name: "Architectural Services", code: "541310" }, { name: "Landscape Architectural Services", code: "541320"}, { name: "Engineering Services", code: "541330" }, { name: "Drafting Services", code: "541340"}, { name: "Building Inspection Services", code: "541350"}, { name: "Geophysical Surveying and Mapping Services", code: "541360" }, { name: "Surveying and Mapping (except Geophysical) Services", code: "541370"}, { name: "Testing Laboratories and Services", code: "541380" }] },
+      { name: "Specialized Design Services", code: "5414", industries: [{ name: "Interior Design Services", code: "541410"}, { name: "Industrial Design Services", code: "541420"}, { name: "Graphic Design Services", code: "541430"}, { name: "Other Specialized Design Services", code: "541490"}]},
+      { name: "Computer Systems Design and Related Services", code: "5415", industries: [{ name: "Custom Computer Programming Services", code: "541511" }, { name: "Computer Systems Design Services", code: "541512" }, { name: "Computer Facilities Management Services", code: "541513" }, { name: "Other Computer Related Services", code: "541519"}] },
+      { name: "Management, Scientific, and Technical Consulting Services", code: "5416", industries: [{ name: "Management Consulting Services", code: "54161" }, { name: "Environmental Consulting Services", code: "541620" }, { name: "Scientific and Technical Consulting Services", code: "541690"}] },
+      { name: "Scientific Research and Development Services", code: "5417", industries: [{ name: "Research and Development in the Physical, Engineering, and Life Sciences (except Nanotechnology and Biotechnology)", code: "54171"}, { name: "Research and Development in the Social Sciences and Humanities", code: "541720"}]},
+      { name: "Advertising, Public Relations, and Related Services", code: "5418", industries: [{name: "Advertising Agencies", code: "541810"}, {name: "Public Relations Agencies", code: "541820"}, { name: "Media Buying Agencies", code: "541830"}, { name: "Media Representatives", code: "541840"}, { name: "Display Advertising", code: "541850"}, { name: "Direct Mail Advertising", code: "541860"}, { name: "Advertising Material Distribution Services", code: "541870"}, { name: "Other Services Related to Advertising", code: "541890"}] },
+      { name: "Other Professional, Scientific, and Technical Services", code: "5419", industries: [{name: "Marketing Research and Public Opinion Polling", code: "541910"}, {name: "Photographic Services", code: "54192"}, {name: "Translation and Interpretation Services", code: "541930"}, {name: "Veterinary Services", code: "541940"}, { name: "All Other Professional, Scientific, and Technical Services", code: "541990"}] },
     ]
   },
   {
@@ -437,8 +486,8 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Administrative and Support and Waste Management and Remediation Services", code: "56", description: "Establishments performing routine support activities for the day-to-day operations of other organizations or managing waste.",
     subSectors: [
-      { name: "Administrative and Support Services", code: "561", industries: [{ name: "Office Administrative Services", code: "561110" }, { name: "Facilities Support Services", code: "561210" }, { name: "Employment Services", code: "5613" }, { name: "Investigation and Security Services", code: "5616" }, {"name": "Document Preparation Services", code: "561410"}, {"name": "Travel Arrangement and Reservation Services", code: "5615"}] },
-      { name: "Waste Management and Remediation Services", code: "562", industries: [{ name: "Waste Collection", code: "56211" }, { name: "Waste Treatment and Disposal", code: "56221" }, { name: "Remediation Services", code: "562910" }] },
+      { name: "Administrative and Support Services", code: "561", industries: [{ name: "Office Administrative Services", code: "561110" }, { name: "Facilities Support Services", code: "561210" }, { name: "Employment Services", code: "5613" }, { name: "Business Support Services", code: "5614"}, { name: "Travel Arrangement and Reservation Services", code: "5615" }, { name: "Investigation and Security Services", code: "5616" }, { name: "Services to Buildings and Dwellings", code: "5617"}, { name: "Other Support Services", code: "5619"}] },
+      { name: "Waste Management and Remediation Services", code: "562", industries: [{ name: "Waste Collection", code: "56211" }, { name: "Waste Treatment and Disposal", code: "56221" }, { name: "Remediation Services", code: "562910" }, { name: "Materials Recovery Facilities", code: "562920"}, { name: "All Other Waste Management Services", code: "56299"}] },
     ]
   },
   {
@@ -447,51 +496,56 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Elementary and Secondary Schools", code: "6111", industries: [{ name: "Elementary and Secondary Schools", code: "611110" }] },
       { name: "Junior Colleges", code: "6112", industries: [{ name: "Junior Colleges", code: "611210" }] },
       { name: "Colleges, Universities, and Professional Schools", code: "6113", industries: [{ name: "Colleges, Universities, and Professional Schools", code: "611310" }] },
-      { name: "Other Schools and Instruction", code: "6116", industries: [{ name: "Fine Arts Schools", code: "611610" }, { name: "Sports and Recreation Instruction", code: "611620" }, { name: "Language Schools", code: "611630"}] },
-      { name: "Technical and Trade Schools", code: "6115", industries: [{ name: "Technical and Trade Schools", code: "61151"}] },
+      { name: "Business Schools and Computer and Management Training", code: "6114", industries: [{ name: "Business and Secretarial Schools", code: "611410"}, { name: "Computer Training", code: "611420"}, { name: "Professional and Management Development Training", code: "611430"}]},
+      { name: "Technical and Trade Schools", code: "6115", industries: [{ name: "Cosmetology and Barber Schools", code: "611511"}, { name: "Flight Training", code: "611512"}, { name: "Apprenticeship Training", code: "611513"}, { name: "Other Technical and Trade Schools", code: "611519"}] },
+      { name: "Other Schools and Instruction", code: "6116", industries: [{ name: "Fine Arts Schools", code: "611610" }, { name: "Sports and Recreation Instruction", code: "611620" }, { name: "Language Schools", code: "611630"}, { name: "Exam Preparation and Tutoring", code: "611691"}, { name: "All Other Schools and Instruction", code: "611699"}] },
       { name: "Educational Support Services", code: "6117", industries: [{ name: "Educational Support Services", code: "611710"}] },
     ]
   },
   {
     name: "Health Care and Social Assistance", code: "62", description: "Establishments providing health care and social assistance for individuals.",
     subSectors: [
-      { name: "Ambulatory Health Care Services", code: "621", industries: [{ name: "Offices of Physicians", code: "6211" }, { name: "Offices of Dentists", code: "621210" }, { name: "Offices of Other Health Practitioners", code: "6213" }, { name: "Medical and Diagnostic Laboratories", code: "62151" }, { name: "Home Health Care Services", code: "621610"}] },
-      { name: "Hospitals", code: "622", industries: [{ name: "General Medical and Surgical Hospitals", code: "622110" }, { name: "Psychiatric and Substance Abuse Hospitals", code: "622210" }] },
-      { name: "Nursing and Residential Care Facilities", code: "623", industries: [{ name: "Nursing Care Facilities (Skilled Nursing Facilities)", code: "623110" }, { name: "Residential Intellectual and Developmental Disability, Mental Health, and Substance Abuse Facilities", code: "6232" }] },
-      { name: "Social Assistance", code: "624", industries: [{ name: "Individual and Family Services", code: "6241" }, { name: "Community Food and Housing, and Emergency and Other Relief Services", code: "6242" }, { name: "Vocational Rehabilitation Services", code: "624310"}] },
+      { name: "Ambulatory Health Care Services", code: "621", industries: [{ name: "Offices of Physicians", code: "6211" }, { name: "Offices of Dentists", code: "621210" }, { name: "Offices of Other Health Practitioners", code: "6213" }, { name: "Outpatient Care Centers", code: "6214"}, { name: "Medical and Diagnostic Laboratories", code: "62151" }, { name: "Home Health Care Services", code: "621610"}, { name: "Ambulance Services", code: "621910"}, { name: "All Other Ambulatory Health Care Services", code: "62199"}] },
+      { name: "Hospitals", code: "622", industries: [{ name: "General Medical and Surgical Hospitals", code: "622110" }, { name: "Psychiatric and Substance Abuse Hospitals", code: "622210" }, { name: "Specialty (except Psychiatric and Substance Abuse) Hospitals", code: "622310"}] },
+      { name: "Nursing and Residential Care Facilities", code: "623", industries: [{ name: "Nursing Care Facilities (Skilled Nursing Facilities)", code: "623110" }, { name: "Residential Intellectual and Developmental Disability, Mental Health, and Substance Abuse Facilities", code: "6232" }, { name: "Continuing Care Retirement Communities and Assisted Living Facilities for the Elderly", code: "62331"}, { name: "Other Residential Care Facilities", code: "623990"}] },
+      { name: "Social Assistance", code: "624", industries: [{ name: "Individual and Family Services", code: "6241" }, { name: "Community Food and Housing, and Emergency and Other Relief Services", code: "6242" }, { name: "Vocational Rehabilitation Services", code: "624310"}, { name: "Child Care Services", code: "624410"}] },
     ]
   },
   {
     name: "Arts, Entertainment, and Recreation", code: "71", description: "Establishments that operate facilities or provide services to meet varied cultural, entertainment, and recreational interests.",
     subSectors: [
-      { name: "Performing Arts, Spectator Sports, and Related Industries", code: "711", industries: [{ name: "Performing Arts Companies", code: "7111" }, { name: "Spectator Sports", code: "7112" }, { name: "Promoters of Performing Arts, Sports, and Similar Events", code: "7113" }, {"name": "Agents and Managers for Artists, Athletes, Entertainers, and Other Public Figures", code: "711410"}] },
-      { name: "Museums, Historical Sites, and Similar Institutions", code: "712", industries: [{ name: "Museums", code: "712110" }, {"name": "Historical Sites", code: "712120"}] },
+      { name: "Performing Arts, Spectator Sports, and Related Industries", code: "711", industries: [{ name: "Performing Arts Companies", code: "7111" }, { name: "Spectator Sports", code: "7112" }, { name: "Promoters of Performing Arts, Sports, and Similar Events", code: "7113" }, {"name": "Agents and Managers for Artists, Athletes, Entertainers, and Other Public Figures", code: "711410"}, { name: "Independent Artists, Writers, and Performers", code: "711510"}] },
+      { name: "Museums, Historical Sites, and Similar Institutions", code: "712", industries: [{ name: "Museums", code: "712110" }, {"name": "Historical Sites", code: "712120"}, { name: "Zoos and Botanical Gardens", code: "712130"}, { name: "Nature Parks and Other Similar Institutions", code: "712190"}] },
       { name: "Amusement, Gambling, and Recreation Industries", code: "713", industries: [{ name: "Amusement Parks and Arcades", code: "7131" }, { name: "Gambling Industries", code: "7132" }, { name: "Other Amusement and Recreation Industries (except Gambling)", code: "7139" }] },
     ]
   },
   {
     name: "Accommodation and Food Services", code: "72", description: "Establishments providing customers with lodging and/or preparing meals, snacks, and beverages for immediate consumption.",
     subSectors: [
-      { name: "Accommodation", code: "721", industries: [{ name: "Hotels (except Casino Hotels) and Motels", code: "721110" }, { name: "RV (Recreational Vehicle) Parks and Recreational Camps", code: "721211" }, { name: "Rooming and Boarding Houses, Dormitories, and Workers' Camps", code: "721310" }] },
-      { name: "Food Services and Drinking Places", code: "722", industries: [{ name: "Full-Service Restaurants", code: "722511" }, { name: "Limited-Service Restaurants", code: "722513" }, { name: "Cafeterias, Grill Buffets, and Buffets", code: "722514"}, { name: "Snack and Nonalcoholic Beverage Bars", code: "722515"}, { name: "Food Service Contractors", code: "722310" }, { name: "Caterers", code: "722320" }, { name: "Drinking Places (Alcoholic Beverages)", code: "722410" }] },
+      { name: "Accommodation", code: "721", industries: [{ name: "Hotels (except Casino Hotels) and Motels", code: "721110" }, { name: "Casino Hotels", code: "721120"}, { name: "Other Traveler Accommodation", code: "72119"}, { name: "RV (Recreational Vehicle) Parks and Recreational Camps", code: "721211" }, { name: "Rooming and Boarding Houses, Dormitories, and Workers' Camps", code: "721310" }] },
+      { name: "Food Services and Drinking Places", code: "722", industries: [{ name: "Full-Service Restaurants", code: "722511" }, { name: "Limited-Service Restaurants", code: "722513" }, { name: "Cafeterias, Grill Buffets, and Buffets", code: "722514"}, { name: "Snack and Nonalcoholic Beverage Bars", code: "722515"}, { name: "Food Service Contractors", code: "722310" }, { name: "Caterers", code: "722320" }, { name: "Mobile Food Services", code: "722330"}, { name: "Drinking Places (Alcoholic Beverages)", code: "722410" }] },
     ]
   },
   {
     name: "Other Services (except Public Administration)", code: "81", description: "Establishments engaged in providing services not elsewhere classified.",
     subSectors: [
-      { name: "Repair and Maintenance", code: "811", industries: [{ name: "Automotive Repair and Maintenance", code: "8111" }, { name: "Electronic and Precision Equipment Repair and Maintenance", code: "81121" }, { name: "Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance", code: "811310" }] },
-      { name: "Personal and Laundry Services", code: "812", industries: [{ name: "Personal Care Services (e.g., hair, skin, nail)", code: "8121" }, { name: "Drycleaning and Laundry Services", code: "8123" }, { name: "Other Personal Services (e.g., pet care, photofinishing)", code: "8129" }] },
-      { name: "Religious, Grantmaking, Civic, Professional, and Similar Organizations", code: "813", industries: [{ name: "Religious Organizations", code: "813110" }, { name: "Grantmaking and Giving Services", code: "8132" }, { name: "Social Advocacy Organizations", code: "8133" }, {"name": "Business Associations", code: "813910"}] },
+      { name: "Repair and Maintenance", code: "811", industries: [{ name: "Automotive Repair and Maintenance", code: "8111" }, { name: "Electronic and Precision Equipment Repair and Maintenance", code: "81121" }, { name: "Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance", code: "811310" }, { name: "Personal and Household Goods Repair and Maintenance", code: "8114"}] },
+      { name: "Personal and Laundry Services", code: "812", industries: [{ name: "Personal Care Services (e.g., hair, skin, nail)", code: "8121" }, { name: "Funeral Homes and Funeral Services", code: "812210"}, { name: "Cemeteries and Crematories", code: "812220"}, { name: "Drycleaning and Laundry Services", code: "8123" }, { name: "Other Personal Services (e.g., pet care, photofinishing)", code: "8129" }] },
+      { name: "Religious, Grantmaking, Civic, Professional, and Similar Organizations", code: "813", industries: [{ name: "Religious Organizations", code: "813110" }, { name: "Grantmaking and Giving Services", code: "8132" }, { name: "Social Advocacy Organizations", code: "8133" }, {"name": "Business Associations", code: "813910"}, { name: "Professional Organizations", code: "813920"}, { name: "Labor Unions and Similar Labor Organizations", code: "813930"}, { name: "Political Organizations", code: "813940"}, { name: "Other Similar Organizations (except Business, Professional, Labor, and Political Organizations)", code: "813990"}] },
       { name: "Private Households", code: "814", industries: [{ name: "Private Households", code: "814110"}] },
     ]
   },
   {
     name: "Public Administration", code: "92", description: "Establishments of federal, state, and local government agencies that administer, oversee, and manage public programs.",
     subSectors: [
-      { name: "Executive, Legislative, and Other General Government Support", code: "921", industries: [{ name: "Executive Offices", code: "921110" }, { name: "Legislative Bodies", code: "921120" }, { name: "Public Finance Activities", code: "921130"}] },
-      { name: "Justice, Public Order, and Safety Activities", code: "922", industries: [{ name: "Courts", code: "922110" }, { name: "Police Protection", code: "922120" }, { name: "Correctional Institutions", code: "922140" }, {"name": "Fire Protection", code: "922160"}] },
+      { name: "Executive, Legislative, and Other General Government Support", code: "921", industries: [{ name: "Executive Offices", code: "921110" }, { name: "Legislative Bodies", code: "921120" }, { name: "Public Finance Activities", code: "921130"}, { name: "Other General Government Support", code: "921190"}] },
+      { name: "Justice, Public Order, and Safety Activities", code: "922", industries: [{ name: "Courts", code: "922110" }, { name: "Police Protection", code: "922120" }, { name: "Legal Counsel and Prosecution", code: "922130"}, { name: "Correctional Institutions", code: "922140" }, {"name": "Parole Offices and Probation Offices", code: "922150"}, {"name": "Fire Protection", code: "922160"}, { name: "Other Justice, Public Order, and Safety Activities", code: "922190"}] },
+      { name: "Administration of Human Resource Programs", code: "923", industries: [{ name: "Administration of Education Programs", code: "923110"}, { name: "Administration of Public Health Programs", code: "923120"}, { name: "Administration of Human Resource Programs (except Education, Public Health, and Veterans' Affairs Programs)", code: "923130"}, { name: "Administration of Veterans' Affairs", code: "923140"}]},
+      { name: "Administration of Environmental Quality Programs", code: "924", industries: [{ name: "Administration of Air and Water Resource and Solid Waste Management Programs", code: "924110"}, { name: "Administration of Conservation Programs", code: "924120"}]},
+      { name: "Administration of Housing Programs, Urban Planning, and Community Development", code: "925", industries: [{ name: "Administration of Housing Programs", code: "925110"}, { name: "Administration of Urban Planning and Community and Rural Development", code: "925120"}]},
+      { name: "Administration of Economic Programs", code: "926", industries: [{ name: "Administration of General Economic Programs", code: "926110"}, { name: "Regulation and Administration of Transportation Programs", code: "926120"}, { name: "Regulation and Administration of Communications, Electric, Gas, and Other Utilities", code: "926130"}, { name: "Regulation of Agricultural Marketing and Commodities", code: "926140"}, { name: "Regulation, Licensing, and Inspection of Miscellaneous Commercial Sectors", code: "926150"}] },
+      { name: "Space Research and Technology", code: "927", industries: [{ name: "Space Research and Technology", code: "927110"}]},
       { name: "National Security and International Affairs", code: "928", industries: [{ name: "National Security", code: "928110" }, { name: "International Affairs", code: "928120" }] },
-      { name: "Administration of Economic Programs", code: "926", industries: [{ name: "Administration of General Economic Programs", code: "926110"}] },
     ]
   },
 ];
@@ -508,21 +562,31 @@ export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
-// Dynamically import forms
 const DynamicCreatePostForm = dynamic(() =>
   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-  { loading: () => <p className="p-4 text-center">Loading form...</p> }
+  {
+    loading: () => <div className="p-4 text-center text-sm text-muted-foreground">Loading form...</div>,
+    ssr: false // Ensure form is client-side only if it has heavy client JS
+  }
 );
 
+// Corrected: Dynamically import RequestHelpForm for the "Request Help" dialog
 const DynamicRequestHelpForm = dynamic(() =>
-  import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-  { loading: () => <p className="p-4 text-center">Loading form...</p> }
+  import('@/components/RequestHelpForm').then((mod) => mod.RequestHelpForm),
+  {
+    loading: () => <div className="p-4 text-center text-sm text-muted-foreground">Loading form...</div>,
+    ssr: false
+  }
 );
 
 const DynamicThemeToggle = dynamic(() =>
   import('@/components/ThemeToggle').then((mod) => mod.ThemeToggle),
-  { loading: () => <DropdownMenuItem disabled>Theme...</DropdownMenuItem> }
+  {
+    loading: () => <DropdownMenuItem disabled className="justify-between">Theme <span className="text-xs text-muted-foreground">...</span></DropdownMenuItem>,
+    ssr: false
+  }
 );
+
 
 export default function MainLayout({
   children
@@ -602,7 +666,7 @@ export default function MainLayout({
         ...postDataForFirestoreBase,
         imageUrls: finalImageUrls,
         mentionedUserIds: mentionedUserIds,
-        requestType: 'post', // Regular post
+        requestType: 'post',
       };
       return addPostToFirestore(postDataForFirestore);
     },
@@ -615,7 +679,6 @@ export default function MainLayout({
         description: "Your post has been added to the board.",
       });
       setIsCreatePostOpen(false);
-
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
@@ -642,6 +705,7 @@ export default function MainLayout({
         title: "Post Failed",
         description: `Could not submit your post: ${error.message}.`,
       });
+       setIsCreatePostOpen(false); // Close dialog on error too
     },
   });
 
@@ -668,15 +732,15 @@ export default function MainLayout({
 
           const finalImageUrls = uploadedImageUrls.length > 0 ? uploadedImageUrls : [];
           const { imageFile, ...postDataForFirestoreBase } = newHelpRequestDataWithImage;
-
           const mentionedUserIds = Array.isArray(newHelpRequestDataWithImage.mentionedUserIds) ? newHelpRequestDataWithImage.mentionedUserIds : [];
-
 
           const postDataForFirestore: NewPostData = {
               ...postDataForFirestoreBase,
               imageUrls: finalImageUrls,
               mentionedUserIds: mentionedUserIds,
               requestType: 'help_request',
+              // Ensure deadline is converted to Timestamp if it exists
+              deadline: newHelpRequestDataWithImage.deadline ? Timestamp.fromDate(new Date(newHelpRequestDataWithImage.deadline)) : null,
           };
           return addPostToFirestore(postDataForFirestore);
       },
@@ -692,7 +756,7 @@ export default function MainLayout({
 
           if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
               variables.mentionedUserIds.forEach(async (mentionedUid) => {
-                  if (mentionedUid !== user.uid) { // Don't notify self for mentioning self in post
+                  if (mentionedUid !== user.uid) {
                       try {
                           await createNotification({
                               userId: mentionedUid,
@@ -715,6 +779,7 @@ export default function MainLayout({
               title: "Request Failed",
               description: `Could not submit your help request: ${error.message}.`,
           });
+          setIsRequestHelpDialogOpen(false); // Close dialog on error
       },
   });
 
@@ -743,13 +808,14 @@ export default function MainLayout({
         industry: industryDetails?.name || formData.industry,
         naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
+        // These are examples, adjust as needed
         businessType: "Startup",
         safetyIndicator: "Medium",
         ratingScore: 0,
         imageFile: formData.imageFile,
-        imageUrls: [],
+        imageUrls: [], // Will be populated by mutationFn
         mentionedUserIds: formData.mentionedUserIds,
-        requestType: 'post',
+        requestType: 'post', // Explicitly set type for regular posts
       };
       addPostMutation.mutate(newPostDataForService);
     },
@@ -757,7 +823,8 @@ export default function MainLayout({
   );
 
   const handleRequestHelpSubmit = useCallback(
-    (formData: CreatePostFormData) => { // Using CreatePostFormData as it's a duplicate
+    (formData: RequestHelpFormData) => {
+      console.log("[MainLayout] handleRequestHelpSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       if (!user) {
         toast({ variant: "destructive", title: "Authentication Required" });
         return;
@@ -768,7 +835,12 @@ export default function MainLayout({
 
       const newHelpRequestData: NewPostData & { imageFile?: File | null } = {
         question: formData.question,
-        description: formData.description, // From CreatePostForm, will be general description
+        // Map tabbed descriptions for help requests
+        descriptionDetails: formData.descriptionDetails,
+        descriptionTried: formData.descriptionTried,
+        descriptionOutcome: formData.descriptionOutcome,
+        description: undefined, // Ensure general description is not set for help requests
+
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
@@ -779,10 +851,15 @@ export default function MainLayout({
         safetyIndicator: "Medium",
         ratingScore: 0,
         imageFile: formData.imageFile,
-        imageUrls: [],
+        imageUrls: [], // Will be populated by mutationFn
         mentionedUserIds: formData.mentionedUserIds,
-        requestType: 'help_request', // Key difference
+        requestType: 'help_request',
+        // paymentAmount and deadline should come from RequestHelpFormData if they exist
+        // and be converted appropriately (e.g., deadline to Timestamp)
+        paymentAmount: formData.paymentAmount,
+        deadline: formData.deadline, // This should be a Date object from the form
       };
+      console.log("[MainLayout] handleRequestHelpSubmit newHelpRequestData PREPARED:", JSON.stringify(newHelpRequestData, null, 2));
       addHelpRequestMutation.mutate(newHelpRequestData);
     },
     [user, toast, addHelpRequestMutation, queryClient]
@@ -811,7 +888,6 @@ export default function MainLayout({
     "flex flex-col bg-background",
     isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
   );
-
 
   return (
     <div className={rootLayoutClasses}>
@@ -887,7 +963,7 @@ export default function MainLayout({
                     </DialogHeader>
                     <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
                       {isRequestHelpDialogOpen && user && (
-                        <DynamicRequestHelpForm
+                        <DynamicRequestHelpForm // Ensure this uses RequestHelpForm
                           onSubmit={handleRequestHelpSubmit}
                           availableTags={availableTags}
                           detailedSectorsData={detailedSectorsData}
@@ -968,7 +1044,7 @@ export default function MainLayout({
 
       <main className={cn(
         "flex-1 flex flex-col",
-        isMobile ? "pb-14" : "pb-0"
+        "pb-14 md:pb-0" // Ensure mobile bottom nav space, remove for desktop
       )}>
         {children}
       </main>

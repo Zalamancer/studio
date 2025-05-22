@@ -1,4 +1,3 @@
-
 // src/components/RequestHelpForm.tsx
 "use client";
 
@@ -22,7 +21,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Loader2, Upload, XCircle, ImageDown, CalendarDays, AtSign, User } from 'lucide-react';
+import { Loader2, Upload, XCircle, ImageDown, CalendarDays, AtSign, User, DollarSign } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
@@ -42,14 +41,11 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
-
-
-const getInitials = (name: string | undefined | null): string => {
-    return getSharedInitials(name);
-};
 
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
@@ -70,6 +66,8 @@ const requestHelpFormSchema = z.object({
       file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
       "Only .jpg, .jpeg, .png and .gif formats are supported."
     ),
+  paymentAmount: z.coerce.number().positive({ message: "Payment amount must be positive." }).optional(),
+  deadline: z.date().optional(),
 });
 
 export interface RequestHelpFormData {
@@ -83,6 +81,8 @@ export interface RequestHelpFormData {
   industry?: string;
   imageFile?: File | null;
   mentionedUserIds: string[];
+  paymentAmount?: number;
+  deadline?: Date;
 }
 
 interface RequestHelpFormProps {
@@ -106,6 +106,8 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
       subSector: "",
       industry: "",
       image: null,
+      paymentAmount: undefined,
+      deadline: undefined,
     },
   });
   const { toast } = useToast();
@@ -255,14 +257,16 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
         industry: values.industry,
         imageFile: selectedImageFile,
         mentionedUserIds: Array.from(selectedMentionedUserIds),
+        paymentAmount: values.paymentAmount,
+        deadline: values.deadline,
     };
     onSubmit(submitData);
     setSelectedMentionedUserIds(new Set());
     setDescriptionDetailsMentionQuery('');
     setShowDescriptionDetailsSuggestions(false);
-    form.reset();
-    setImagePreviewUrl(null);
-    setSelectedImageFile(null);
+    // form.reset(); // Keep form data in case of submission error, let parent handle reset
+    // setImagePreviewUrl(null);
+    // setSelectedImageFile(null);
   };
 
   const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
@@ -349,10 +353,8 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
 
   const filteredDescriptionSuggestions = useMemo(() => {
     if (!showDescriptionDetailsSuggestions) return [];
-    if (isLoadingSuggestibleUsers) {
-        return [{ userId: 'loading-desc', actualDisplayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
-    }
-
+    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc-help', mentionName: 'loading-desc-help', actualDisplayName: 'Loading users...' } as UserProfileBasic];
+    
     const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
     let results: UserProfileBasic[];
 
@@ -368,10 +370,10 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
     }
 
     if (results.length === 0 && debouncedDescriptionDetailsQuery.trim() !== '') {
-        return [{ userId: 'no-match-desc', actualDisplayName: `No users matching "@${debouncedDescriptionDetailsQuery}"`, mentionName:'no-match-desc' } as UserProfileBasic];
+        return [{ userId: 'no-match-desc-help', mentionName:'no-match-desc-help', actualDisplayName: `No users matching "@${debouncedDescriptionDetailsQuery}"` } as UserProfileBasic];
     }
     if (results.length === 0) {
-        return [{ userId: 'no-users-desc', actualDisplayName: 'No users to suggest for this context.', mentionName: 'no-users-desc' } as UserProfileBasic];
+        return [{ userId: 'no-users-desc-help', mentionName: 'no-users-desc-help', actualDisplayName: 'No users to suggest for this context.' } as UserProfileBasic];
     }
     return results;
   }, [debouncedDescriptionDetailsQuery, suggestibleUsers, isLoadingSuggestibleUsers, showDescriptionDetailsSuggestions, currentUserId]);
@@ -388,7 +390,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Question / Need <span className="text-destructive">*</span></FormLabel>
-                  <Input placeholder="e.g., How to improve B2B lead generation?" {...field} disabled={isSubmitting} />
+                  <Input placeholder="e.g., Seeking expertise in B2B marketing automation" {...field} disabled={isSubmitting} />
                   <FormDescription>Keep it concise and clear.</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -397,7 +399,8 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
 
             {/* Tabbed Description Section */}
             <div className="flex-grow flex flex-col">
-              <Tabs defaultValue="details" className="w-full flex-grow flex flex-col">
+                <FormLabel>Details <span className="text-destructive">*</span></FormLabel>
+                <Tabs defaultValue="details" className="w-full flex-grow flex flex-col mt-1">
                 <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 border-b-2 border-border rounded-none h-auto">
                   <TabsTrigger
                     value="details"
@@ -425,9 +428,10 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                     name="descriptionDetails"
                     render={({ field }) => (
                       <FormItem className="flex-grow flex flex-col">
+                        <FormLabel className="sr-only">Problem Details</FormLabel>
                         <Popover
-                          open={showDescriptionDetailsSuggestions && filteredDescriptionSuggestions.length > 0 && (filteredDescriptionSuggestions[0]?.userId !== 'loading-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-users-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-match-desc')}
-                          onOpenChange={(isOpen) => {
+                          open={showDescriptionDetailsSuggestions && filteredDescriptionSuggestions.length > 0 && (filteredDescriptionSuggestions[0]?.userId !== 'loading-desc-help' && filteredDescriptionSuggestions[0]?.userId !== 'no-users-desc-help' && filteredDescriptionSuggestions[0]?.userId !== 'no-match-desc-help')}
+                           onOpenChange={(isOpen) => {
                               setShowDescriptionDetailsSuggestions(isOpen);
                               if (!isOpen) setDescriptionDetailsMentionQuery('');
                           }}
@@ -463,7 +467,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                                   const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
 
                                   return (
-                                      profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
+                                      profile.userId === 'loading-desc-help' || profile.userId === 'no-users-desc-help' || profile.userId === 'no-match-desc-help' ? (
                                           <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
                                               {profile.actualDisplayName}
                                           </div>
@@ -481,12 +485,12 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                                                   <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
                                               </Avatar>
                                               <div className="flex flex-col items-start">
-                                                  {showSecondaryNameLine && (
-                                                      <span className="font-medium text-foreground">{displayableName}</span>
-                                                  )}
-                                                  <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
-                                                      @{profile.mentionName}
-                                                  </span>
+                                                {showSecondaryNameLine && (
+                                                    <span className="font-medium text-foreground">{displayableName}</span>
+                                                )}
+                                                <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
+                                                    @{profile.mentionName}
+                                                </span>
                                               </div>
                                           </Button>
                                       )
@@ -587,6 +591,77 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
           </div>
 
           <div className="space-y-6">
+             <FormField
+              control={form.control}
+              name="paymentAmount"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel className="flex items-center gap-1">
+                    <DollarSign className="h-4 w-4 text-green-600" />
+                    Offering / Budget (Optional)
+                  </FormLabel>
+                  <Input
+                    type="number"
+                    placeholder="e.g., 500 (USD)"
+                    {...field}
+                    value={field.value === undefined || field.value === null ? '' : String(field.value)}
+                    onChange={e => {
+                        const value = e.target.value;
+                        field.onChange(value === '' ? undefined : parseFloat(value));
+                    }}
+                    disabled={isSubmitting}
+                  />
+                  <FormDescription>Specify the amount you're willing to offer for help.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="deadline"
+              render={({ field }) => (
+                <FormItem className="flex flex-col">
+                  <FormLabel className="flex items-center gap-1">
+                    <CalendarDays className="h-4 w-4 text-muted-foreground" />
+                    Deadline (Optional)
+                  </FormLabel>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button
+                        variant={"outline"}
+                        className={cn(
+                          "w-full justify-start text-left font-normal",
+                          !field.value && "text-muted-foreground"
+                        )}
+                        disabled={isSubmitting}
+                        type="button"
+                      >
+                        <span className="flex items-center justify-between w-full">
+                            <span>
+                                {field.value && field.value instanceof Date ? format(field.value, "PPP") : "Pick a date"}
+                            </span>
+                            <CalendarDays className="h-4 w-4 opacity-50" />
+                        </span>
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-0" align="start">
+                      <Calendar
+                        mode="single"
+                        selected={field.value}
+                        onSelect={field.onChange}
+                        disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) || isSubmitting}
+                        initialFocus
+                      />
+                    </PopoverContent>
+                  </Popover>
+                  <FormDescription>Set a deadline for when you need the help by.</FormDescription>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+
             <FormField
               control={form.control}
               name="sector"
@@ -701,30 +776,6 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
             </Button>
         </DialogFooter>
       </form>
-
-      <AlertDialog open={showCompressionDialog} onOpenChange={setShowCompressionDialog}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Image Too Large</AlertDialogTitle>
-            <AlertDialogDescription>
-              The selected image exceeds {MAX_FILE_SIZE_BYTES / (1024 * 1024)}MB.
-              Would you like to compress it? This may slightly reduce quality.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => {
-              setOriginalTooLargeFile(null);
-              if (fileInputRef.current) fileInputRef.current.value = "";
-              form.setValue("image", null);
-              setImagePreviewUrl(null);
-              setSelectedImageFile(null);
-            }}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleCompressAndSetImage} className="bg-primary hover:bg-primary/90">
-              <ImageDown className="mr-2 h-4 w-4" /> Compress Image
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </Form>
   );
 };
