@@ -1,4 +1,3 @@
-
 // src/components/RequestHelpForm.tsx
 "use client";
 
@@ -6,7 +5,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -45,7 +44,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Import Tabs components
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export interface Industry {
   name: string;
@@ -82,8 +81,8 @@ const requestHelpFormSchema = z.object({
   sector: z.string().min(1, "Please select a sector."),
   subSector: z.string().optional(),
   industry: z.string().optional(),
-  paymentAmount: z.coerce.number({ invalid_type_error: "Must be a number" }).positive({ message: "Amount must be positive" }).optional(),
-  deadline: z.date().optional(),
+  // paymentAmount: z.coerce.number({ invalid_type_error: "Must be a number" }).positive({ message: "Amount must be positive" }).optional(), // Removed
+  // deadline: z.date().optional(), // Removed
   image: z.instanceof(File).optional().nullable()
     .refine(file => !file || file.size <= MAX_FILE_SIZE_BYTES, `Max image size is 2MB.`)
     .refine(
@@ -101,8 +100,8 @@ export interface RequestHelpFormData {
   sector: string;
   subSector?: string;
   industry?: string;
-  paymentAmount?: number;
-  deadline?: Date;
+  // paymentAmount?: number; // Removed
+  // deadline?: Date; // Removed
   imageFile?: File | null;
   mentionedUserIds: string[];
 }
@@ -127,8 +126,8 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
       sector: "",
       subSector: "",
       industry: "",
-      paymentAmount: undefined,
-      deadline: undefined,
+      // paymentAmount: undefined, // Removed
+      // deadline: undefined, // Removed
       image: null,
     },
   });
@@ -276,8 +275,8 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
         sector: values.sector,
         subSector: values.subSector,
         industry: values.industry,
-        paymentAmount: values.paymentAmount,
-        deadline: values.deadline,
+        // paymentAmount: values.paymentAmount, // Removed
+        // deadline: values.deadline, // Removed
         imageFile: selectedImageFile,
         mentionedUserIds: Array.from(selectedMentionedUserIds),
     };
@@ -405,7 +404,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-0">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 p-1">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 p-1">
           <div className="space-y-6 flex flex-col">
             <FormField
               control={form.control}
@@ -669,68 +668,7 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
               )}
             />
             
-            <FormField
-              control={form.control}
-              name="paymentAmount"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel>Payment Amount / Budget (Optional)</FormLabel>
-                    <Input 
-                      type="number" 
-                      placeholder="e.g., 500" 
-                      {...field}
-                      value={field.value === undefined || field.value === null || isNaN(Number(field.value)) ? '' : String(field.value)}
-                      onChange={e => {
-                        const value = e.target.value;
-                        field.onChange(value === '' ? undefined : parseFloat(value));
-                      }}
-                      disabled={isSubmitting} 
-                    />
-                  <FormDescription>Enter a numeric value (e.g., USD).</FormDescription>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <FormField
-              control={form.control}
-              name="deadline"
-              render={({ field }) => (
-                <FormItem className="flex flex-col">
-                  <FormLabel>Deadline (Optional)</FormLabel>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !field.value && "text-muted-foreground"
-                        )}
-                        disabled={isSubmitting}
-                        type="button" 
-                      >
-                        <span className="flex items-center justify-between w-full">
-                          <span>
-                            {field.value && field.value instanceof Date ? format(field.value, "PPP") : "Pick a date"}
-                          </span>
-                          <CalendarDays className="h-4 w-4 opacity-50" />
-                        </span>
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0">
-                      <Calendar
-                        mode="single"
-                        selected={field.value}
-                        onSelect={field.onChange}
-                        initialFocus
-                        disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1))}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+            {/* Payment Amount and Deadline fields are removed as per previous user request */}
 
             <FormField
               control={form.control}
@@ -812,4 +750,3 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
     </Form>
   );
 };
-

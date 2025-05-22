@@ -1,4 +1,3 @@
-
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -36,14 +35,15 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, HelpingHand, Factory } from "lucide-react";
-import { signOut } from '@/lib/firebase/auth';
+} from "@/components/ui/dropdown-menu"; // Import Dropdown components
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, HelpingHand } from "lucide-react"; // Changed LineChart to Compass
+import { signOut } from '@/lib/firebase/auth'; // Import auth and signOut
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import type {
   CreatePostFormData
 } from '@/components/CreatePostForm';
+import type { RequestHelpFormData } from '@/components/RequestHelpForm'; // Import RequestHelpFormData
 import type {
   NewPostData,
   Post
@@ -53,13 +53,13 @@ import {
 } from '@/services/postService';
 import {
   uploadPostImage
-} from '@/services/storageService';
+} from '@/services/storageService'; // Import storage service
 import {
   useMutation,
   useQueryClient
 } from '@tanstack/react-query';
 import { cn } from '@/lib/utils';
-import { NotificationDropdown } from '@/components/notifications/NotificationDropdown';
+import { NotificationDropdown } from '@/components/notifications/NotificationDropdown'; // Corrected dynamic import to static
 import { createNotification } from '@/services/notificationService';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
@@ -209,18 +209,18 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     name: "Manufacturing", code: "31-33", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products.",
     subSectors: [
       { name: "Food Manufacturing", code: "311", industries: [
-          { name: "Animal Food Manufacturing", code: "3111" },
-          { name: "Grain and Oilseed Milling", code: "3112" },
-          { name: "Sugar and Confectionery Product Manufacturing", code: "3113" },
-          { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "3114" },
-          { name: "Dairy Product Manufacturing", code: "3115" },
-          { name: "Animal Slaughtering and Processing", code: "3116" },
+          { name: "Animal Food Manufacturing", code: "311119" },
+          { name: "Grain and Oilseed Milling", code: "311211" },
+          { name: "Sugar and Confectionery Product Manufacturing", code: "311313" },
+          { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "311411" },
+          { name: "Dairy Product Manufacturing", code: "311511" },
+          { name: "Animal Slaughtering and Processing", code: "311611" },
           { name: "Seafood Product Preparation and Packaging", code: "311710" },
-          { name: "Bakeries and Tortilla Manufacturing", code: "3118" },
-          { name: "Other Food Manufacturing", code: "3119" },
+          { name: "Bakeries and Tortilla Manufacturing", code: "311812" },
+          { name: "Other Food Manufacturing", code: "311911" },
       ]},
       { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [
-          { name: "Soft Drink and Ice Manufacturing", code: "31211" },
+          { name: "Soft Drink and Ice Manufacturing", code: "312111" },
           { name: "Breweries", code: "312120" },
           { name: "Wineries", code: "312130" },
           { name: "Distilleries", code: "312140" },
@@ -245,7 +245,9 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Apparel Manufacturing", code: "315", industries: [
           { name: "Apparel Knitting Mills", code: "315120" },
           { name: "Cut and Sew Apparel Contractors", code: "315210" },
-          { name: "Cut and Sew Apparel Manufacturing (except Contractors)", code: "315250" },
+          { name: "Men's and Boys' Cut and Sew Apparel Manufacturing", code: "315220" },
+          { name: "Women's, Girls', and Infants' Cut and Sew Apparel Manufacturing", code: "315240" },
+          { name: "Other Cut and Sew Apparel Manufacturing", code: "315280" },
           { name: "Apparel Accessories and Other Apparel Manufacturing", code: "315990" },
       ]},
       { name: "Leather and Allied Product Manufacturing", code: "316", industries: [
@@ -256,153 +258,102 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Wood Product Manufacturing", code: "321", industries: [
           { name: "Sawmills", code: "321113" },
           { name: "Wood Preservation", code: "321114" },
-          { name: "Hardwood Veneer and Plywood Manufacturing", code: "321211" },
-          { name: "Softwood Veneer and Plywood Manufacturing", code: "321212" },
-          { name: "Engineered Wood Member Manufacturing", code: "321215" },
-          { name: "Reconstituted Wood Product Manufacturing", code: "321219" },
-          { name: "Wood Window and Door Manufacturing", code: "321911" },
-          { name: "Cut Stock, Resawing Lumber, and Planing", code: "321912" },
+          { name: "Veneer, Plywood, and Engineered Wood Product Manufacturing", code: "321210" },
           { name: "Other Millwork (including Flooring)", code: "321918" },
           { name: "Wood Container and Pallet Manufacturing", code: "321920" },
-          { name: "Manufactured Home (Mobile Home) Manufacturing", code: "321991" },
-          { name: "Prefabricated Wood Building Manufacturing", code: "321992" },
-          { name: "All Other Miscellaneous Wood Product Manufacturing", code: "321999" },
+          { name: "All Other Wood Product Manufacturing", code: "321999" },
       ]},
       { name: "Paper Manufacturing", code: "322", industries: [
-          { name: "Pulp Mills", code: "322110" },
-          { name: "Paper Mills", code: "322120" },
-          { name: "Paperboard Mills", code: "322130" },
-          { name: "Corrugated and Solid Fiber Box Manufacturing", code: "322211" },
-          { name: "Folding Paperboard Box Manufacturing", code: "322212" },
-          { name: "Other Paperboard Container Manufacturing", code: "322219" },
-          { name: "Paper Bag and Coated and Treated Paper Manufacturing", code: "322220" },
-          { name: "Stationery Product Manufacturing", code: "322230" },
-          { name: "Sanitary Paper Product Manufacturing", code: "322291" },
-          { name: "All Other Converted Paper Product Manufacturing", code: "322299" },
+          { name: "Pulp, Paper, and Paperboard Mills", code: "3221" },
+          { name: "Converted Paper Product Manufacturing", code: "3222" },
       ]},
       { name: "Printing and Related Support Activities", code: "323", industries: [
-          { name: "Commercial Printing (except Screen and Books)", code: "323111" },
-          { name: "Commercial Screen Printing", code: "323113" },
-          { name: "Books Printing", code: "323117" },
+          { name: "Printing", code: "323111" },
           { name: "Support Activities for Printing", code: "323120" },
       ]},
       { name: "Petroleum and Coal Products Manufacturing", code: "324", industries: [
           { name: "Petroleum Refineries", code: "324110" },
-          { name: "Asphalt Paving Mixture and Block Manufacturing", code: "324121" },
-          { name: "Asphalt Shingle and Coating Materials Manufacturing", code: "324122" },
-          { name: "Petroleum Lubricating Oil and Grease Manufacturing", code: "324191" },
-          { name: "All Other Petroleum and Coal Products Manufacturing", code: "324199" },
+          { name: "Asphalt Paving, Roofing, and Saturated Materials Manufacturing", code: "32412" },
+          { name: "Other Petroleum and Coal Products Manufacturing", code: "32419" },
       ]},
       { name: "Chemical Manufacturing", code: "325", industries: [
-          { name: "Petrochemical Manufacturing", code: "325110" },
-          { name: "Industrial Gas Manufacturing", code: "325120" },
-          { name: "Synthetic Dye and Pigment Manufacturing", code: "325130" },
-          { name: "Other Basic Inorganic Chemical Manufacturing", code: "325180" },
-          { name: "Ethyl Alcohol Manufacturing", code: "325193" },
-          { name: "All Other Basic Organic Chemical Manufacturing", code: "325199" },
-          { name: "Plastics Material and Resin Manufacturing", code: "325211" },
-          { name: "Synthetic Rubber Manufacturing", code: "325212" },
-          { name: "Artificial and Synthetic Fibers and Filaments Manufacturing", code: "325220" },
-          { name: "Nitrogenous Fertilizer Manufacturing", code: "325311" },
-          { name: "Pesticide and Other Agricultural Chemical Manufacturing", code: "325320" },
-          { name: "Pharmaceutical Preparation Manufacturing", code: "325412" },
-          { name: "Paint and Coating Manufacturing", code: "325510" },
-          { name: "Adhesive Manufacturing", code: "325520" },
-          { name: "Soap and Other Detergent Manufacturing", code: "325611" },
-          { name: "Toilet Preparation Manufacturing", code: "325620" },
-          { name: "Printing Ink Manufacturing", code: "325910" },
-          { name: "All Other Miscellaneous Chemical Product and Preparation Manufacturing", code: "325998" },
+          { name: "Basic Chemical Manufacturing", code: "3251" },
+          { name: "Resin, Synthetic Rubber, and Artificial and Synthetic Fibers and Filaments Manufacturing", code: "3252" },
+          { name: "Pesticide, Fertilizer, and Other Agricultural Chemical Manufacturing", code: "3253" },
+          { name: "Pharmaceutical and Medicine Manufacturing", code: "3254" },
+          { name: "Paint, Coating, and Adhesive Manufacturing", code: "3255" },
+          { name: "Soap, Cleaning Compound, and Toilet Preparation Manufacturing", code: "3256" },
+          { name: "Other Chemical Product and Preparation Manufacturing", code: "3259" },
       ]},
       { name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [
-          { name: "Plastics Packaging Materials and Unlaminated Film and Sheet Manufacturing", code: "32611" },
-          { name: "Plastics Pipe, Pipe Fitting, and Unlaminated Profile Shape Manufacturing", code: "32612" },
-          { name: "Polystyrene Foam Product Manufacturing", code: "326140" },
-          { name: "All Other Plastics Product Manufacturing", code: "326199" },
-          { name: "Tire Manufacturing (except Retreading)", code: "326211" },
-          { name: "Rubber and Plastics Hoses and Belting Manufacturing", code: "326220" },
-          { name: "All Other Rubber Product Manufacturing", code: "326299" },
+          { name: "Plastics Product Manufacturing", code: "3261" },
+          { name: "Rubber Product Manufacturing", code: "3262" },
       ]},
       { name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [
-          { name: "Pottery, Ceramics, and Plumbing Fixture Manufacturing", code: "327110" },
-          { name: "Clay Building Material and Refractories Manufacturing", code: "327120" },
-          { name: "Flat Glass Manufacturing", code: "327211" },
-          { name: "Cement Manufacturing", code: "327310" },
-          { name: "Ready-Mix Concrete Manufacturing", code: "327320" },
-          { name: "Lime Manufacturing", code: "327410" },
-          { name: "Gypsum Product Manufacturing", code: "327420" },
-          { name: "Abrasive Product Manufacturing", code: "327910" },
+          { name: "Clay Product and Refractory Manufacturing", code: "3271" },
+          { name: "Glass and Glass Product Manufacturing", code: "3272" },
+          { name: "Cement and Concrete Product Manufacturing", code: "3273" },
+          { name: "Lime and Gypsum Product Manufacturing", code: "3274" },
+          { name: "Other Nonmetallic Mineral Product Manufacturing", code: "3279" },
       ]},
       { name: "Primary Metal Manufacturing", code: "331", industries: [
           { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "331110" },
           { name: "Steel Product Manufacturing from Purchased Steel", code: "3312" },
-          { name: "Alumina Refining and Primary Aluminum Production", code: "331313" },
-          { name: "Copper Rolling, Drawing, Extruding, and Alloying", code: "331420" },
-          { name: "Iron Foundries", code: "331511" },
+          { name: "Alumina and Aluminum Production and Processing", code: "3313" },
+          { name: "Nonferrous Metal (except Aluminum) Production and Processing", code: "3314" },
+          { name: "Foundries", code: "3315" },
       ]},
       { name: "Fabricated Metal Product Manufacturing", code: "332", industries: [
-          { name: "Iron and Steel Forging", code: "332111" },
-          { name: "Cutlery and Handtool Manufacturing", code: "33221" },
+          { name: "Forging and Stamping", code: "3321" },
+          { name: "Cutlery and Handtool Manufacturing", code: "3322" },
           { name: "Architectural and Structural Metals Manufacturing", code: "3323" },
           { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "3324" },
           { name: "Hardware Manufacturing", code: "332510" },
-          { name: "Spring and Wire Product Manufacturing", code: "33261" },
+          { name: "Spring and Wire Product Manufacturing", code: "3326" },
           { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "3327" },
-          { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "33281" },
-          { name: "All Other Fabricated Metal Product Manufacturing", code: "33299" },
+          { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "3328" },
+          { name: "Other Fabricated Metal Product Manufacturing", code: "3329" },
       ]},
       { name: "Machinery Manufacturing", code: "333", industries: [
-          { name: "Agricultural Implement Manufacturing", code: "33311" },
-          { name: "Construction Machinery Manufacturing", code: "333120" },
-          { name: "Mining and Oil and Gas Field Machinery Manufacturing", code: "33313" },
-          { name: "Industrial Machinery Manufacturing", code: "33324" },
-          { name: "Commercial and Service Industry Machinery Manufacturing", code: "333310" },
-          { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "33341" },
-          { name: "Metalworking Machinery Manufacturing", code: "33351" },
-          { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "33361" },
+          { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" },
+          { name: "Industrial Machinery Manufacturing", code: "3332" },
+          { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333" },
+          { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334" },
+          { name: "Metalworking Machinery Manufacturing", code: "3335" },
+          { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336" },
           { name: "Other General Purpose Machinery Manufacturing", code: "3339" },
       ]},
       { name: "Computer and Electronic Product Manufacturing", code: "334", industries: [
-          { name: "Electronic Computer Manufacturing", code: "334111" },
-          { name: "Computer Peripheral Equipment Manufacturing", code: "33411" },
-          { name: "Telephone Apparatus Manufacturing", code: "334210" },
-          { name: "Radio and Television Broadcasting and Wireless Communications Equipment Manufacturing", code: "334220" },
+          { name: "Computer and Peripheral Equipment Manufacturing", code: "3341" },
+          { name: "Communications Equipment Manufacturing", code: "3342" },
           { name: "Audio and Video Equipment Manufacturing", code: "334310" },
-          { name: "Semiconductor and Other Electronic Component Manufacturing", code: "33441" },
-          { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "33451" },
+          { name: "Semiconductor and Other Electronic Component Manufacturing", code: "3344" },
+          { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "3345" },
           { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "334610" },
       ]},
       { name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [
-          { name: "Electric Lighting Equipment Manufacturing", code: "33513" },
+          { name: "Electric Lighting Equipment Manufacturing", code: "3351" },
           { name: "Household Appliance Manufacturing", code: "3352" },
-          { name: "Electrical Equipment Manufacturing", code: "33531" },
-          { name: "Battery Manufacturing", code: "335910" },
-          { name: "Communication and Energy Wire and Cable Manufacturing", code: "33592" },
-          { name: "Wiring Device Manufacturing", code: "33593" },
-          { name: "All Other Electrical Equipment and Component Manufacturing", code: "33599" },
+          { name: "Electrical Equipment Manufacturing", code: "3353" },
+          { name: "Other Electrical Equipment and Component Manufacturing", code: "3359" },
       ]},
       { name: "Transportation Equipment Manufacturing", code: "336", industries: [
-          { name: "Automobile and Light Duty Motor Vehicle Manufacturing", code: "336110" },
-          { name: "Heavy Duty Truck Manufacturing", code: "336120" },
-          { name: "Motor Vehicle Body Manufacturing", code: "336211" },
+          { name: "Motor Vehicle Manufacturing", code: "3361" },
+          { name: "Motor Vehicle Body and Trailer Manufacturing", code: "3362" },
           { name: "Motor Vehicle Parts Manufacturing", code: "3363" },
-          { name: "Aerospace Product and Parts Manufacturing", code: "33641" },
+          { name: "Aerospace Product and Parts Manufacturing", code: "3364" },
           { name: "Railroad Rolling Stock Manufacturing", code: "336510" },
-          { name: "Ship and Boat Building", code: "33661" },
-          { name: "Other Transportation Equipment Manufacturing", code: "33699" },
+          { name: "Ship and Boat Building", code: "3366" },
+          { name: "Other Transportation Equipment Manufacturing", code: "3369" },
       ]},
       { name: "Furniture and Related Product Manufacturing", code: "337", industries: [
-          { name: "Wood Kitchen Cabinet and Countertop Manufacturing", code: "337110" },
-          { name: "Household and Institutional Furniture Manufacturing", code: "33712" },
-          { name: "Office Furniture (including Fixtures) Manufacturing", code: "33721" },
-          { name: "Mattress Manufacturing", code: "337910" },
-          { name: "Blind and Shade Manufacturing", code: "337920" },
+          { name: "Household and Institutional Furniture and Kitchen Cabinet Manufacturing", code: "3371" },
+          { name: "Office Furniture (including Fixtures) Manufacturing", code: "3372" },
+          { name: "Other Furniture Related Product Manufacturing", code: "3379" },
       ]},
       { name: "Miscellaneous Manufacturing", code: "339", industries: [
-          { name: "Surgical and Medical Instrument Manufacturing", code: "339112" },
-          { name: "Sporting and Athletic Goods Manufacturing", code: "339920" },
-          { name: "Doll, Toy, and Game Manufacturing", code: "339930" },
-          { name: "Sign Manufacturing", code: "339950" },
-          { name: "All Other Miscellaneous Manufacturing", code: "33999" },
+          { name: "Medical Equipment and Supplies Manufacturing", code: "3391" },
+          { name: "Other Miscellaneous Manufacturing", code: "3399" },
       ]},
     ]
   },
@@ -421,6 +372,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Furniture, Home Furnishings, Electronics, and Appliance Retailers", code: "449", industries: [{ name: "Furniture Retailers", code: "449110" }, { name: "Home Furnishings Retailers", code: "44912" }, { name: "Electronics and Appliance Retailers", code: "449210" }] },
       { name: "Food and Beverage Retailers", code: "445", industries: [{ name: "Grocery and Convenience Retailers", code: "4451" }, { name: "Specialty Food Retailers", code: "4452" }, { name: "Beer, Wine, and Liquor Retailers", code: "4453" }] },
       { name: "General Merchandise Retailers", code: "455", industries: [{ name: "Department Stores ", code: "4551" }, { name: "Warehouse Clubs, Supercenters, and Other General Merchandise Retailers", code: "4552" } ] },
+      { name: "Miscellaneous Store Retailers", code: "459", industries: [{ name: "Sporting Goods, Hobby, and Musical Instrument Retailers", code: "4591" }, { name: "Book Retailers", code: "459210" }] },
     ]
   },
   {
@@ -431,6 +383,10 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Water Transportation", code: "483", industries: [{ name: "Deep Sea, Coastal, and Great Lakes Water Transportation", code: "4831" }, { name: "Inland Water Transportation", code: "4832" }] },
       { name: "Truck Transportation", code: "484", industries: [{ name: "General Freight Trucking", code: "4841" }, { name: "Specialized Freight Trucking", code: "4842" }] },
       { name: "Warehousing and Storage", code: "493", industries: [{ name: "Warehousing and Storage", code: "4931" }] },
+      { name: "Pipeline Transportation", code: "486", industries: [{ name: "Pipeline Transportation of Crude Oil", code: "486110"}, {"name": "Pipeline Transportation of Natural Gas", code: "486210"}]},
+      { name: "Scenic and Sightseeing Transportation", code: "487", industries: [{ name: "Scenic and Sightseeing Transportation, Land", code: "487110"}, {"name": "Scenic and Sightseeing Transportation, Water", code: "487210"}]},
+      { name: "Support Activities for Transportation", code: "488", industries: [{ name: "Support Activities for Air Transportation", code: "4881"}, {"name": "Support Activities for Rail Transportation", code: "488210"}]},
+      { name: "Couriers and Messengers", code: "492", industries: [{ name: "Couriers and Express Delivery Services", code: "492110"}, {"name": "Local Messengers and Local Delivery", code: "492210"}]},
     ]
   },
   {
@@ -440,6 +396,8 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Motion Picture and Sound Recording Industries", code: "512", industries: [{ name: "Motion Picture and Video Industries", code: "5121" }, { name: "Sound Recording Industries", code: "5122" }] },
       { name: "Broadcasting and Content Providers", code: "516", industries: [{ name: "Radio and Television Broadcasting Stations", code: "5161" }, {name: "Content Providers, Web Search Portals, and Data Processing Services", code: "5162"}] },
       { name: "Telecommunications", code: "517", industries: [{ name: "Wired and Wireless Telecommunications Carriers (except Satellite)", code: "5171" }, { name: "Satellite Telecommunications", code: "5174" }, {"name": "Other Telecommunications", code: "5179"}] },
+      { name: "Data Processing, Hosting, and Related Services", code: "518", industries: [{ name: "Data Processing, Hosting, and Related Services", code: "518210" }] },
+      { name: "Other Information Services", code: "519", industries: [{ name: "News Syndicates", code: "519210" }, { name: "Libraries and Archives", code: "519220" }] },
     ]
   },
   {
@@ -449,6 +407,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Credit Intermediation and Related Activities", code: "522", industries: [{ name: "Commercial Banking", code: "522110" }, { name: "Savings Institutions", code: "522120" }, { name: "Credit Unions", code: "522130" }, { name: "Sales Financing", code: "522220" }, { name: "Consumer Lending", code: "522291" }] },
       { name: "Securities, Commodity Contracts, and Other Financial Investments and Related Activities", code: "523", industries: [{ name: "Investment Banking and Securities Dealing", code: "523110" }, { name: "Securities Brokerage", code: "523120" }, { name: "Commodity Contracts Dealing", code: "523130" } ] },
       { name: "Insurance Carriers and Related Activities", code: "524", industries: [{ name: "Direct Life Insurance Carriers", code: "524113" }, { name: "Direct Health and Medical Insurance Carriers", code: "524114" }, { name: "Direct Property and Casualty Insurance Carriers", code: "524126" }, { name: "Insurance Agencies and Brokerages", code: "524210" }] },
+      { name: "Funds, Trusts, and Other Financial Vehicles", code: "525", industries: [{ name: "Pension Funds", code: "525110"}, {"name": "Health and Welfare Funds", code: "525120"}]}
     ]
   },
   {
@@ -468,12 +427,13 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Computer Systems Design and Related Services", code: "5415", industries: [{ name: "Custom Computer Programming Services", code: "541511" }, { name: "Computer Systems Design Services", code: "541512" }, { name: "Computer Facilities Management Services", code: "541513" }] },
       { name: "Management, Scientific, and Technical Consulting Services", code: "5416", industries: [{ name: "Management Consulting Services", code: "54161" }, { name: "Environmental Consulting Services", code: "541620" }] },
       { name: "Advertising, Public Relations, and Related Services", code: "5418", industries: [{name: "Advertising Agencies", code: "541810"}, {name: "Public Relations Agencies", code: "541820"}] },
+      { name: "Other Professional, Scientific, and Technical Services", code: "5419", industries: [{name: "Marketing Research and Public Opinion Polling", code: "541910"}, {name: "Photographic Services", code: "54192"}, {name: "Translation and Interpretation Services", code: "541930"}, {name: "Veterinary Services", code: "541940"}] },
     ]
   },
   {
     name: "Management of Companies and Enterprises", code: "55", description: "Establishments that hold the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions.",
     subSectors: [
-      { name: "Management of Companies and Enterprises", code: "5511", industries: [{ name: "Offices of Bank Holding Companies", code: "551111" }, { name: "Offices of Other Holding Companies", code: "551112" }] },
+      { name: "Management of Companies and Enterprises", code: "551", industries: [{ name: "Offices of Bank Holding Companies", code: "551111" }, { name: "Offices of Other Holding Companies", code: "551112" }] },
     ]
   },
   {
@@ -490,15 +450,17 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Junior Colleges", code: "6112", industries: [{ name: "Junior Colleges", code: "611210" }] },
       { name: "Colleges, Universities, and Professional Schools", code: "6113", industries: [{ name: "Colleges, Universities, and Professional Schools", code: "611310" }] },
       { name: "Other Schools and Instruction", code: "6116", industries: [{ name: "Fine Arts Schools", code: "611610" }, { name: "Sports and Recreation Instruction", code: "611620" }, { name: "Language Schools", code: "611630"}] },
+      { name: "Technical and Trade Schools", code: "6115", industries: [{ name: "Technical and Trade Schools", code: "61151"}] },
+      { name: "Educational Support Services", code: "6117", industries: [{ name: "Educational Support Services", code: "611710"}] },
     ]
   },
   {
     name: "Health Care and Social Assistance", code: "62", description: "Establishments providing health care and social assistance for individuals.",
     subSectors: [
-      { name: "Ambulatory Health Care Services", code: "621", industries: [{ name: "Offices of Physicians", code: "6211" }, { name: "Offices of Dentists", code: "621210" }, { name: "Offices of Other Health Practitioners", code: "6213" }, { name: "Medical and Diagnostic Laboratories", code: "62151" }] },
+      { name: "Ambulatory Health Care Services", code: "621", industries: [{ name: "Offices of Physicians", code: "6211" }, { name: "Offices of Dentists", code: "621210" }, { name: "Offices of Other Health Practitioners", code: "6213" }, { name: "Medical and Diagnostic Laboratories", code: "62151" }, { name: "Home Health Care Services", code: "621610"}] },
       { name: "Hospitals", code: "622", industries: [{ name: "General Medical and Surgical Hospitals", code: "622110" }, { name: "Psychiatric and Substance Abuse Hospitals", code: "622210" }] },
       { name: "Nursing and Residential Care Facilities", code: "623", industries: [{ name: "Nursing Care Facilities (Skilled Nursing Facilities)", code: "623110" }, { name: "Residential Intellectual and Developmental Disability, Mental Health, and Substance Abuse Facilities", code: "6232" }] },
-      { name: "Social Assistance", code: "624", industries: [{ name: "Individual and Family Services", code: "6241" }, { name: "Community Food and Housing, and Emergency and Other Relief Services", code: "6242" }] },
+      { name: "Social Assistance", code: "624", industries: [{ name: "Individual and Family Services", code: "6241" }, { name: "Community Food and Housing, and Emergency and Other Relief Services", code: "6242" }, { name: "Vocational Rehabilitation Services", code: "624310"}] },
     ]
   },
   {
@@ -522,6 +484,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Repair and Maintenance", code: "811", industries: [{ name: "Automotive Repair and Maintenance", code: "8111" }, { name: "Electronic and Precision Equipment Repair and Maintenance", code: "81121" }, { name: "Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance", code: "811310" }] },
       { name: "Personal and Laundry Services", code: "812", industries: [{ name: "Personal Care Services (e.g., hair, skin, nail)", code: "8121" }, { name: "Drycleaning and Laundry Services", code: "8123" }, { name: "Other Personal Services (e.g., pet care, photofinishing)", code: "8129" }] },
       { name: "Religious, Grantmaking, Civic, Professional, and Similar Organizations", code: "813", industries: [{ name: "Religious Organizations", code: "813110" }, { name: "Grantmaking and Giving Services", code: "8132" }, { name: "Social Advocacy Organizations", code: "8133" }, {"name": "Business Associations", code: "813910"}] },
+      { name: "Private Households", code: "814", industries: [{ name: "Private Households", code: "814110"}] },
     ]
   },
   {
@@ -530,6 +493,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Executive, Legislative, and Other General Government Support", code: "921", industries: [{ name: "Executive Offices", code: "921110" }, { name: "Legislative Bodies", code: "921120" }, { name: "Public Finance Activities", code: "921130"}] },
       { name: "Justice, Public Order, and Safety Activities", code: "922", industries: [{ name: "Courts", code: "922110" }, { name: "Police Protection", code: "922120" }, { name: "Correctional Institutions", code: "922140" }, {"name": "Fire Protection", code: "922160"}] },
       { name: "National Security and International Affairs", code: "928", industries: [{ name: "National Security", code: "928110" }, { name: "International Affairs", code: "928120" }] },
+      { name: "Administration of Economic Programs", code: "926", industries: [{ name: "Administration of General Economic Programs", code: "926110"}] },
     ]
   },
 ];
@@ -542,34 +506,35 @@ const navItems = [
   { title: "Contracts", href: "/contracts", icon: FileText },
 ];
 
-export const formSectors = detailedSectorsData.map(sector => ({
-  name: sector.name,
-  code: sector.code,
-}));
+// export const formSectors = detailedSectorsData.map(sector => ({
+//   name: sector.name,
+//   code: sector.code,
+// }));
 
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
+// Dynamically import forms
 const DynamicCreatePostForm = dynamic(() =>
   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-  { loading: () => <p>Loading form...</p> }
+  { loading: () => <p className="p-4 text-center">Loading form...</p>, ssr: false }
 );
 
 const DynamicRequestHelpForm = dynamic(() =>
-  import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm), // Use CreatePostForm for help requests too
-  { loading: () => <p>Loading form...</p> }
+  import('@/components/RequestHelpForm').then((mod) => mod.RequestHelpForm), // Corrected import
+  { loading: () => <p className="p-4 text-center">Loading form...</p>, ssr: false }
 );
 
 const DynamicThemeToggle = dynamic(() =>
   import('@/components/ThemeToggle').then((mod) => mod.ThemeToggle),
-  { loading: () => <DropdownMenuItem disabled>Theme...</DropdownMenuItem> }
+  { loading: () => <DropdownMenuItem disabled>Theme...</DropdownMenuItem>, ssr: false }
 );
 
-const DynamicNotificationDropdown = dynamic(() =>
-  import('@/components/notifications/NotificationDropdown').then((mod) => mod.NotificationDropdown),
-  { loading: () => <Button variant="ghost" size="icon" className="h-8 w-8" disabled><Bell className="h-5 w-5" /></Button> }
-);
+// const DynamicNotificationDropdown = dynamic(() =>
+//   import('@/components/notifications/NotificationDropdown').then((mod) => mod.NotificationDropdown),
+//   { loading: () => <Button variant="ghost" size="icon" className="h-8 w-8" disabled><Bell className="h-5 w-5" /></Button>, ssr: false }
+// );
 
 
 export default function MainLayout({
@@ -622,7 +587,7 @@ export default function MainLayout({
 
   const addPostMutation = useMutation({
     mutationFn: async (newPostDataWithImage: NewPostData & {
-      imageFile?: File | null | undefined; mentionedUserIds?: string[]
+      imageFile?: File | null | undefined; mentionedUserIds?: string[];
     }) => {
       if (!user) {
         console.error("[MainLayout] addPostMutation: User not authenticated.");
@@ -658,7 +623,18 @@ export default function MainLayout({
         imageUrls: finalImageUrls,
         mentionedUserIds: mentionedUserIds,
         requestType: postDataForFirestoreBase.requestType || 'post',
+        // Remove deadline and paymentAmount for 'post' type explicitly if needed, or rely on service to handle
       };
+      if (postDataForFirestore.requestType !== 'help_request') {
+        delete postDataForFirestore.paymentAmount;
+        delete postDataForFirestore.deadline;
+        delete postDataForFirestore.descriptionDetails;
+        delete postDataForFirestore.descriptionTried;
+        delete postDataForFirestore.descriptionOutcome;
+      } else {
+         delete postDataForFirestore.description; // Ensure general description is not saved for help requests
+      }
+
 
       console.log("[MainLayout] Data for Firestore (addPostMutation):", JSON.stringify(postDataForFirestore, null, 2));
       return addPostToFirestore(postDataForFirestore);
@@ -679,7 +655,7 @@ export default function MainLayout({
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
         console.log(`[MainLayout] Post/Request created, triggering notifications for ${variables.mentionedUserIds.length} mentions.`);
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) {
+          if (mentionedUid !== user.uid) { // Don't notify self for mentioning self in post
             try {
               await createNotification({
                 userId: mentionedUid,
@@ -687,7 +663,7 @@ export default function MainLayout({
                 senderId: user.uid,
                 postId: newlyCreatedPostId,
                 postQuestion: variables.question,
-                textSnippet: variables.description ? variables.description.substring(0, 100) : (variables.requestType === 'help_request' ? "You were mentioned in a help request!" : "You were mentioned in a new post!"),
+                textSnippet: variables.description ? variables.description.substring(0, 100) : (variables.requestType === 'help_request' && variables.descriptionDetails ? variables.descriptionDetails.substring(0,100) : "You were mentioned!"),
               });
               console.log(`[MainLayout] Mention notification created for user ${mentionedUid} in post/request ${newlyCreatedPostId}`);
             } catch (notifyError) {
@@ -702,7 +678,7 @@ export default function MainLayout({
       toast({
         variant: "destructive",
         title: variables.requestType === 'help_request' ? "Request Failed" : "Post Failed",
-        description: `Could not submit your ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}. Check console and Firestore rules.`,
+        description: `Could not submit your ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.`,
       });
     },
   });
@@ -724,16 +700,16 @@ export default function MainLayout({
 
       const newPostDataForService: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
         question: formData.question,
-        description: formData.description,
+        description: formData.description, // General description for 'post'
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
         industry: industryDetails?.name || formData.industry,
         naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Startup",
-        safetyIndicator: "Medium",
-        ratingScore: Math.floor(Math.random() * 3) + 3,
+        businessType: "Startup", // Example, adjust as needed
+        safetyIndicator: "Medium", // Example
+        ratingScore: 0, // Example
         imageFile: formData.imageFile,
         imageUrls: [],
         mentionedUserIds: formData.mentionedUserIds || [],
@@ -746,8 +722,8 @@ export default function MainLayout({
     [user, toast, addPostMutation, queryClient]
   );
 
-  const handleRequestHelpSubmit = useCallback(
-    (formData: CreatePostFormData) => {
+  const handleAddHelpRequest = useCallback(
+    (formData: RequestHelpFormData) => {
       if (!user) {
         toast({ variant: "destructive", title: "Authentication Required" });
         return;
@@ -758,23 +734,27 @@ export default function MainLayout({
 
       const newHelpRequestData: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
         question: formData.question,
-        description: formData.description,
+        descriptionDetails: formData.descriptionDetails,
+        descriptionTried: formData.descriptionTried,
+        descriptionOutcome: formData.descriptionOutcome,
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector,
         industry: industryDetails?.name || formData.industry,
         naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Project",
-        safetyIndicator: "Medium",
-        ratingScore: 0,
+        businessType: "Project", // Example
+        safetyIndicator: "Medium", // Example
+        ratingScore: 0, // Example
+        // paymentAmount: formData.paymentAmount, // Removed
+        // deadline: formData.deadline ? Timestamp.fromDate(formData.deadline) : undefined, // Removed
         imageFile: formData.imageFile,
         imageUrls: [],
         mentionedUserIds: formData.mentionedUserIds || [],
         requestType: 'help_request',
       };
       console.log("[MainLayout] Calling addPostMutation (as addHelpRequestMutation) with (help request):", newHelpRequestData);
-      addPostMutation.mutate(newHelpRequestData);
+      addPostMutation.mutate(newHelpRequestData); // Use the same mutation but with different data structure
     },
     [user, toast, addPostMutation, queryClient]
   );
@@ -804,7 +784,7 @@ export default function MainLayout({
     "bg-background"
   );
 
-  const hideAppChrome = isMobile && pathname === '/contracts';
+  const hideAppChrome = false; // Always show chrome now
 
 
   return (
@@ -882,8 +862,8 @@ export default function MainLayout({
                           </DialogHeader>
                           <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
                           {isRequestHelpDialogOpen && user && (
-                              <DynamicRequestHelpForm // Changed to DynamicCreatePostForm as per previous logic
-                                  onSubmit={handleRequestHelpSubmit}
+                              <DynamicRequestHelpForm // Now correctly pointing to the new form for help requests
+                                  onSubmit={handleAddHelpRequest}
                                   availableTags={availableTags}
                                   detailedSectorsData={detailedSectorsData}
                                   isSubmitting={addPostMutation.isPending && addPostMutation.variables?.requestType === 'help_request'}
@@ -898,7 +878,7 @@ export default function MainLayout({
 
               {user ? (
                 <div className="flex items-center gap-2">
-                  {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
+                  {user.uid && <NotificationDropdown userId={user.uid} />}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                       <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
@@ -964,7 +944,7 @@ export default function MainLayout({
 
       <main className={cn(
         "flex-1 flex flex-col",
-        hideAppChrome ? "h-full" : (isMobile ? "pb-14" : "pb-0")
+        isMobile ? "pb-14" : "pb-0" // Ensure bottom padding for mobile nav
       )}>
         {children}
       </main>
@@ -999,3 +979,4 @@ export default function MainLayout({
     </div>
   );
 }
+
