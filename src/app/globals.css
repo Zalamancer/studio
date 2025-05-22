@@ -9,99 +9,99 @@ body {
 
 @layer base {
   :root {
-    --background: 220 20% 96%; /* Lighter Gray */
-    --foreground: 220 25% 10%; /* Darker Gray-Blue */
+    --background: 210 40% 98%; /* Very Light Cool Gray */
+    --foreground: 215 25% 25%; /* Dark Slate Blue */
 
     --card: 0 0% 100%; /* White */
-    --card-foreground: 220 25% 10%;
+    --card-foreground: 215 25% 25%; /* Dark Slate Blue */
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 220 25% 10%;
+    --popover: 0 0% 100%; /* White */
+    --popover-foreground: 215 25% 25%; /* Dark Slate Blue */
 
-    --primary: 240 60% 55%; /* Vibrant Blue/Purple */
+    --primary: 210 70% 50%;     /* Classic Blue */
     --primary-foreground: 0 0% 100%; /* White */
 
-    --secondary: 220 15% 90%; /* Light Gray */
-    --secondary-foreground: 220 25% 20%; /* Dark Gray */
+    --secondary: 210 40% 94%;   /* Light Cool Gray */
+    --secondary-foreground: 215 25% 20%; /* Dark Slate Blue */
 
-    --muted: 220 15% 90%; /* Light Gray */
-    --muted-foreground: 220 10% 45%; /* Medium Gray */
+    --muted: 210 40% 94%;       /* Light Cool Gray */
+    --muted-foreground: 215 15% 45%;  /* Medium Slate Gray */
 
-    --accent: 260 70% 60%; /* Vibrant Purple - slightly different from primary */
+    --accent: 205 75% 55%;      /* Slightly Lighter/Brighter Blue */
     --accent-foreground: 0 0% 100%; /* White */
 
     --destructive: 0 70% 55%; /* Softer Red */
     --destructive-foreground: 0 0% 100%; /* White */
 
-    --border: 220 20% 88%; /* Softer Gray Border */
-    --input: 220 20% 92%;   /* Slightly off-white input background */
-    --ring: 240 60% 50%;    /* Primary color for focus rings */
+    --border: 210 30% 90%;      /* Light Cool Gray Border */
+    --input: 210 30% 94%;       /* Very Light Cool Gray Input */
+    --ring: 210 70% 45%;        /* Slightly Darker Blue for focus rings */
 
     --radius: 0.5rem;
 
-    /* Sidebar specific vars for light theme (can be same as main if desired) */
-    --sidebar-background: 220 20% 94%; /* Slightly off main background */
-    --sidebar-foreground: 220 25% 15%;
-    --sidebar-primary: 240 60% 55%;
+    /* Sidebar specific vars for light theme */
+    --sidebar-background: 210 30% 96%; 
+    --sidebar-foreground: 215 25% 20%;
+    --sidebar-primary: 210 70% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 15% 88%;
-    --sidebar-accent-foreground: 220 25% 10%;
-    --sidebar-border: 220 20% 85%;
-    --sidebar-ring: 240 60% 50%;
+    --sidebar-accent: 210 30% 90%;
+    --sidebar-accent-foreground: 215 25% 15%;
+    --sidebar-border: 210 30% 88%;
+    --sidebar-ring: 210 70% 45%;
 
     /* Chart colors for light theme */
-    --chart-1: 240 50% 60%; /* Blue */
+    --chart-1: 210 70% 50%; /* Blue */
     --chart-2: 160 60% 45%; /* Green */
     --chart-3: 30 80% 55%;  /* Orange */
-    --chart-4: 280 65% 60%; /* Purple */
-    --chart-5: 340 75% 55%; /* Pink */
+    --chart-4: 280 65% 60%; /* Purple (Kept for variety or can be changed to another blue shade) */
+    --chart-5: 340 75% 55%; /* Pink (Kept for variety or can be changed to another blue shade) */
   }
 
   .dark {
-    --background: 220 20% 9%;    /* Very Dark Gray-Blue */
-    --foreground: 220 15% 88%;   /* Light Gray */
+    --background: 220 20% 10%;    /* Very Dark Blue-Gray */
+    --foreground: 210 30% 85%;   /* Light Cool Gray */
 
-    --card: 220, 20%, 12%;       /* Darker Card Background */
-    --card-foreground: 220 15% 88%;
+    --card: 220 20% 15%;       /* Dark Blue-Gray Card */
+    --card-foreground: 210 30% 85%; /* Light Cool Gray */
 
-    --popover: 220 20% 7%;       /* Even Darker Popover */
-    --popover-foreground: 220 15% 88%;
+    --popover: 220 20% 12%;       /* Darker Popover */
+    --popover-foreground: 210 30% 85%; /* Light Cool Gray */
 
-    --primary: 240 65% 65%;    /* Vibrant Blue/Purple (slightly lighter for dark mode) */
-    --primary-foreground: 220 20% 10%;  /* Dark text on primary button */
+    --primary: 210 80% 65%;    /* Brighter Blue */
+    --primary-foreground: 220 20% 5%;  /* Very Dark Blue for text on primary button */
 
-    --secondary: 220 20% 18%;    /* Dark Muted Gray */
-    --secondary-foreground: 220 15% 80%; /* Lighter text on secondary */
+    --secondary: 220 20% 20%;    /* Dark Muted Blue-Gray */
+    --secondary-foreground: 210 30% 80%; /* Lighter text on secondary */
 
-    --muted: 220 20% 15%;       /* Dark Muted Gray */
-    --muted-foreground: 220 10% 55%; /* Medium-Light Gray */
+    --muted: 220 20% 18%;       /* Dark Muted Blue-Gray */
+    --muted-foreground: 210 20% 55%; /* Medium-Light Cool Gray */
 
-    --accent: 260 70% 65%;      /* Vibrant Purple (slightly lighter for dark mode) */
-    --accent-foreground: 220 15% 95%;  /* Very light text on accent */
+    --accent: 205 85% 70%;      /* Lighter, Vibrant Blue for accents */
+    --accent-foreground: 220 20% 5%;  /* Very Dark Blue text on accent */
 
     --destructive: 0 60% 50%;     /* Softer Red for dark mode */
     --destructive-foreground: 0 0% 100%; /* White */
 
-    --border: 220 20% 20%;       /* Subtle Dark Border */
-    --input: 220 20% 16%;        /* Dark Input Background */
-    --ring: 240 65% 60%;         /* Primary color for focus rings (dark mode variant) */
+    --border: 220 20% 25%;       /* Subtle Dark Blue-Gray Border */
+    --input: 220 20% 20%;        /* Dark Blue-Gray Input Background */
+    --ring: 210 80% 60%;         /* Vibrant Blue for focus rings */
 
     /* Sidebar specific vars for dark theme */
-    --sidebar-background: 220 20% 7%; /* Very dark */
-    --sidebar-foreground: 220 15% 85%;
-    --sidebar-primary: 240 65% 65%;
-    --sidebar-primary-foreground: 220 20% 10%;
-    --sidebar-accent: 220 20% 15%;
-    --sidebar-accent-foreground: 220 15% 90%;
-    --sidebar-border: 220 20% 18%;
-    --sidebar-ring: 240 65% 60%;
+    --sidebar-background: 220 20% 8%; 
+    --sidebar-foreground: 210 30% 80%;
+    --sidebar-primary: 210 80% 65%;
+    --sidebar-primary-foreground: 220 20% 5%;
+    --sidebar-accent: 220 20% 18%;
+    --sidebar-accent-foreground: 210 30% 88%;
+    --sidebar-border: 220 20% 22%;
+    --sidebar-ring: 210 80% 60%;
 
     /* Chart colors for dark theme */
-    --chart-1: 240 55% 65%; /* Blue */
+    --chart-1: 210 75% 65%; /* Blue */
     --chart-2: 160 55% 55%; /* Green */
     --chart-3: 30 75% 60%;  /* Orange */
-    --chart-4: 280 60% 65%; /* Purple */
-    --chart-5: 340 70% 60%; /* Pink */
+    --chart-4: 280 60% 65%; /* Purple (Kept for variety) */
+    --chart-5: 340 70% 60%; /* Pink (Kept for variety) */
   }
 }
 
