@@ -40,7 +40,7 @@ body {
     --radius: 0.5rem;
 
     /* Sidebar specific vars for light theme */
-    --sidebar-background: 210 30% 96%; 
+    --sidebar-background: 210 30% 96%;
     --sidebar-foreground: 215 25% 20%;
     --sidebar-primary: 210 70% 50%;
     --sidebar-primary-foreground: 0 0% 100%;
@@ -87,7 +87,7 @@ body {
     --ring: 210 80% 60%;         /* Vibrant Blue for focus rings */
 
     /* Sidebar specific vars for dark theme */
-    --sidebar-background: 220 20% 8%; 
+    --sidebar-background: 220 20% 8%;
     --sidebar-foreground: 210 30% 80%;
     --sidebar-primary: 210 80% 65%;
     --sidebar-primary-foreground: 220 20% 5%;
@@ -131,5 +131,10 @@ body {
   .mb-6 {
     display: none;
   }
+}
+
+/* Add 4px padding to ScrollArea viewport */
+[data-radix-scroll-area-viewport] {
+  padding: 4px;
 }
     
