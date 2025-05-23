@@ -35,9 +35,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, Factory } from "lucide-react";
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Handshake, Factory, HelpingHand } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -65,7 +65,6 @@ import { Timestamp } from 'firebase/firestore';
 import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
-import { fetchFullUserProfile } from '@/services/connectionService'; // Import for fetching user profile
 import { getReviewsForProfile } from '@/services/reviewService'; // Import for fetching reviews
 
 
@@ -89,14 +88,13 @@ export interface SectorWithSubSectors {
   subSectors: SubSector[];
 }
 
+// Using more concise names and including NAICS codes for clarity
 export const detailedSectorsData: SectorWithSubSectors[] = [
   {
-    name: "Agriculture, Forestry, Fishing and Hunting",
-    code: "11",
-    description: "Establishments primarily engaged in growing crops, raising animals, harvesting timber, and harvesting fish and other animals from a farm, ranch, or their natural habitats.",
+    name: "Agriculture, Forestry, Fishing and Hunting", code: "11",
+    description: "Growing crops, raising animals, harvesting timber, and fishing.",
     subSectors: [
-      {
-        name: "Crop Production", code: "111", industries: [
+      { name: "Crop Production", code: "111", industries: [
           { name: "Soybean Farming", code: "111110" },
           { name: "Oilseed (except Soybean) Farming", code: "111120" },
           { name: "Dry Pea and Bean Farming", code: "111130" },
@@ -129,8 +127,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
           { name: "All Other Miscellaneous Crop Farming", code: "111998" },
         ]
       },
-      {
-        name: "Animal Production and Aquaculture", code: "112", industries: [
+      { name: "Animal Production and Aquaculture", code: "112", industries: [
           { name: "Beef Cattle Ranching and Farming", code: "112111" },
           { name: "Cattle Feedlots", code: "112112" },
           { name: "Dairy Cattle and Milk Production", code: "112120" },
@@ -152,23 +149,20 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
           { name: "All Other Animal Production", code: "112990" },
         ]
       },
-      {
-        name: "Forestry and Logging", code: "113", industries: [
+      { name: "Forestry and Logging", code: "113", industries: [
           { name: "Timber Tract Operations", code: "113110" },
           { name: "Forest Nurseries and Gathering of Forest Products", code: "113210" },
           { name: "Logging", code: "113310" },
         ]
       },
-      {
-        name: "Fishing, Hunting and Trapping", code: "114", industries: [
+      { name: "Fishing, Hunting and Trapping", code: "114", industries: [
           { name: "Finfish Fishing", code: "114111" },
           { name: "Shellfish Fishing", code: "114112" },
           { name: "Other Marine Fishing", code: "114119" },
           { name: "Hunting and Trapping", code: "114210" },
         ]
       },
-      {
-        name: "Support Activities for Agriculture and Forestry", code: "115", industries: [
+      { name: "Support Activities for Agriculture and Forestry", code: "115", industries: [
           { name: "Cotton Ginning", code: "115111" },
           { name: "Soil Preparation, Planting, and Cultivating", code: "115112" },
           { name: "Crop Harvesting, Primarily by Machine", code: "115113" },
@@ -181,8 +175,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       },
     ]
   },
-  {
-    name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21", description: "Establishments that extract naturally occurring mineral solids, liquid minerals, and gases.",
+  { name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21", description: "Extracting naturally occurring mineral solids, liquids, and gases.",
     subSectors: [
       { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "211111" }, { name: "Natural Gas Liquid Extraction", code: "211130" }] },
       { name: "Coal Mining", code: "2121", industries: [{ name: "Bituminous Coal and Lignite Surface Mining", code: "212111" }, { name: "Bituminous Coal Underground Mining", code: "212112" }, { name: "Anthracite Mining", code: "212113" }] },
@@ -191,24 +184,21 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Support Activities for Mining", code: "213", industries: [{ name: "Drilling Oil and Gas Wells", code: "213111" }, { name: "Support Activities for Oil and Gas Operations", code: "213112" }, { name: "Support Activities for Coal Mining", code: "213113" }, { name: "Support Activities for Metal Mining", code: "213114"}, { name: "Support Activities for Nonmetallic Minerals (except Fuels) Mining", code: "213115"} ] },
     ]
   },
-  {
-    name: "Utilities", code: "22", description: "Establishments engaged in providing utility services such as electric power, natural gas, steam supply, water supply, and sewage removal.",
+  { name: "Utilities", code: "22", description: "Providing utility services like electric power, natural gas, water, and sewage.",
     subSectors: [
       { name: "Electric Power Generation, Transmission and Distribution", code: "2211", industries: [{ name: "Hydroelectric Power Generation", code: "221111" }, { name: "Fossil Fuel Electric Power Generation", code: "221112" }, { name: "Nuclear Electric Power Generation", code: "221113" }, { name: "Solar Electric Power Generation", code: "221114"}, { name: "Wind Electric Power Generation", code: "221115"}, { name: "Geothermal Electric Power Generation", code: "221116"}, { name: "Biomass Electric Power Generation", code: "221117"}, { name: "Other Electric Power Generation", code: "221118"}, { name: "Electric Bulk Power Transmission and Control", code: "221121" }, { name: "Electric Power Distribution", code: "221122" }] },
       { name: "Natural Gas Distribution", code: "2212", industries: [{ name: "Natural Gas Distribution", code: "221210" }] },
       { name: "Water, Sewage and Other Systems", code: "2213", industries: [{ name: "Water Supply and Irrigation Systems", code: "221310" }, { name: "Sewage Treatment Facilities", code: "221320" }, { name: "Steam and Air-Conditioning Supply", code: "221330" }] },
     ]
   },
-  {
-    name: "Construction", code: "23", description: "Establishments primarily engaged in the construction of buildings and engineering projects.",
+  { name: "Construction", code: "23", description: "Construction of buildings and engineering projects.",
     subSectors: [
       { name: "Construction of Buildings", code: "236", industries: [{ name: "New Single-Family Housing Construction (except For-Sale Builders)", code: "236115" }, { name: "New Multifamily Housing Construction (except For-Sale Builders)", code: "236116" }, { name: "Residential Remodelers", code: "236118"}, { name: "Industrial Building Construction", code: "236210" }, { name: "Commercial and Institutional Building Construction", code: "236220" }] },
       { name: "Heavy and Civil Engineering Construction", code: "237", industries: [{ name: "Water and Sewer Line and Related Structures Construction", code: "237110" }, { name: "Oil and Gas Pipeline and Related Structures Construction", code: "237120" }, { name: "Power and Communication Line and Related Structures Construction", code: "237130" }, { name: "Land Subdivision", code: "237210"}, { name: "Highway, Street, and Bridge Construction", code: "237310" }, { name: "Other Heavy and Civil Engineering Construction", code: "237990"}] },
       { name: "Specialty Trade Contractors", code: "238", industries: [{ name: "Poured Concrete Foundation and Structure Contractors", code: "238110"}, { name: "Structural Steel and Precast Concrete Contractors", code: "238120"}, { name: "Framing Contractors", code: "238130"}, { name: "Masonry Contractors", code: "238140"}, { name: "Glass and Glazing Contractors", code: "238150"}, { name: "Roofing Contractors", code: "238160"}, { name: "Siding Contractors", code: "238170"}, { name: "Other Foundation, Structure, and Building Exterior Contractors", code: "238190"}, { name: "Electrical Contractors and Other Wiring Installation Contractors", code: "238210" }, { name: "Plumbing, Heating, and Air-Conditioning Contractors", code: "238220" }, { name: "Other Building Equipment Contractors", code: "238290"}, { name: "Drywall and Insulation Contractors", code: "238310"}, { name: "Painting and Wall Covering Contractors", code: "238320" }, { name: "Flooring Contractors", code: "238330"}, { name: "Tile and Terrazzo Contractors", code: "238340"}, { name: "Finish Carpentry Contractors", code: "238350"}, { name: "Other Building Finishing Contractors", code: "238390"}, { name: "Site Preparation Contractors", code: "238910" }, {"name": "All Other Specialty Trade Contractors", code: "238990"} ] },
     ]
   },
-  {
-    name: "Manufacturing", code: "31-33", description: "Mechanical, physical, or chemical transformation of materials, substances, or components into new products.",
+  { name: "Manufacturing", code: "31-33", description: "Mechanical, physical, or chemical transformation of materials into new products.",
     subSectors: [
       { name: "Food Manufacturing", code: "311", industries: [ { name: "Animal Food Manufacturing", code: "311119" }, { name: "Grain and Oilseed Milling", code: "311211" }, { name: "Sugar and Confectionery Product Manufacturing", code: "311313" }, { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "311411" }, { name: "Dairy Product Manufacturing", code: "311511" }, { name: "Animal Slaughtering and Processing", code: "311611" }, { name: "Seafood Product Preparation and Packaging", code: "311710" }, { name: "Bakeries and Tortilla Manufacturing", code: "311812" }, { name: "Other Food Manufacturing", code: "311911" }, ]},
       { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [ { name: "Soft Drink and Ice Manufacturing", code: "312111" }, { name: "Breweries", code: "312120" }, { name: "Wineries", code: "312130" }, { name: "Distilleries", code: "312140" }, { name: "Tobacco Manufacturing", code: "312230" }, ]},
@@ -233,16 +223,14 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Miscellaneous Manufacturing", code: "339", industries: [ { name: "Medical Equipment and Supplies Manufacturing", code: "339110" }, { name: "Jewelry and Silverware Manufacturing", code: "339910" }, { name: "Sporting and Athletic Goods Manufacturing", code: "339920"}, { name: "Doll, Toy, and Game Manufacturing", code: "339930"}, { name: "Office Supplies (except Paper) Manufacturing", code: "339940"}, { name: "Sign Manufacturing", code: "339950"}, { name: "All Other Miscellaneous Manufacturing", code: "339990"}, ]},
     ]
   },
-  {
-    name: "Wholesale Trade", code: "42", description: "Establishments primarily engaged in wholesaling merchandise, generally without transformation.",
+  { name: "Wholesale Trade", code: "42", description: "Wholesaling merchandise, generally without transformation.",
     subSectors: [
-      { name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{ name: "Motor Vehicle and Motor Vehicle Parts and Supplies Merchant Wholesalers", code: "4231" }, { name: "Professional and Commercial Equipment and Supplies Merchant Wholesalers", code: "4234" }, { name: "Metal and Mineral (except Petroleum) Merchant Wholesalers", code: "4235" }, { name: "Household Appliances and Electrical and Electronic Goods Merchant Wholesalers", code: "4236"}, { name: "Hardware, and Plumbing and Heating Equipment and Supplies Merchant Wholesalers", code: "4237"}, { name: "Machinery, Equipment, and Supplies Merchant Wholesalers", code: "4238"}, { name: "Miscellaneous Durable Goods Merchant Wholesalers", code: "4239"}] },
-      { name: "Merchant Wholesalers, Nondurable Goods", code: "424", industries: [{ name: "Paper and Paper Product Merchant Wholesalers", code: "4241"}, { name: "Drugs and Druggists' Sundries Merchant Wholesalers", code: "4242"}, { name: "Apparel, Piece Goods, and Notions Merchant Wholesalers", code: "4243"}, { name: "Grocery and Related Product Merchant Wholesalers", code: "4244" }, { name: "Farm Product Raw Material Merchant Wholesalers", code: "4245"}, { name: "Chemical and Allied Products Merchant Wholesalers", code: "4246"}, { name: "Petroleum and Petroleum Products Merchant Wholesalers", code: "4247" }, { name: "Alcoholic Beverage Merchant Wholesalers", code: "4248" }, { name: "Miscellaneous Nondurable Goods Merchant Wholesalers", code: "4249"}] },
+      { name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{ name: "Motor Vehicle and Parts", code: "4231" }, { name: "Professional Equipment", code: "4234" }, { name: "Metal and Mineral", code: "4235" }] },
+      { name: "Merchant Wholesalers, Nondurable Goods", code: "424", industries: [{ name: "Paper and Paper Products", code: "4241"}, { name: "Drugs and Sundries", code: "4242"}, { name: "Apparel and Notions", code: "4243"}] },
       { name: "Wholesale Electronic Markets and Agents and Brokers", code: "425", industries: [{ name: "Business to Business Electronic Markets", code: "425110" }, { name: "Wholesale Trade Agents and Brokers", code: "425120" }] },
     ]
   },
-  {
-    name: "Retail Trade", code: "44-45", description: "Establishments primarily engaged in retailing merchandise, generally without transformation.",
+  { name: "Retail Trade", code: "44-45", description: "Retailing merchandise, generally without transformation.",
     subSectors: [
       { name: "Motor Vehicle and Parts Dealers", code: "441", industries: [{ name: "Automobile Dealers", code: "4411" }, { name: "Other Motor Vehicle Dealers", code: "4412" }, { name: "Automotive Parts, Accessories, and Tire Retailers", code: "4413" } ] },
       { name: "Furniture, Home Furnishings, Electronics, and Appliance Retailers", code: "449", industries: [{ name: "Furniture Retailers", code: "449110" }, { name: "Home Furnishings Retailers", code: "44912" }, { name: "Electronics and Appliance Retailers", code: "449210" }] },
@@ -255,8 +243,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Miscellaneous Store Retailers", code: "459", industries: [{ name: "Sporting Goods, Hobby, and Musical Instrument Retailers", code: "4591" }, { name: "Book Retailers", code: "459210" }, { name: "Office Supplies, Stationery, and Gift Retailers", code: "4594"}, { name: "Used Merchandise Retailers", code: "459510"}, { name: "Other Miscellaneous Store Retailers", code: "4599"}] },
     ]
   },
-  {
-    name: "Transportation and Warehousing", code: "48-49", description: "Establishments providing transportation of passengers and cargo, warehousing and storage for goods.",
+  { name: "Transportation and Warehousing", code: "48-49", description: "Transportation of passengers and cargo, warehousing and storage.",
     subSectors: [
       { name: "Air Transportation", code: "481", industries: [{ name: "Scheduled Passenger Air Transportation", code: "481111"}, { name: "Scheduled Freight Air Transportation", code: "481112"}, { name: "Nonscheduled Air Transportation", code: "4812" }] },
       { name: "Rail Transportation", code: "482", industries: [{ name: "Rail Transportation", code: "4821" }] },
@@ -270,8 +257,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Warehousing and Storage", code: "493", industries: [{ name: "Warehousing and Storage", code: "4931" }] },
     ]
   },
-  {
-    name: "Information", code: "51", description: "Establishments engaged in producing and distributing information and cultural products.",
+  { name: "Information", code: "51", description: "Producing and distributing information and cultural products.",
     subSectors: [
       { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper, Periodical, Book, and Directory Publishers", code: "5131" }, { name: "Software Publishers", code: "513210" }] },
       { name: "Motion Picture and Sound Recording Industries", code: "512", industries: [{ name: "Motion Picture and Video Industries", code: "5121" }, { name: "Sound Recording Industries", code: "5122" }] },
@@ -281,8 +267,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Other Information Services", code: "519", industries: [{ name: "News Syndicates", code: "519210" }, { name: "Libraries and Archives", code: "519220" }, { name: "All Other Information Services", code: "519290" }] },
     ]
   },
-  {
-    name: "Finance and Insurance", code: "52", description: "Establishments primarily engaged in financial transactions or in facilitating financial transactions.",
+  { name: "Finance and Insurance", code: "52", description: "Financial transactions and facilitating financial transactions.",
     subSectors: [
       { name: "Monetary Authorities - Central Bank", code: "521", industries: [{ name: "Monetary Authorities - Central Bank", code: "521110" }] },
       { name: "Credit Intermediation and Related Activities", code: "522", industries: [{ name: "Commercial Banking", code: "522110" }, { name: "Savings Institutions", code: "522120" }, { name: "Credit Unions", code: "522130" }, { name: "Other Depository Credit Intermediation", code: "522190"}, { name: "Mortgage and Nonmortgage Loan Brokers", code: "522310"}, { name: "Financial Transactions Processing, Reserve, and Clearinghouse Activities", code: "522320"}, { name: "Other Activities Related to Credit Intermediation", code: "522390"}, { name: "Sales Financing", code: "522220" }, { name: "Consumer Lending", code: "522291" }] },
@@ -291,16 +276,14 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Funds, Trusts, and Other Financial Vehicles", code: "525", industries: [{ name: "Pension Funds", code: "525110"}, {"name": "Health and Welfare Funds", code: "525120"}, { name: "Other Insurance Funds", code: "525190"}, { name: "Open-End Investment Funds", code: "525910"}, { name: "Trusts, Estates, and Agency Accounts", code: "525920"}, { name: "Real Estate Investment Trusts", code: "525930"}, { name: "Other Financial Vehicles", code: "525990"}]}
     ]
   },
-  {
-    name: "Real Estate and Rental and Leasing", code: "53", description: "Establishments primarily engaged in renting, leasing, or otherwise allowing the use of tangible or intangible assets.",
+  { name: "Real Estate and Rental and Leasing", code: "53", description: "Renting, leasing, or otherwise allowing the use of assets.",
     subSectors: [
       { name: "Real Estate", code: "531", industries: [{ name: "Lessors of Residential Buildings and Dwellings", code: "531110" }, { name: "Lessors of Nonresidential Buildings (except Miniwarehouses)", code: "531120"}, { name: "Lessors of Miniwarehouses and Self-Storage Units", code: "531130"}, { name: "Lessors of Other Real Estate Property", code: "531190"}, { name: "Offices of Real Estate Agents and Brokers", code: "531210" }, { name: "Offices of Real Estate Appraisers", code: "531320"}, { name: "Real Estate Property Managers", code: "53131" }, { name: "Other Activities Related to Real Estate", code: "531390"}] },
       { name: "Rental and Leasing Services", code: "532", industries: [{ name: "Automotive Equipment Rental and Leasing", code: "5321" }, { name: "Consumer Goods Rental", code: "5322" }, { name: "General Rental Centers", code: "532310" }, { name: "Commercial and Industrial Machinery and Equipment Rental and Leasing", code: "5324"}] },
       { name: "Lessors of Nonfinancial Intangible Assets (except Copyrighted Works)", code: "533", industries: [{ name: "Lessors of Nonfinancial Intangible Assets (except Copyrighted Works)", code: "533110" }] },
     ]
   },
-  {
-    name: "Professional, Scientific, and Technical Services", code: "54", description: "Establishments that specialize in performing professional, scientific, and technical activities for others.",
+  { name: "Professional, Scientific, and Technical Services", code: "54", description: "Performing professional, scientific, and technical activities for others.",
     subSectors: [
       { name: "Legal Services", code: "5411", industries: [{ name: "Offices of Lawyers", code: "541110" }, { name: "Other Legal Services", code: "54119" }] },
       { name: "Accounting, Tax Preparation, Bookkeeping, and Payroll Services", code: "5412", industries: [{ name: "Offices of Certified Public Accountants", code: "541211" }, { name: "Tax Preparation Services", code: "541213" }, { name: "Bookkeeping, Compilation, and Payroll Services", code: "541214"}, { name: "Other Accounting Services", code: "541219"}] },
@@ -313,21 +296,18 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Other Professional, Scientific, and Technical Services", code: "5419", industries: [{name: "Marketing Research and Public Opinion Polling", code: "541910"}, {name: "Photographic Services", code: "54192"}, {name: "Translation and Interpretation Services", code: "541930"}, {name: "Veterinary Services", code: "541940"}, { name: "All Other Professional, Scientific, and Technical Services", code: "541990"}] },
     ]
   },
-  {
-    name: "Management of Companies and Enterprises", code: "55", description: "Establishments that hold the securities of companies and enterprises for the purpose of owning a controlling interest or influencing management decisions.",
+  { name: "Management of Companies and Enterprises", code: "55", description: "Holding securities of companies for controlling interest or influencing management.",
     subSectors: [
       { name: "Management of Companies and Enterprises", code: "551", industries: [{ name: "Offices of Bank Holding Companies", code: "551111" }, { name: "Offices of Other Holding Companies", code: "551112" }] },
     ]
   },
-  {
-    name: "Administrative and Support and Waste Management and Remediation Services", code: "56", description: "Establishments performing routine support activities for the day-to-day operations of other organizations or managing waste.",
+  { name: "Administrative and Support and Waste Management and Remediation Services", code: "56", description: "Routine support activities for other organizations or managing waste.",
     subSectors: [
       { name: "Administrative and Support Services", code: "561", industries: [{ name: "Office Administrative Services", code: "561110" }, { name: "Facilities Support Services", code: "561210" }, { name: "Employment Services", code: "5613" }, { name: "Business Support Services", code: "5614"}, { name: "Travel Arrangement and Reservation Services", code: "5615" }, { name: "Investigation and Security Services", code: "5616" }, { name: "Services to Buildings and Dwellings", code: "5617"}, { name: "Other Support Services", code: "5619"}] },
       { name: "Waste Management and Remediation Services", code: "562", industries: [{ name: "Waste Collection", code: "56211" }, { name: "Waste Treatment and Disposal", code: "56221" }, { name: "Remediation Services", code: "562910" }, { name: "Materials Recovery Facilities", code: "562920"}, { name: "All Other Waste Management Services", code: "56299"}] },
     ]
   },
-  {
-    name: "Educational Services", code: "61", description: "Establishments that provide instruction and training in a wide variety of subjects.",
+  { name: "Educational Services", code: "61", description: "Providing instruction and training in a wide variety of subjects.",
     subSectors: [
       { name: "Elementary and Secondary Schools", code: "6111", industries: [{ name: "Elementary and Secondary Schools", code: "611110" }] },
       { name: "Junior Colleges", code: "6112", industries: [{ name: "Junior Colleges", code: "611210" }] },
@@ -338,8 +318,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Educational Support Services", code: "6117", industries: [{ name: "Educational Support Services", code: "611710"}] },
     ]
   },
-  {
-    name: "Health Care and Social Assistance", code: "62", description: "Establishments providing health care and social assistance for individuals.",
+  { name: "Health Care and Social Assistance", code: "62", description: "Providing health care and social assistance for individuals.",
     subSectors: [
       { name: "Ambulatory Health Care Services", code: "621", industries: [{ name: "Offices of Physicians", code: "6211" }, { name: "Offices of Dentists", code: "621210" }, { name: "Offices of Other Health Practitioners", code: "6213" }, { name: "Outpatient Care Centers", code: "6214"}, { name: "Medical and Diagnostic Laboratories", code: "62151" }, { name: "Home Health Care Services", code: "621610"}, { name: "Ambulance Services", code: "621910"}, { name: "All Other Ambulatory Health Care Services", code: "62199"}] },
       { name: "Hospitals", code: "622", industries: [{ name: "General Medical and Surgical Hospitals", code: "622110" }, { name: "Psychiatric and Substance Abuse Hospitals", code: "622210" }, { name: "Specialty (except Psychiatric and Substance Abuse) Hospitals", code: "622310"}] },
@@ -347,23 +326,20 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Social Assistance", code: "624", industries: [{ name: "Individual and Family Services", code: "6241" }, { name: "Community Food and Housing, and Emergency and Other Relief Services", code: "6242" }, { name: "Vocational Rehabilitation Services", code: "624310"}, { name: "Child Care Services", code: "624410"}] },
     ]
   },
-  {
-    name: "Arts, Entertainment, and Recreation", code: "71", description: "Establishments that operate facilities or provide services to meet varied cultural, entertainment, and recreational interests.",
+  { name: "Arts, Entertainment, and Recreation", code: "71", description: "Operating facilities or providing services for cultural, entertainment, and recreational interests.",
     subSectors: [
       { name: "Performing Arts, Spectator Sports, and Related Industries", code: "711", industries: [{ name: "Performing Arts Companies", code: "7111" }, { name: "Spectator Sports", code: "7112" }, { name: "Promoters of Performing Arts, Sports, and Similar Events", code: "7113" }, {"name": "Agents and Managers for Artists, Athletes, Entertainers, and Other Public Figures", code: "711410"}, { name: "Independent Artists, Writers, and Performers", code: "711510"}] },
       { name: "Museums, Historical Sites, and Similar Institutions", code: "712", industries: [{ name: "Museums", code: "712110" }, {"name": "Historical Sites", code: "712120"}, { name: "Zoos and Botanical Gardens", code: "712130"}, { name: "Nature Parks and Other Similar Institutions", code: "712190"}] },
       { name: "Amusement, Gambling, and Recreation Industries", code: "713", industries: [{ name: "Amusement Parks and Arcades", code: "7131" }, { name: "Gambling Industries", code: "7132" }, { name: "Other Amusement and Recreation Industries (except Gambling)", code: "7139" }] },
     ]
   },
-  {
-    name: "Accommodation and Food Services", code: "72", description: "Establishments providing customers with lodging and/or preparing meals, snacks, and beverages for immediate consumption.",
+  { name: "Accommodation and Food Services", code: "72", description: "Providing lodging and/or preparing meals, snacks, and beverages.",
     subSectors: [
       { name: "Accommodation", code: "721", industries: [{ name: "Hotels (except Casino Hotels) and Motels", code: "721110" }, { name: "Casino Hotels", code: "721120"}, { name: "Other Traveler Accommodation", code: "72119"}, { name: "RV (Recreational Vehicle) Parks and Recreational Camps", code: "721211" }, { name: "Rooming and Boarding Houses, Dormitories, and Workers' Camps", code: "721310" }] },
       { name: "Food Services and Drinking Places", code: "722", industries: [{ name: "Full-Service Restaurants", code: "722511" }, { name: "Limited-Service Restaurants", code: "722513" }, { name: "Cafeterias, Grill Buffets, and Buffets", code: "722514"}, { name: "Snack and Nonalcoholic Beverage Bars", code: "722515"}, { name: "Food Service Contractors", code: "722310" }, { name: "Caterers", code: "722320" }, { name: "Mobile Food Services", code: "722330"}, { name: "Drinking Places (Alcoholic Beverages)", code: "722410" }] },
     ]
   },
-  {
-    name: "Other Services (except Public Administration)", code: "81", description: "Establishments engaged in providing services not elsewhere classified.",
+  { name: "Other Services (except Public Administration)", code: "81", description: "Providing services not elsewhere classified.",
     subSectors: [
       { name: "Repair and Maintenance", code: "811", industries: [{ name: "Automotive Repair and Maintenance", code: "8111" }, { name: "Electronic and Precision Equipment Repair and Maintenance", code: "81121" }, { name: "Commercial and Industrial Machinery and Equipment (except Automotive and Electronic) Repair and Maintenance", code: "811310" }, { name: "Personal and Household Goods Repair and Maintenance", code: "8114"}] },
       { name: "Personal and Laundry Services", code: "812", industries: [{ name: "Personal Care Services (e.g., hair, skin, nail)", code: "8121" }, { name: "Funeral Homes and Funeral Services", code: "812210"}, { name: "Cemeteries and Crematories", code: "812220"}, { name: "Drycleaning and Laundry Services", code: "8123" }, { name: "Other Personal Services (e.g., pet care, photofinishing)", code: "8129" }] },
@@ -371,8 +347,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Private Households", code: "814", industries: [{ name: "Private Households", code: "814110"}] },
     ]
   },
-  {
-    name: "Public Administration", code: "92", description: "Establishments of federal, state, and local government agencies that administer, oversee, and manage public programs.",
+  { name: "Public Administration", code: "92", description: "Government agencies administering public programs.",
     subSectors: [
       { name: "Executive, Legislative, and Other General Government Support", code: "921", industries: [{ name: "Executive Offices", code: "921110" }, { name: "Legislative Bodies", code: "921120" }, { name: "Public Finance Activities", code: "921130"}, { name: "Other General Government Support", code: "921190"}] },
       { name: "Justice, Public Order, and Safety Activities", code: "922", industries: [{ name: "Courts", code: "922110" }, { name: "Police Protection", code: "922120" }, { name: "Legal Counsel and Prosecution", code: "922130"}, { name: "Correctional Institutions", code: "922140" }, {"name": "Parole Offices and Probation Offices", code: "922150"}, {"name": "Fire Protection", code: "922160"}, { name: "Other Justice, Public Order, and Safety Activities", code: "922190"}] },
@@ -472,21 +447,26 @@ export default function MainLayout({
   const addPostMutation = useMutation({
     mutationFn: async (newPostDataWithImage: NewPostData & {
       imageFile?: File | null | undefined;
+      mentionedUserIds?: string[]; // Ensure this is part of the type
     }) => {
       if (!user) {
         throw new Error("User not authenticated to create post.");
       }
 
-      let currentRatingScore = 0; // Default to 0
+      let currentRatingScore = 0;
       try {
+        console.log(`%c[MainLayout] addPostMutation: Fetching reviews for user ${user.uid} to calculate rating score.`, "color: magenta;");
         const reviews = await getReviewsForProfile(user.uid);
-        if (reviews.length > 0) {
+        console.log(`%c[MainLayout] addPostMutation: Fetched ${reviews.length} reviews for user ${user.uid}.`, "color: magenta;");
+        if (reviews && reviews.length > 0) {
           const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
           currentRatingScore = totalRating / reviews.length;
+          console.log(`%c[MainLayout] addPostMutation: Calculated totalRating: ${totalRating}, currentRatingScore: ${currentRatingScore}`, "color: magenta;");
+        } else {
+          console.log(`%c[MainLayout] addPostMutation: No reviews found or reviews array is empty for user ${user.uid}. Rating score remains 0.`, "color: magenta;");
         }
-      } catch (ratingError) {
-        console.error("[MainLayout] Error fetching reviews to calculate rating score for new post:", ratingError);
-        // Proceed with default ratingScore = 0
+      } catch (ratingError: any) {
+        console.error("[MainLayout] addPostMutation: Error fetching reviews to calculate rating score:", ratingError.message, ratingError);
       }
 
 
@@ -516,6 +496,7 @@ export default function MainLayout({
         requestType: 'post',
         ratingScore: currentRatingScore,
       };
+      console.log(`%c[MainLayout] addPostMutation: Post data prepared with ratingScore ${currentRatingScore}:`, "color: magenta;", postDataForFirestore);
       return addPostToFirestore(postDataForFirestore);
     },
     onSuccess: (newlyCreatedPostId, variables) => {
@@ -530,7 +511,7 @@ export default function MainLayout({
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) { // Don't notify self for mentions in own post
+          if (mentionedUid !== user.uid) {
             try {
               await createNotification({
                 userId: mentionedUid,
@@ -560,20 +541,26 @@ export default function MainLayout({
   const addHelpRequestMutation = useMutation({
       mutationFn: async (newHelpRequestDataWithImage: NewPostData & {
           imageFile?: File | null | undefined;
+          mentionedUserIds?: string[]; // Ensure this is part of the type
       }) => {
           if (!user) {
               throw new Error("User not authenticated to request help.");
           }
 
-          let currentRatingScore = 0; // Default to 0
+          let currentRatingScore = 0;
           try {
+            console.log(`%c[MainLayout] addHelpRequestMutation: Fetching reviews for user ${user.uid} to calculate rating score.`, "color: orange;");
             const reviews = await getReviewsForProfile(user.uid);
-            if (reviews.length > 0) {
+             console.log(`%c[MainLayout] addHelpRequestMutation: Fetched ${reviews.length} reviews for user ${user.uid}.`, "color: orange;");
+            if (reviews && reviews.length > 0) {
               const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
               currentRatingScore = totalRating / reviews.length;
+              console.log(`%c[MainLayout] addHelpRequestMutation: Calculated totalRating: ${totalRating}, currentRatingScore: ${currentRatingScore}`, "color: orange;");
+            } else {
+              console.log(`%c[MainLayout] addHelpRequestMutation: No reviews found or reviews array is empty for user ${user.uid}. Rating score remains 0.`, "color: orange;");
             }
-          } catch (ratingError) {
-            console.error("[MainLayout] Error fetching reviews to calculate rating score for new help request:", ratingError);
+          } catch (ratingError: any) {
+              console.error("[MainLayout] addHelpRequestMutation: Error fetching reviews to calculate rating score:", ratingError.message, ratingError);
           }
 
           let uploadedImageUrls: string[] = [];
@@ -600,9 +587,9 @@ export default function MainLayout({
               mentionedUserIds: mentionedUserIds,
               requestType: 'help_request',
               ratingScore: currentRatingScore,
-              // maxBudget and deadline are now directly from postDataForFirestoreBase if they exist
+              // maxBudget and deadline are passed in via postDataForFirestoreBase
           };
-          console.log("[MainLayout] addHelpRequestMutation - data for Firestore:", postDataForFirestore);
+          console.log(`%c[MainLayout] addHelpRequestMutation: Help request data prepared with ratingScore ${currentRatingScore}:`, "color: orange;", postDataForFirestore);
           return addPostToFirestore(postDataForFirestore);
       },
       onSuccess: (newlyCreatedPostId, variables) => {
@@ -617,7 +604,7 @@ export default function MainLayout({
 
           if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
               variables.mentionedUserIds.forEach(async (mentionedUid) => {
-                  if (mentionedUid !== user.uid) { // Don't notify self
+                  if (mentionedUid !== user.uid) {
                       try {
                           await createNotification({
                               userId: mentionedUid,
@@ -670,18 +657,18 @@ export default function MainLayout({
         industry: industryDetails?.name || formData.industry,
         naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Startup", // Default or from form if added later
-        safetyIndicator: "Medium", // Default or from form if added later
+        businessType: "Startup", 
+        safetyIndicator: "Medium", 
         ratingScore: 0, // Will be updated by mutationFn
         imageFile: formData.imageFile,
-        imageUrls: [], // Will be populated by mutationFn if imageFile exists
+        imageUrls: [], 
         mentionedUserIds: formData.mentionedUserIds,
         requestType: 'post',
       };
       console.log("[MainLayout] handleAddPost newPostDataForService PREPARED:", JSON.stringify(newPostDataForService, null, 2));
       addPostMutation.mutate(newPostDataForService);
     },
-    [user, toast, addPostMutation, queryClient]
+    [user, toast, addPostMutation, queryClient] // Added queryClient
   );
 
   const handleRequestHelpSubmit = useCallback(
@@ -706,20 +693,20 @@ export default function MainLayout({
         industry: industryDetails?.name || formData.industry,
         naicsCode: formData.industry || formData.subSector || formData.sector,
         userId: user.uid,
-        businessType: "Project", // Example, can be dynamic
-        safetyIndicator: "Medium", // Example
+        businessType: "Project", 
+        safetyIndicator: "Medium", 
         ratingScore: 0, // Will be updated by mutationFn
         imageFile: formData.imageFile,
-        imageUrls: [], // Will be populated by mutationFn
+        imageUrls: [],
         mentionedUserIds: formData.mentionedUserIds,
         requestType: 'help_request',
         maxBudget: formData.maxBudget,
-        deadline: formData.deadline, // Already a Date or undefined
+        deadline: formData.deadline,
       };
       console.log("[MainLayout] handleRequestHelpSubmit newHelpRequestData PREPARED:", JSON.stringify(newHelpRequestData, null, 2));
       addHelpRequestMutation.mutate(newHelpRequestData);
     },
-    [user, toast, addHelpRequestMutation, queryClient]
+    [user, toast, addHelpRequestMutation, queryClient] // Added queryClient
   );
 
 
@@ -750,178 +737,172 @@ export default function MainLayout({
   return (
     <div className={rootLayoutClasses}>
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
-          <div className="mr-4 hidden md:flex">
-            <Link href="/" className="mr-6 flex items-center space-x-2">
-              <Factory className="h-6 w-6 text-primary" />
-              <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
-                AnonyCollab
-              </span>
-            </Link>
-            <nav className="flex items-center gap-4 text-sm lg:gap-6">
-              {navItems.map((item) => (
-                <Link
-                  key={item.title}
-                  href={item.href}
-                  className={cn(
-                    "transition-colors hover:text-foreground/80 flex items-center",
-                    pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
-                  )}
-                >
-                  <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
-                  {item.title}
-                </Link>
-              ))}
-            </nav>
-          </div>
-          <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
-            {user && (
-              <>
-                <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
-                  <DialogTrigger asChild>
-                    <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                      <PlusCircle className="mr-2 h-4 w-4" />
-                      Create Post
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                    <DialogHeader className="p-6 pb-4 border-b">
-                      <DialogTitle>Create a New Post</DialogTitle>
-                      <DialogDescription>
-                        Share your question or need with the community. Keep it anonymous.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                      {isCreatePostOpen && user && (
-                        <DynamicCreatePostForm
-                          onSubmit={handleAddPost}
-                          availableTags={availableTags}
-                          detailedSectorsData={detailedSectorsData}
-                          isSubmitting={addPostMutation.isPending}
-                          currentUserId={user.uid}
-                        />
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-
-                <Dialog open={isRequestHelpDialogOpen} onOpenChange={setIsRequestHelpDialogOpen}>
-                  <DialogTrigger asChild>
-                     <Button variant="secondary" size="sm" className="bg-amber-600 hover:bg-amber-700 text-white">
-                      <Handshake className="mr-2 h-4 w-4" />
-                      Request Help
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                    <DialogHeader className="p-6 pb-4 border-b">
-                      <DialogTitle>Request Assistance</DialogTitle>
-                      <DialogDescription>
-                        Describe the help you need. This will be posted to the board.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                      {isRequestHelpDialogOpen && user && (
-                        <DynamicRequestHelpForm
-                          onSubmit={handleRequestHelpSubmit}
-                          availableTags={availableTags}
-                          detailedSectorsData={detailedSectorsData}
-                          isSubmitting={addHelpRequestMutation.isPending}
-                          currentUserId={user.uid}
-                        />
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-              </>
-            )}
-
-            {user ? (
-              <div className="flex items-center gap-2">
-                {user.uid && <NotificationDropdown userId={user.uid} />}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email || 'User')} />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                          {getInitials(user.displayName || user.email || 'User')}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel className="font-normal">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">{user.displayName || 'Anonymous User'}</p>
-                        {user.email && (
-                           <p className="text-xs leading-none text-muted-foreground">
-                             {user.email}
-                           </p>
+      {! (isMobile && pathname === '/contracts') && (
+        <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+            <div className="mr-4 hidden md:flex">
+              <Link href="/" className="mr-6 flex items-center space-x-2">
+                <Factory className="h-6 w-6 text-primary" />
+                <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
+                  AnonyCollab
+                </span>
+              </Link>
+              <nav className="flex items-center gap-4 text-sm lg:gap-6">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.title}
+                    href={item.href}
+                    className={cn(
+                      "transition-colors hover:text-foreground/80 flex items-center",
+                      pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
+                    )}
+                  >
+                    <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
+                    {item.title}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+            <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+              {user && (
+                <>
+                  <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
+                    <DialogTrigger asChild>
+                      <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Create Post
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                      <DialogHeader className="p-6 pb-4 border-b">
+                        <DialogTitle>Create a New Post</DialogTitle>
+                        <DialogDescription>
+                          Share your question or need with the community. Keep it anonymous.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                        {isCreatePostOpen && user && (
+                          <DynamicCreatePostForm
+                            onSubmit={handleAddPost}
+                            availableTags={availableTags}
+                            detailedSectorsData={detailedSectorsData}
+                            isSubmitting={addPostMutation.isPending}
+                            currentUserId={user.uid}
+                          />
                         )}
                       </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
-                      <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer">
-                        <User className="mr-2 h-4 w-4" />
-                        <span>Profile</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
-                      <Link href="/subscription" className="w-full cursor-pointer">
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        <span>Subscription</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
-                      <Link href="/settings/profile" className="w-full cursor-pointer">
-                        <Settings className="mr-2 h-4 w-4" />
-                        <span>Settings</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DynamicThemeToggle />
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                      <LogOut className="mr-2 h-4 w-4" />
-                      <span>Log out</span>
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" asChild>
-                  <Link href="/login">Login</Link>
-                </Button>
-                <Button variant="default" size="sm" asChild>
-                  <Link href="/signup">Sign Up</Link>
-                </Button>
-              </div>
-            )}
+                    </DialogContent>
+                  </Dialog>
+
+                  <Dialog open={isRequestHelpDialogOpen} onOpenChange={setIsRequestHelpDialogOpen}>
+                    <DialogTrigger asChild>
+                       <Button variant="secondary" size="sm" className="bg-amber-500 hover:bg-amber-600/90 text-white dark:bg-amber-600 dark:hover:bg-amber-700/90">
+                        <HelpingHand className="mr-2 h-4 w-4" />
+                        Request Help
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                      <DialogHeader className="p-6 pb-4 border-b">
+                        <DialogTitle>Request Assistance</DialogTitle>
+                        <DialogDescription>
+                          Describe the help you need. This will be posted to the board.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                        {isRequestHelpDialogOpen && user && (
+                          <DynamicRequestHelpForm
+                            onSubmit={handleRequestHelpSubmit}
+                            availableTags={availableTags}
+                            detailedSectorsData={detailedSectorsData}
+                            isSubmitting={addHelpRequestMutation.isPending}
+                            currentUserId={user.uid}
+                          />
+                        )}
+                      </div>
+                    </DialogContent>
+                  </Dialog>
+                </>
+              )}
+
+              {user ? (
+                <div className="flex items-center gap-2">
+                  {user.uid && <NotificationDropdown userId={user.uid} />}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email)} />
+                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                            {getInitials(user.displayName || user.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel className="font-normal">
+                        <div className="flex flex-col space-y-1">
+                          <p className="text-sm font-medium leading-none">{user.displayName || generateAnonymousName(user.uid)}</p>
+                          {user.email && (
+                             <p className="text-xs leading-none text-muted-foreground">
+                               {user.email}
+                             </p>
+                          )}
+                        </div>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                        <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer">
+                          <User className="mr-2 h-4 w-4" />
+                          <span>Profile</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                        <Link href="/subscription" className="w-full cursor-pointer">
+                          <CreditCard className="mr-2 h-4 w-4" />
+                          <span>Subscription</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
+                        <Link href="/settings/profile" className="w-full cursor-pointer">
+                          <Settings className="mr-2 h-4 w-4" />
+                          <span>Settings</span>
+                        </Link>
+                      </DropdownMenuItem>
+                      <DynamicThemeToggle />
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
+                        <LogOut className="mr-2 h-4 w-4" />
+                        <span>Log out</span>
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/login">Login</Link>
+                  </Button>
+                  <Button variant="default" size="sm" asChild>
+                    <Link href="/signup">Sign Up</Link>
+                  </Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
 
       {/* Main Content Area */}
       <main className={cn(
         "flex-1 flex flex-col",
-        isMobile ? "pb-14" : "pb-0" // Updated padding for main content
+        (isMobile && pathname === '/contracts') ? "h-full" : "pb-14 md:pb-0"
       )}>
         {children}
       </main>
 
       {/* Mobile Bottom Navigation Bar */}
-      {!isMobile && ( // Render footer only if NOT mobile
-        <footer className="py-4 border-t md:mt-auto">
-          <div className="container mx-auto text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} AnonyCollab. All rights reserved.
-          </div>
-        </footer>
-      )}
-
-      {isMobile && ( // Render mobile nav only if IS mobile
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
+      {! (isMobile && pathname === '/contracts') && (
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14 md:hidden">
           <div className="container mx-auto flex justify-around items-center h-full">
             {navItems.map((item) => (
               <Link
@@ -942,3 +923,27 @@ export default function MainLayout({
     </div>
   );
 }
+```
+
+**Explanation of Changes:**
+
+1.  **Enhanced Logging in `mutationFn` for `addPostMutation` and `addHelpRequestMutation`**:
+    *   Added `console.log` statements to show the `user.uid` for whom reviews are being fetched.
+    *   Logs the number of reviews found.
+    *   Logs the calculated `totalRating` and `currentRatingScore`.
+    *   Logs if no reviews were found.
+    *   Logs the final `postDataForFirestore` object, specifically noting the `ratingScore` it contains before sending to `addPostToFirestore`.
+2.  **Error Handling for Review Fetching**: The `try...catch` block around `getReviewsForProfile` will log the error message and stack if fetching reviews fails, but will allow the post creation to proceed with a `ratingScore` of `0`.
+
+**To debug your issue:**
+1.  Make sure you have submitted some reviews for the user who is creating the post.
+2.  Open your browser's developer console.
+3.  Create a new post or help request.
+4.  Examine the console logs prefixed with `%c[MainLayout] addPostMutation:` or `%c[MainLayout] addHelpRequestMutation:`.
+    *   Is `getReviewsForProfile` being called for the correct `user.uid`?
+    *   How many reviews are being fetched? (`Fetched X reviews...`)
+    *   What is the `currentRatingScore` being calculated?
+    *   What is the `ratingScore` in the final `postDataForFirestore` object that gets logged just before `addPostToFirestore` is called?
+5.  Compare this logged `ratingScore` with what you see in Firestore for the newly created post, and what you see on the user's profile page.
+
+This should help clarify if the `ratingScore` is being calculated correctly at the time of post creation. If it is, and the discrepancy still exists, it confirms that the profile page shows a live, updated average, while the post shows the snapshot.
