@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Upload, ImageDown, AtSign, Building, Briefcase, Info } from 'lucide-react';
+import { Loader2, Upload, ImageDown, AtSign, Building, Briefcase, Info, User } from 'lucide-react'; // Added User
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
 import {
@@ -38,16 +38,6 @@ const visibilityOptions: { value: VisibilitySetting; label: string }[] = [
   { value: 'only_me', label: 'Only Me (Private)' },
 ];
 
-const incomeRangeOptions = [
-  "Prefer not to say",
-  "$0 - $50,000",
-  "$50,001 - $100,000",
-  "$100,001 - $250,000",
-  "$250,001 - $500,000",
-  "$500,001 - $1,000,000",
-  "$1,000,000+",
-];
-
 const ProfileSettingsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -57,8 +47,9 @@ const ProfileSettingsPage = () => {
   const [industry, setIndustry] = useState('');
   const [description, setDescription] = useState('');
   const [descriptionVisibility, setDescriptionVisibility] = useState<VisibilitySetting>('everyone');
-  const [established, setEstablished] = useState(''); // For 'Year Established'
-  const [incomeRange, setIncomeRange] = useState<string>("Prefer not to say");
+  const [established, setEstablished] = useState('');
+  const [establishedError, setEstablishedError] = useState<string | null>(null);
+
 
   // State for read-only fetched data
   const [fetchedCompanyName, setFetchedCompanyName] = useState('');
@@ -76,6 +67,7 @@ const ProfileSettingsPage = () => {
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
 
   const availableIndustries = detailedSectorsData.map(sector => sector.name);
+  const currentYear = new Date().getFullYear();
 
   useEffect(() => {
     if (authLoading) {
@@ -88,7 +80,7 @@ const ProfileSettingsPage = () => {
       setDescription('');
       setDescriptionVisibility('everyone');
       setEstablished('');
-      setIncomeRange("Prefer not to say");
+      setEstablishedError(null);
       setPreviewUrl(null);
       setCurrentDbAvatarUrl(null);
       setFetchedCompanyName('');
@@ -99,7 +91,7 @@ const ProfileSettingsPage = () => {
     }
 
     const fetchProfile = async () => {
-      if (isFetchingProfile) return; // Prevent re-fetch if already fetching
+      if (isFetchingProfile) return; 
       setIsFetchingProfile(true);
       console.log("[ProfileSettingsPage] useEffect: Fetching profile for user:", user.uid);
       try {
@@ -111,10 +103,9 @@ const ProfileSettingsPage = () => {
           setDescription(fullProfileData.description || '');
           setDescriptionVisibility(fullProfileData.descriptionVisibility || 'everyone');
           setEstablished(fullProfileData.established || '');
-          setIncomeRange(fullProfileData.incomeRange || "Prefer not to say");
           
           setFetchedCompanyName(fullProfileData.companyName || '');
-          setFetchedActualDisplayName(fullProfileData.actualDisplayName || '');
+          setFetchedActualDisplayName(fullProfileData.actualDisplayName || ''); // Correct field from UserProfileData
           setFetchedMentionName(fullProfileData.mentionName || generateAnonymousName(user.uid));
 
           const avatarToDisplay = fullProfileData.avatarUrl || null;
@@ -124,12 +115,10 @@ const ProfileSettingsPage = () => {
         } else {
           console.warn("[ProfileSettingsPage] No full profile document found, setting defaults.");
           setFetchedMentionName(generateAnonymousName(user.uid));
-          // Reset other fields to defaults if no profile found
           setIndustry('');
           setDescription('');
           setDescriptionVisibility('everyone');
           setEstablished('');
-          setIncomeRange("Prefer not to say");
           setPreviewUrl(null);
           setCurrentDbAvatarUrl(null);
           setFetchedCompanyName('');
@@ -138,18 +127,23 @@ const ProfileSettingsPage = () => {
       } catch (error) {
         console.error("[ProfileSettingsPage] useEffect: Error fetching profile:", error);
         toast({ variant: "destructive", title: "Error Fetching Profile", description: "Could not load your profile data." });
-        setFetchedMentionName(generateAnonymousName(user.uid)); // Ensure mention name is set even on error
+        setFetchedMentionName(generateAnonymousName(user.uid)); 
       } finally {
         setIsFetchingProfile(false);
         console.log("[ProfileSettingsPage] useEffect: Finished fetching profile attempt, isFetchingProfile set to false.");
       }
     };
 
-    if (user && !isFetchingProfile) { // Only fetch if user is present and not already fetching
+    if (user && !isFetchingProfile && !authLoading) { 
       fetchProfile();
+    } else if (!authLoading && !user) {
+      setIsFetchingProfile(false);
+      setIndustry(''); setDescription(''); setDescriptionVisibility('everyone'); setEstablished('');
+      setPreviewUrl(null); setCurrentDbAvatarUrl(null);
+      setFetchedCompanyName(''); setFetchedActualDisplayName(''); setFetchedMentionName('');
     }
 
-  }, [user, authLoading, toast]); // Removed isFetchingProfile from deps
+  }, [user, authLoading, toast]); 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -200,6 +194,24 @@ const ProfileSettingsPage = () => {
     };
 
   const handleAvatarChangeClick = () => fileInputRef.current?.click();
+  
+  const handleEstablishedYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const yearValue = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
+    setEstablished(yearValue);
+    if (yearValue.length === 4) {
+      const yearNum = parseInt(yearValue, 10);
+      if (yearNum < 1613 || yearNum > currentYear) {
+        setEstablishedError(`Year must be between 1613 and ${currentYear}.`);
+      } else {
+        setEstablishedError(null);
+      }
+    } else if (yearValue.length > 0) {
+      setEstablishedError("Year must be 4 digits.");
+    } else {
+      setEstablishedError(null); // Clear error if field is empty (optional)
+    }
+  };
+
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -207,6 +219,16 @@ const ProfileSettingsPage = () => {
         toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to update your profile." });
         return;
     }
+    if (establishedError) {
+        toast({ variant: "destructive", title: "Invalid Input", description: establishedError });
+        return;
+    }
+    if (established && established.length > 0 && established.length < 4) {
+        setEstablishedError("Year must be 4 digits.");
+        toast({ variant: "destructive", title: "Invalid Input", description: "Year Established must be 4 digits." });
+        return;
+    }
+
     setIsSubmitting(true);
     let newAvatarUrlForFirestore: string | null | undefined = undefined; 
 
@@ -225,7 +247,7 @@ const ProfileSettingsPage = () => {
             description: description || null,
             descriptionVisibility: descriptionVisibility,
             established: established || null,
-            incomeRange: incomeRange === "Prefer not to say" ? null : incomeRange,
+            // Removed: actualDisplayNameVisibility, companyNameVisibility, avatarVisibility, industryVisibility
         };
 
         if (newAvatarUrlForFirestore !== undefined) {
@@ -267,7 +289,7 @@ const ProfileSettingsPage = () => {
       );
   }
    
-  if (isFetchingProfile && !authLoading && user) { // Show profile fetching only after auth is done and user exists
+  if (isFetchingProfile && !authLoading && user) { 
       return (
           <Card>
               <CardHeader><CardTitle>Profile Settings</CardTitle><CardDescription>Manage your public business profile.</CardDescription></CardHeader>
@@ -278,7 +300,7 @@ const ProfileSettingsPage = () => {
       );
   }
 
-  if (!user && !authLoading) { // Check after authLoading is false
+  if (!user && !authLoading) { 
       return (
           <Card>
               <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
@@ -297,7 +319,6 @@ const ProfileSettingsPage = () => {
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-8">
-           {/* Avatar Section */}
            <div className="space-y-3 p-4 border rounded-md bg-muted/20">
                <Label className="text-base font-medium">Avatar / Logo</Label>
                <div className="flex items-center gap-4">
@@ -322,15 +343,14 @@ const ProfileSettingsPage = () => {
                 <p className="text-xs text-muted-foreground">Upload a JPG, PNG, or GIF. Max size {MAX_FILE_SIZE_MB}MB.</p>
            </div>
 
-            {/* Read-only Name Fields */}
             <div className="space-y-4 p-4 border rounded-md bg-muted/20">
                 <Label className="text-base font-medium text-foreground">Your Identifiers</Label>
-                <div className="space-y-2">
+                <div className="space-y-1">
                     <Label htmlFor="mentionNameDisplay" className="text-sm font-medium flex items-center">
                       <AtSign className="mr-2 h-4 w-4 text-primary" /> Mention Name (@)
                     </Label>
                     <Input id="mentionNameDisplay" value={fetchedMentionName ? `@${fetchedMentionName}` : "Generating..."} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                    <p className="text-xs text-muted-foreground">Your unique anonymous identifier for mentions. Auto-generated.</p>
+                    <p className="text-xs text-muted-foreground">Your unique anonymous identifier for mentions. Auto-generated and not editable.</p>
                 </div>
 
                 {fetchedCompanyName && (
@@ -339,7 +359,7 @@ const ProfileSettingsPage = () => {
                             <Building className="mr-2 h-4 w-4 text-primary" /> Company Name
                         </Label>
                         <Input id="companyNameDisplay" value={fetchedCompanyName} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                        <p className="text-xs text-muted-foreground">Your registered company name (from sign-up or Google). Visible to everyone.</p>
+                         <p className="text-xs text-muted-foreground">From your sign-up. Visible to everyone.</p>
                     </div>
                 )}
                 
@@ -349,13 +369,12 @@ const ProfileSettingsPage = () => {
                             <User className="mr-2 h-4 w-4 text-primary" /> Display Name
                         </Label>
                         <Input id="actualDisplayNameDisplay" value={fetchedActualDisplayName} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                        <p className="text-xs text-muted-foreground">Your display name (e.g., from Google). Visible to everyone.</p>
+                        <p className="text-xs text-muted-foreground">e.g., from Google. Visible to everyone.</p>
                     </div>
                 )}
             </div>
 
 
-          {/* Industry Section */}
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
             <Label htmlFor="industry" className="text-base font-medium flex items-center">
                 <Briefcase className="mr-2 h-4 w-4 text-primary" /> Industry
@@ -374,40 +393,23 @@ const ProfileSettingsPage = () => {
             <p className="text-xs text-muted-foreground pt-1">Your industry is always visible if set.</p>
           </div>
 
-           {/* Year Established Section */}
            <div className="space-y-1 p-4 border rounded-md bg-muted/20">
-            <Label htmlFor="established" className="text-base font-medium">Year Established (Optional)</Label>
+            <Label htmlFor="established" className="text-base font-medium">Year Established</Label>
             <Input 
               id="established" 
-              type="text" // Use text to allow 4-digit year easily
+              type="text"
               placeholder="e.g., 2010"
               value={established} 
-              onChange={(e) => setEstablished(e.target.value.replace(/[^0-9]/g, '').slice(0, 4))} // Allow only numbers, max 4 chars
+              onChange={handleEstablishedYearChange}
               maxLength={4}
-              pattern="\d{4}"
               disabled={isSubmitting} 
               className="text-sm"
             />
-            <p className="text-xs text-muted-foreground pt-1">Enter the year your business was established. Visible to everyone.</p>
+            {establishedError && <p className="text-xs text-destructive pt-1">{establishedError}</p>}
+            <p className="text-xs text-muted-foreground pt-1">Enter the 4-digit year your business was established (e.g., 1995). Must be between 1613 and {currentYear}. Visible to everyone.</p>
           </div>
 
-          {/* Income Range Section */}
-          <div className="space-y-1 p-4 border rounded-md bg-muted/20">
-            <Label htmlFor="incomeRange" className="text-base font-medium">Annual Income Range</Label>
-            <Select value={incomeRange} onValueChange={setIncomeRange} disabled={isSubmitting}>
-                <SelectTrigger id="incomeRange" className="w-full text-sm">
-                    <SelectValue placeholder="Select your income range" />
-                </SelectTrigger>
-                <SelectContent>
-                    {incomeRangeOptions.map((range) => (
-                        <SelectItem key={range} value={range} className="text-sm">{range}</SelectItem>
-                    ))}
-                </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground pt-1">This information is optional and currently not displayed on your public profile.</p>
-          </div>
 
-          {/* Description Section */}
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
             <Label htmlFor="description" className="text-base font-medium">About Your Business</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Tell others a bit about your company..." rows={4} disabled={isSubmitting} className="resize-y text-sm" />
@@ -427,7 +429,7 @@ const ProfileSettingsPage = () => {
           </div>
 
           <div className="flex justify-end pt-4">
-            <Button type="submit" disabled={isSubmitting || isFetchingProfile || isCompressing}>
+            <Button type="submit" disabled={isSubmitting || isFetchingProfile || isCompressing || !!establishedError}>
               {isSubmitting ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Saving...</>) : ('Save Changes')}
             </Button>
           </div>
