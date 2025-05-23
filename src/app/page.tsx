@@ -18,6 +18,7 @@ import {
     AlertDialogHeader,
     AlertDialogTitle,
     AlertDialogTrigger,
+    AlertDialogFooter, // Added AlertDialogFooter
 } from "@/components/ui/alert-dialog"
 import { Input } from "@/components/ui/input";
 import { Label } from '@/components/ui/label';
@@ -42,40 +43,45 @@ import { useQuery, useMutation, useQueryClient, useIsFetching } from '@tanstack/
 import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
-import { findOrCreateConversation } from '@/services/messagingService';
-import { ConnectionButton } from '@/components/ConnectionButton';
-import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService';
+import { findOrCreateConversation } from '@/services/messagingService'; // Import conversation service
+import { ConnectionButton } from '@/components/ConnectionButton'; // Import ConnectionButton
+import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService'; // Import comment/subcomment/like services
 import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
 import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
+// Moved availableTags to MainLayout as it's used by CreatePostForm there
 import { availableTags } from '@/components/layout/MainLayout';
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
-import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addBidToPost, getBidsForPost } from '@/services/bidService';
 import type { ClientBid, NewBidData } from '@/types/bid';
 import { formatDistanceToNow } from 'date-fns';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
+import { useForm, Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 
 const IS_UID_REGEX_PAGE = /^[a-zA-Z0-9]{20,}$/;
 
 const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: string, mentionedUserIds?: string[] }) => {
+  console.log(`%c[TextWithMentions] Rendering. Text: "${text?.substring(0,30)}...", mentionedUserIds:`, "color: #DAA520;", mentionedUserIds);
+
   const { data: mentionProfilesMap = new Map<string, UserProfileBasic | null>(), isLoading: isLoadingMentionProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
       queryKey: ['mentionProfiles', mentionedUserIds.join(',')],
       queryFn: async () => {
+          console.log(`%c[TextWithMentions] QueryFn: Fetching profiles for UIDs:`, "color: #DAA520;", mentionedUserIds);
           const profiles = new Map<string, UserProfileBasic | null>();
           const validUids = mentionedUserIds.filter(id => id && IS_UID_REGEX_PAGE.test(id));
 
           if (validUids.length === 0) {
+            console.log("%c[TextWithMentions] QueryFn: No valid UIDs to fetch profiles for.", "color: #DAA520;");
             return profiles;
           }
           await Promise.all(
               validUids.map(async (userId) => {
                   try {
                       const profile = await fetchUserProfileBasic(userId);
+                      console.log(`%c[TextWithMentions] QueryFn: Fetched profile for UID ${userId}:`, "color: #DAA520;", profile);
                       profiles.set(userId, profile);
                   } catch (error) {
                       console.error(`%c[TextWithMentions] QueryFn: Error fetching profile for UID ${userId}:`, "color: red;", error);
@@ -83,17 +89,18 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
                   }
               })
           );
+          console.log(`%c[TextWithMentions] QueryFn: Resulting profiles map:`, "color: #DAA520;", profiles);
           return profiles;
       },
       enabled: mentionedUserIds && mentionedUserIds.length > 0 && mentionedUserIds.some(id => id && IS_UID_REGEX_PAGE.test(id)),
-      staleTime: 5 * 60 * 1000,
+      staleTime: 5 * 60 * 1000, // 5 minutes
   });
+
 
   const renderableParts = useMemo(() => {
     if (typeof text !== 'string' || text.trim() === '') {
         return [<React.Fragment key="original-text">{text || ''}</React.Fragment>];
     }
-    // Regex to find @UID or @ColorAnimalNumber patterns
     const mentionRegexGlobal = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,})/g;
     const parts: (string | JSX.Element)[] = [];
     let lastIndex = 0;
@@ -106,44 +113,53 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
         if (startIndex > lastIndex) {
             parts.push(text.substring(lastIndex, startIndex));
         }
+        
+        console.log(`%c[TextWithMentions] Processing textualMention: '${textualMention}'`, "color: #DAA520;");
 
         let profileToLink: UserProfileBasic | null | undefined = undefined;
 
-        // Strategy 1: If textualMention is a UID and present in mentionedUserIds (and thus in map)
+        // Strategy 1: Check if textualMention itself is a UID and is in mentionedUserIds (and thus in map)
         if (IS_UID_REGEX_PAGE.test(textualMention) && mentionProfilesMap.has(textualMention)) {
             profileToLink = mentionProfilesMap.get(textualMention);
-            console.log(`%c[TextWithMentions] Matched textualMention '${textualMention}' as UID. Profile:`, "color: cyan", profileToLink);
+            console.log(`%c[TextWithMentions] Matched textualMention '${textualMention}' as DIRECT UID. Profile:`, "color: green;", profileToLink);
         }
-        // Strategy 2: If textualMention matches a profile's generated mentionName
+
+        // Strategy 2: If not a direct UID match, iterate through profiles in the map and compare their generated mentionName
         if (!profileToLink) {
-            const textualMentionLower = textualMention.toLowerCase();
             for (const profile of mentionProfilesMap.values()) {
-                if (profile && profile.mentionName?.toLowerCase() === textualMentionLower) {
-                    profileToLink = profile;
-                    console.log(`%c[TextWithMentions] Matched textualMention '${textualMention}' as mentionName. Profile:`, "color: cyan", profileToLink);
-                    break;
+                if (profile && profile.mentionName) {
+                    const generatedNameForProfile = generateAnonymousName(profile.userId); // Always use the util for consistency
+                    console.log(`%c[TextWithMentions] Comparing mention "${textualMention}" with generated name "${generatedNameForProfile}" for profile UID ${profile.userId}`, "color: #DAA520;");
+                    if (generatedNameForProfile.toLowerCase() === textualMention.toLowerCase()) {
+                        profileToLink = profile;
+                        console.log(`%c[TextWithMentions] Matched textualMention '${textualMention}' via generated mentionName. Profile:`, "color: green;", profileToLink);
+                        break;
+                    }
                 }
             }
         }
 
         if (profileToLink && profileToLink.userId && IS_UID_REGEX_PAGE.test(profileToLink.userId)) {
-             parts.push(
+            const linkText = `@${generateAnonymousName(profileToLink.userId)}`;
+            console.log(`%c[TextWithMentions] Creating LINK for '${textualMention}'. Href: '/profile/${profileToLink.userId}', Link Text: '${linkText}'`, "color: green; font-weight: bold;");
+            parts.push(
                 <Link
                     key={`${profileToLink.userId}-${startIndex}`}
                     href={`/profile/${profileToLink.userId}`}
                     className="text-primary hover:underline font-medium cursor-pointer"
-                    onClick={(e) => { e.stopPropagation(); }} // Stop propagation if link is inside another clickable element
+                    onClick={(e) => { e.stopPropagation(); }}
                 >
-                    {`@${profileToLink.mentionName}`}
+                    {linkText}
                 </Link>
             );
         } else {
-             parts.push(
+            console.log(`%c[TextWithMentions] No profile found for textualMention '${textualMention}'. Rendering as styled span.`, "color: orange;");
+            parts.push(
                 <span
                     key={`unresolved-${textualMention}-${startIndex}`}
-                    className="text-primary cursor-pointer" // Make it look clickable, but it won't navigate
+                    className="text-primary cursor-default"
                     title={`Unresolved mention: ${mentionWithAt}`}
-                    onClick={(e) => e.stopPropagation()} // Ensure it doesn't trigger parent clicks
+                    onClick={(e) => e.stopPropagation()}
                 >
                     {mentionWithAt}
                 </span>
@@ -160,12 +176,14 @@ const TextWithMentions = React.memo(({ text, mentionedUserIds = [] }: { text: st
 
 
   if (isLoadingMentionProfiles && mentionedUserIds && mentionedUserIds.length > 0 && mentionedUserIds.some(id => id && IS_UID_REGEX_PAGE.test(id))) {
-      return <span className="text-muted-foreground/80">{text}</span>;
+      // Show placeholder or original text while profiles are loading
+      return <span className="text-muted-foreground/80">{text}</span>; // Or a more specific loading indicator
   }
 
   return <>{renderableParts.map((part, index) => <React.Fragment key={index}>{part}</React.Fragment>)}</>;
 });
 TextWithMentions.displayName = 'TextWithMentions';
+
 
 const PostCard = React.memo(({ post, onOpen, isSelected }: { post: Post, onOpen: (post: Post) => void, isSelected?: boolean }) => {
    const postDate = post.createdAt instanceof Timestamp
@@ -246,7 +264,7 @@ const SubCommentItem = React.memo(({ subComment, currentUserId, postId, commentI
     const [isLiking, setIsLiking] = useState(false);
     const hasLiked = !!(currentUserId && subComment.likedBy?.includes(currentUserId));
     const [isDeleting, setIsDeleting] = useState(false);
-    const displayAnonymousName = generateAnonymousName(subComment.userId);
+    const displayAnonymousName = subComment.userName || generateAnonymousName(subComment.userId);
 
 
     const handleDeleteClick = useCallback(async () => {
@@ -407,7 +425,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
 
     const hasLiked = !!(currentUserId && comment.likedBy?.includes(currentUserId));
     const [isDeleting, setIsDeleting] = useState(false);
-    const displayAnonymousName = generateAnonymousName(comment.userId);
+    const displayAnonymousName = comment.userName || generateAnonymousName(comment.userId);
 
 
     useEffect(() => {
@@ -440,30 +458,35 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
     const filteredSuggestionsForReply = useMemo(() => {
         if (!showSuggestions || !isReplying) return [];
         if (isLoadingProfilesForReply) {
-             return [{ userId: 'loading-reply', mentionName: 'loading-reply', displayName: 'Loading users...' } as UserProfileBasic];
+             return [{ userId: 'loading-reply', mentionName: 'loading-reply', actualDisplayName: 'Loading users...' } as UserProfileBasic];
         }
 
         const profilesSource = (suggestedProfilesForReply || []).filter(p => p.userId !== currentUserId && !!p.mentionName);
         let results: UserProfileBasic[];
 
         if (mentionQuery.trim() === '') {
+            // For replies, if mentionQuery is empty, show other participants in this specific comment's sub-thread
+            // This requires knowing participants of the sub-thread, which is complex without fetching all sub-commenters.
+            // For simplicity, or until that data is readily available, we can show general suggestions or limit this.
+            // For now, let's show from the generally suggested users if query is empty in reply context.
             results = profilesSource.slice(0, 5);
         } else {
             const queryLower = mentionQuery.toLowerCase();
             results = profilesSource.filter(
                 p => p.mentionName.toLowerCase().includes(queryLower) ||
-                     (p.displayName && p.displayName.toLowerCase().includes(queryLower))
+                     (p.actualDisplayName && p.actualDisplayName.toLowerCase().includes(queryLower))
             ).slice(0,10);
         }
 
         if (results.length === 0 && mentionQuery.trim() !== '') {
-            return [{ userId: 'no-match-reply', mentionName: 'no-match-reply', displayName: `No users matching "@${mentionQuery}"` } as UserProfileBasic];
+            return [{ userId: 'no-match-reply', mentionName: 'no-match-reply', actualDisplayName: `No users matching "@${mentionQuery}"` } as UserProfileBasic];
         }
         if (results.length === 0) {
-            return [{ userId: 'no-users-reply', mentionName: 'no-users-reply', displayName: 'No users to suggest.' } as UserProfileBasic];
+            return [{ userId: 'no-users-reply', mentionName: 'no-users-reply', actualDisplayName: 'No users to suggest.' } as UserProfileBasic];
         }
         return results;
     }, [mentionQuery, suggestedProfilesForReply, isLoadingProfilesForReply, showSuggestions, isReplying, currentUserId]);
+
 
     const handleDeleteClick = useCallback(async () => {
         if (isDeleting) return;
@@ -490,19 +513,15 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         if (!user || !newReply.trim() || isSubmittingReply) return;
         setIsSubmittingReply(true);
 
-        // For reply context, profilesToSearch would include the original comment author, previous repliers, and users from the general suggestion list.
         const profilesForMentionResolution: UserProfileBasic[] = [...(suggestedProfilesForReply || [])];
-        // Ensure original commenter is available for @mention resolution if not already in suggestible list
-        if (!profilesForMentionResolution.find(p => p.userId === comment.userId)) {
+        if (comment.userId && !profilesForMentionResolution.find(p => p.userId === comment.userId)) {
             const originalCommenterProfile = await fetchUserProfileBasic(comment.userId);
             if (originalCommenterProfile) profilesForMentionResolution.push(originalCommenterProfile);
         }
-         // Ensure person being replied to (if it's a sub-comment reply) is available
         if (replyingToSubComment?.userId && !profilesForMentionResolution.find(p => p.userId === replyingToSubComment.userId)) {
             const subCommentAuthorProfile = await fetchUserProfileBasic(replyingToSubComment.userId);
             if (subCommentAuthorProfile) profilesForMentionResolution.push(subCommentAuthorProfile);
         }
-
 
         const finalMentionedUids = await extractMentionedUids(newReply.trim(), profilesForMentionResolution);
 
@@ -565,7 +584,7 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
         if (lastAtIndex > -1) {
             const textBeforeMention = currentValue.substring(0, lastAtIndex);
             const textAfterCursor = currentValue.substring(cursorPosition);
-            const mentionToInsert = profile.mentionName;
+            const mentionToInsert = profile.mentionName; // Use mentionName (ColorAnimalNumber)
             setNewReply(`${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`);
             setSelectedReplyMentionedUserIds(prev => new Set(prev).add(profile.userId));
 
@@ -635,10 +654,10 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
 
     const toggleReplyForm = useCallback(() => {
         setIsReplying(prev => !prev);
-        setReplyingToSubComment(null); 
-        if (!isReplying) { 
+        setReplyingToSubComment(null);
+        if (!isReplying) {
              setTimeout(() => replyInputRef.current?.focus(), 0);
-        } else { 
+        } else {
             setShowSuggestions(false);
             setMentionQuery('');
         }
@@ -647,14 +666,14 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
     const handleSubCommentDeleted = useCallback(() => refetchSubComments(), [refetchSubComments]);
 
     const handleStartSubCommentReply = useCallback((subCommentToReplyTo: ClientSubComment) => {
-        if (!user) return; 
+        if (!user) return;
         setIsReplying(true);
-        const subCommentAuthorMentionName = subCommentToReplyTo.userName || generateAnonymousName(subCommentToReplyTo.userId);
+        const subCommentAuthorMentionName = subCommentToReplyTo.userName ? generateAnonymousName(subCommentToReplyTo.userId) : generateAnonymousName(subCommentToReplyTo.userId);
         setNewReply(`@${subCommentAuthorMentionName} `);
-        setReplyingToSubComment(subCommentToReplyTo); 
-        setTimeout(() => { 
+        setReplyingToSubComment(subCommentToReplyTo);
+        setTimeout(() => {
             replyInputRef.current?.focus();
-            if (replyInputRef.current) { 
+            if (replyInputRef.current) {
                 const len = replyInputRef.current.value.length;
                 replyInputRef.current.setSelectionRange(len, len);
             }
@@ -684,13 +703,10 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                     <div className="flex justify-between items-center mb-1">
                          <Link href={`/profile/${comment.userId}`} passHref>
                              <p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">
-                                 {displayAnonymousName}
+                                 {displayAnonymousName} {/* Use generated name */}
                              </p>
                          </Link>
                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-                            <p className="text-xs text-muted-foreground">
-                                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                            </p>
                             {user && (
                                 <Button
                                      variant="ghost"
@@ -711,6 +727,9 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                                      {comment.likeCount && comment.likeCount > 0 ? <span className="text-xs ml-0.5">({comment.likeCount})</span> : ''}
                                  </Button>
                             )}
+                             <p className="text-xs text-muted-foreground">
+                                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </p>
                             {isOwnComment && (
                                 <AlertDialog>
                                     <AlertDialogTrigger asChild>
@@ -798,13 +817,13 @@ const CommentItem = React.memo(({ comment, currentUserId, postId, onDelete }: { 
                         onOpenAutoFocus={(e) => e.preventDefault()}
                     >
                        {filteredSuggestionsForReply.map(profile => {
-                            const displayableName = profile.displayName;
+                            const displayableName = profile.actualDisplayName || profile.companyName;
                             const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
 
                             return (
                                  profile.userId === 'loading-reply' || profile.userId === 'no-users-reply' || profile.userId === 'no-match-reply' ? (
                                     <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
-                                        {profile.displayName}
+                                        {profile.actualDisplayName} {/* Display the message */}
                                     </div>
                                  ) : (
                                     <Button
@@ -866,7 +885,7 @@ CommentItem.displayName = 'CommentItem';
 
 // Bid Form Zod Schema and Type
 const bidFormSchema = z.object({
-  bidAmount: z.coerce.number().min(0, "Bid cannot be negative.").optional(), // Optional for preset buttons
+  bidAmount: z.coerce.number().min(0, "Bid cannot be negative.").optional(),
   bidMessage: z.string().max(200, "Message cannot exceed 200 characters.").optional(),
 });
 type BidFormValues = z.infer<typeof bidFormSchema>;
@@ -935,10 +954,13 @@ const BoardPageContent = () => {
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [selectedNewCommentMentionedUserIds, setSelectedNewCommentMentionedUserIds] = useState<Set<string>>(new Set());
 
+  // State for the inline bid input and its validation for "Offer Help & Submit Bid"
   const [inlineBidAmount, setInlineBidAmount] = useState<string>("");
   const [inlineBidError, setInlineBidError] = useState<string | null>(null);
   const [isProcessingOffer, setIsProcessingOffer] = useState(false);
 
+
+  // All hooks should be called at the top level of the component
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: getPostsFromFirestore,
@@ -967,6 +989,76 @@ const BoardPageContent = () => {
     },
   });
 
+  const {
+    data: comments = [],
+    isLoading: isLoadingComments,
+    error: commentsError,
+    refetch: refetchComments,
+  } = useQuery<ClientComment[]>({
+    queryKey: ['comments', selectedPost?.id],
+    queryFn: () => selectedPost?.id ? getCommentsForPost(selectedPost.id) : Promise.resolve([]),
+    enabled: !!selectedPost && !!selectedPost.id,
+    staleTime: 1000 * 60 * 1,
+    refetchOnWindowFocus: true,
+  });
+
+   const { data: bids = [], isLoading: isLoadingBids } = useQuery<ClientBid[], Error>({
+    queryKey: ['bids', selectedPost?.id],
+    queryFn: () => selectedPost?.id ? getBidsForPost(selectedPost.id) : Promise.resolve([]),
+    enabled: !!selectedPost && selectedPost.requestType === 'help_request',
+  });
+
+  // For @mention suggestions in the main new comment input
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedNewCommentMentionQuery(newCommentMentionQuery);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [newCommentMentionQuery]);
+
+  const { data: generalSuggestibleUsers = [], isLoading: isLoadingGeneralSuggestions } = useQuery<UserProfileBasic[]>({
+      queryKey: ['generalSuggestibleUsers', selectedPost?.id, debouncedNewCommentMentionQuery],
+      queryFn: () => getSuggestibleUsers(debouncedNewCommentMentionQuery, debouncedNewCommentMentionQuery ? 10 : 25),
+      enabled: !!selectedPost && !!user && showNewCommentSuggestions, // Only fetch when suggestions are active
+      staleTime: 1000 * 60 * 5,
+      retry: 1,
+  });
+
+  const newCommentMentionProfilesMap = useMemo(() => {
+    const map = new Map<string, UserProfileBasic>();
+    (generalSuggestibleUsers || []).forEach(profile => {
+        if (profile.userId) map.set(profile.userId, profile);
+    });
+    return map;
+  }, [generalSuggestibleUsers]);
+
+  const filteredNewCommentSuggestions = useMemo(() => {
+    if (!showNewCommentSuggestions) return [];
+    if (isLoadingGeneralSuggestions) return [{ userId: 'loading-nc', mentionName: 'loading-nc', actualDisplayName: 'Loading users...' } as UserProfileBasic];
+
+    const profilesSource = generalSuggestibleUsers.filter(p => p.userId !== user?.uid && !!p.mentionName);
+    let results: UserProfileBasic[];
+
+    if (newCommentMentionQuery.trim() === '') {
+        results = profilesSource; // Show all fetched (up to limit in getSuggestibleUsers)
+    } else {
+        const queryLower = newCommentMentionQuery.toLowerCase();
+        results = profilesSource.filter(
+            p => p.mentionName.toLowerCase().includes(queryLower) ||
+                 (p.actualDisplayName && p.actualDisplayName.toLowerCase().includes(queryLower))
+        ).slice(0,10); // Limit filtered results for display
+    }
+
+    if (results.length === 0 && newCommentMentionQuery.trim() !== '') {
+      return [{ userId: 'no-match-nc', mentionName:'no-match-nc', actualDisplayName: `No users matching "@${newCommentMentionQuery}"` } as UserProfileBasic];
+    }
+    if (results.length === 0) {
+        return [{ userId: 'no-users-nc', mentionName: 'no-users-nc', actualDisplayName: 'No users to suggest.' } as UserProfileBasic];
+    }
+    return results;
+  }, [newCommentMentionQuery, generalSuggestibleUsers, isLoadingGeneralSuggestions, showNewCommentSuggestions, user?.uid]);
+
+
   const addBidMutation = useMutation({
     mutationFn: (bidData: NewBidData) => {
       if (!selectedPost || !selectedPost.id) throw new Error("Post ID is missing for bid.");
@@ -983,69 +1075,8 @@ const BoardPageContent = () => {
     },
   });
 
-  const {
-    data: comments = [],
-    isLoading: isLoadingComments,
-    error: commentsError,
-    refetch: refetchComments,
-  } = useQuery<ClientComment[]>({
-    queryKey: ['comments', selectedPost?.id],
-    queryFn: () => selectedPost?.id ? getCommentsForPost(selectedPost.id) : Promise.resolve([]),
-    enabled: !!selectedPost && !!selectedPost.id,
-    staleTime: 1000 * 60 * 1,
-    refetchOnWindowFocus: true,
-  });
 
-  const { data: bids = [], isLoading: isLoadingBids } = useQuery<ClientBid[], Error>({
-    queryKey: ['bids', selectedPost?.id],
-    queryFn: () => selectedPost?.id ? getBidsForPost(selectedPost.id) : Promise.resolve([]),
-    enabled: !!selectedPost && selectedPost.requestType === 'help_request',
-  });
-
-  const { data: generalSuggestibleUsers = [], isLoading: isLoadingGeneralSuggestions } = useQuery<UserProfileBasic[]>({
-      queryKey: ['generalSuggestibleUsers', debouncedNewCommentMentionQuery, selectedPost?.id], 
-      queryFn: () => getSuggestibleUsers(debouncedNewCommentMentionQuery, debouncedNewCommentMentionQuery ? 10 : 25),
-      enabled: !!selectedPost && !!user && showNewCommentSuggestions,
-      staleTime: 1000 * 60 * 5,
-      retry: 1,
-  });
-
-  const newCommentMentionProfilesMap = useMemo(() => {
-    const map = new Map<string, UserProfileBasic>();
-    (generalSuggestibleUsers || []).forEach(profile => {
-        if (profile.userId) map.set(profile.userId, profile);
-    });
-    return map;
-  }, [generalSuggestibleUsers]);
-
-  const filteredNewCommentSuggestions = useMemo(() => {
-    if (!showNewCommentSuggestions) return [];
-    if (isLoadingGeneralSuggestions) return [{ userId: 'loading-nc', mentionName: 'loading-nc', displayName: 'Loading users...' } as UserProfileBasic];
-
-    const profilesSource = generalSuggestibleUsers.filter(p => p.userId !== user?.uid && !!p.mentionName);
-    let results: UserProfileBasic[];
-
-    if (newCommentMentionQuery.trim() === '') {
-        results = profilesSource;
-    } else {
-        const queryLower = newCommentMentionQuery.toLowerCase();
-        results = profilesSource.filter(
-            p => p.mentionName.toLowerCase().includes(queryLower) ||
-                 (p.displayName && p.displayName.toLowerCase().includes(queryLower))
-        );
-    }
-    results = results.slice(0, 10);
-
-    if (results.length === 0 && newCommentMentionQuery.trim() !== '') {
-      return [{ userId: 'no-match-nc', mentionName:'no-match-nc', displayName: `No users matching "@${newCommentMentionQuery}"` } as UserProfileBasic];
-    }
-    if (results.length === 0) {
-        return [{ userId: 'no-users-nc', mentionName: 'no-users-nc', displayName: 'No users to suggest.' } as UserProfileBasic];
-    }
-    return results;
-  }, [newCommentMentionQuery, generalSuggestibleUsers, isLoadingGeneralSuggestions, showNewCommentSuggestions, user?.uid]);
-
-
+  // Event Handlers
   const handleNewCommentMentionInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
         setNewComment(value);
@@ -1108,23 +1139,28 @@ const BoardPageContent = () => {
     e.preventDefault();
     if (!user || !selectedPost || !newComment.trim() || isSubmittingComment) return;
     setIsSubmittingComment(true);
+    console.log("[BoardPageContent] handleCommentSubmit - Submitting comment. Text:", newComment.substring(0, 50));
 
-    const profilesToSearch: UserProfileBasic[] = [...(generalSuggestibleUsers || [])];
-    if (selectedPost.userId && !profilesToSearch.find(p => p.userId === selectedPost.userId)) {
+    const profilesForMentionResolution: UserProfileBasic[] = [...(generalSuggestibleUsers || [])];
+    if (selectedPost.userId && !profilesForMentionResolution.find(p => p.userId === selectedPost.userId)) {
         const postAuthorProfile = await fetchUserProfileBasic(selectedPost.userId);
-        if (postAuthorProfile) profilesToSearch.push(postAuthorProfile);
+        if (postAuthorProfile) profilesForMentionResolution.push(postAuthorProfile);
     }
-    if (comments && comments.length > 0) {
+    if (comments && comments.length > 0) { // Ensure comments is defined
         const commenterIds = new Set(comments.map(c => c.userId));
         for (const commenterId of commenterIds) {
-            if (!profilesToSearch.find(p => p.userId === commenterId)) {
+            if (!profilesForMentionResolution.find(p => p.userId === commenterId)) {
                 const commenterProfile = await fetchUserProfileBasic(commenterId);
-                if (commenterProfile) profilesToSearch.push(commenterProfile);
+                if (commenterProfile) profilesForMentionResolution.push(commenterProfile);
             }
         }
     }
+    console.log("[BoardPageContent] handleCommentSubmit - Profiles for mention resolution:", profilesForMentionResolution.map(p => p.userId));
 
-    const finalMentionedUids = await extractMentionedUids(newComment.trim(), profilesToSearch);
+
+    const finalMentionedUids = await extractMentionedUids(newComment.trim(), profilesForMentionResolution);
+    console.log("[BoardPageContent] handleCommentSubmit - Final mentioned UIDs:", finalMentionedUids);
+
 
     const commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'> = {
       userId: user.uid,
@@ -1154,72 +1190,6 @@ const BoardPageContent = () => {
     if (selectedPost) refetchComments();
   }, [selectedPost, refetchComments]);
 
-  const handleInlineBidChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value;
-    setInlineBidAmount(value);
-    if (value === "") {
-      setInlineBidError(null);
-      return;
-    }
-    const numValue = parseFloat(value);
-    if (isNaN(numValue)) {
-      setInlineBidError("Please enter a valid number.");
-    } else if (numValue < 0) {
-      setInlineBidError("Bid cannot be negative.");
-    } else if (selectedPost?.maxBudget != null && numValue > selectedPost.maxBudget) {
-      setInlineBidError(`Bid cannot exceed max budget of $${selectedPost.maxBudget.toLocaleString()}.`);
-    } else {
-      setInlineBidError(null);
-    }
-  }, [selectedPost?.maxBudget]);
-
-  const handleOfferHelpAndBid = useCallback(async () => {
-    if (!user || !selectedPost || selectedPost.userId === user.uid || selectedPost.requestType !== 'help_request') {
-        toast({ variant: "destructive", title: "Action Not Allowed", description: "Cannot perform this action on this post."});
-        return;
-    }
-    setIsProcessingOffer(true);
-
-    const parsedBidAmount = parseFloat(inlineBidAmount);
-    if (inlineBidAmount === "" || isNaN(parsedBidAmount) || parsedBidAmount < 0 || (selectedPost.maxBudget != null && parsedBidAmount > selectedPost.maxBudget)) {
-      const currentError = inlineBidAmount === "" ? "Bid amount is required." : (selectedPost.maxBudget != null ? `Invalid bid amount. Must be between $0 and $${selectedPost.maxBudget.toLocaleString()}.` : "Invalid bid amount.");
-      setInlineBidError(currentError);
-      toast({ variant: "destructive", title: "Invalid Bid", description: currentError });
-      setIsProcessingOffer(false);
-      return;
-    }
-    setInlineBidError(null);
-
-    const bidDetails: NewBidData = {
-      postId: selectedPost.id,
-      bidderId: user.uid,
-      bidAmount: parsedBidAmount,
-      bidMessage: `Bid: $${parsedBidAmount.toLocaleString()} via 'Offer Help'.`, 
-    };
-
-    try {
-      await addBidMutation.mutateAsync(bidDetails);
-      const conversationId = await findOrCreateConversation(user.uid, selectedPost.userId, selectedPost.id);
-      if (conversationId) {
-        toast({ title: "Bid Placed & Conversation Started", description: "Redirecting to Messages..." });
-        router.push(`/contracts?conversationId=${conversationId}&postId=${selectedPost.id}&initialMessageText=${encodeURIComponent(`My bid for your request '${selectedPost.question.substring(0,30)}...' is $${parsedBidAmount.toLocaleString()}. Let's discuss!`)}`);
-        setInlineBidAmount("");
-        setSelectedPost(null);
-      } else {
-        throw new Error("Failed to initiate conversation after bid.");
-      }
-    } catch (error: any) {
-      console.error("Error in handleOfferHelpAndBid:", error);
-      toast({
-        variant: "destructive",
-        title: "Action Failed",
-        description: error.message || "Could not place bid or start conversation.",
-      });
-    } finally {
-      setIsProcessingOffer(false);
-    }
-  },[user, selectedPost, inlineBidAmount, addBidMutation, router, toast, queryClient]);
-
   const handleTagClick = useCallback((tag: string) => {
     setSelectedTags(prevTags =>
       prevTags.includes(tag)
@@ -1230,31 +1200,36 @@ const BoardPageContent = () => {
 
   const openPostCallback = useCallback((postToOpen: Post) => {
       if (selectedPost && selectedPost.id === postToOpen.id) {
-        setSelectedPost(null); 
+        setSelectedPost(null);
         setInlineBidAmount("");
         setInlineBidError(null);
       } else {
         setSelectedPost(postToOpen);
-        setInlineBidAmount(""); 
+        setInlineBidAmount("");
         setInlineBidError(null);
       }
-    }, [selectedPost]); 
+    }, [selectedPost]);
 
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
+    console.log("[BoardPageContent] useEffect for postIdFromUrl. URL Post ID:", postIdFromUrl, "Current selectedPost.id:", selectedPost?.id);
     if (postIdFromUrl && posts.length > 0) {
         const postToOpen = posts.find(p => p.id === postIdFromUrl);
         if (postToOpen) {
             if (!selectedPost || selectedPost.id !== postIdFromUrl) {
+                console.log("[BoardPageContent] Opening post from URL:", postIdFromUrl);
                 setSelectedPost(postToOpen);
             }
-            router.replace('/', { shallow: true });
+            // Clear the URL parameter after opening
+            // router.replace('/', { shallow: true }); // This line can cause issues if router is not stable or if effect runs too often
         } else {
-            router.replace('/', { shallow: true });
+            console.warn("[BoardPageContent] Post ID from URL not found in posts list:", postIdFromUrl);
+            // router.replace('/', { shallow: true }); // Clear invalid postId
             toast({ variant: "destructive", title: "Post Not Found", description: "The requested post could not be found or has been removed." });
         }
     }
-  }, [searchParams, posts, router, selectedPost, toast]); // Added toast
+  }, [searchParams, posts, router, selectedPost?.id]); // Removed selectedPost from dep array
+
 
   useEffect(() => {
     if (newComment.trim() === '') {
@@ -1264,18 +1239,11 @@ const BoardPageContent = () => {
 
   useEffect(() => {
     if (selectedPost && !authLoading && !user) {
-      setSelectedPost(null); 
+      setSelectedPost(null);
        setInlineBidAmount("");
        setInlineBidError(null);
     }
   }, [user, authLoading, selectedPost]);
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedNewCommentMentionQuery(newCommentMentionQuery);
-    }, 300);
-    return () => clearTimeout(handler);
-  }, [newCommentMentionQuery]);
 
   const handleDeletePost = useCallback((postId: string | undefined) => {
     if (!postId) {
@@ -1309,7 +1277,7 @@ const BoardPageContent = () => {
   const opportunitiesPosts = useMemo(() => filteredPostsByTags.filter(post => post.requestType === 'post' || !post.requestType), [filteredPostsByTags]);
 
   const renderPosts = useCallback((postsToRender: Post[]) => (
-    <div className="masonry-grid columns-1 md:columns-2 gap-4 space-y-4">
+    <div className="masonry-grid columns-1 md:columns-2 gap-4 space-y-4"> {/* Changed from md:columns-3 */}
       {postsToRender.length > 0 ? (
         postsToRender.map((post) => (
           <PostCard key={post.id} post={post} onOpen={openPostCallback} isSelected={selectedPost?.id === post.id} />
@@ -1326,6 +1294,83 @@ const BoardPageContent = () => {
       )}
     </div>
   ), [isLoadingPosts, selectedTags, openPostCallback, selectedPost?.id]);
+
+  // Handler for inline bid input changes
+  const handleInlineBidChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setInlineBidAmount(value);
+    if (value === "") {
+      setInlineBidError(null);
+      return;
+    }
+    const numValue = parseFloat(value);
+    if (isNaN(numValue)) {
+      setInlineBidError("Please enter a valid number.");
+    } else if (numValue < 0) {
+      setInlineBidError("Bid cannot be negative.");
+    } else if (selectedPost?.maxBudget != null && numValue > selectedPost.maxBudget) {
+      setInlineBidError(`Bid cannot exceed max budget of $${selectedPost.maxBudget.toLocaleString()}.`);
+    } else {
+      setInlineBidError(null);
+    }
+  }, [selectedPost?.maxBudget]);
+
+  // Handler for "Offer Help & Submit Bid" button
+  const handleOfferHelpAndBid = useCallback(async () => {
+    if (!user || !selectedPost || selectedPost.userId === user.uid || selectedPost.requestType !== 'help_request' || selectedPost.maxBudget == null) {
+        toast({ variant: "destructive", title: "Action Not Allowed", description: "Cannot perform this action on this post."});
+        return;
+    }
+    setIsProcessingOffer(true);
+
+    const parsedBidAmount = parseFloat(inlineBidAmount);
+    if (inlineBidAmount === "" || isNaN(parsedBidAmount) || parsedBidAmount < 0 || parsedBidAmount > selectedPost.maxBudget) {
+      const currentError = inlineBidAmount === "" ? "Bid amount is required." : `Invalid bid amount. Must be between $0 and $${selectedPost.maxBudget.toLocaleString()}.`;
+      setInlineBidError(currentError);
+      toast({ variant: "destructive", title: "Invalid Bid", description: currentError });
+      setIsProcessingOffer(false);
+      return;
+    }
+    setInlineBidError(null);
+
+    const bidDetails: NewBidData = {
+      postId: selectedPost.id,
+      bidderId: user.uid,
+      bidAmount: parsedBidAmount,
+      bidMessage: `Bid placed: $${parsedBidAmount.toLocaleString()}`, // Default message
+    };
+
+    try {
+      await addBidMutation.mutateAsync(bidDetails);
+      const conversationId = await findOrCreateConversation(user.uid, selectedPost.userId, selectedPost.id);
+      if (conversationId) {
+        toast({ title: "Bid Placed & Conversation Started", description: "Redirecting to Messages..." });
+        router.push(`/contracts?conversationId=${conversationId}&postId=${selectedPost.id}&initialBidAmount=${parsedBidAmount}`);
+        setInlineBidAmount("");
+        setSelectedPost(null);
+      } else {
+        throw new Error("Failed to initiate conversation after bid.");
+      }
+    } catch (error: any) {
+      console.error("Error in handleOfferHelpAndBid:", error);
+      toast({
+        variant: "destructive",
+        title: "Action Failed",
+        description: error.message || "Could not place bid or start conversation.",
+      });
+    } finally {
+      setIsProcessingOffer(false);
+    }
+  },[user, selectedPost, inlineBidAmount, addBidMutation, router, toast, queryClient]); // Removed setInlineBidError from deps as it causes loop
+
+  // Effect to clear URL query params after opening post from URL
+  useEffect(() => {
+    const postIdFromUrl = searchParams?.get('postId');
+    if (postIdFromUrl && selectedPost && selectedPost.id === postIdFromUrl) {
+        console.log("[BoardPageContent] Post from URL is selected, clearing URL params.");
+        router.replace('/', { shallow: true });
+    }
+  }, [searchParams, selectedPost, router]);
 
 
   if (authLoading || (isLoadingPosts && !posts?.length && user)) {
@@ -1407,10 +1452,10 @@ const BoardPageContent = () => {
           </Tabs>
         </div>
 
-        {/* Right Column: Selected Post Details */}
-         <div className="md:col-span-1 md:sticky md:top-20 flex flex-col">
+        {/* Right Column: Selected Post Details or Placeholder */}
+        <div className="md:col-span-1 md:sticky md:top-20 flex flex-col">
           {selectedPost ? (
-            <Card className="shadow-xl flex flex-col bg-card flex-1 overflow-hidden max-h-[calc(100vh-6rem)]"> {/* Added max-h */}
+            <Card className="shadow-xl flex flex-col bg-card flex-1 overflow-hidden max-h-[calc(100vh-6rem)]">
               <CardHeader className="p-4 border-b flex-shrink-0">
                 <div className="flex justify-between items-start">
                   <div>
@@ -1445,7 +1490,7 @@ const BoardPageContent = () => {
                 </div>
               </CardHeader>
 
-              <ScrollArea className="flex-grow"> {/* This ScrollArea wraps the content that needs scrolling */}
+              <ScrollArea className="flex-grow">
                 <CardContent className="p-4 space-y-4">
                     {selectedPost.imageUrls && selectedPost.imageUrls.length > 0 && (
                       <div className="mb-4 rounded-lg overflow-hidden shadow-md">
@@ -1583,6 +1628,7 @@ const BoardPageContent = () => {
                       </div>
                     </div>
 
+                    {/* Display Bids Section for Help Requests */}
                     {selectedPost.requestType === 'help_request' && (
                       <div className="mt-6 border-t pt-4">
                         <h4 className="text-lg font-semibold mb-3 flex items-center gap-2">
@@ -1592,6 +1638,7 @@ const BoardPageContent = () => {
                       </div>
                     )}
 
+                    {/* Comments Section */}
                     <div className="mt-6 border-t pt-4">
                       <h4 className="text-lg font-semibold mb-4 flex items-center gap-2">
                         <MessageSquare className="h-5 w-5 text-primary"/> Comments ({isLoadingComments ? '...' : comments.length})
@@ -1621,7 +1668,7 @@ const BoardPageContent = () => {
                 </CardContent>
               </ScrollArea>
 
-              <CardFooter className="p-4 border-t bg-background mt-auto sticky bottom-0 flex-shrink-0"> {/* Make footer shrink-0 */}
+              <CardFooter className="p-4 border-t bg-background sticky bottom-0 flex-shrink-0">
                 <div className="w-full space-y-4">
                   {/* Top Row: Comment Input */}
                    <Popover open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && (filteredNewCommentSuggestions[0]?.userId !== 'loading-nc' && filteredNewCommentSuggestions[0]?.userId !== 'no-users-nc' && filteredNewCommentSuggestions[0]?.userId !== 'no-match-nc')} onOpenChange={setShowNewCommentSuggestions}>
@@ -1652,13 +1699,13 @@ const BoardPageContent = () => {
                           onOpenAutoFocus={(e) => e.preventDefault()}
                       >
                           {filteredNewCommentSuggestions.map(profile => {
-                                const displayableName = profile.displayName;
-                                const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
+                                const displayableName = profile.actualDisplayName || profile.mentionName;
+                                const showSecondaryNameLine = profile.actualDisplayName && profile.actualDisplayName.toLowerCase() !== profile.mentionName.toLowerCase();
                                 
                                 return (
                                    profile.userId === 'loading-nc' || profile.userId === 'no-users-nc' || profile.userId === 'no-match-nc' ? (
                                       <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
-                                          {profile.displayName}
+                                          {profile.actualDisplayName}
                                       </div>
                                    ) : (
                                       <Button
@@ -1672,13 +1719,13 @@ const BoardPageContent = () => {
                                               <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
                                               <AvatarFallback className="text-xs">{getSharedInitials(profile.mentionName)}</AvatarFallback>
                                           </Avatar>
-                                          <div className="flex flex-col items-start">
-                                            {showSecondaryNameLine && (
-                                                 <span className="font-medium text-foreground">{displayableName}</span>
-                                             )}
-                                             <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
-                                                 @{profile.mentionName}
-                                             </span>
+                                           <div className="flex flex-col items-start">
+                                              {showSecondaryNameLine && (
+                                                  <span className="font-medium text-foreground">{displayableName}</span>
+                                              )}
+                                              <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
+                                                  @{profile.mentionName}
+                                              </span>
                                           </div>
                                       </Button>
                                   )
@@ -1689,14 +1736,14 @@ const BoardPageContent = () => {
 
                   {/* Bottom Row: Bidding UI and Action Buttons */}
                    <div className="flex flex-col sm:flex-row justify-between items-stretch sm:items-end gap-3 pt-2">
-                     {/* Bidding specific UI - now on the left for sm screens and up */}
-                     {user && selectedPost.requestType === 'help_request' && selectedPost.userId !== user.uid && selectedPost.maxBudget != null && (
+                      {user && selectedPost.requestType === 'help_request' && selectedPost.userId !== user.uid && selectedPost.maxBudget != null && (
                         <div className="flex-grow space-y-2 self-start sm:self-center order-1 sm:order-none">
-                           <Label htmlFor="inlineBidAmount" className="text-xs font-medium">
-                              Your Bid (0 - ${selectedPost.maxBudget.toLocaleString()})
+                           <Label htmlFor="inlineBidAmount" className="text-sm font-medium">
+                             Your Bid (0 - ${selectedPost.maxBudget.toLocaleString()})
                            </Label>
                            <div className="flex flex-wrap items-center gap-1.5">
                               <Button variant="outline" size="xs" onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }} disabled={isProcessingOffer}>Bid FREE</Button>
+                              {/* Removed Bid Half and Bid Max buttons */}
                               <Input
                                  id="inlineBidAmount"
                                  type="number"
@@ -1711,9 +1758,9 @@ const BoardPageContent = () => {
                            </div>
                            {inlineBidError && <p className="text-xs text-destructive mt-1">{inlineBidError}</p>}
                         </div>
-                     )}
+                      )}
 
-                    {/* Action Buttons Container - now on the right */}
+                    {/* Action Buttons Container */}
                     <div className="flex flex-shrink-0 gap-2 self-center sm:self-end order-2 sm:order-none">
                       {user && selectedPost.userId && selectedPost.userId !== user.uid && (
                         <>
@@ -1729,7 +1776,7 @@ const BoardPageContent = () => {
                                     className="bg-green-600 hover:bg-green-700 text-white"
                                   >
                                     {isProcessingOffer ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <HandHelping className="mr-2 h-4 w-4" />}
-                                    Offer Help & Bid
+                                    Offer Help & Submit Bid
                                   </Button>
                                 </TooltipTrigger>
                                 {(!!inlineBidError || inlineBidAmount === "" || !user) && (
@@ -1739,7 +1786,7 @@ const BoardPageContent = () => {
                                 )}
                               </Tooltip>
                             </TooltipProvider>
-                          ) : selectedPost.requestType !== 'help_request' ? ( // Only show general "Offer Help" for non-help_request posts
+                          ) : selectedPost.requestType !== 'help_request' ? (
                             <Button
                               variant="outline"
                               size="sm"
@@ -1811,11 +1858,11 @@ export const extractMentionedUids = async (text: string, profilesToSearch: UserP
     return [];
   }
   console.log(`%c[page.tsx] extractMentionedUids - Input Text: "${text.substring(0, 50)}..."`, "color: #FFA500;");
-  console.log(`%c[page.tsx] extractMentionedUids - Profiles to Search In (first 5):`, "color: #FFA500;", profilesToSearch.slice(0, 5).map(p => ({uid: p.userId, mentionName: p.mentionName, displayName: p.displayName })));
+  console.log(`%c[page.tsx] extractMentionedUids - Profiles to Search In (first 5):`, "color: #FFA500;", profilesToSearch.slice(0, 5).map(p => ({uid: p.userId, mentionName: p.mentionName, actualDisplayName: p.actualDisplayName })));
 
-  const mentionRegexGlobal = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,})/g;
+  const mentionRegex = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,})/g;
   const textualMentions = new Set<string>();
-  for (const match of text.matchAll(mentionRegexGlobal)) {
+  for (const match of text.matchAll(mentionRegex)) {
     if (match[1]) textualMentions.add(match[1].trim());
   }
 
@@ -1836,7 +1883,7 @@ export const extractMentionedUids = async (text: string, profilesToSearch: UserP
       continue;
     }
 
-    // Strategy 2: Check if the textualMention itself is a UID
+    // Strategy 2: Check if the textualMention itself is a UID and is present in profilesToSearch
     if (IS_UID_REGEX_PAGE.test(textualMention)) {
       foundProfile = profilesToSearch.find(p => p.userId === textualMention);
       if (foundProfile && foundProfile.userId) {
