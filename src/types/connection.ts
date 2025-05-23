@@ -6,43 +6,52 @@ export type VisibilitySetting = 'everyone' | 'connected' | 'only_me';
 // User profile data stored in Firestore 'users' collection
 export interface UserProfileData {
     uid: string;
-    email?: string | null;
-    // actualDisplayName?: string | null; // Removed in favor of more specific fields + mentionName
-    // actualDisplayNameVisibility?: VisibilitySetting; // Removed
+    email?: string | null; // From Firebase Auth, usually synced
+    
+    // Fields for user-provided "real" identity, if they choose to share
+    actualDisplayName?: string | null; 
+    companyName?: string | null; 
+    
+    // The "ColorAnimalNumber" name, always generated and used for @mentions
+    mentionName: string; 
 
-    companyName?: string | null; // Always visible if set, used as primary display name if actualDisplayName not set
-    // companyNameVisibility?: VisibilitySetting; // Removed
+    avatarUrl?: string | null; // User's chosen profile picture URL
 
-    mentionName: string; // The "ColorAnimalNumber" name, e.g., BlueWhale123 - used for @mentions
-
-    industry?: string | null; // Always visible if set
-    // industryVisibility?: VisibilitySetting; // Removed
-
-    avatarUrl?: string | null; // Always visible if set
-    // avatarVisibility?: VisibilitySetting; // Removed
-
-    description?: string | null;
+    industry?: string | null; // User-set industry
+    description?: string | null; // User-set profile description
     descriptionVisibility?: VisibilitySetting; // Visibility for description
 
-    incomeRange?: string | null; // New field for income range
+    // New field for establishment year
+    established?: string | null; // Store as string (e.g., "2005")
 
-    tags?: string[];
-    location?: string | null;
-    established?: string | null;
-    contactEmail?: string | null;
+    tags?: string[]; // Optional: user-defined tags or skills
+    
+    // Fields that were previously requested to be removed from public display unless connected/own profile
+    location?: string | null; // Keeping in type for now, but UI will hide it
+    contactEmail?: string | null; // Separate from auth email, for public contact if desired
     contactPhone?: string | null;
-    verified?: boolean;
+
+    verified?: boolean; // Verification status
+    
+    // Timestamps
     createdAt?: Timestamp;
     lastLoginAt?: Timestamp;
     updatedAt?: Timestamp;
+
+    // Fields removed based on previous requests from settings UI
+    // actualDisplayNameVisibility?: VisibilitySetting;
+    // companyNameVisibility?: VisibilitySetting;
+    // avatarVisibility?: VisibilitySetting;
+    // industryVisibility?: VisibilitySetting; // Industry is always visible if set
+    incomeRange?: string | null;
 }
 
 // Basic user profile information, often derived, used for displays and suggestions
 export interface UserProfileBasic {
     userId: string; // UID
-    displayName: string; // Derived: companyName or mentionName
+    displayName: string; // Derived: actualDisplayName or companyName or mentionName
     mentionName: string; // The "ColorAnimalNumber" name for @mentions
     avatarUrl?: string;
-    // companyName?: string; // Redundant if displayName logic covers it
-    // actualDisplayName?: string; // Redundant
+    actualDisplayName?: string; // To help in suggestion UI
+    companyName?: string; // To help in suggestion UI
 }

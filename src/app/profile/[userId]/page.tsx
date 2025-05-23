@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building, CalendarDays, MapPin, CheckCircle, Mail, Phone, Loader2, AlertTriangle, Lock, Star, MessageSquare, Edit3, Trash2 } from 'lucide-react';
+import { Building, CalendarDays, CheckCircle, Mail, Phone, Loader2, AlertTriangle, Star, MessageSquare, Edit3, Trash2, Briefcase, Info, AtSign } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
@@ -15,9 +15,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { ConnectionButton } from '@/components/ConnectionButton';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getConnectionStatus, fetchFullUserProfile, type UserProfileData, type VisibilitySetting } from '@/services/connectionService';
+import { getConnectionStatus, fetchFullUserProfile, type UserProfileData } from '@/services/connectionService';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import type { ConnectionStatus } from '@/types/connection';
+import type { ConnectionStatus, VisibilitySetting } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
 import { addReview, getReviewsForProfile, updateReview, deleteReview } from '@/services/reviewService';
@@ -49,8 +49,6 @@ const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string
   );
 };
 
-// getInitials is now imported from pseudonymUtils
-
 const BusinessProfilePage = () => {
   const params = useParams();
   const profileUserIdFromParams = params?.userId as string | undefined;
@@ -64,7 +62,7 @@ const BusinessProfilePage = () => {
   const [reviewComment, setReviewComment] = useState('');
   const [editingReview, setEditingReview] = useState<ClientReview | null>(null);
 
-  const isProfileIdValidUid = useMemo(() => {
+  const isProfileIdActuallyValidUid = useMemo(() => {
     if (!profileUserIdFromParams) return false;
     const isValid = IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams);
     console.log(`[BusinessProfilePage] isProfileIdValidUid for '${profileUserIdFromParams}': ${isValid}`);
@@ -72,13 +70,6 @@ const BusinessProfilePage = () => {
   }, [profileUserIdFromParams]);
 
   const profileUserId = profileUserIdFromParams;
-
-  useEffect(() => {
-    if (profileUserId && !isProfileIdValidUid) {
-        console.warn(`[BusinessProfilePage] Effect: Invalid profileUserId '${profileUserId}' from URL. UI should show error.`);
-    }
-  }, [profileUserId, isProfileIdValidUid]);
-
 
   const { data: viewedUserProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileData | null, Error>({
     queryKey: ['fullUserProfile', profileUserId],
@@ -90,23 +81,15 @@ const BusinessProfilePage = () => {
       }
       return fetchFullUserProfile(profileUserId);
     },
-    enabled: !!profileUserId && isProfileIdValidUid,
+    enabled: !!profileUserId && isProfileIdActuallyValidUid, // Only fetch if profileUserId is valid-looking UID
   });
 
   const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
   
-  useEffect(() => {
-    console.log(`[BusinessProfilePage] Debug: connectionStatusQueryEnabled: ${connectionStatusQueryEnabled}`);
-    console.log(`  currentUser?.uid: ${currentUser?.uid}`);
-    console.log(`  profileUserId: ${profileUserId}`);
-    console.log(`  isProfileIdValidUid: ${isProfileIdValidUid}`);
-    console.log(`  currentUser?.uid !== profileUserId: ${currentUser?.uid !== profileUserId}`);
-  }, [connectionStatusQueryEnabled, currentUser?.uid, profileUserId, isProfileIdValidUid]);
-
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
-        console.log(`[BusinessProfilePage] queryFn for connectionStatus - Parameters: currentUser='${currentUser?.uid}', profileUser='${profileUserId}'`);
+        console.log(`%c[BusinessProfilePage] queryFn for connectionStatus - Parameters: currentUser='${currentUser?.uid}', profileUser='${profileUserId}'`, "color: blue;");
         if (!currentUser?.uid || !profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) || currentUser.uid === profileUserId) {
             console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions for fetch. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
             return 'not_connected';
@@ -116,12 +99,12 @@ const BusinessProfilePage = () => {
     enabled: connectionStatusQueryEnabled,
   });
 
-  const reviewsQueryEnabled = !!profileUserId && isProfileIdValidUid && !!currentUser;
+  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid; // User doesn't need to be logged in to see reviews
   const { data: reviews = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId],
     queryFn: () => {
       console.log(`%c[BusinessProfilePage] getReviewsForProfile queryFn: Fetching for targetUserId: '${profileUserId}'. Auth UID: '${currentUser?.uid || 'NULL'}'`, "color: dodgerblue;");
-      if (!profileUserId || !isProfileIdValidUid ) {
+      if (!profileUserId || !isProfileIdActuallyValidUid ) {
         console.warn(`[BusinessProfilePage] getReviewsForProfile queryFn: Invalid profileUserId '${profileUserId}' or not a valid UID format. Skipping fetch.`);
         return Promise.resolve([]);
       }
@@ -129,7 +112,6 @@ const BusinessProfilePage = () => {
     },
     enabled: reviewsQueryEnabled,
   });
-
 
   const currentUserReview = useMemo(() => {
     if (!currentUser) return null;
@@ -157,21 +139,21 @@ const BusinessProfilePage = () => {
 
   const addOrUpdateReviewMutation = useMutation({
     mutationFn: async (data: { rating: number; comment: string }) => {
-      if (!currentUser || !profileUserId || !isProfileIdValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
+      if (!currentUser || !profileUserId || !isProfileIdActuallyValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
+      
+      const reviewerProfile = await fetchFullUserProfile(currentUser.uid); // Fetch own profile to get current mentionName
+      const reviewerMentionNameToUse = reviewerProfile?.mentionName || generateAnonymousName(currentUser.uid);
+
       if (editingReview) {
         const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
         await updateReview(editingReview.id, currentUser.uid, updateData);
         return "Review updated successfully!";
       } else {
-        // Fetch current user's profile to get their mentionName for the review
-        const reviewerProfile = await fetchFullUserProfile(currentUser.uid);
-        const reviewerMentionName = reviewerProfile?.mentionName || generateAnonymousName(currentUser.uid);
-
         const newReviewData: NewReviewData = {
           targetUserId: profileUserId,
           reviewerId: currentUser.uid,
-          reviewerName: reviewerMentionName, // Use mentionName for anonymity
-          reviewerAvatar: viewedUserProfileData?.avatarUrl || undefined, // Or use currentUser.photoURL if preferred
+          reviewerName: reviewerMentionNameToUse, 
+          reviewerAvatar: reviewerProfile?.avatarUrl || undefined, 
           rating: data.rating,
           comment: data.comment,
         };
@@ -214,7 +196,7 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-  if (profileUserIdFromParams && !isProfileIdValidUid) {
+  if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -228,10 +210,9 @@ const BusinessProfilePage = () => {
     );
   }
 
-
-  if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdValidUid)) {
+  if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdActuallyValidUid)) {
      return (
-       <div className="container mx-auto p-4 md:p-8 max-w-4xl">
+       <div className="w-full"> {/* Changed from container to w-full */}
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
            <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
              <div className="flex flex-col md:flex-row items-start md:items-center gap-4 animate-pulse">
@@ -264,7 +245,7 @@ const BusinessProfilePage = () => {
 
   if (!profileUserId || !viewedUserProfileData) {
     return (
-      <div className="container mx-auto p-4 text-center">
+      <div className="w-full text-center p-4"> {/* Changed from container */}
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
         <p className="text-muted-foreground font-semibold">Business profile data could not be loaded or profile ID is missing/invalid.</p>
          <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
@@ -272,9 +253,9 @@ const BusinessProfilePage = () => {
     );
   }
 
-  if (profileError) {
+  if (profileError && isProfileIdActuallyValidUid) { // Only show error if it was a valid UID attempt
       return (
-          <div className="container mx-auto p-4 text-center">
+          <div className="w-full text-center p-4"> {/* Changed from container */}
              <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
              <p className="text-muted-foreground font-semibold">Error loading profile: {profileError.message}</p>
              <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
@@ -283,46 +264,37 @@ const BusinessProfilePage = () => {
   }
 
   const isOwnProfile = currentUser?.uid === viewedUserProfileData.uid;
-
-  const canViewDescription = isOwnProfile || 
-                           !viewedUserProfileData.descriptionVisibility || // Default to everyone if not set
-                           viewedUserProfileData.descriptionVisibility === 'everyone' ||
-                           (viewedUserProfileData.descriptionVisibility === 'connected' && connectionStatus === 'connected');
-
-  const canViewContactInfo = isOwnProfile || connectionStatus === 'connected';
-
-
   const generatedNameForProfile = generateAnonymousName(viewedUserProfileData.uid);
+
   const headerDisplayNameForTitle = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
-  const headerDisplayNameForAvatar = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
+  const headerDisplayNameForAvatar = viewedUserProfileData.companyName || viewedUserProfileData.actualDisplayName || viewedUserProfileData.mentionName || generatedNameForProfile;
   
   const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerDisplayNameForTitle;
 
-  const headerAvatarUrl = viewedUserProfileData.avatarUrl || undefined;
-  const headerIndustry = viewedUserProfileData.industry || "Industry Not Specified";
-  
   let nameForConnectionButton: string;
   if (viewedUserProfileData.companyName) {
     nameForConnectionButton = viewedUserProfileData.companyName;
   } else {
     nameForConnectionButton = headerDisplayNameForAvatar; 
   }
+  
+  // Visibility logic for description
+  const canViewDescription = isOwnProfile ||
+    !viewedUserProfileData.descriptionVisibility ||
+    viewedUserProfileData.descriptionVisibility === 'everyone' ||
+    (viewedUserProfileData.descriptionVisibility === 'connected' && connectionStatus === 'connected');
 
+  const displayDescription = canViewDescription ? (viewedUserProfileData.description || "No profile description provided.") : "[Description Hidden by User]";
   const displayIndustry = viewedUserProfileData.industry || "Not specified";
-  const displayDescription = canViewDescription ? (viewedUserProfileData.description || "No profile description provided.") : "[Description Hidden]";
-  const displayLocation = viewedUserProfileData.location || "Location not set";
   const displayEstablished = viewedUserProfileData.established || "Year not set";
-  const displayContactEmail = canViewContactInfo ? (viewedUserProfileData.contactEmail || "Email not available") : "[Contact Email Hidden]";
-  const displayContactPhone = canViewContactInfo ? (viewedUserProfileData.contactPhone) : undefined;
-
-
+  
   return (
-    <div className="container mx-auto p-4 md:p-8 max-w-4xl">
+    <div className="w-full"> {/* Removed container classes */}
       <Card className="overflow-hidden shadow-lg rounded-lg border-border">
         <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
           <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
             <Avatar className="h-20 w-20 border-2 border-primary">
-              <AvatarImage src={headerAvatarUrl} alt={headerDisplayNameForTitle} />
+              <AvatarImage src={viewedUserProfileData.avatarUrl || undefined} alt={headerDisplayNameForAvatar} />
               <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
                 {getInitials(headerDisplayNameForAvatar)}
               </AvatarFallback>
@@ -331,14 +303,20 @@ const BusinessProfilePage = () => {
               <CardTitle className="text-3xl font-bold text-foreground">
                 {headerDisplayNameForTitle}
               </CardTitle>
-              <CardDescription className="text-muted-foreground mt-1 flex items-center justify-center md:justify-start gap-1">
-                 <Building className="h-4 w-4" /> {headerIndustry}
-                 {viewedUserProfileData.verified && (
-                    <span className="ml-2 inline-flex items-center gap-1 text-green-600">
-                        <CheckCircle className="h-4 w-4" /> Verified
-                    </span>
-                 )}
-              </CardDescription>
+              <div className="flex items-center justify-center md:justify-start gap-2 mt-1">
+                <Briefcase className="h-4 w-4 text-muted-foreground" /> 
+                <CardDescription className="text-muted-foreground">{displayIndustry}</CardDescription>
+                {viewedUserProfileData.mentionName && (
+                     <span className="text-muted-foreground text-sm flex items-center gap-1">
+                        <AtSign className="h-4 w-4" /> {viewedUserProfileData.mentionName}
+                     </span>
+                )}
+              </div>
+               {viewedUserProfileData.verified && (
+                  <span className="mt-1 inline-flex items-center gap-1 text-green-600 text-sm">
+                      <CheckCircle className="h-4 w-4" /> Verified
+                  </span>
+               )}
                <div className="mt-2 flex flex-wrap gap-2 justify-center md:justify-start">
                   {(viewedUserProfileData.tags || []).map((tag) => (
                     <Badge key={tag} variant="secondary">{tag}</Badge>
@@ -390,33 +368,16 @@ const BusinessProfilePage = () => {
           <Separator />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
-            <div className="flex items-center gap-2 text-muted-foreground">
-               <MapPin className="h-4 w-4 text-primary" />
-               <span>{displayLocation}</span>
-            </div>
-            <div className="flex items-center gap-2 text-muted-foreground">
-               <CalendarDays className="h-4 w-4 text-primary" />
-               <span>Established: {displayEstablished}</span>
-            </div>
-             <div className="flex items-center gap-2 text-muted-foreground">
-               <Mail className="h-4 w-4 text-primary" />
-               {canViewContactInfo && viewedUserProfileData.contactEmail ? (
-                  <a href={`mailto:${viewedUserProfileData.contactEmail}`} className="hover:underline hover:text-primary">
-                    {viewedUserProfileData.contactEmail}
-                  </a>
-               ) : (
-                  <span>{displayContactEmail}</span>
-               )}
-            </div>
-            {displayContactPhone && (
-                <div className="flex items-center gap-2 text-muted-foreground">
-                    <Phone className="h-4 w-4 text-primary" />
-                    <span>{displayContactPhone}</span>
-                 </div>
-             )}
+            {viewedUserProfileData.established && (
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <CalendarDays className="h-4 w-4 text-primary" />
+                <span>Established: {displayEstablished}</span>
+              </div>
+            )}
+            {/* Location and Contact Email/Phone removed from display */}
           </div>
 
-          {currentUser && !isOwnProfile && isProfileIdValidUid && (
+          {currentUser && !isOwnProfile && isProfileIdActuallyValidUid && (
             <>
               <Separator />
               <div>
@@ -478,7 +439,7 @@ const BusinessProfilePage = () => {
                            <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
                                 <div className="flex items-center gap-3">
                                     <Avatar className="h-9 w-9">
-                                        <AvatarImage src={review.reviewerAvatar || undefined} alt={review.reviewerName || 'Reviewer'} />
+                                        <AvatarImage src={review.reviewerAvatar || undefined} alt={review.reviewerName} />
                                         <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
                                             {getInitials(review.reviewerName)}
                                         </AvatarFallback>
@@ -534,7 +495,7 @@ const BusinessProfilePage = () => {
 
            <div>
               <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {displayCompanyNameForAboutHeading}</h3>
-              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (isOwnProfile || (connectionStatus === 'connected' )) ? (
+              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (isOwnProfile || connectionStatus === 'connected' ) ? (
                   <ProfilePostsSection userId={profileUserId} />
               ) : isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="flex items-center justify-center p-6">
@@ -548,9 +509,11 @@ const BusinessProfilePage = () => {
                    </div>
               ) : profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
                   <div className="text-center p-6 border rounded-lg bg-muted/50">
-                     <Lock className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                     <p className="text-muted-foreground font-medium">Connect to view posts</p>
-                     <p className="text-xs text-muted-foreground mt-1">Posts by this user are only visible to connected businesses or the business owner.</p>
+                     <Info className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                     <p className="text-muted-foreground font-medium">
+                        {isOwnProfile ? "You haven't posted anything yet." : `Connect with ${displayCompanyNameForAboutHeading} to view their posts.`}
+                     </p>
+                     {!isOwnProfile && <p className="text-xs text-muted-foreground mt-1">Posts by this user are only visible to connected businesses or the business owner.</p>}
                   </div>
               ) : (
                  <div className="text-center p-6 border rounded-lg bg-destructive/10">
