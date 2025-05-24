@@ -1,5 +1,5 @@
 
-import {onRequest} from "firebase-functions/v2/https";
+import { onRequest } from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
 import { generateAnonymousName } from "./utils/pseudonymUtils";
@@ -29,7 +29,7 @@ export const createBotUser = onRequest(async (request, response) => {
     const botPassword = `strongPassword${Date.now()}${randomSuffix}`;
 
     logger.info(
-      `Attempting to create bot user with email: ${botEmail}`
+      `Attempting to create bot user with email: ${botEmail}`,
     );
 
     // Create Firebase Auth user
@@ -41,14 +41,14 @@ export const createBotUser = onRequest(async (request, response) => {
 
     logger.info(
       "Successfully created new Firebase Auth user:",
-      userRecord.uid
+      userRecord.uid,
     );
 
     // Generate profile data for Firestore
     const newMentionName = generateAnonymousName(userRecord.uid);
     const industries = [
       "Tech", "Retail", "Healthcare", "Finance",
-      "Manufacturing", "Education"
+      "Manufacturing", "Education",
     ];
     const randomIndustry = industries[
       Math.floor(Math.random() * industries.length)
@@ -67,7 +67,7 @@ export const createBotUser = onRequest(async (request, response) => {
       tags: [],
       location: null,
       established: String(
-        new Date().getFullYear() - Math.floor(Math.random() * 10)
+        new Date().getFullYear() - Math.floor(Math.random() * 10),
       ), // Random year in last 10 years
       contactEmail: null,
       contactPhone: null,
@@ -82,7 +82,7 @@ export const createBotUser = onRequest(async (request, response) => {
     await dbAdmin.collection("users").doc(userRecord.uid).set(userProfileData);
     logger.info(
       "Successfully created Firestore profile for bot user:",
-      userRecord.uid
+      userRecord.uid,
     );
 
     response.status(200).send({

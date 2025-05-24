@@ -46,7 +46,7 @@ const simpleHash = (str: string, max: number): number => {
 };
 
 export const generateAnonymousName = (
-  userId: string | null | undefined
+  userId: string | null | undefined,
 ): string => {
   if (!userId || typeof userId !== "string" || userId.trim() === "") {
     const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
