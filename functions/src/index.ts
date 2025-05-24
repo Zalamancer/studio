@@ -23,14 +23,17 @@ export const helloWorld = onRequest((request, response) => {
 
 // --- New Function: createBotUser ---
 export const createBotUser = onRequest(async (request, response) => {
+  logger.info("createBotUser function called (Simplified for debugging)");
   try {
+    // Original logic commented out for debugging:
+    /*
     // Generate a random suffix for uniqueness
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const botEmail = `bot_${Date.now()}_${randomSuffix}@example.com`;
     const botPassword = `strongPassword${Date.now()}${randomSuffix}`;
 
     logger.info(
-      `Attempting to create bot user with email: ${botEmail}`,
+      `Attempting to create bot user with email: ${botEmail}`
     );
 
     // Create Firebase Auth user
@@ -42,7 +45,7 @@ export const createBotUser = onRequest(async (request, response) => {
 
     logger.info(
       "Successfully created new Firebase Auth user:",
-      userRecord.uid,
+      userRecord.uid
     );
 
     // Generate profile data for Firestore
@@ -69,7 +72,7 @@ export const createBotUser = onRequest(async (request, response) => {
       location: null,
       // Random year in last 10 years
       established: String(
-        new Date().getFullYear() - Math.floor(Math.random() * 10),
+        new Date().getFullYear() - Math.floor(Math.random() * 10)
       ),
       contactEmail: null,
       contactPhone: null,
@@ -84,20 +87,127 @@ export const createBotUser = onRequest(async (request, response) => {
     await dbAdmin.collection("users").doc(userRecord.uid).set(userProfileData);
     logger.info(
       "Successfully created Firestore profile for bot user:",
-      userRecord.uid,
+      userRecord.uid
     );
 
     response.status(200).send({
-      message: "Bot user created successfully!",
+      message: "Bot user created successfully! (Original Logic)",
       userId: userRecord.uid,
       email: botEmail,
       mentionName: newMentionName,
     });
+    */
+
+    // Simplified response for debugging
+    response.status(200).send({
+      message: "createBotUser called successfully (Simplified for debugging)",
+      userId: "debug-bot-user-id",
+    });
   } catch (error) {
-    logger.error("Error creating bot user:", error);
+    logger.error("Error in createBotUser (Simplified):", error);
     response.status(500).send({
-      error: "Failed to create bot user",
-      details: error,
+      error: "Failed in simplified createBotUser",
+      details: (error as Error).message || "Unknown error",
     });
   }
 });
+
+
+// --- New Function: createBotPost ---
+export const createBotPost = onRequest(async (request, response) => {
+  logger.info("createBotPost function called (Simplified for debugging)");
+  try {
+    // Original logic commented out for debugging:
+    /*
+    const botUsersSnapshot = await dbAdmin.collection("users")
+      .where("isBotAccount", "==", true).limit(50).get();
+
+    if (botUsersSnapshot.empty) {
+      logger.warn("No bot users found in Firestore. Cannot create a post.");
+      response.status(404).send({error: "No bot users available to create a post."});
+      return;
+    }
+
+    const botUsers = botUsersSnapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}));
+    const randomBot = botUsers[Math.floor(Math.random() * botUsers.length)];
+
+    if (!randomBot || !randomBot.id) {
+      logger.error("Selected random bot is invalid.", randomBot);
+      response.status(500).send({error: "Failed to select a valid bot user."});
+      return;
+    }
+
+    const sampleQuestions = [
+      "What are the best strategies for B2B lead generation in 2024?",
+      "How can AI be leveraged for improving supply chain efficiency?",
+      "Seeking collaborators for a new SaaS product in the fintech space.",
+      "What are common pitfalls to avoid when scaling a remote team?",
+      "Looking for insights on sustainable manufacturing practices.",
+    ];
+    // ... (other sample data arrays as before) ...
+
+    const sampleDescriptions = [
+      "We're exploring innovative ways to connect with potential clients...",
+      "Our team is developing an AI model to optimize logistics and reduce costs...",
+      "This project aims to disrupt the traditional payment processing industry...",
+      "We're facing challenges in maintaining company culture with a distributed workforce...",
+      "Our goal is to implement greener solutions in our production line...",
+    ];
+    const sampleTags = [
+      ["Marketing", "Sales", "B2B"],
+      ["AI", "Logistics", "Supply Chain"],
+      ["Fintech", "SaaS", "Collaboration"],
+      ["Remote Work", "HR", "Management"],
+      ["Sustainability", "Manufacturing", "Innovation"],
+    ];
+    const sampleSectors = [
+      "Tech", "Logistics", "Finance", "HR", "Manufacturing",
+    ];
+
+    const question = sampleQuestions[Math.floor(Math.random() * sampleQuestions.length)];
+    const description = sampleDescriptions[Math.floor(Math.random() * sampleDescriptions.length)];
+    const tags = sampleTags[Math.floor(Math.random() * sampleTags.length)];
+    const sector = sampleSectors[Math.floor(Math.random() * sampleSectors.length)];
+
+    const newPostData = {
+      userId: randomBot.id,
+      question: question,
+      description: description,
+      tags: tags,
+      sector: sector,
+      businessType: randomBot.industry || "Bot Industry", // Use bot's industry
+      safetyIndicator: "Medium",
+      ratingScore: 0, // Bots might not have a rating initially
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      imageUrls: [], // Bots won't upload images for now
+      mentionedUserIds: [],
+      requestType: "post" as const,
+    };
+
+    const postDocRef = await dbAdmin.collection("posts").add(newPostData);
+    logger.info(
+      `Bot user ${randomBot.id} created a new post: ${postDocRef.id}`
+    );
+
+    response.status(200).send({
+      message: "Bot post created successfully! (Original Logic)",
+      postId: postDocRef.id,
+      botUserId: randomBot.id,
+    });
+    */
+
+    // Simplified response for debugging
+    response.status(200).send({
+      message: "createBotPost called successfully (Simplified for debugging)",
+      postId: "debug-bot-post-id",
+    });
+  } catch (error) {
+    logger.error("Error in createBotPost (Simplified):", error);
+    response.status(500).send({
+      error: "Failed in simplified createBotPost",
+      details: (error as Error).message || "Unknown error",
+    });
+  }
+});
+
+    
