@@ -10,13 +10,13 @@ import * as admin from "firebase-admin";
 // credentials.
 admin.initializeApp();
 
-// Export Firestore and Auth admin instances - Commented out as not used by helloWorld
-// export const dbAdmin = admin.firestore();
-// export const authAdmin = admin.auth();
+// Export Firestore and Auth admin instances
+export const dbAdmin = admin.firestore();
+export const authAdmin = admin.auth();
 
 // Example Cloud Function (Keep this for testing deployment)
 export const helloWorld = onRequest((request, response) => {
-  logger.info("Hello logs!", {structuredData: true});
+  logger.info("Hello logs!", {structuredData:true});
   response.send("Hello from Firebase!");
 });
 
@@ -234,3 +234,5 @@ export const helloWorld = onRequest((request, response) => {
 //     });
 //   }
 // });
+
+    
