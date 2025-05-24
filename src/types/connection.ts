@@ -1,3 +1,4 @@
+
 // src/types/connection.ts
 import type { Timestamp } from 'firebase/firestore';
 
@@ -8,44 +9,37 @@ export interface UserProfileData {
     uid: string;
     email?: string | null;
 
-    companyName?: string | null;    // From email sign-up or profile settings
-    actualDisplayName?: string | null; // From Google sign-in or profile settings
-
-    mentionName: string; // The "ColorAnimalNumber" name, always generated and stored. Used for @mentions.
+    companyName?: string | null;
+    // actualDisplayName is removed as per user request to simplify
+    mentionName: string; // The "ColorAnimalNumber" name, always generated and stored. Primary for @mentions.
 
     avatarUrl?: string | null;
-    industry?: string | null;
+    industry?: string | null; // Will always be visible if set
     description?: string | null;
-    descriptionVisibility?: VisibilitySetting; // Only this one remains from the granular visibilities
+    descriptionVisibility?: VisibilitySetting; // Visibility for description
 
     tags?: string[];
-    location?: string | null; // Kept for potential future use but not actively displayed on profile
-    established?: string | null;
-    contactEmail?: string | null; // Kept for potential future use
-    contactPhone?: string | null; // Kept for potential future use
+    location?: string | null;
+    established?: string | null; // Will always be visible if set
+    contactEmail?: string | null;
+    contactPhone?: string | null;
     verified?: boolean;
     isBotAccount?: boolean; // To identify bot accounts
+    incomeRange?: string | null;
 
     // Timestamps
     createdAt?: Timestamp;
     lastLoginAt?: Timestamp;
     updatedAt?: Timestamp;
-
-    // Fields removed based on user request to simplify:
-    // actualDisplayNameVisibility?: VisibilitySetting;
-    // companyNameVisibility?: VisibilitySetting;
-    // avatarVisibility?: VisibilitySetting;
-    // industryVisibility?: VisibilitySetting; // Industry is now always visible if set
-    incomeRange?: string | null; // This was added, keeping it for now
 }
 
 // Basic user profile information, often derived, used for displays and suggestions
 export interface UserProfileBasic {
     userId: string; // UID
-    displayName: string; // Derived: actualDisplayName or companyName or mentionName
+    displayName: string; // Derived: companyName or mentionName
     mentionName: string; // The "ColorAnimalNumber" name for @mentions
     avatarUrl?: string;
-    actualDisplayName?: string; // To help in suggestion UI if different from companyName
-    companyName?: string; // To help in suggestion UI
     isBotAccount?: boolean;
+    // Removed companyName and actualDisplayName from here to simplify,
+    // displayName will hold the best available public name (company or mentionName)
 }

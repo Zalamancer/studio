@@ -1,3 +1,4 @@
+
 // functions/src/utils/pseudonymUtils.ts
 
 // Copied from the main app's src/lib/pseudonymUtils.ts
@@ -18,7 +19,7 @@ const simpleHash = (str: string, max: number): number => {
 };
 
 export const generateAnonymousName = (userId: string | null | undefined): string => {
-  if (!userId || typeof userId !== 'string' || userId.trim() === '') {
+  if (!userId || typeof userId !== "string" || userId.trim() === "") {
     const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
     const randomAnimal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
     const randomNumber = Math.floor(Math.random() * 900) + 100;
