@@ -1,11 +1,12 @@
 
-import { onRequest } from "firebase-functions/v2/https";
+import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import { generateAnonymousName } from "./utils/pseudonymUtils";
+import {generateAnonymousName} from "./utils/pseudonymUtils";
 
 // Initialize Firebase Admin SDK.
-// When deployed to Firebase, the SDK automatically discovers service account credentials.
+// When deployed to Firebase, the SDK automatically discovers service account
+// credentials.
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
@@ -16,7 +17,7 @@ export const authAdmin = admin.auth();
 
 // Example Cloud Function (Keep this if you still use it)
 export const helloWorld = onRequest((request, response) => {
-  logger.info("Hello logs!", { structuredData: true });
+  logger.info("Hello logs!", {structuredData:true});
   response.send("Hello from Firebase!");
 });
 
