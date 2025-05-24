@@ -5,8 +5,35 @@
 // Ensure this is kept in sync if the main app's version changes,
 // or consider creating a shared local package if this becomes common.
 
-const COLORS = ["Aqua", "Azure", "Beige", "Black", "Blue", "Bronze", "Brown", "Coral", "Crimson", "Cyan", "Emerald", "Gold", "Golden", "Green", "Grey", "Indigo", "Ivory", "Jade", "Lavender", "Lime", "Magenta", "Maroon", "Mint", "Navy", "Olive", "Onyx", "Orange", "Orchid", "Pearl", "Pine", "Pink", "Plum", "Purple", "Red", "Rose", "Ruby", "Sable", "Salmon", "Sapphire", "Scarlet", "Silver", "Sky", "Slate", "Tan", "Teal", "Turquoise", "Verdant", "Violet", "White", "Yellow"];
-const ANIMALS = ["Alpaca", "Ant", "Ape", "Badger", "Bat", "Bear", "Bee", "Bison", "Boar", "Bobcat", "Bug", "Camel", "Cat", "Clam", "Cobra", "Cod", "Comet", "Condor", "Cougar", "Cow", "Coyote", "Crab", "Crane", "Crow", "Deer", "Dingo", "Dog", "Dolphin", "Dove", "Dragon", "Duck", "Eagle", "Eel", "Elk", "Emu", "Falcon", "Ferret", "Finch", "Fish", "Fly", "Fox", "Frog", "Gecko", "Glitch", "Gnu", "Goat", "Goose", "Griffin", "Gull", "Hamster", "Hare", "Hawk", "Hedgehog", "Heron", "Hornet", "Horse", "Hound", "Hyena", "Impala", "Jaguar", "Jay", "Kitten", "Koala", "Koi", "Krill", "Lemur", "Leopard", "Lion", "Lizard", "Llama", "Lobster", "Lynx", "Macaw", "Matrix", "Mole", "Monkey", "Moose", "Mouse", "Mule", "Newt", "Octopus", "Opossum", "Orca", "Ostrich", "Otter", "Owl", "Ox", "Panda", "Panther", "Parrot", "Pelican", "Penguin", "Pigeon", "Pixel", "Puma", "Puppy", "Python", "Quail", "Rabbit", "Raccoon", "Ram", "Rat", "Raven", "Rhino", "Robin", "Salmon", "Scorpion", "Seal", "Shark", "Sheep", "Skunk", "Sloth", "Snail", "Snake", "Sparrow", "Spider", "Squid", "Squirrel", "Starfish", "Stingray", "Stork", "Swan", "Tarpon", "Termite", "Tiger", "Toad", "Trout", "Turtle", "Vector", "Viper", "Vulture", "Walrus", "Wasp", "Weasel", "Whale", "Wolf", "Wombat", "Wren", "Yak", "Zebra"];
+const COLORS = [
+  "Aqua", "Azure", "Beige", "Black", "Blue", "Bronze", "Brown", "Coral",
+  "Crimson", "Cyan", "Emerald", "Gold", "Golden", "Green", "Grey",
+  "Indigo", "Ivory", "Jade", "Lavender", "Lime", "Magenta", "Maroon",
+  "Mint", "Navy", "Olive", "Onyx", "Orange", "Orchid", "Pearl", "Pine",
+  "Pink", "Plum", "Purple", "Red", "Rose", "Ruby", "Sable", "Salmon",
+  "Sapphire", "Scarlet", "Silver", "Sky", "Slate", "Tan", "Teal",
+  "Turquoise", "Verdant", "Violet", "White", "Yellow",
+];
+const ANIMALS = [
+  "Alpaca", "Ant", "Ape", "Badger", "Bat", "Bear", "Bee", "Bison", "Boar",
+  "Bobcat", "Bug", "Camel", "Cat", "Clam", "Cobra", "Cod", "Comet",
+  "Condor", "Cougar", "Cow", "Coyote", "Crab", "Crane", "Crow", "Deer",
+  "Dingo", "Dog", "Dolphin", "Dove", "Dragon", "Duck", "Eagle", "Eel",
+  "Elk", "Emu", "Falcon", "Ferret", "Finch", "Fish", "Fly", "Fox", "Frog",
+  "Gecko", "Glitch", "Gnu", "Goat", "Goose", "Griffin", "Gull", "Hamster",
+  "Hare", "Hawk", "Hedgehog", "Heron", "Hornet", "Horse", "Hound", "Hyena",
+  "Impala", "Jaguar", "Jay", "Kitten", "Koala", "Koi", "Krill", "Lemur",
+  "Leopard", "Lion", "Lizard", "Llama", "Lobster", "Lynx", "Macaw",
+  "Matrix", "Mole", "Monkey", "Moose", "Mouse", "Mule", "Newt", "Octopus",
+  "Opossum", "Orca", "Ostrich", "Otter", "Owl", "Ox", "Panda", "Panther",
+  "Parrot", "Pelican", "Penguin", "Pigeon", "Pixel", "Puma", "Puppy",
+  "Python", "Quail", "Rabbit", "Raccoon", "Ram", "Rat", "Raven", "Rhino",
+  "Robin", "Salmon", "Scorpion", "Seal", "Shark", "Sheep", "Skunk",
+  "Sloth", "Snail", "Snake", "Sparrow", "Spider", "Squid", "Squirrel",
+  "Starfish", "Stingray", "Stork", "Swan", "Tarpon", "Termite", "Tiger",
+  "Toad", "Trout", "Turtle", "Vector", "Viper", "Vulture", "Walrus",
+  "Wasp", "Weasel", "Whale", "Wolf", "Wombat", "Wren", "Yak", "Zebra",
+];
 
 const simpleHash = (str: string, max: number): number => {
   let hash = 0;
@@ -18,7 +45,9 @@ const simpleHash = (str: string, max: number): number => {
   return Math.abs(hash) % max;
 };
 
-export const generateAnonymousName = (userId: string | null | undefined): string => {
+export const generateAnonymousName = (
+  userId: string | null | undefined
+): string => {
   if (!userId || typeof userId !== "string" || userId.trim() === "") {
     const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
     const randomAnimal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
