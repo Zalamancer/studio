@@ -3,37 +3,43 @@
 import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import {dbAdmin, authAdmin} from "./admin"; // Use local admin import
-import {generateAnonymousName} from "./utils/pseudonymUtils";
+import {generateAnonymousName} from "./utils/pseudonymUtils"; // Ensure this is used
 
-// Initialize Firebase Admin SDK - This should ideally be done once.
-// If admin.apps.length is 0, it means it hasn't been initialized yet.
-// The check in admin.ts might handle this, but ensure it's robust.
-// For Cloud Functions, admin.initializeApp() without arguments works when deployed.
+// Initialize Firebase Admin SDK
+// This is done once per function instance.
 if (admin.apps.length === 0) {
   admin.initializeApp();
 }
 
+// Export Firestore and Auth admin instances
+// These are initialized with the global admin app instance.
+export const dbAdmin = admin.firestore();
+export const authAdmin = admin.auth();
+
 // ========== helloWorld Function ==========
-export const helloWorld = onRequest((request, response) => {
+// This is a simple example function, keep it for basic testing.
+export const helloWorld = onRequest((req, res) => {
   logger.info("Hello logs!", {structuredData: true});
-  response.send("Hello from Firebase!");
+  res.send("Hello from Firebase!");
 });
 
 
 // ========== createBotUser Function ==========
+// Creates a new bot user in Firebase Authentication and Firestore.
 export const createBotUser = onRequest(async (req, res) => {
   logger.info("createBotUser function called - V3 (ColorAnimalNumber names)");
 
   try {
+    // Generate random elements for email and password to ensure uniqueness
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const botEmail = `bot_${Date.now()}_${randomSuffix}@example.com`;
     const botPassword = `strongPassword${Date.now()}${randomSuffix}`;
 
+    // Create the Firebase Authentication user
     const userRecord = await authAdmin.createUser({
       email: botEmail,
       password: botPassword,
-      disabled: false,
+      disabled: false, // Ensure the bot account is enabled
     });
 
     const industries = [
@@ -43,20 +49,23 @@ export const createBotUser = onRequest(async (req, res) => {
     const randomIndustry = industries[
       Math.floor(Math.random() * industries.length)
     ];
-    // Generate the ColorAnimalNumber mentionName
+
+    // Generate the "ColorAnimalNumber" mentionName using the utility
     const generatedMentionName = generateAnonymousName(userRecord.uid);
 
+    // Define the user profile data to be stored in Firestore
+    // Only include essential fields for bots
     const userProfileData = {
       uid: userRecord.uid,
       email: botEmail,
-      mentionName: generatedMentionName, // Use the generated ColorAnimalNumber name
+      mentionName: generatedMentionName, // Use the ColorAnimalNumber name
       industry: randomIndustry,
       description: `This is an automated bot account for the ${randomIndustry} industry, known as ${generatedMentionName}.`,
       descriptionVisibility: "everyone" as const,
       tags: [], // Bots start with no specific tags
       established: String(
         new Date().getFullYear() - Math.floor(Math.random() * 10),
-      ),
+      ), // Random established year
       verified: true, // Bots can be marked as verified by the system
       isBotAccount: true,
       // Omitted fields: actualDisplayName, avatarUrl, companyName,
@@ -66,15 +75,16 @@ export const createBotUser = onRequest(async (req, res) => {
       lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
+    // Save the user profile data to Firestore
     await dbAdmin.collection("users").doc(userRecord.uid).set(userProfileData);
+
     logger.info(
-      `Bot user ${userRecord.uid} (${generatedMentionName})` +
-      " created successfully with lean profile and ColorAnimalNumber name."
+      `Bot user ${userRecord.uid} (${generatedMentionName}) created successfully with lean profile and ColorAnimalNumber name.`,
     );
 
-    // Corrected response message
+    // Send a success response
     res.status(200).send({
-      message: "Bot user created successfully!",
+      message: "Bot user created successfully!", // Corrected message
       userId: userRecord.uid,
       email: botEmail,
       mentionName: generatedMentionName,
@@ -89,13 +99,15 @@ export const createBotUser = onRequest(async (req, res) => {
 });
 
 // ========== createBotPost Function ==========
+// Creates a new post authored by a randomly selected bot user.
 export const createBotPost = onRequest(async (req, res) => {
   logger.info("createBotPost function called - V2");
   try {
+    // Fetch up to 50 bot users from Firestore
     const botUsersSnapshot = await dbAdmin
       .collection("users")
       .where("isBotAccount", "==", true)
-      .limit(50) // Consider how many bot users you might have
+      .limit(50)
       .get();
 
     if (botUsersSnapshot.empty) {
@@ -106,13 +118,16 @@ export const createBotPost = onRequest(async (req, res) => {
       return;
     }
 
+    // Map Firestore documents to user objects
     const botUsers = botUsersSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...(doc.data() as any), // Cast to any or define a BotUser type
     }));
 
+    // Select a random bot user
     const randomBot = botUsers[Math.floor(Math.random() * botUsers.length)];
 
+    // Ensure the selected bot is valid and has a mentionName
     if (!randomBot || !randomBot.id || !randomBot.mentionName) {
       logger.error(
         "Selected random bot is invalid or missing mentionName.", randomBot,
@@ -121,6 +136,7 @@ export const createBotPost = onRequest(async (req, res) => {
       return;
     }
 
+    // Sample data for creating posts
     const sampleQuestions = [
       "What are the best B2B lead generation strategies for 2024?",
       "How can AI be leveraged to improve supply chain efficiency?",
@@ -158,11 +174,10 @@ export const createBotPost = onRequest(async (req, res) => {
     ];
 
     const index = Math.floor(Math.random() * sampleQuestions.length);
-
-    // Use the bot's actual industry if available, otherwise default
     const postSector = randomBot.industry || "General Business";
     const botRating = Math.floor(Math.random() * 3) + 2; // 2-4 stars
 
+    // Data for the new post
     const newPostData = {
       userId: randomBot.id,
       question: sampleQuestions[index],
@@ -171,10 +186,10 @@ export const createBotPost = onRequest(async (req, res) => {
       sector: postSector,
       businessType: randomBot.industry || "Bot Industry",
       safetyIndicator: "Medium" as const,
-      ratingScore: botRating, // Use the calculated bot rating
+      ratingScore: botRating,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
-      imageUrls: [],
-      mentionedUserIds: [],
+      imageUrls: [], // Bots won't upload images for now
+      mentionedUserIds: [], // Bots won't mention users for now
       requestType: "post" as const,
       // Explicitly null for fields not used by 'post' type bots
       descriptionDetails: null,
@@ -182,11 +197,12 @@ export const createBotPost = onRequest(async (req, res) => {
       descriptionOutcome: null,
       maxBudget: null,
       deadline: null,
-      subSector: null, // Bots post to general sectors for now
+      subSector: null,
       industry: null,
-      naicsCode: null, // Can be refined later if bots need specific NAICS
+      naicsCode: null,
     };
 
+    // Add the new post to Firestore
     const postDocRef = await dbAdmin.collection("posts").add(newPostData);
 
     logger.info(
@@ -194,6 +210,7 @@ export const createBotPost = onRequest(async (req, res) => {
       `created a new post: ${postDocRef.id}`,
     );
 
+    // Send a success response
     res.status(200).send({
       message: "Bot post created successfully!",
       postId: postDocRef.id,
