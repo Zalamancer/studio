@@ -17,7 +17,7 @@ export const authAdmin = admin.auth();
 
 // Example Cloud Function (Keep this if you still use it)
 export const helloWorld = onRequest((request, response) => {
-  logger.info("Hello logs!", {structuredData:true});
+  logger.info("Hello logs!", {structuredData: true});
   response.send("Hello from Firebase!");
 });
 
@@ -67,9 +67,10 @@ export const createBotUser = onRequest(async (request, response) => {
       descriptionVisibility: "everyone" as const,
       tags: [],
       location: null,
+      // Random year in last 10 years
       established: String(
         new Date().getFullYear() - Math.floor(Math.random() * 10),
-      ), // Random year in last 10 years
+      ),
       contactEmail: null,
       contactPhone: null,
       verified: true, // Bots can be marked as verified for testing
