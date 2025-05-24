@@ -1,4 +1,5 @@
 
+// functions/src/index.ts
 import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 // import * as functions from "firebase-functions"; // Commented out if not used by helloWorld
@@ -16,7 +17,7 @@ export const authAdmin = admin.auth();
 
 // Example Cloud Function (Keep this for testing deployment)
 export const helloWorld = onRequest((request, response) => {
-  logger.info("Hello logs!", {structuredData:true});
+  logger.info("Hello logs!", {structuredData: true});
   response.send("Hello from Firebase!");
 });
 
@@ -234,5 +235,3 @@ export const helloWorld = onRequest((request, response) => {
 //     });
 //   }
 // });
-
-    
