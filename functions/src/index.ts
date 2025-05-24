@@ -2,7 +2,7 @@
 import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-// import {generateAnonymousName} from "./utils/pseudonymUtils"; // Temporarily commented out as it's unused
+// import {generateAnonymousName} from "./utils/pseudonymUtils"; // Temporarily unused
 
 // Initialize Firebase Admin SDK.
 // When deployed to Firebase, the SDK automatically discovers service account
@@ -32,6 +32,7 @@ export const createBotUser = onRequest(async (request, response) => {
     // Generate a random suffix for uniqueness
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const botEmail = `bot_${Date.now()}_${randomSuffix}@example.com`;
+    // Ensure password meets Firebase minimum requirements (at least 6 chars)
     const botPassword = `strongPassword${Date.now()}${randomSuffix}`;
 
     logger.info(
@@ -52,7 +53,8 @@ export const createBotUser = onRequest(async (request, response) => {
 
     // Generate profile data for Firestore
     // const newMentionName = generateAnonymousName(userRecord.uid);
-    const newMentionName = "BotMentionName" + randomSuffix; // Placeholder
+    // Placeholder for mentionName if generateAnonymousName is causing issues
+    const newMentionName = "BotMentionName" + randomSuffix;
     const industries = [
       "Tech", "Retail", "Healthcare", "Finance",
       "Manufacturing", "Education",
@@ -68,20 +70,18 @@ export const createBotUser = onRequest(async (request, response) => {
       companyName: `Bot Business ${randomSuffix}`,
       actualDisplayName: null, // Bots don't have a "real" name
       industry: randomIndustry,
-      avatarUrl: null, // Bots will use initials
-      // Shorter description for max-len
-      description: `Automated bot for ${randomIndustry}.`,
+      avatarUrl: null, // Bots will use initials by default
+      description: `This is an automated bot account for the ${randomIndustry} industry.`,
       descriptionVisibility: "everyone" as const,
       tags: [],
       location: null,
-      // Random year in last 10 years
-      established: String(
+      established: String( // Random year in last 10 years
         new Date().getFullYear() - Math.floor(Math.random() * 10),
       ),
       contactEmail: null,
       contactPhone: null,
-      verified: true, // Bots can be marked as verified for testing
-      isBotAccount: true, // Crucial flag
+      verified: true, // Bots can be marked as verified for testing purposes
+      isBotAccount: true, // Crucial flag to identify bot accounts
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -111,6 +111,7 @@ export const createBotUser = onRequest(async (request, response) => {
     logger.error("Error in createBotUser (Simplified):", error);
     response.status(500).send({
       error: "Failed in simplified createBotUser",
+      // Safely access error message
       details: (error as Error).message || "Unknown error",
     });
   }
@@ -136,9 +137,11 @@ export const createBotPost = onRequest(async (request, response) => {
       return;
     }
 
+    // Map to a more usable array of bot user data
     const botUsers = botUsersSnapshot.docs.map((doc) => (
       {id: doc.id, ...doc.data()}
     ));
+    // Select a random bot user
     const randomBot = botUsers[Math.floor(Math.random() * botUsers.length)];
 
     if (!randomBot || !randomBot.id) {
@@ -148,29 +151,29 @@ export const createBotPost = onRequest(async (request, response) => {
     }
 
     const sampleQuestions = [
-      "Best B2B lead gen strategies for 2024?", // Shorter for max-len
-      "How can AI improve supply chain efficiency?",
-      "Seeking collaborators for a new SaaS product in fintech.",
-      "Common pitfalls when scaling a remote team?",
-      "Insights on sustainable manufacturing practices?",
+      "What are the best B2B lead generation strategies for 2024?",
+      "How can AI be leveraged to improve supply chain efficiency?",
+      "Seeking collaborators for a new SaaS product in the fintech space.",
+      "What are common pitfalls when scaling a remote team globally?",
+      "Insights on sustainable manufacturing practices for SMEs?",
     ];
 
     const sampleDescriptions = [
-      "Exploring innovative ways to connect with clients...", // Shorter
-      "Developing an AI model to optimize logistics...", // Shorter
-      "This project aims to disrupt payment processing...", // Shorter
-      "Facing challenges with culture in a remote workforce...", // Shorter
-      "Goal: implement greener solutions in production...", // Shorter
+      "Exploring innovative ways to connect with potential B2B clients and drive growth.",
+      "Developing an AI-driven model to optimize logistics and reduce operational costs.",
+      "This project aims to disrupt traditional payment processing with a novel approach.",
+      "Facing challenges with maintaining company culture and productivity in a remote workforce.",
+      "Looking for partners to implement greener solutions in our production lines.",
     ];
     const sampleTags = [
-      ["Marketing", "Sales", "B2B"],
-      ["AI", "Logistics", "Supply Chain"],
-      ["Fintech", "SaaS", "Collaboration"],
-      ["Remote Work", "HR", "Management"],
-      ["Sustainability", "Manufacturing", "Innovation"],
+      ["Marketing", "Sales", "B2B", "Lead Generation"],
+      ["AI", "Logistics", "Supply Chain", "Optimization"],
+      ["Fintech", "SaaS", "Collaboration", "Payments"],
+      ["Remote Work", "HR", "Management", "Culture"],
+      ["Sustainability", "Manufacturing", "Green Tech", "Innovation"],
     ];
-    const sampleSectors = [
-      "Tech", "Logistics", "Finance", "HR", "Manufacturing",
+    const sampleSectors = [ // Assuming these are broad sector names
+      "Technology", "Logistics", "Finance", "Human Resources", "Manufacturing",
     ];
 
     const question = sampleQuestions[
@@ -192,13 +195,14 @@ export const createBotPost = onRequest(async (request, response) => {
       description: description,
       tags: tags,
       sector: sector,
+      // Assuming the bot's industry is stored in its profile
       businessType: randomBot.industry || "Bot Industry",
-      safetyIndicator: "Medium",
+      safetyIndicator: "Medium", // Example value
       ratingScore: 0, // Bots might not have a rating initially
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       imageUrls: [], // Bots won't upload images for now
-      mentionedUserIds: [],
-      requestType: "post" as const,
+      mentionedUserIds: [], // Bots won't mention users for now
+      requestType: "post" as const, // Explicitly a normal post
     };
 
     const postDocRef = await dbAdmin.collection("posts").add(newPostData);
