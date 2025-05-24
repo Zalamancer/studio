@@ -20,7 +20,7 @@ import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { ConnectionStatus, VisibilitySetting } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
-import { addReview, getReviewsForProfile, updateReview, deleteReview, getReviewsGivenByUserId } from '@/services/reviewService'; // Import getReviewsGivenByUserId
+import { addReview, getReviewsForProfile, updateReview, deleteReview, getReviewsGivenByUserId } from '@/services/reviewService';
 import type { ClientReview, NewReviewData, UpdateReviewData } from '@/types/review';
 import {
   AlertDialog,
@@ -34,16 +34,20 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from '@/components/ui/skeleton';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Import Tooltip
 
 const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
-  const emptyStars = totalStars - fullStars;
+  const emptyStars = totalStars - Math.ceil(rating); // Show empty for non-integer part too
+  const halfStar = !Number.isInteger(rating) && rating % 1 !== 0;
+
 
   return (
     <div className="flex items-center">
       {[...Array(fullStars)].map((_, i) => <Star key={`full-${i}`} className={cn(size, "text-yellow-400 fill-yellow-400")} />)}
+      {halfStar && <Star key="half" className={cn(size, "text-yellow-400")} style={{ clipPath: 'polygon(0 0, 50% 0, 50% 100%, 0% 100%)' }} />}
       {[...Array(emptyStars)].map((_, i) => <Star key={`empty-${i}`} className={cn(size, "text-gray-300")} />)}
     </div>
   );
@@ -61,27 +65,19 @@ const BusinessProfilePage = () => {
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [editingReview, setEditingReview] = useState<ClientReview | null>(null);
+  
+  const profileUserId = profileUserIdFromParams; // Use this consistently
 
   const isProfileIdActuallyValidUid = useMemo(() => {
-    if (!profileUserIdFromParams) return false;
-    const isValid = IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams);
-    console.log(`[BusinessProfilePage] isProfileIdValidUid for '${profileUserIdFromParams}': ${isValid}`);
-    return isValid;
-  }, [profileUserIdFromParams]);
+    if (!profileUserId) return false;
+    return IS_UID_REGEX_PROFILE_PAGE.test(profileUserId);
+  }, [profileUserId]);
 
-  const profileUserId = profileUserIdFromParams;
-
-  useEffect(() => {
-    const authStateString = currentUser ? `UID: ${currentUser.uid}` : 'No user authenticated';
-    console.log(`[BusinessProfilePage] Debug: profileUserId='${profileUserId}', isProfileIdActuallyValidUid=${isProfileIdActuallyValidUid}, currentUser (auth state): ${authStateString}`);
-  }, [profileUserId, isProfileIdActuallyValidUid, currentUser]);
 
   const { data: viewedUserProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileData | null, Error>({
     queryKey: ['fullUserProfile', profileUserId],
     queryFn: async () => {
-      console.log(`[BusinessProfilePage] queryFn for fullUserProfile: Fetching for targetUserId: '${profileUserId}'`);
-      if (!profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
-        console.warn(`[BusinessProfilePage] queryFn for fullUserProfile: Invalid profileUserId '${profileUserId}', returning null.`);
+      if (!profileUserId || !isProfileIdActuallyValidUid) {
         return null;
       }
       return fetchFullUserProfile(profileUserId);
@@ -89,28 +85,16 @@ const BusinessProfilePage = () => {
     enabled: !!profileUserId && isProfileIdActuallyValidUid,
   });
 
-  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
-  console.log(`%c[BusinessProfilePage] Pre-query for connectionStatus: profileUserId='${profileUserId}', currentUser.uid='${currentUser?.uid}', connectionStatusQueryEnabled=${connectionStatusQueryEnabled}, isProfileIdValidUid=${isProfileIdActuallyValidUid}`);
+  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && isProfileIdActuallyValidUid && currentUser.uid !== profileUserId;
   
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
-      console.log(`%c[BusinessProfilePage] Debug: Evaluating conditions for connectionStatus query.
-        currentUser?.uid: ${currentUser?.uid}
-        profileUserId: ${profileUserId}
-        IS_UID_REGEX_PROFILE_PAGE.test(profileUserId!): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}
-        currentUser?.uid !== profileUserId: ${currentUser?.uid !== profileUserId}
-      `, "color: orange;");
-
-      if (!currentUser?.uid || !profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) || currentUser.uid === profileUserId) {
-          console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions for fetch. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
-          return 'not_connected'; 
-      }
-      if (!IS_UID_REGEX_PROFILE_PAGE.test(profileUserId)) {
-           console.error(`[BusinessProfilePage] queryFn for connectionStatus: profileUserId '${profileUserId}' is invalid format. Aborting call to getConnectionStatus.`);
-           return 'not_connected';
-      }
-      return getConnectionStatus(currentUser.uid, profileUserId);
+       if (!currentUser?.uid || !profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) || currentUser.uid === profileUserId) {
+         console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
+         return 'not_connected';
+       }
+       return getConnectionStatus(currentUser.uid, profileUserId);
     },
     enabled: connectionStatusQueryEnabled,
   });
@@ -118,23 +102,13 @@ const BusinessProfilePage = () => {
   const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid;
   const { data: reviewsReceived = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'received'],
-    queryFn: () => {
-      console.log(`%c[BusinessProfilePage] getReviewsForProfile queryFn: Fetching for targetUserId: '${profileUserId}'. Auth UID: '${currentUser?.uid || 'NULL'}'`, "color: dodgerblue;");
-      if (!profileUserId || !isProfileIdActuallyValidUid ) {
-        console.warn(`[BusinessProfilePage] getReviewsForProfile queryFn: Invalid profileUserId '${profileUserId}' or not a valid UID format. Skipping fetch.`);
-        return Promise.resolve([]);
-      }
-      return getReviewsForProfile(profileUserId);
-    },
+    queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]),
     enabled: reviewsQueryEnabled,
   });
 
-  const { data: reviewsGiven = [], isLoading: isLoadingReviewsGiven, error: reviewsGivenError } = useQuery<ClientReview[], Error>({
+  const { data: reviewsGivenByThisProfile = [], isLoading: isLoadingReviewsGiven } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'given'],
-    queryFn: () => {
-      if (!profileUserId || !isProfileIdActuallyValidUid) return Promise.resolve([]);
-      return getReviewsGivenByUserId(profileUserId);
-    },
+    queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsGivenByUserId(profileUserId) : Promise.resolve([]),
     enabled: reviewsQueryEnabled,
   });
 
@@ -156,26 +130,46 @@ const BusinessProfilePage = () => {
     }
   }, [currentUserReview]);
 
-  const averageRatingReceived = useMemo(() => {
+  const weightedAverageRatingReceived = useMemo(() => {
     if (!reviewsReceived || reviewsReceived.length === 0) return 0;
-    const totalRating = reviewsReceived.reduce((sum, review) => sum + review.rating, 0);
-    return totalRating / reviewsReceived.length;
+    
+    let totalWeightedRating = 0;
+    let totalWeight = 0;
+
+    reviewsReceived.forEach(review => {
+      let weight = 1.0; // Default weight
+      if (review.reviewerHistoricalAvgRating !== null && review.reviewerHistoricalAvgRating !== undefined) {
+        if (review.reviewerHistoricalAvgRating < 2.5) {
+          weight = 0.7; // Historically harsh reviewer
+        } else if (review.reviewerHistoricalAvgRating >= 4.0) {
+          weight = 1.0; // Historically lenient/positive (could be > 1.0 if desired)
+        }
+        // Mid-range (2.5 to 3.99) keeps weight = 1.0
+      }
+      // If reviewerHistoricalAvgRating is null (no history), weight also remains 1.0
+
+      totalWeightedRating += review.rating * weight;
+      totalWeight += weight;
+    });
+
+    return totalWeight === 0 ? 0 : totalWeightedRating / totalWeight;
   }, [reviewsReceived]);
   const ratingReceivedCount = reviewsReceived.length;
 
-  const averageRatingGiven = useMemo(() => {
-    if (!reviewsGiven || reviewsGiven.length === 0) return 0;
-    const totalRating = reviewsGiven.reduce((sum, review) => sum + review.rating, 0);
-    return totalRating / reviewsGiven.length;
-  }, [reviewsGiven]);
-  const ratingGivenCount = reviewsGiven.length;
+
+  const averageRatingGivenByThisProfile = useMemo(() => {
+    if (!reviewsGivenByThisProfile || reviewsGivenByThisProfile.length === 0) return 0;
+    const totalRating = reviewsGivenByThisProfile.reduce((sum, review) => sum + review.rating, 0);
+    return totalRating / reviewsGivenByThisProfile.length;
+  }, [reviewsGivenByThisProfile]);
+  const ratingGivenCount = reviewsGivenByThisProfile.length;
 
 
   const addOrUpdateReviewMutation = useMutation({
     mutationFn: async (data: { rating: number; comment: string }) => {
       if (!currentUser || !profileUserId || !isProfileIdActuallyValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
       
-      const reviewerProfile = await fetchFullUserProfile(currentUser.uid); // Fetch full profile for current user
+      const reviewerProfile = await fetchFullUserProfile(currentUser.uid);
       const reviewerMentionNameToUse = reviewerProfile?.mentionName || generateAnonymousName(currentUser.uid);
 
       if (editingReview) {
@@ -187,7 +181,7 @@ const BusinessProfilePage = () => {
           targetUserId: profileUserId,
           reviewerId: currentUser.uid,
           reviewerName: reviewerMentionNameToUse, 
-          reviewerAvatar: reviewerProfile?.avatarUrl || undefined, 
+          reviewerAvatar: reviewerProfile?.avatarUrl || null, 
           rating: data.rating,
           comment: data.comment,
         };
@@ -229,7 +223,7 @@ const BusinessProfilePage = () => {
   const handleDeleteReview = (reviewId: string) => {
     deleteReviewMutation.mutate(reviewId);
   };
-
+  
   if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
@@ -244,9 +238,10 @@ const BusinessProfilePage = () => {
     );
   }
 
+
   if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdActuallyValidUid)) {
      return (
-      <div className="w-full"> {/* Changed to w-full to allow Card to use container internally */}
+      <div className="w-full">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border container mx-auto max-w-4xl">
            <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
              <div className="flex flex-col md:flex-row items-start md:items-center gap-4 animate-pulse">
@@ -299,16 +294,10 @@ const BusinessProfilePage = () => {
 
   const isOwnProfile = currentUser?.uid === viewedUserProfileData.uid;
   const generatedNameForProfile = generateAnonymousName(viewedUserProfileData.uid);
+  const headerDisplayNameForTitle = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
+  const headerDisplayNameForAvatar = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
+  const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerDisplayNameForTitle;
   
-  // Determine the primary name for the header
-  const headerMainName = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
-
-  // Name to show next to the avatar (initials generation)
-  const headerDisplayNameForAvatar = viewedUserProfileData.mentionName || generatedNameForProfile;
-
-  // Name for "About" section and potentially for ConnectionButton if company name is hidden
-  const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerMainName;
-
   let nameForConnectionButton: string;
   if (viewedUserProfileData.companyName) {
     nameForConnectionButton = viewedUserProfileData.companyName;
@@ -328,248 +317,267 @@ const BusinessProfilePage = () => {
   const displayEstablished = viewedUserProfileData.established || "Year not set";
   
   return (
-    <div className="w-full"> {/* Changed from container to w-full */}
-      <Card className="overflow-hidden shadow-lg rounded-lg border-border container mx-auto max-w-4xl"> {/* Card now acts as container */}
-        <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
-          <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
-            <Avatar className="h-20 w-20 border-2 border-primary">
-              <AvatarImage src={headerAvatarUrl} alt={headerDisplayNameForAvatar} />
-              <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                {getInitials(headerDisplayNameForAvatar)}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-grow text-center md:text-left">
-              <CardTitle className="text-3xl font-bold text-foreground">
-                 {headerMainName}
-              </CardTitle>
-              <div className="flex items-center justify-center md:justify-start gap-2 mt-1 flex-wrap">
-                {viewedUserProfileData.industry && (
+    <TooltipProvider>
+      <div className="w-full">
+        <Card className="overflow-hidden shadow-lg rounded-lg border-border container mx-auto max-w-4xl">
+          <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
+            <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
+              <Avatar className="h-20 w-20 border-2 border-primary">
+                <AvatarImage src={headerAvatarUrl} alt={headerDisplayNameForAvatar} />
+                <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
+                  {getInitials(headerDisplayNameForAvatar)}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-grow text-center md:text-left">
+                <CardTitle className="text-3xl font-bold text-foreground">
+                   {headerDisplayNameForTitle}
+                </CardTitle>
+                <div className="flex items-center justify-center md:justify-start gap-x-3 gap-y-1 mt-1 flex-wrap">
+                  {viewedUserProfileData.mentionName && (
+                       <span className="text-muted-foreground text-sm flex items-center gap-1">
+                          <AtSign className="h-4 w-4" /> {viewedUserProfileData.mentionName}
+                       </span>
+                  )}
+                  {viewedUserProfileData.industry && (
+                      <span className="text-muted-foreground text-sm flex items-center gap-1">
+                          <Briefcase className="h-4 w-4" /> {headerIndustry}
+                      </span>
+                  )}
+                  {viewedUserProfileData.established && (
                     <span className="text-muted-foreground text-sm flex items-center gap-1">
-                        <Briefcase className="h-4 w-4" /> {headerIndustry}
+                      <CalendarDays className="h-4 w-4" /> Established: {displayEstablished}
                     </span>
-                )}
-                {viewedUserProfileData.established && (
-                  <span className="text-muted-foreground text-sm flex items-center gap-1">
-                    <CalendarDays className="h-4 w-4" /> Established: {displayEstablished}
-                  </span>
-                )}
-                {viewedUserProfileData.mentionName && (
-                     <span className="text-muted-foreground text-sm flex items-center gap-1">
-                        <AtSign className="h-4 w-4" /> {viewedUserProfileData.mentionName}
-                     </span>
-                )}
-               {viewedUserProfileData.verified && (
-                  <span className="mt-1 inline-flex items-center gap-1 text-green-600 text-sm">
-                      <CheckCircle className="h-4 w-4" /> Verified
-                  </span>
-               )}
-              </div>
-               <div className="mt-2 flex flex-wrap gap-2 justify-center md:justify-start">
-                  {(viewedUserProfileData.tags || []).map((tag) => (
-                    <Badge key={tag} variant="secondary">{tag}</Badge>
-                  ))}
-                </div>
-            </div>
-            <div className="flex flex-col items-center md:items-end gap-2 ml-auto mt-4 md:mt-0 w-full md:w-auto">
-                 {(averageRatingReceived > 0 || ratingReceivedCount > 0 || isOwnProfile) && (
-                     <div className="text-center md:text-right mb-2">
-                        <p className="text-sm text-muted-foreground">Average Rating Received</p>
-                        <div className="flex items-center gap-1 justify-center md:justify-end">
-                            <StarDisplay rating={averageRatingReceived} size="h-5 w-5" />
-                            <span className="text-lg font-semibold text-primary ml-1">
-                                {averageRatingReceived.toFixed(1)}
-                            </span>
-                            <span className="text-xs text-muted-foreground ml-0.5">({ratingReceivedCount} ratings)</span>
-                        </div>
-                     </div>
                   )}
-                  {(averageRatingGiven > 0 || ratingGivenCount > 0 || isOwnProfile) && (
-                     <div className="text-center md:text-right">
-                        <p className="text-sm text-muted-foreground">Average Rating Given</p>
-                        <div className="flex items-center gap-1 justify-center md:justify-end">
-                            <StarDisplay rating={averageRatingGiven} size="h-4 w-4" /> {/* Slightly smaller for differentiation */}
-                            <span className="text-md font-semibold text-primary/80 ml-1">
-                                {averageRatingGiven.toFixed(1)}
-                            </span>
-                             <span className="text-xs text-muted-foreground ml-0.5">({ratingGivenCount} reviews)</span>
-                        </div>
-                     </div>
-                  )}
-                 {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
-                    <ConnectionButton
-                      targetUserId={profileUserId}
-                      targetUserName={nameForConnectionButton}
-                      size="default"
-                      className="mt-2 w-full md:w-auto"
-                    />
+                 {viewedUserProfileData.verified && (
+                    <span className="inline-flex items-center gap-1 text-green-600 text-sm">
+                        <CheckCircle className="h-4 w-4" /> Verified
+                    </span>
                  )}
-                 {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
-                     <Button disabled size="default" className="mt-2 w-full md:w-auto">
-                         <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
-                     </Button>
-                 )}
-                 {statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
-                     <p className="text-xs text-destructive mt-2 text-right">Error loading connection status</p>
-                 )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-6 grid gap-6">
-          <div>
-             <h3 className="text-lg font-semibold text-foreground mb-2">About {displayCompanyNameForAboutHeading}</h3>
-             <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">
-               {displayDescription}
-             </p>
-          </div>
-
-          {currentUser && !isOwnProfile && isProfileIdActuallyValidUid && (
-            <>
-              <Separator />
-              <div>
-                <h3 className="text-lg font-semibold text-foreground mb-3">
-                  {editingReview ? "Update Your Review" : "Rate this Business"}
-                </h3>
-                <div className="flex items-center gap-2 mb-3">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <Star
-                      key={star}
-                      className={cn(
-                        "h-7 w-7 cursor-pointer transition-colors",
-                        (hoverRating || userRating) >= star ? "text-yellow-400 fill-yellow-400" : "text-gray-300 hover:text-yellow-300"
-                      )}
-                      onMouseEnter={() => setHoverRating(star)}
-                      onMouseLeave={() => setHoverRating(0)}
-                      onClick={() => setUserRating(star)}
-                    />
-                  ))}
                 </div>
-                <div className="space-y-2 mb-4">
-                    <Label htmlFor="reviewComment" className="text-sm font-medium">Add a comment (optional)</Label>
-                    <Textarea
-                        id="reviewComment"
-                        placeholder="Share your experience with this business..."
-                        value={reviewComment}
-                        onChange={(e) => setReviewComment(e.target.value)}
-                        rows={3}
-                        className="resize-y"
-                        disabled={addOrUpdateReviewMutation.isPending}
-                    />
-                </div>
-                <Button
-                  onClick={handleRateProfileSubmit}
-                  size="sm"
-                  disabled={userRating === 0 || addOrUpdateReviewMutation.isPending}
-                >
-                   {addOrUpdateReviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                   {editingReview ? "Update Review" : "Submit Review"}
-                </Button>
-              </div>
-            </>
-          )}
-
-          <Separator />
-
-          <div>
-            <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-                <MessageSquare className="h-5 w-5 text-primary" /> Customer Reviews ({ratingReceivedCount})
-            </h3>
-            {isLoadingReviews ? (
-                 <div className="flex justify-center items-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
-            ) : reviewsError ? (
-                <p className="text-sm text-destructive text-center py-4">Error loading reviews: {reviewsError.message}</p>
-            ) : reviewsReceived.length > 0 ? (
-                <div className="space-y-6">
-                    {reviewsReceived.map((review) => (
-                        <Card key={review.id} className="bg-muted/50 p-4 shadow-sm border-border">
-                           <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
-                                <div className="flex items-center gap-3">
-                                    <Avatar className="h-9 w-9">
-                                        <AvatarImage src={review.reviewerAvatar || undefined} alt={review.reviewerName} />
-                                        <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
-                                            {getInitials(review.reviewerName)}
-                                        </AvatarFallback>
-                                    </Avatar>
-                                    <div>
-                                        <p className="text-sm font-medium text-foreground">{review.reviewerName}</p>
-                                        <p className="text-xs text-muted-foreground">{new Date(review.createdAt).toLocaleDateString()}</p>
-                                    </div>
-                                </div>
-                                <StarDisplay rating={review.rating} size="h-4 w-4" />
-                           </CardHeader>
-                           <CardContent className="p-0 pt-2">
-                                <p className="text-sm text-muted-foreground leading-relaxed">{review.comment}</p>
-                           </CardContent>
-                           {currentUser?.uid === review.reviewerId && (
-                               <CardFooter className="p-0 pt-3 flex justify-end gap-2">
-                                   <AlertDialog>
-                                       <AlertDialogTrigger asChild>
-                                           <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>
-                                               {deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : <Trash2 className="h-3 w-3 mr-1"/>}
-                                               Delete
-                                           </Button>
-                                       </AlertDialogTrigger>
-                                       <AlertDialogContent>
-                                           <AlertDialogHeader>
-                                               <AlertDialogTitle>Delete Your Review?</AlertDialogTitle>
-                                               <AlertDialogDescription>
-                                                   Are you sure you want to delete your review? This action cannot be undone.
-                                               </AlertDialogDescription>
-                                           </AlertDialogHeader>
-                                           <AlertDialogFooter>
-                                               <AlertDialogCancel disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>Cancel</AlertDialogCancel>
-                                               <AlertDialogAction onClick={() => handleDeleteReview(review.id)} className="bg-destructive hover:bg-destructive/90" disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>
-                                                   {deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
-                                                   Delete
-                                               </AlertDialogAction>
-                                           </AlertDialogFooter>
-                                       </AlertDialogContent>
-                                   </AlertDialog>
-                               </CardFooter>
-                           )}
-                        </Card>
+                 <div className="mt-2 flex flex-wrap gap-2 justify-center md:justify-start">
+                    {(viewedUserProfileData.tags || []).map((tag) => (
+                      <Badge key={tag} variant="secondary">{tag}</Badge>
                     ))}
-                </div>
-            ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                    No reviews yet for this business.
-                </p>
-            )}
-          </div>
-
-           <Separator />
-
-           <div>
-              <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {displayCompanyNameForAboutHeading}</h3>
-              {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (isOwnProfile || connectionStatus === 'connected' ) ? (
-                  <ProfilePostsSection userId={profileUserId} />
-              ) : isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
-                  <div className="flex items-center justify-center p-6">
-                      <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
-                      <p className="text-muted-foreground">Checking connection status...</p>
                   </div>
-              ) : statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
-                   <div className="flex items-center justify-center p-6 text-destructive gap-2 border rounded-lg bg-destructive/10">
-                      <AlertTriangle className="h-5 w-5" />
-                      <p>Could not load connection status for posts.</p>
-                   </div>
-              ) : profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
-                  <div className="text-center p-6 border rounded-lg bg-muted/50">
-                     <Info className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
-                     <p className="text-muted-foreground font-medium">
-                        {isOwnProfile ? "You haven't posted anything yet." : `Connect with ${displayCompanyNameForAboutHeading} to view their posts.`}
-                     </p>
-                     {!isOwnProfile && <p className="text-xs text-muted-foreground mt-1">Posts by this user are only visible to connected businesses or the business owner.</p>}
+              </div>
+              <div className="flex flex-col items-center md:items-end gap-2 ml-auto mt-4 md:mt-0 w-full md:w-auto">
+                   {(weightedAverageRatingReceived > 0 || ratingReceivedCount > 0 || isOwnProfile) && (
+                       <div className="text-center md:text-right mb-1">
+                          <div className="flex items-center gap-1.5">
+                            <p className="text-sm text-muted-foreground">Avg. Rating Received</p>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground">
+                                  <Info className="h-3.5 w-3.5" />
+                                </Button>
+                              </TooltipTrigger>
+                              <TooltipContent className="max-w-xs text-xs p-2">
+                                This is a weighted average score, considering the typical rating behavior of reviewers to provide a more balanced perspective.
+                              </TooltipContent>
+                            </Tooltip>
+                          </div>
+                          <div className="flex items-center gap-1 justify-center md:justify-end">
+                              <StarDisplay rating={weightedAverageRatingReceived} size="h-5 w-5" />
+                              <span className="text-lg font-semibold text-primary ml-1">
+                                  {weightedAverageRatingReceived.toFixed(1)}
+                              </span>
+                              <span className="text-xs text-muted-foreground ml-0.5">({ratingReceivedCount} ratings)</span>
+                          </div>
+                       </div>
+                    )}
+                    {(averageRatingGivenByThisProfile > 0 || ratingGivenCount > 0 || isOwnProfile) && (
+                       <div className="text-center md:text-right">
+                          <p className="text-sm text-muted-foreground">Avg. Rating Given to Others</p>
+                          <div className="flex items-center gap-1 justify-center md:justify-end">
+                              <StarDisplay rating={averageRatingGivenByThisProfile} size="h-4 w-4" />
+                              <span className="text-md font-semibold text-primary/80 ml-1">
+                                  {averageRatingGivenByThisProfile.toFixed(1)}
+                              </span>
+                               <span className="text-xs text-muted-foreground ml-0.5">({ratingGivenCount} reviews)</span>
+                          </div>
+                       </div>
+                    )}
+                   {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
+                      <ConnectionButton
+                        targetUserId={profileUserId}
+                        targetUserName={nameForConnectionButton}
+                        size="default"
+                        className="mt-2 w-full md:w-auto"
+                      />
+                   )}
+                   {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
+                       <Button disabled size="default" className="mt-2 w-full md:w-auto">
+                           <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
+                       </Button>
+                   )}
+                   {statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
+                       <p className="text-xs text-destructive mt-2 text-right">Error loading connection status</p>
+                   )}
+              </div>
+            </div>
+          </CardHeader>
+          <CardContent className="p-6 grid gap-6">
+            <div>
+               <h3 className="text-lg font-semibold text-foreground mb-2">About {displayCompanyNameForAboutHeading}</h3>
+               <p className="text-muted-foreground text-sm leading-relaxed whitespace-pre-wrap">
+                 {displayDescription}
+               </p>
+            </div>
+
+            {currentUser && !isOwnProfile && isProfileIdActuallyValidUid && (
+              <>
+                <Separator />
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-3">
+                    {editingReview ? "Update Your Review" : "Rate this Business"}
+                  </h3>
+                  <div className="flex items-center gap-2 mb-3">
+                    {[1, 2, 3, 4, 5].map((star) => (
+                      <Star
+                        key={star}
+                        className={cn(
+                          "h-7 w-7 cursor-pointer transition-colors",
+                          (hoverRating || userRating) >= star ? "text-yellow-400 fill-yellow-400" : "text-gray-300 hover:text-yellow-300"
+                        )}
+                        onMouseEnter={() => setHoverRating(star)}
+                        onMouseLeave={() => setHoverRating(0)}
+                        onClick={() => setUserRating(star)}
+                      />
+                    ))}
+                  </div>
+                  <div className="space-y-2 mb-4">
+                      <Label htmlFor="reviewComment" className="text-sm font-medium">Add a comment (optional)</Label>
+                      <Textarea
+                          id="reviewComment"
+                          placeholder="Share your experience with this business..."
+                          value={reviewComment}
+                          onChange={(e) => setReviewComment(e.target.value)}
+                          rows={3}
+                          className="resize-y"
+                          disabled={addOrUpdateReviewMutation.isPending}
+                      />
+                  </div>
+                  <Button
+                    onClick={handleRateProfileSubmit}
+                    size="sm"
+                    disabled={userRating === 0 || addOrUpdateReviewMutation.isPending}
+                  >
+                     {addOrUpdateReviewMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                     {editingReview ? "Update Review" : "Submit Review"}
+                  </Button>
+                </div>
+              </>
+            )}
+
+            <Separator />
+
+            <div>
+              <h3 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
+                  <MessageSquare className="h-5 w-5 text-primary" /> Reviews Received ({ratingReceivedCount})
+              </h3>
+              {isLoadingReviews ? (
+                   <div className="flex justify-center items-center py-8"><Loader2 className="h-6 w-6 animate-spin text-primary" /></div>
+              ) : reviewsError ? (
+                  <p className="text-sm text-destructive text-center py-4">Error loading reviews: {reviewsError.message}</p>
+              ) : reviewsReceived.length > 0 ? (
+                  <div className="space-y-6">
+                      {reviewsReceived.map((review) => (
+                          <Card key={review.id} className="bg-muted/50 p-4 shadow-sm border-border">
+                             <CardHeader className="p-0 pb-2 flex flex-row justify-between items-start">
+                                  <div className="flex items-center gap-3">
+                                      <Avatar className="h-9 w-9">
+                                          <AvatarImage src={review.reviewerAvatar || undefined} alt={review.reviewerName} />
+                                          <AvatarFallback className="bg-secondary text-secondary-foreground text-xs">
+                                              {getInitials(review.reviewerName)}
+                                          </AvatarFallback>
+                                      </Avatar>
+                                      <div>
+                                          <p className="text-sm font-medium text-foreground">{review.reviewerName}</p>
+                                          <p className="text-xs text-muted-foreground">{new Date(review.createdAt).toLocaleDateString()}</p>
+                                      </div>
+                                  </div>
+                                  <StarDisplay rating={review.rating} size="h-4 w-4" />
+                             </CardHeader>
+                             <CardContent className="p-0 pt-2">
+                                  <p className="text-sm text-muted-foreground leading-relaxed">{review.comment}</p>
+                                  {review.reviewerHistoricalAvgRating !== null && review.reviewerHistoricalAvgRating !== undefined && (
+                                      <p className="text-xs text-muted-foreground/70 mt-1.5 italic">
+                                          (Reviewer's avg. rating given at time of review: {review.reviewerHistoricalAvgRating.toFixed(1)})
+                                      </p>
+                                  )}
+                             </CardContent>
+                             {currentUser?.uid === review.reviewerId && (
+                                 <CardFooter className="p-0 pt-3 flex justify-end gap-2">
+                                     <AlertDialog>
+                                         <AlertDialogTrigger asChild>
+                                             <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>
+                                                 {deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : <Trash2 className="h-3 w-3 mr-1"/>}
+                                                 Delete
+                                             </Button>
+                                         </AlertDialogTrigger>
+                                         <AlertDialogContent>
+                                             <AlertDialogHeader>
+                                                 <AlertDialogTitle>Delete Your Review?</AlertDialogTitle>
+                                                 <AlertDialogDescription>
+                                                     Are you sure you want to delete your review? This action cannot be undone.
+                                                 </AlertDialogDescription>
+                                             </AlertDialogHeader>
+                                             <AlertDialogFooter>
+                                                 <AlertDialogCancel disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>Cancel</AlertDialogCancel>
+                                                 <AlertDialogAction onClick={() => handleDeleteReview(review.id)} className="bg-destructive hover:bg-destructive/90" disabled={deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id}>
+                                                     {deleteReviewMutation.isPending && deleteReviewMutation.variables === review.id ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                                                     Delete
+                                                 </AlertDialogAction>
+                                             </AlertDialogFooter>
+                                         </AlertDialogContent>
+                                     </AlertDialog>
+                                 </CardFooter>
+                             )}
+                          </Card>
+                      ))}
                   </div>
               ) : (
-                 <div className="text-center p-6 border rounded-lg bg-destructive/10">
-                     <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-3" />
-                     <p className="text-destructive-foreground font-medium">Cannot display posts due to invalid profile identifier or other error.</p>
-                  </div>
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                      No reviews yet for this business.
+                  </p>
               )}
-           </div>
-        </CardContent>
-      </Card>
-    </div>
+            </div>
+
+             <Separator />
+
+             <div>
+                <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {displayCompanyNameForAboutHeading}</h3>
+                {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (isOwnProfile || connectionStatus === 'connected' ) ? (
+                    <ProfilePostsSection userId={profileUserId} />
+                ) : isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
+                    <div className="flex items-center justify-center p-6">
+                        <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
+                        <p className="text-muted-foreground">Checking connection status...</p>
+                    </div>
+                ) : statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
+                     <div className="flex items-center justify-center p-6 text-destructive gap-2 border rounded-lg bg-destructive/10">
+                        <AlertTriangle className="h-5 w-5" />
+                        <p>Could not load connection status for posts.</p>
+                     </div>
+                ) : profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
+                    <div className="text-center p-6 border rounded-lg bg-muted/50">
+                       <Info className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
+                       <p className="text-muted-foreground font-medium">
+                          {isOwnProfile ? "You haven't posted anything yet." : `Connect with ${displayCompanyNameForAboutHeading} to view their posts.`}
+                       </p>
+                       {!isOwnProfile && <p className="text-xs text-muted-foreground mt-1">Posts by this user are only visible to connected businesses or the business owner.</p>}
+                    </div>
+                ) : (
+                   <div className="text-center p-6 border rounded-lg bg-destructive/10">
+                       <AlertTriangle className="h-8 w-8 text-destructive mx-auto mb-3" />
+                       <p className="text-destructive-foreground font-medium">Cannot display posts due to invalid profile identifier or other error.</p>
+                    </div>
+                )}
+             </div>
+          </CardContent>
+        </Card>
+      </div>
+    </TooltipProvider>
   );
 };
 
