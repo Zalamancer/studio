@@ -1,7 +1,7 @@
 // src/app/profile/[userId]/page.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -34,15 +34,14 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Skeleton } from '@/components/ui/skeleton';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"; // Import Tooltip
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 const IS_UID_REGEX_PROFILE_PAGE = /^[a-zA-Z0-9]{20,}$/;
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
-  const emptyStars = totalStars - Math.ceil(rating); // Show empty for non-integer part too
+  const emptyStars = totalStars - Math.ceil(rating);
   const halfStar = !Number.isInteger(rating) && rating % 1 !== 0;
-
 
   return (
     <div className="flex items-center">
@@ -65,8 +64,8 @@ const BusinessProfilePage = () => {
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [editingReview, setEditingReview] = useState<ClientReview | null>(null);
-  
-  const profileUserId = profileUserIdFromParams; // Use this consistently
+
+  const profileUserId = profileUserIdFromParams;
 
   const isProfileIdActuallyValidUid = useMemo(() => {
     if (!profileUserId) return false;
@@ -78,15 +77,17 @@ const BusinessProfilePage = () => {
     queryKey: ['fullUserProfile', profileUserId],
     queryFn: async () => {
       if (!profileUserId || !isProfileIdActuallyValidUid) {
+        console.warn(`[BusinessProfilePage] fetchFullUserProfile queryFn: Invalid profileUserId '${profileUserId}', or isProfileIdActuallyValidUid is false. Aborting fetch.`);
         return null;
       }
+      console.log(`[BusinessProfilePage] fetchFullUserProfile queryFn: Fetching for profileUserId '${profileUserId}'`);
       return fetchFullUserProfile(profileUserId);
     },
     enabled: !!profileUserId && isProfileIdActuallyValidUid,
   });
 
-  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && isProfileIdActuallyValidUid && currentUser.uid !== profileUserId;
-  
+  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
+
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
@@ -94,6 +95,7 @@ const BusinessProfilePage = () => {
          console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
          return 'not_connected';
        }
+       console.log(`[BusinessProfilePage] Querying connection status between ${currentUser.uid} and ${profileUserId}`);
        return getConnectionStatus(currentUser.uid, profileUserId);
     },
     enabled: connectionStatusQueryEnabled,
@@ -102,7 +104,10 @@ const BusinessProfilePage = () => {
   const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid;
   const { data: reviewsReceived = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'received'],
-    queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]),
+    queryFn: () => {
+        console.log(`%c[BusinessProfilePage] getReviewsForProfile queryFn: Fetching for profileUserId '${profileUserId}'`, "color: dodgerblue;");
+        return (profileUserId && isProfileIdActuallyValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]);
+    },
     enabled: reviewsQueryEnabled,
   });
 
@@ -111,7 +116,6 @@ const BusinessProfilePage = () => {
     queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsGivenByUserId(profileUserId) : Promise.resolve([]),
     enabled: reviewsQueryEnabled,
   });
-
 
   const currentUserReview = useMemo(() => {
     if (!currentUser) return null;
@@ -131,31 +135,41 @@ const BusinessProfilePage = () => {
   }, [currentUserReview]);
 
   const weightedAverageRatingReceived = useMemo(() => {
+    console.log(`%c[BusinessProfilePage] Calculating weightedAverageRatingReceived. Found ${reviewsReceived.length} reviews.`, "color: darkorange; font-weight: bold;");
     if (!reviewsReceived || reviewsReceived.length === 0) return 0;
-    
+
     let totalWeightedRating = 0;
     let totalWeight = 0;
 
-    reviewsReceived.forEach(review => {
-      let weight = 1.0; // Default weight
-      if (review.reviewerHistoricalAvgRating !== null && review.reviewerHistoricalAvgRating !== undefined) {
-        if (review.reviewerHistoricalAvgRating < 2.5) {
-          weight = 0.7; // Historically harsh reviewer
-        } else if (review.reviewerHistoricalAvgRating >= 4.0) {
-          weight = 1.0; // Historically lenient/positive (could be > 1.0 if desired)
-        }
-        // Mid-range (2.5 to 3.99) keeps weight = 1.0
-      }
-      // If reviewerHistoricalAvgRating is null (no history), weight also remains 1.0
+    reviewsReceived.forEach((review, index) => {
+      let weight = 1.0; // Neutral weight for "normal" reviewers or if historical is between 2.5 and 3.99
 
+      if (review.reviewerHistoricalAvgRating === null) { // No history for reviewer at time of this review
+        weight = 0.9; // Slightly less weight for new reviewers' opinions
+      } else if (typeof review.reviewerHistoricalAvgRating === 'number') {
+        if (review.reviewerHistoricalAvgRating < 2.5) {
+          weight = 0.6; // Historically harsh reviewer, less weight
+        } else if (review.reviewerHistoricalAvgRating >= 4.0) {
+          weight = 1.1; // Historically lenient reviewer, slightly more weight
+        }
+        // If 2.5 <= reviewerHistoricalAvgRating < 4.0, weight remains 1.0 (neutral)
+      }
+      console.log(`%c  Review ${index + 1}: Rating=${review.rating}, ReviewerHistAvg=${review.reviewerHistoricalAvgRating}, AssignedWeight=${weight.toFixed(1)}`, "color: darkorange;");
       totalWeightedRating += review.rating * weight;
       totalWeight += weight;
     });
 
-    return totalWeight === 0 ? 0 : totalWeightedRating / totalWeight;
-  }, [reviewsReceived]);
-  const ratingReceivedCount = reviewsReceived.length;
+    if (totalWeight === 0) {
+      console.log(`%c  TotalWeight is 0, returning 0.`, "color: darkorange;");
+      return 0;
+    }
 
+    const average = totalWeightedRating / totalWeight;
+    console.log(`%c  Final: TotalWeightedRating=${totalWeightedRating.toFixed(2)}, TotalWeight=${totalWeight.toFixed(2)}, WeightedAverage=${average.toFixed(2)}`, "color: darkorange; font-weight: bold;");
+    return average;
+  }, [reviewsReceived]);
+
+  const ratingReceivedCount = reviewsReceived.length;
 
   const averageRatingGivenByThisProfile = useMemo(() => {
     if (!reviewsGivenByThisProfile || reviewsGivenByThisProfile.length === 0) return 0;
@@ -164,13 +178,11 @@ const BusinessProfilePage = () => {
   }, [reviewsGivenByThisProfile]);
   const ratingGivenCount = reviewsGivenByThisProfile.length;
 
-
   const addOrUpdateReviewMutation = useMutation({
     mutationFn: async (data: { rating: number; comment: string }) => {
       if (!currentUser || !profileUserId || !isProfileIdActuallyValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
-      
-      const reviewerProfile = await fetchFullUserProfile(currentUser.uid);
-      const reviewerMentionNameToUse = reviewerProfile?.mentionName || generateAnonymousName(currentUser.uid);
+
+      const reviewerProfile = await fetchFullUserProfile(currentUser.uid); // Fetch full profile to get mentionName
 
       if (editingReview) {
         const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
@@ -180,10 +192,11 @@ const BusinessProfilePage = () => {
         const newReviewData: NewReviewData = {
           targetUserId: profileUserId,
           reviewerId: currentUser.uid,
-          reviewerName: reviewerMentionNameToUse, 
-          reviewerAvatar: reviewerProfile?.avatarUrl || null, 
+          reviewerName: reviewerProfile?.mentionName || generateAnonymousName(currentUser.uid),
+          reviewerAvatar: reviewerProfile?.avatarUrl || null,
           rating: data.rating,
           comment: data.comment,
+          // reviewerHistoricalAvgRating is calculated and added by the addReview service
         };
         await addReview(newReviewData);
         return "Review submitted successfully!";
@@ -223,7 +236,7 @@ const BusinessProfilePage = () => {
   const handleDeleteReview = (reviewId: string) => {
     deleteReviewMutation.mutate(reviewId);
   };
-  
+
   if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
@@ -237,7 +250,6 @@ const BusinessProfilePage = () => {
       </div>
     );
   }
-
 
   if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdActuallyValidUid)) {
      return (
@@ -296,8 +308,9 @@ const BusinessProfilePage = () => {
   const generatedNameForProfile = generateAnonymousName(viewedUserProfileData.uid);
   const headerDisplayNameForTitle = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
   const headerDisplayNameForAvatar = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
-  const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerDisplayNameForTitle;
-  
+
+  const displayCompanyNameForAboutHeading = headerDisplayNameForTitle;
+
   let nameForConnectionButton: string;
   if (viewedUserProfileData.companyName) {
     nameForConnectionButton = viewedUserProfileData.companyName;
@@ -311,15 +324,15 @@ const BusinessProfilePage = () => {
     (viewedUserProfileData.descriptionVisibility === 'connected' && connectionStatus === 'connected');
 
   const displayDescription = canViewDescription ? (viewedUserProfileData.description || "No profile description provided.") : "[Description Hidden by User]";
-  
+
   const headerAvatarUrl = viewedUserProfileData.avatarUrl || undefined;
-  const headerIndustry = viewedUserProfileData.industry || "Not specified";
   const displayEstablished = viewedUserProfileData.established || "Year not set";
-  
+  const displayIndustry = viewedUserProfileData.industry || "Not specified";
+
   return (
     <TooltipProvider>
-      <div className="w-full">
-        <Card className="overflow-hidden shadow-lg rounded-lg border-border container mx-auto max-w-4xl">
+      <div className="container mx-auto p-4 md:p-8 max-w-4xl">
+        <Card className="overflow-hidden shadow-lg rounded-lg border-border">
           <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
               <Avatar className="h-20 w-20 border-2 border-primary">
@@ -332,24 +345,24 @@ const BusinessProfilePage = () => {
                 <CardTitle className="text-3xl font-bold text-foreground">
                    {headerDisplayNameForTitle}
                 </CardTitle>
-                <div className="flex items-center justify-center md:justify-start gap-x-3 gap-y-1 mt-1 flex-wrap">
+                <div className="flex items-center justify-center md:justify-start gap-x-3 gap-y-1 mt-1 flex-wrap text-sm">
                   {viewedUserProfileData.mentionName && (
-                       <span className="text-muted-foreground text-sm flex items-center gap-1">
+                       <span className="text-muted-foreground flex items-center gap-1">
                           <AtSign className="h-4 w-4" /> {viewedUserProfileData.mentionName}
                        </span>
                   )}
-                  {viewedUserProfileData.industry && (
-                      <span className="text-muted-foreground text-sm flex items-center gap-1">
-                          <Briefcase className="h-4 w-4" /> {headerIndustry}
+                  {displayIndustry !== "Not specified" && (
+                      <span className="text-muted-foreground flex items-center gap-1">
+                          <Briefcase className="h-4 w-4" /> {displayIndustry}
                       </span>
                   )}
-                  {viewedUserProfileData.established && (
-                    <span className="text-muted-foreground text-sm flex items-center gap-1">
+                  {displayEstablished !== "Year not set" && (
+                    <span className="text-muted-foreground flex items-center gap-1">
                       <CalendarDays className="h-4 w-4" /> Established: {displayEstablished}
                     </span>
                   )}
                  {viewedUserProfileData.verified && (
-                    <span className="inline-flex items-center gap-1 text-green-600 text-sm">
+                    <span className="inline-flex items-center gap-1 text-green-600">
                         <CheckCircle className="h-4 w-4" /> Verified
                     </span>
                  )}
@@ -361,10 +374,10 @@ const BusinessProfilePage = () => {
                   </div>
               </div>
               <div className="flex flex-col items-center md:items-end gap-2 ml-auto mt-4 md:mt-0 w-full md:w-auto">
-                   {(weightedAverageRatingReceived > 0 || ratingReceivedCount > 0 || isOwnProfile) && (
+                   {(ratingReceivedCount > 0 || isOwnProfile) && (
                        <div className="text-center md:text-right mb-1">
                           <div className="flex items-center gap-1.5">
-                            <p className="text-sm text-muted-foreground">Avg. Rating Received</p>
+                            <p className="text-sm text-muted-foreground">Weighted Avg. Rating</p>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground">
@@ -385,7 +398,7 @@ const BusinessProfilePage = () => {
                           </div>
                        </div>
                     )}
-                    {(averageRatingGivenByThisProfile > 0 || ratingGivenCount > 0 || isOwnProfile) && (
+                    {(ratingGivenCount > 0 || isOwnProfile) && (
                        <div className="text-center md:text-right">
                           <p className="text-sm text-muted-foreground">Avg. Rating Given to Others</p>
                           <div className="flex items-center gap-1 justify-center md:justify-end">
