@@ -2,7 +2,7 @@
 import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
 import * as admin from "firebase-admin";
-import {generateAnonymousName} from "./utils/pseudonymUtils";
+// import {generateAnonymousName} from "./utils/pseudonymUtils"; // Temporarily commented out as it's unused
 
 // Initialize Firebase Admin SDK.
 // When deployed to Firebase, the SDK automatically discovers service account
@@ -23,9 +23,11 @@ export const helloWorld = onRequest((request, response) => {
 
 // --- New Function: createBotUser ---
 export const createBotUser = onRequest(async (request, response) => {
-  logger.info("createBotUser function called (Simplified for debugging)");
+  logger.info(
+    "createBotUser function called (Simplified for debugging deployment)",
+  );
   try {
-    // Original logic commented out for debugging:
+    // Original logic commented out for debugging "Maximum call stack size exceeded":
     /*
     // Generate a random suffix for uniqueness
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
@@ -33,7 +35,7 @@ export const createBotUser = onRequest(async (request, response) => {
     const botPassword = `strongPassword${Date.now()}${randomSuffix}`;
 
     logger.info(
-      `Attempting to create bot user with email: ${botEmail}`
+      `Attempting to create bot user with email: ${botEmail}`,
     );
 
     // Create Firebase Auth user
@@ -45,11 +47,12 @@ export const createBotUser = onRequest(async (request, response) => {
 
     logger.info(
       "Successfully created new Firebase Auth user:",
-      userRecord.uid
+      userRecord.uid,
     );
 
     // Generate profile data for Firestore
-    const newMentionName = generateAnonymousName(userRecord.uid);
+    // const newMentionName = generateAnonymousName(userRecord.uid);
+    const newMentionName = "BotMentionName" + randomSuffix; // Placeholder
     const industries = [
       "Tech", "Retail", "Healthcare", "Finance",
       "Manufacturing", "Education",
@@ -66,13 +69,14 @@ export const createBotUser = onRequest(async (request, response) => {
       actualDisplayName: null, // Bots don't have a "real" name
       industry: randomIndustry,
       avatarUrl: null, // Bots will use initials
-      description: `This is an automated bot account for ${randomIndustry}.`,
+      // Shorter description for max-len
+      description: `Automated bot for ${randomIndustry}.`,
       descriptionVisibility: "everyone" as const,
       tags: [],
       location: null,
       // Random year in last 10 years
       established: String(
-        new Date().getFullYear() - Math.floor(Math.random() * 10)
+        new Date().getFullYear() - Math.floor(Math.random() * 10),
       ),
       contactEmail: null,
       contactPhone: null,
@@ -87,7 +91,7 @@ export const createBotUser = onRequest(async (request, response) => {
     await dbAdmin.collection("users").doc(userRecord.uid).set(userProfileData);
     logger.info(
       "Successfully created Firestore profile for bot user:",
-      userRecord.uid
+      userRecord.uid,
     );
 
     response.status(200).send({
@@ -98,7 +102,7 @@ export const createBotUser = onRequest(async (request, response) => {
     });
     */
 
-    // Simplified response for debugging
+    // Simplified response for debugging deployment
     response.status(200).send({
       message: "createBotUser called successfully (Simplified for debugging)",
       userId: "debug-bot-user-id",
@@ -115,20 +119,26 @@ export const createBotUser = onRequest(async (request, response) => {
 
 // --- New Function: createBotPost ---
 export const createBotPost = onRequest(async (request, response) => {
-  logger.info("createBotPost function called (Simplified for debugging)");
+  logger.info(
+    "createBotPost function called (Simplified for debugging deployment)",
+  );
   try {
-    // Original logic commented out for debugging:
+    // Original logic commented out for debugging "Maximum call stack size exceeded":
     /*
     const botUsersSnapshot = await dbAdmin.collection("users")
       .where("isBotAccount", "==", true).limit(50).get();
 
     if (botUsersSnapshot.empty) {
-      logger.warn("No bot users found in Firestore. Cannot create a post.");
-      response.status(404).send({error: "No bot users available to create a post."});
+      logger.warn("No bot users found. Cannot create a post.");
+      response.status(404).send({
+        error: "No bot users available to create a post.",
+      });
       return;
     }
 
-    const botUsers = botUsersSnapshot.docs.map((doc) => ({id: doc.id, ...doc.data()}));
+    const botUsers = botUsersSnapshot.docs.map((doc) => (
+      {id: doc.id, ...doc.data()}
+    ));
     const randomBot = botUsers[Math.floor(Math.random() * botUsers.length)];
 
     if (!randomBot || !randomBot.id) {
@@ -138,20 +148,19 @@ export const createBotPost = onRequest(async (request, response) => {
     }
 
     const sampleQuestions = [
-      "What are the best strategies for B2B lead generation in 2024?",
-      "How can AI be leveraged for improving supply chain efficiency?",
-      "Seeking collaborators for a new SaaS product in the fintech space.",
-      "What are common pitfalls to avoid when scaling a remote team?",
-      "Looking for insights on sustainable manufacturing practices.",
+      "Best B2B lead gen strategies for 2024?", // Shorter for max-len
+      "How can AI improve supply chain efficiency?",
+      "Seeking collaborators for a new SaaS product in fintech.",
+      "Common pitfalls when scaling a remote team?",
+      "Insights on sustainable manufacturing practices?",
     ];
-    // ... (other sample data arrays as before) ...
 
     const sampleDescriptions = [
-      "We're exploring innovative ways to connect with potential clients...",
-      "Our team is developing an AI model to optimize logistics and reduce costs...",
-      "This project aims to disrupt the traditional payment processing industry...",
-      "We're facing challenges in maintaining company culture with a distributed workforce...",
-      "Our goal is to implement greener solutions in our production line...",
+      "Exploring innovative ways to connect with clients...", // Shorter
+      "Developing an AI model to optimize logistics...", // Shorter
+      "This project aims to disrupt payment processing...", // Shorter
+      "Facing challenges with culture in a remote workforce...", // Shorter
+      "Goal: implement greener solutions in production...", // Shorter
     ];
     const sampleTags = [
       ["Marketing", "Sales", "B2B"],
@@ -164,10 +173,18 @@ export const createBotPost = onRequest(async (request, response) => {
       "Tech", "Logistics", "Finance", "HR", "Manufacturing",
     ];
 
-    const question = sampleQuestions[Math.floor(Math.random() * sampleQuestions.length)];
-    const description = sampleDescriptions[Math.floor(Math.random() * sampleDescriptions.length)];
-    const tags = sampleTags[Math.floor(Math.random() * sampleTags.length)];
-    const sector = sampleSectors[Math.floor(Math.random() * sampleSectors.length)];
+    const question = sampleQuestions[
+      Math.floor(Math.random() * sampleQuestions.length)
+    ];
+    const description = sampleDescriptions[
+      Math.floor(Math.random() * sampleDescriptions.length)
+    ];
+    const tags = sampleTags[
+      Math.floor(Math.random() * sampleTags.length)
+    ];
+    const sector = sampleSectors[
+      Math.floor(Math.random() * sampleSectors.length)
+    ];
 
     const newPostData = {
       userId: randomBot.id,
@@ -175,7 +192,7 @@ export const createBotPost = onRequest(async (request, response) => {
       description: description,
       tags: tags,
       sector: sector,
-      businessType: randomBot.industry || "Bot Industry", // Use bot's industry
+      businessType: randomBot.industry || "Bot Industry",
       safetyIndicator: "Medium",
       ratingScore: 0, // Bots might not have a rating initially
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
@@ -186,7 +203,7 @@ export const createBotPost = onRequest(async (request, response) => {
 
     const postDocRef = await dbAdmin.collection("posts").add(newPostData);
     logger.info(
-      `Bot user ${randomBot.id} created a new post: ${postDocRef.id}`
+      `Bot user ${randomBot.id} created a new post: ${postDocRef.id}`,
     );
 
     response.status(200).send({
@@ -196,7 +213,7 @@ export const createBotPost = onRequest(async (request, response) => {
     });
     */
 
-    // Simplified response for debugging
+    // Simplified response for debugging deployment
     response.status(200).send({
       message: "createBotPost called successfully (Simplified for debugging)",
       postId: "debug-bot-post-id",
@@ -209,5 +226,3 @@ export const createBotPost = onRequest(async (request, response) => {
     });
   }
 });
-
-    
