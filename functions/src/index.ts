@@ -1,20 +1,20 @@
 
+// functions/src/index.ts
+/* eslint-disable object-curly-spacing, comma-spacing, indent */
+import {dbAdmin as db, authAdmin as auth} from "./admin"; // Use aliased imports
 import {onRequest} from "firebase-functions/v2/https";
 import * as logger from "firebase-functions/logger";
-import * as admin from "firebase-admin";
-import {generateAnonymousName} from "./utils/pseudonymUtils";
-// Corrected import path for detailedSectorsData
-import {detailedSectorsData} from "./data/sectorData";
 import {onMessagePublished} from "firebase-functions/v2/pubsub";
+import {generateAnonymousName} from "./utils/pseudonymUtils";
+import {detailedSectorsData} from "./data/sectorData";
+import * as admin from "firebase-admin";
 
-// Initialize Firebase Admin SDK
-admin.initializeApp();
 
-// Export Firestore and Auth admin instances
-export const dbAdmin = admin.firestore();
-export const authAdmin = admin.auth();
-
-// --- Helper Function to Create a Bot User Profile ---
+/**
+ * Creates a bot user account with randomized details and saves it to Firestore.
+ * This function contains the core logic for bot user creation.
+ * @returns {Promise<object|null>} An object with bot user details or null on error.
+ */
 async function _createBotUserLogic(): Promise<{
   userId: string;
   email: string;
@@ -27,7 +27,7 @@ async function _createBotUserLogic(): Promise<{
     // Generate a strong, unique password (though it won't be used for login)
     const botPassword = `strongPassword${Date.now()}${randomSuffix}`;
 
-    const userRecord = await authAdmin.createUser({
+    const userRecord = await auth.createUser({
       email: botEmail,
       password: botPassword,
       disabled: false, // Ensure the account is enabled
@@ -74,13 +74,13 @@ async function _createBotUserLogic(): Promise<{
       lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
     };
 
-    await dbAdmin
+    await db
       .collection("users")
       .doc(userRecord.uid)
       .set(userProfileData);
     logger.info(
-      `Bot user ${userRecord.uid} (${generatedMentionName})` +
-      `created successfully (logic).`,
+      `Bot user ${userRecord.uid} (${generatedMentionName}) ` +
+      "created successfully (logic)."
     );
 
     return {
@@ -89,12 +89,16 @@ async function _createBotUserLogic(): Promise<{
       mentionName: generatedMentionName,
     };
   } catch (error) {
-    logger.error("Error creating bot user (logic):", error);
+    logger.error("_createBotUserLogic error:", error);
     return null;
   }
 }
 
-// --- Helper Function for Bot to Create a Post ---
+/**
+ * Selects a random bot user and creates a post on their behalf using randomized content.
+ * This function contains the core logic for bot post creation.
+ * @returns {Promise<object|null>} An object with post details or null on error.
+ */
 async function _createBotPostLogic(): Promise<{
   postId: string;
   botUserId: string;
@@ -103,7 +107,7 @@ async function _createBotPostLogic(): Promise<{
   logger.info("Attempting to create a new bot post (logic)...");
   try {
     // Fetch up to 50 bot users
-    const botUsersSnapshot = await dbAdmin
+    const botUsersSnapshot = await db
       .collection("users")
       .where("isBotAccount", "==", true)
       .limit(50)
@@ -111,7 +115,7 @@ async function _createBotPostLogic(): Promise<{
 
     if (botUsersSnapshot.empty) {
       logger.warn(
-        "No bot users found in Firestore. Cannot create a bot post.",
+        "No bot users found in Firestore. Cannot create a bot post."
       );
       return null;
     }
@@ -125,49 +129,12 @@ async function _createBotPostLogic(): Promise<{
     if (!randomBot.id || !randomBot.mentionName) {
       logger.error(
         "Selected bot user is invalid or missing mentionName.",
-        randomBot,
+        randomBot
       );
       return null;
     }
 
-    // Generate varied post content
-    const sampleQuestions = [
-      `What are the latest trends in ${randomBot.industry || "my industry"}?`,
-      `Seeking collaborators for a new project in ${randomBot.mentionName}'s area.`,
-      `Best practices for supply chain management in ${randomBot.industry || "manufacturing"}?`,
-      `How is AI transforming the ${randomBot.industry || "tech"} sector? #AI #Innovation`,
-      `Looking for insights on market entry strategies. @${randomBot.mentionName} any ideas?`,
-      `Discussing the impact of sustainability on business models. #Sustainability`,
-      `Need advice on scaling a startup. What are key challenges? #Startup`,
-      `Exploring new technologies for remote work efficiency. #FutureOfWork`,
-    ];
-    const sampleDescriptions = [
-      "Looking for detailed insights and real-world examples. " +
-      "All contributions appreciated!",
-      "This is an exciting new venture and we are looking for partners " +
-      "with expertise in development and marketing.",
-      "We are trying to optimize our logistics and reduce costs. " +
-      "What strategies have worked for you?",
-      "Focusing on machine learning applications and data analytics. " +
-      "Share your thoughts!",
-      "Specifically interested in targeting new demographics " +
-      "and regions. Open to all suggestions.",
-      "How can businesses integrate sustainable practices without " +
-      "compromising profitability?",
-      "What are the common pitfalls to avoid when growing a company " +
-      "from 10 to 100 employees?",
-      "Virtual collaboration tools, project management software, " +
-      "and communication platforms - what's working best?",
-    ];
-    const sampleTagsPool = [
-      ["Tech", "Innovation"], ["Collaboration", "Projects"],
-      ["Logistics", "SupplyChain"], ["AI", "FutureTech"],
-      ["Strategy", "MarketEntry"], ["Sustainability", "Business"],
-      ["Startup", "Growth"], ["RemoteWork", "Productivity"],
-      ["Finance"], ["Healthcare"], ["Education"], ["Marketing"],
-    ];
-
-    // Select detailed sector info for the post
+    // Use the comprehensive detailedSectorsData for content generation
     const postSectorData = detailedSectorsData[
       Math.floor(Math.random() * detailedSectorsData.length)
     ];
@@ -187,6 +154,34 @@ async function _createBotPostLogic(): Promise<{
     const subSectorName = postSubSector?.name || null;
     const industryName = postIndustry?.name || null;
 
+    // More varied post content
+    const sampleQuestions = [
+      `What are the latest trends in ${industryName || subSectorName || sectorName}? #Innovation`,
+      `Seeking collaborators for a project in ${randomBot.mentionName}'s field (${industryName || "general"}).`,
+      `Best practices for supply chain in ${sectorName}?`,
+      `How is AI transforming the ${sectorName} sector? #AI #FutureTech`,
+      `User ${randomBot.mentionName} is looking for insights on market entry strategies for ${subSectorName || sectorName}.`,
+      `Discussing sustainability impact on ${industryName || sectorName} business models. #ESG`,
+      `Need advice on scaling a startup in ${randomBot.industry || "our industry"}. Key challenges? #StartupLife`,
+      `Exploring new tech for remote work efficiency in ${sectorName}. #FutureOfWork`,
+    ];
+    const sampleDescriptions = [
+      "Looking for detailed insights and real-world examples. All contributions appreciated!",
+      "This is an exciting new venture and we're looking for partners with expertise.",
+      "Trying to optimize logistics and reduce costs. What strategies have worked for you?",
+      "Focusing on machine learning applications and data analytics. Share your thoughts!",
+      "Specifically interested in targeting new demographics. Open to all suggestions.",
+      "How can businesses integrate sustainable practices without compromising profitability?",
+      "What are common pitfalls to avoid when growing a company?",
+      "Virtual collaboration tools, project management software - what's working best?",
+    ];
+    const sampleTagsPool = [
+      ["Tech", "Innovation"], ["Collaboration", "Projects"],
+      ["Logistics", "SupplyChain"], ["AI", "FutureTech"],
+      ["Strategy", "MarketEntry"], ["Sustainability", "Business"],
+      ["Startup", "Growth"], ["RemoteWork", "Productivity"],
+      ["Finance"], ["Healthcare"], ["Education"], ["Marketing"], ["Legal"], ["Product"],
+    ];
 
     const newPostData = {
       userId: randomBot.id,
@@ -200,12 +195,12 @@ async function _createBotPostLogic(): Promise<{
         Math.floor(Math.random() * sampleTagsPool.length)
       ],
       sector: sectorName,
-      subSector: subSectorName,
-      industry: industryName,
+      subSector: subSectorName, // Can be null
+      industry: industryName,   // Can be null
       naicsCode: naicsCode,
-      businessType: randomBot.industry || "General Business",
+      businessType: randomBot.industry || "General Business", // From bot's profile
       safetyIndicator: "Medium" as const,
-      ratingScore: Math.random() * 2 + 3, // Random score between 3.0 and 5.0
+      ratingScore: Math.random() * 2 + 3, // Random score between 3.0 and 5.0 for bots
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       imageUrls: [] as string[],
       mentionedUserIds: [] as string[],
@@ -218,10 +213,10 @@ async function _createBotPostLogic(): Promise<{
       deadline: null,
     };
 
-    const postRef = await dbAdmin.collection("posts").add(newPostData);
+    const postRef = await db.collection("posts").add(newPostData);
     logger.info(
       `Bot user ${randomBot.id} (${randomBot.mentionName}) ` +
-      `created post ${postRef.id} (logic).`,
+      `created post ${postRef.id} (logic).`
     );
 
     return {
@@ -230,48 +225,68 @@ async function _createBotPostLogic(): Promise<{
       botMentionName: randomBot.mentionName,
     };
   } catch (error) {
-    logger.error("Error creating bot post (logic):", error);
+    logger.error("_createBotPostLogic error:", error);
     return null;
   }
 }
 
 
 // --- HTTP-Triggered Cloud Functions ---
-export const createBotUser = onRequest(async (request, response) => {
+/**
+ * HTTP-triggered function to create a new bot user.
+ * @param {https.Request} req - The HTTP request.
+ * @param {https.Response} res - The HTTP response.
+ */
+export const createBotUser = onRequest(async (req, res) => {
   logger.info("createBotUser HTTP function triggered.");
   const result = await _createBotUserLogic();
   if (result) {
-    response.send({
+    res.status(200).send({
       message: "Bot user created successfully!", ...result,
     });
   } else {
-    response.status(500).send({error: "Failed to create bot user."});
+    res.status(500).send({error: "Failed to create bot user."});
   }
 });
 
-export const createBotPost = onRequest(async (request, response) => {
+/**
+ * HTTP-triggered function to create a new bot post.
+ * @param {https.Request} req - The HTTP request.
+ * @param {https.Response} res - The HTTP response.
+ */
+export const createBotPost = onRequest(async (req, res) => {
   logger.info("createBotPost HTTP function triggered.");
   const result = await _createBotPostLogic();
   if (result) {
-    response.send({
+    res.status(200).send({
       message: "Bot post created successfully!", ...result,
     });
   } else {
-    response.status(500).send({error: "Failed to create bot post."});
+    res.status(500).send({error: "Failed to create bot post."});
   }
 });
 
-export const helloWorld = onRequest((request, response) => {
+/**
+ * Simple test endpoint.
+ * @param {https.Request} req - The HTTP request.
+ * @param {https.Response} res - The HTTP response.
+ */
+export const helloWorld = onRequest((req, res) => {
   logger.info("Hello logs!", {structuredData: true});
-  response.send("Hello from Firebase!");
+  res.send("Hello from Firebase!");
 });
 
 // --- Pub/Sub-Triggered Cloud Function for Scheduled Activity ---
-const BOT_ACTIVITY_TOPIC_NAME = "bot-activity-tick"; // Or from environment variables
+const BOT_ACTIVITY_TOPIC_NAME = "bot-activity-tick";
 
+/**
+ * PubSub-triggered function that randomly decides to create a bot user or post.
+ * @param {functions.pubsub.Message} event - The Pub/Sub message event.
+ * @returns {Promise<null>} A promise that resolves when processing is complete.
+ */
 export const scheduledBotActivity = onMessagePublished(
   BOT_ACTIVITY_TOPIC_NAME,
-  async (event) => {
+  async (event) => { // Added event parameter for PubSub functions
     logger.info("scheduledBotActivity triggered by Pub/Sub message:", event);
 
     const shouldAct = Math.random() < 0.7; // 70% chance to perform an action
@@ -287,9 +302,9 @@ export const scheduledBotActivity = onMessagePublished(
       }
     } else {
       logger.info(
-        "Scheduled bot activity: Decided to do nothing this time.",
+        "Scheduled bot activity: Decided to do nothing this time."
       );
     }
     return null; // Indicate successful processing of the Pub/Sub message
-  },
+  }
 );
