@@ -1,0 +1,273 @@
+// functions/src/data/sectorData.ts
+/* eslint-disable max-len */
+
+import type { SectorWithSubSectors } from "./sectorTypes";
+
+// This data is a copy from src/components/layout/MainLayout.tsx
+// Ensure it's kept in sync if the main app's version changes,
+// or consider a shared package/module strategy in a more complex setup.
+
+export const detailedSectorsData: SectorWithSubSectors[] = [
+  {
+    name: "Agriculture, Forestry, Fishing and Hunting", code: "11",
+    description: "Growing crops, raising animals, harvesting timber, and fishing.",
+    subSectors: [
+      {
+        name: "Crop Production", code: "111",
+        industries: [
+          {name: "Soybean Farming", code: "111110"},
+          {name: "Oilseed (except Soybean) Farming", code: "111120"},
+          {name: "Dry Pea and Bean Farming", code: "111130"},
+          {name: "Wheat Farming", code: "111140"},
+          {name: "Corn Farming", code: "111150"},
+          {name: "Rice Farming", code: "111160"},
+          {name: "Oilseed and Grain Combination Farming", code: "111191"},
+          {name: "All Other Grain Farming", code: "111199"},
+        ],
+      },
+      {
+        name: "Animal Production and Aquaculture", code: "112",
+        industries: [
+          {name: "Beef Cattle Ranching and Farming", code: "112111"},
+          {name: "Cattle Feedlots", code: "112112"},
+          {name: "Dairy Cattle and Milk Production", code: "112120"},
+          {name: "Dual-Purpose Cattle Ranching and Farming", code: "112130"},
+          {name: "Hog and Pig Farming", code: "112210"},
+          {name: "Chicken Egg Production", code: "112310"},
+          {name: "Broilers and Other Meat Type Chicken Production", code: "112320"},
+          {name: "Turkey Production", code: "112330"},
+          {name: "Poultry Hatcheries", code: "112340"},
+          {name: "Other Poultry Production", code: "112390"},
+          {name: "Sheep Farming", code: "112410"},
+          {name: "Goat Farming", code: "112420"},
+          {name: "Finfish Farming and Fish Hatcheries", code: "112511"},
+          {name: "Shellfish Farming", code: "112512"},
+          {name: "Other Aquaculture", code: "112519"},
+          {name: "Apiculture", code: "112910"},
+          {name: "Horses and Other Equine Production", code: "112920"},
+          {name: "Fur-Bearing Animal and Rabbit Production", code: "112930"},
+          {name: "All Other Animal Production", code: "112990"},
+        ],
+      },
+      {
+        name: "Forestry and Logging", code: "113",
+        industries: [
+          {name: "Timber Tract Operations", code: "113110"},
+          {name: "Forest Nurseries and Gathering of Forest Products", code: "113210"},
+          {name: "Logging", code: "113310"},
+        ],
+      },
+      {
+        name: "Fishing, Hunting and Trapping", code: "114",
+        industries: [
+          {name: "Finfish Fishing", code: "114111"},
+          {name: "Shellfish Fishing", code: "114112"},
+          {name: "Other Marine Fishing", code: "114119"},
+          {name: "Hunting and Trapping", code: "114210"},
+        ],
+      },
+      {
+        name: "Support Activities for Agriculture and Forestry", code: "115",
+        industries: [
+          {name: "Cotton Ginning", code: "115111"},
+          {name: "Soil Preparation, Planting, and Cultivating", code: "115112"},
+          {name: "Crop Harvesting, Primarily by Machine", code: "115113"},
+          {name: "Postharvest Crop Activities (except Cotton Ginning)", code: "115114"},
+          {name: "Farm Labor Contractors and Crew Leaders", code: "115115"},
+          {name: "Farm Management Services", code: "115116"},
+          {name: "Support Activities for Animal Production", code: "115210"},
+          {name: "Support Activities for Forestry", code: "115310"},
+        ],
+      },
+    ],
+  },
+  {
+    name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21",
+    description: "Extracting naturally occurring mineral solids, liquids, and gases.",
+    subSectors: [
+      {name: "Oil and Gas Extraction", code: "211", industries: [{name: "Crude Petroleum and Natural Gas Extraction", code: "2111"}]},
+      {name: "Coal Mining", code: "212", industries: [{name: "Coal Mining", code: "2121"}]}, // Simplified, actual is 2121
+      {name: "Metal Ore Mining", code: "212", industries: [{name: "Iron Ore Mining", code: "21221"}, {name: "Gold and Silver Ore Mining", code: "21222"}]}, // Grouped under 212 for simplicity
+      {name: "Nonmetallic Mineral Mining and Quarrying", code: "212", industries: [{name: "Stone Mining and Quarrying", code: "21231"}]}, // Grouped
+      {name: "Support Activities for Mining", code: "213", industries: [{name: "Support Activities for Oil and Gas Operations", code: "213111"}]},
+    ],
+  },
+  {
+    name: "Utilities", code: "22",
+    description: "Providing utility services like electric power, natural gas, water, and sewage.",
+    subSectors: [
+      {name: "Electric Power Generation, Transmission and Distribution", code: "2211", industries: [{name: "Electric Power Generation", code: "22111"}, {name: "Electric Power Transmission, Control, and Distribution", code: "22112"}]},
+      {name: "Natural Gas Distribution", code: "2212", industries: [{name: "Natural Gas Distribution", code: "221210"}]},
+      {name: "Water, Sewage and Other Systems", code: "2213", industries: [{name: "Water Supply and Irrigation Systems", code: "221310"}, {name: "Sewage Treatment Facilities", code: "221320"}]},
+    ],
+  },
+  {
+    name: "Construction", code: "23",
+    description: "Construction of buildings and engineering projects.",
+    subSectors: [
+      {name: "Construction of Buildings", code: "236", industries: [{name: "Residential Building Construction", code: "2361"}, {name: "Nonresidential Building Construction", code: "2362"}]},
+      {name: "Heavy and Civil Engineering Construction", code: "237", industries: [{name: "Utility System Construction", code: "2371"}, {name: "Highway, Street, and Bridge Construction", code: "2373"}]},
+      {name: "Specialty Trade Contractors", code: "238", industries: [{name: "Foundation, Structure, and Building Exterior Contractors", code: "2381"}, {name: "Building Equipment Contractors", code: "2382"}]},
+    ],
+  },
+  {
+    name: "Manufacturing", code: "31-33",
+    description: "Mechanical, physical, or chemical transformation of materials into new products.",
+    subSectors: [
+      {name: "Food Manufacturing", code: "311", industries: [{name: "Animal Food Manufacturing", code: "3111"}, {name: "Grain and Oilseed Milling", code: "3112"}, {name: "Sugar and Confectionery Product Manufacturing", code: "3113"}]},
+      {name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [{name: "Beverage Manufacturing", code: "3121"}, {name: "Tobacco Manufacturing", code: "3122"}]},
+      {name: "Textile Mills", code: "313", industries: [{name: "Fiber, Yarn, and Thread Mills", code: "3131"}, {name: "Fabric Mills", code: "3132"}]},
+      {name: "Textile Product Mills", code: "314", industries: [{name: "Textile Furnishings Mills", code: "3141"}, {name: "Other Textile Product Mills", code: "3149"}]},
+      {name: "Apparel Manufacturing", code: "315", industries: [{name: "Apparel Knitting Mills", code: "3151"}, {name: "Cut and Sew Apparel Manufacturing", code: "3152"}]},
+      {name: "Leather and Allied Product Manufacturing", code: "316", industries: [{name: "Leather and Hide Tanning and Finishing", code: "3161"}, {name: "Footwear Manufacturing", code: "3162"}]},
+      {name: "Wood Product Manufacturing", code: "321", industries: [{name: "Sawmills and Wood Preservation", code: "3211"}, {name: "Veneer, Plywood, and Engineered Wood Product Manufacturing", code: "3212"}]},
+      {name: "Paper Manufacturing", code: "322", industries: [{name: "Pulp, Paper, and Paperboard Mills", code: "3221"}, {name: "Converted Paper Product Manufacturing", code: "3222"}]},
+      {name: "Printing and Related Support Activities", code: "323", industries: [{name: "Printing and Related Support Activities", code: "3231"}]},
+      {name: "Petroleum and Coal Products Manufacturing", code: "324", industries: [{name: "Petroleum Refineries", code: "324110"}]},
+      {name: "Chemical Manufacturing", code: "325", industries: [{name: "Basic Chemical Manufacturing", code: "3251"}, {name: "Pharmaceutical and Medicine Manufacturing", code: "325412"}]},
+      {name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [{name: "Plastics Product Manufacturing", code: "3261"}, {name: "Rubber Product Manufacturing", code: "3262"}]},
+      {name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [{name: "Clay Product and Refractory Manufacturing", code: "3271"}, {name: "Glass and Glass Product Manufacturing", code: "3272"}]},
+      {name: "Primary Metal Manufacturing", code: "331", industries: [{name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "331110"}, {name: "Alumina and Aluminum Production and Processing", code: "3313"}]},
+      {name: "Fabricated Metal Product Manufacturing", code: "332", industries: [{name: "Forging and Stamping", code: "3321"}, {name: "Architectural and Structural Metals Manufacturing", code: "3323"}]},
+      {name: "Machinery Manufacturing", code: "333", industries: [{name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331"}, {name: "Industrial Machinery Manufacturing", code: "33324"}]},
+      {name: "Computer and Electronic Product Manufacturing", code: "334", industries: [{name: "Computer and Peripheral Equipment Manufacturing", code: "3341"}, {name: "Semiconductor and Other Electronic Component Manufacturing", code: "334413"}]},
+      {name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [{name: "Electric Lighting Equipment Manufacturing", code: "3351"}, {name: "Household Appliance Manufacturing", code: "3352"}]},
+      {name: "Transportation Equipment Manufacturing", code: "336", industries: [{name: "Motor Vehicle Manufacturing", code: "3361"}, {name: "Aerospace Product and Parts Manufacturing", code: "3364"}]},
+      {name: "Furniture and Related Product Manufacturing", code: "337", industries: [{name: "Household and Institutional Furniture and Kitchen Cabinet Manufacturing", code: "3371"}]},
+      {name: "Miscellaneous Manufacturing", code: "339", industries: [{name: "Medical Equipment and Supplies Manufacturing", code: "3391"}, {name: "Other Miscellaneous Manufacturing", code: "3399"}]},
+    ],
+  },
+  {
+    name: "Wholesale Trade", code: "42",
+    description: "Wholesaling merchandise, generally without transformation.",
+    subSectors: [
+      {name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{name: "Motor Vehicle and Parts", code: "4231"}, {name: "Commercial Equipment", code: "423440"}]},
+      {name: "Merchant Wholesalers, Nondurable Goods", code: "424", industries: [{name: "Grocery and Related Products", code: "4244"}, {name: "Petroleum and Petroleum Products", code: "4247"}]},
+    ],
+  },
+  {
+    name: "Retail Trade", code: "44-45",
+    description: "Retailing merchandise, generally without transformation.",
+    subSectors: [
+      {name: "Motor Vehicle and Parts Dealers", code: "441", industries: [{name: "Automobile Dealers", code: "4411"}, {name: "Automotive Parts, Accessories, and Tire Retailers", code: "4413"}]},
+      {name: "Furniture, Home Furnishings, Electronics, and Appliance Retailers", code: "449", industries: [{name: "Furniture Retailers", code: "449110"}, {name: "Electronics and Appliance Retailers", code: "449210"}]},
+      {name: "Building Material and Garden Equipment and Supplies Dealers", code: "444", industries: [{name: "Building Material and Supplies Dealers", code: "4441"}]},
+      {name: "Food and Beverage Retailers", code: "445", industries: [{name: "Grocery and Convenience Retailers", code: "4451"}]},
+      {name: "General Merchandise Retailers", code: "455", industries: [{name: "Department Stores", code: "455211"}]},
+    ],
+  },
+  {
+    name: "Transportation and Warehousing", code: "48-49",
+    description: "Transportation of passengers and cargo, warehousing and storage.",
+    subSectors: [
+      {name: "Air Transportation", code: "481", industries: [{name: "Scheduled Passenger Air Transportation", code: "481111"}]},
+      {name: "Truck Transportation", code: "484", industries: [{name: "General Freight Trucking", code: "4841"}]},
+      {name: "Support Activities for Transportation", code: "488", industries: [{name: "Support Activities for Air Transportation", code: "4881"}]},
+      {name: "Couriers and Messengers", code: "492", industries: [{name: "Couriers and Express Delivery Services", code: "4921"}]},
+      {name: "Warehousing and Storage", code: "493", industries: [{name: "General Warehousing and Storage", code: "493110"}]},
+    ],
+  },
+  {
+    name: "Information", code: "51",
+    description: "Producing and distributing information and cultural products.",
+    subSectors: [
+      {name: "Publishing Industries (except Internet)", code: "513", industries: [{name: "Newspaper Publishers", code: "513110"}, {name: "Software Publishers", code: "513210"}]},
+      {name: "Telecommunications", code: "517", industries: [{name: "Wired Telecommunications Carriers", code: "517111"}, {name: "Wireless Telecommunications Carriers (except Satellite)", code: "517112"}]},
+      {name: "Data Processing, Hosting, and Related Services", code: "518", industries: [{name: "Data Processing, Hosting, and Related Services", code: "5182"}]},
+    ],
+  },
+  {
+    name: "Finance and Insurance", code: "52",
+    description: "Financial transactions and facilitating financial transactions.",
+    subSectors: [
+      {name: "Credit Intermediation and Related Activities", code: "522", industries: [{name: "Commercial Banking", code: "522110"}, {name: "Credit Unions", code: "522130"}]},
+      {name: "Securities, Commodity Contracts, and Other Financial Investments", code: "523", industries: [{name: "Investment Banking and Securities Dealing", code: "523110"}]},
+      {name: "Insurance Carriers and Related Activities", code: "524", industries: [{name: "Direct Life Insurance Carriers", code: "524113"}, {name: "Insurance Agencies and Brokerages", code: "524210"}]},
+    ],
+  },
+  {
+    name: "Real Estate and Rental and Leasing", code: "53",
+    description: "Renting, leasing, or otherwise allowing the use of assets.",
+    subSectors: [
+      {name: "Real Estate", code: "531", industries: [{name: "Lessors of Residential Buildings and Dwellings", code: "531110"}, {name: "Offices of Real Estate Agents and Brokers", code: "5312"}]},
+      {name: "Rental and Leasing Services", code: "532", industries: [{name: "Automotive Equipment Rental and Leasing", code: "5321"}]},
+    ],
+  },
+  {
+    name: "Professional, Scientific, and Technical Services", code: "54",
+    description: "Performing professional, scientific, and technical activities for others.",
+    subSectors: [
+      {name: "Legal Services", code: "5411", industries: [{name: "Offices of Lawyers", code: "541110"}]},
+      {name: "Accounting, Tax Preparation, Bookkeeping, and Payroll Services", code: "5412", industries: [{name: "Offices of Certified Public Accountants", code: "541211"}]},
+      {name: "Architectural, Engineering, and Related Services", code: "5413", industries: [{name: "Architectural Services", code: "541310"}, {name: "Engineering Services", code: "541330"}]},
+      {name: "Computer Systems Design and Related Services", code: "5415", industries: [{name: "Custom Computer Programming Services", code: "541511"}]},
+    ],
+  },
+  {
+    name: "Management of Companies and Enterprises", code: "55",
+    description: "Holding securities of companies for controlling interest or influencing management.",
+    subSectors: [
+      {name: "Management of Companies and Enterprises", code: "551", industries: [{name: "Offices of Bank Holding Companies", code: "551111"}]},
+    ],
+  },
+  {
+    name: "Administrative and Support and Waste Management and Remediation Services", code: "56",
+    description: "Routine support activities for other organizations or managing waste.",
+    subSectors: [
+      {name: "Administrative and Support Services", code: "561", industries: [{name: "Office Administrative Services", code: "5611"}, {name: "Employment Services", code: "5613"}]},
+      {name: "Waste Management and Remediation Services", code: "562", industries: [{name: "Waste Collection", code: "5621"}]},
+    ],
+  },
+  {
+    name: "Educational Services", code: "61",
+    description: "Providing instruction and training in a wide variety of subjects.",
+    subSectors: [
+      {name: "Educational Services", code: "611", industries: [{name: "Elementary and Secondary Schools", code: "6111"}, {name: "Colleges, Universities, and Professional Schools", code: "6113"}]},
+    ],
+  },
+  {
+    name: "Health Care and Social Assistance", code: "62",
+    description: "Providing health care and social assistance for individuals.",
+    subSectors: [
+      {name: "Ambulatory Health Care Services", code: "621", industries: [{name: "Offices of Physicians", code: "6211"}, {name: "Offices of Dentists", code: "6212"}]},
+      {name: "Hospitals", code: "622", industries: [{name: "General Medical and Surgical Hospitals", code: "622110"}]},
+      {name: "Nursing and Residential Care Facilities", code: "623", industries: [{name: "Nursing Care Facilities (Skilled Nursing Facilities)", code: "6231"}]},
+      {name: "Social Assistance", code: "624", industries: [{name: "Individual and Family Services", code: "6241"}]},
+    ],
+  },
+  {
+    name: "Arts, Entertainment, and Recreation", code: "71",
+    description: "Operating facilities or providing services for cultural, entertainment, and recreational interests.",
+    subSectors: [
+      {name: "Performing Arts, Spectator Sports, and Related Industries", code: "711", industries: [{name: "Performing Arts Companies", code: "7111"}, {name: "Spectator Sports", code: "7112"}]},
+      {name: "Museums, Historical Sites, and Similar Institutions", code: "712", industries: [{name: "Museums", code: "712110"}]},
+      {name: "Amusement, Gambling, and Recreation Industries", code: "713", industries: [{name: "Amusement Parks and Arcades", code: "7131"}, {name: "Fitness and Recreational Sports Centers", code: "713940"}]},
+    ],
+  },
+  {
+    name: "Accommodation and Food Services", code: "72",
+    description: "Providing lodging and/or preparing meals, snacks, and beverages.",
+    subSectors: [
+      {name: "Accommodation", code: "721", industries: [{name: "Hotels (except Casino Hotels) and Motels", code: "721110"}]},
+      {name: "Food Services and Drinking Places", code: "722", industries: [{name: "Full-Service Restaurants", code: "722511"}, {name: "Limited-Service Restaurants", code: "722513"}]},
+    ],
+  },
+  {
+    name: "Other Services (except Public Administration)", code: "81",
+    description: "Providing services not elsewhere classified.",
+    subSectors: [
+      {name: "Repair and Maintenance", code: "811", industries: [{name: "Automotive Repair and Maintenance", code: "8111"}]},
+      {name: "Personal and Laundry Services", code: "812", industries: [{name: "Personal Care Services (e.g., hair salons)", code: "8121"}]},
+      {name: "Religious, Grantmaking, Civic, Professional, and Similar Organizations", code: "813", industries: [{name: "Religious Organizations", code: "8131"}]},
+    ],
+  },
+  {
+    name: "Public Administration", code: "92",
+    description: "Government agencies administering public programs.",
+    subSectors: [
+      {name: "Executive, Legislative, and Other General Government Support", code: "921", industries: [{name: "Executive Offices", code: "921110"}]},
+      {name: "Justice, Public Order, and Safety Activities", code: "922", industries: [{name: "Police Protection", code: "922120"}]},
+      {name: "National Security and International Affairs", code: "928", industries: [{name: "National Security", code: "928110"}]},
+    ],
+  },
+];
