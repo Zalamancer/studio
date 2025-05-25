@@ -9,11 +9,11 @@ import {generateAnonymousName} from "./utils/pseudonymUtils";
 import {detailedSectorsData} from "./data/sectorData";
 import * as admin from "firebase-admin";
 
-
 /**
- * Creates a bot user account with randomized details and saves it to Firestore.
- * This function contains the core logic for bot user creation.
- * @returns {Promise<object|null>} An object with bot user details or null on error.
+ * Core logic to create a bot user account with randomized details.
+ * Saves the user to Firebase Auth and their profile to Firestore.
+ * @return {Promise<{userId: string, email: string, mentionName: string} | null>}
+ * An object with bot user details or null on error.
  */
 async function _createBotUserLogic(): Promise<{
   userId: string;
@@ -24,18 +24,15 @@ async function _createBotUserLogic(): Promise<{
   try {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const botEmail = `bot_${Date.now()}_${randomSuffix}@example.com`;
-    // Generate a strong, unique password (though it won't be used for login)
     const botPassword = `strongPassword${Date.now()}${randomSuffix}`;
 
     const userRecord = await auth.createUser({
       email: botEmail,
       password: botPassword,
-      disabled: false, // Ensure the account is enabled
+      disabled: false,
     });
 
     const generatedMentionName = generateAnonymousName(userRecord.uid);
-
-    // Randomly select an industry for the bot
     const randomSector = detailedSectorsData[
       Math.floor(Math.random() * detailedSectorsData.length)
     ];
@@ -51,8 +48,8 @@ async function _createBotUserLogic(): Promise<{
       null;
 
     const industryName = randomIndustry?.name ||
-      randomSubSector?.name ||
-      randomSector.name;
+                       randomSubSector?.name ||
+                       randomSector.name;
 
     const userProfileData = {
       uid: userRecord.uid,
@@ -62,16 +59,17 @@ async function _createBotUserLogic(): Promise<{
       description: `This is an automated bot account for the ` +
                    `${industryName} industry, known as ${generatedMentionName}.`,
       descriptionVisibility: "everyone" as const,
-      tags: [] as string[], // Bots start with no tags
-      // Random established year (e.g., within the last 10 years)
+      tags: [] as string[],
       established: String(
-        new Date().getFullYear() - Math.floor(Math.random() * 10),
+        new Date().getFullYear() - Math.floor(Math.random() * 10)
       ),
-      verified: true, // Bot accounts are considered "verified" by the system
+      verified: true,
       isBotAccount: true,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
+      // Fields explicitly omitted: actualDisplayName, avatarUrl, companyName,
+      // contactEmail, contactPhone, location
     };
 
     await db
@@ -95,9 +93,11 @@ async function _createBotUserLogic(): Promise<{
 }
 
 /**
- * Selects a random bot user and creates a post on their behalf using randomized content.
- * This function contains the core logic for bot post creation.
- * @returns {Promise<object|null>} An object with post details or null on error.
+ * Core logic to select a random bot user and create a post on their behalf.
+ * Uses randomized content from predefined samples and detailed sector data.
+ * @return {Promise<{postId: string, botUserId: string,
+ * botMentionName: string} | null>}
+ * An object with post details or null on error.
  */
 async function _createBotPostLogic(): Promise<{
   postId: string;
@@ -106,7 +106,6 @@ async function _createBotPostLogic(): Promise<{
 } | null> {
   logger.info("Attempting to create a new bot post (logic)...");
   try {
-    // Fetch up to 50 bot users
     const botUsersSnapshot = await db
       .collection("users")
       .where("isBotAccount", "==", true)
@@ -123,18 +122,19 @@ async function _createBotPostLogic(): Promise<{
     const botUsers = botUsersSnapshot.docs.map((doc) => ({
       id: doc.id,
       ...doc.data(),
-    }));
+    // Type assertion, assuming bot users will have mentionName and industry
+    } as { id: string, mentionName?: string, industry?: string } ));
+
     const randomBot = botUsers[Math.floor(Math.random() * botUsers.length)];
 
     if (!randomBot.id || !randomBot.mentionName) {
       logger.error(
-        "Selected bot user is invalid or missing mentionName.",
+        "Selected bot user is invalid or missing key fields (id, mentionName).",
         randomBot
       );
       return null;
     }
 
-    // Use the comprehensive detailedSectorsData for content generation
     const postSectorData = detailedSectorsData[
       Math.floor(Math.random() * detailedSectorsData.length)
     ];
@@ -151,10 +151,9 @@ async function _createBotPostLogic(): Promise<{
                       postSubSector?.code ||
                       postSectorData.code;
     const sectorName = postSectorData.name;
-    const subSectorName = postSubSector?.name || null;
-    const industryName = postIndustry?.name || null;
+    const subSectorName = postSubSector?.name || null; // Can be null
+    const industryName = postIndustry?.name || null;   // Can be null
 
-    // More varied post content
     const sampleQuestions = [
       `What are the latest trends in ${industryName || subSectorName || sectorName}? #Innovation`,
       `Seeking collaborators for a project in ${randomBot.mentionName}'s field (${industryName || "general"}).`,
@@ -180,7 +179,8 @@ async function _createBotPostLogic(): Promise<{
       ["Logistics", "SupplyChain"], ["AI", "FutureTech"],
       ["Strategy", "MarketEntry"], ["Sustainability", "Business"],
       ["Startup", "Growth"], ["RemoteWork", "Productivity"],
-      ["Finance"], ["Healthcare"], ["Education"], ["Marketing"], ["Legal"], ["Product"],
+      ["Finance"], ["Healthcare"], ["Education"], ["Marketing"],
+      ["Legal"], ["Product"],
     ];
 
     const newPostData = {
@@ -195,17 +195,16 @@ async function _createBotPostLogic(): Promise<{
         Math.floor(Math.random() * sampleTagsPool.length)
       ],
       sector: sectorName,
-      subSector: subSectorName, // Can be null
-      industry: industryName,   // Can be null
+      subSector: subSectorName,
+      industry: industryName,
       naicsCode: naicsCode,
-      businessType: randomBot.industry || "General Business", // From bot's profile
+      businessType: randomBot.industry || "General Business",
       safetyIndicator: "Medium" as const,
-      ratingScore: Math.random() * 2 + 3, // Random score between 3.0 and 5.0 for bots
+      ratingScore: Math.random() * 2 + 3,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       imageUrls: [] as string[],
       mentionedUserIds: [] as string[],
       requestType: "post" as const,
-      // Fields for help requests are null for bot posts
       descriptionDetails: null,
       descriptionTried: null,
       descriptionOutcome: null,
@@ -230,12 +229,8 @@ async function _createBotPostLogic(): Promise<{
   }
 }
 
-
-// --- HTTP-Triggered Cloud Functions ---
 /**
  * HTTP-triggered function to create a new bot user.
- * @param {https.Request} req - The HTTP request.
- * @param {https.Response} res - The HTTP response.
  */
 export const createBotUser = onRequest(async (req, res) => {
   logger.info("createBotUser HTTP function triggered.");
@@ -251,8 +246,6 @@ export const createBotUser = onRequest(async (req, res) => {
 
 /**
  * HTTP-triggered function to create a new bot post.
- * @param {https.Request} req - The HTTP request.
- * @param {https.Response} res - The HTTP response.
  */
 export const createBotPost = onRequest(async (req, res) => {
   logger.info("createBotPost HTTP function triggered.");
@@ -268,8 +261,6 @@ export const createBotPost = onRequest(async (req, res) => {
 
 /**
  * Simple test endpoint.
- * @param {https.Request} req - The HTTP request.
- * @param {https.Response} res - The HTTP response.
  */
 export const helloWorld = onRequest((req, res) => {
   logger.info("Hello logs!", {structuredData: true});
@@ -281,8 +272,8 @@ const BOT_ACTIVITY_TOPIC_NAME = "bot-activity-tick";
 
 /**
  * PubSub-triggered function that randomly decides to create a bot user or post.
- * @param {functions.pubsub.Message} event - The Pub/Sub message event.
- * @returns {Promise<null>} A promise that resolves when processing is complete.
+ * @param {functions.pubsub.Message} event The Pub/Sub message event.
+ * @return {Promise<null>} A promise that resolves when processing is complete.
  */
 export const scheduledBotActivity = onMessagePublished(
   BOT_ACTIVITY_TOPIC_NAME,
