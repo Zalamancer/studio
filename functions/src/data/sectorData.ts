@@ -1,7 +1,7 @@
 // functions/src/data/sectorData.ts
 /* eslint-disable max-len */
 
-import type { SectorWithSubSectors } from "./sectorTypes";
+import type {SectorWithSubSectors} from "./sectorTypes";
 
 // This data is a copy from src/components/layout/MainLayout.tsx
 // Ensure it's kept in sync if the main app's version changes,
