@@ -50,7 +50,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
       const data = docSnap.data();
       if (!data.participants || !Array.isArray(data.participants)) {
           console.warn(`%c  [messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`, "color: orange;");
-          return null;
+          return null; // Skip this document
       }
       const lastTimestampMillis = data.lastMessageTimestamp instanceof Timestamp
             ? data.lastMessageTimestamp.toMillis()
@@ -88,7 +88,6 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
 
 export const findOrCreateConversation = async (userId1: string, userId2: string, postIdParam?: string | null): Promise<string> => {
   const currentClientAuthUid = auth.currentUser?.uid;
-  // Ensure postId is explicitly null if it's for a general chat or not provided.
   const postIdForQuery = postIdParam === 'general_connection' || !postIdParam ? null : postIdParam;
   const contextDescription = postIdForQuery ? `post ${postIdForQuery}` : 'general chat';
 
@@ -108,8 +107,6 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
 
   try {
     const queryConstraints: QueryConstraint[] = [where('participants', '==', participants)];
-    // This handles the three cases for postId: specific ID, general (null), or any (not querying by postId)
-    // For findOrCreate, we usually want to match postId specifically or null for general chats.
     queryConstraints.push(where('postId', '==', postIdForQuery));
     queryConstraints.push(limit(1));
 
@@ -126,7 +123,7 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
     console.log(`%c[messagingService] No existing conversation found for ${contextDescription}. Creating new one.`, "color: orange;");
     const newConversationData: NewConversationData = {
         participants: participants,
-        postId: postIdForQuery, // Explicitly null if general_connection or not provided
+        postId: postIdForQuery,
         createdAt: serverTimestamp() as Timestamp,
         lastMessage: null,
         lastMessageTimestamp: null,
@@ -168,7 +165,7 @@ export const getMessagesForConversation = (
     const err = new Error("Conversation ID is required to fetch messages.");
     console.error("[messagingService] getMessagesForConversation:", err.message);
     onError(err);
-    return () => {}; // Return an empty unsubscribe function
+    return () => {};
   }
   console.log(`%c[Service] getMessagesForConversation: Setting up listener for conversationId: ${conversationId}`, "color: cyan;");
 
@@ -176,14 +173,14 @@ export const getMessagesForConversation = (
   const q = query(
     messagesRef,
     orderBy('timestamp', 'asc'),
-    limit(100) // Consider pagination for very long conversations
+    limit(100)
   );
 
   const unsubscribe = onSnapshot(q,
     (querySnapshot) => {
       console.log(`%c[Service] onSnapshot fired for ${conversationId}. Docs count: ${querySnapshot.docs.length}`, "color: cyan;");
       const messages = querySnapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as Message; // Assume Message type
+        const data = docSnap.data() as Message;
         console.log(`    [Service] Mapping doc ${docSnap.id} - Raw data: `, data); // Log raw data
         const timestampMillis = data.timestamp instanceof Timestamp
             ? data.timestamp.toMillis()
@@ -196,7 +193,7 @@ export const getMessagesForConversation = (
           text: data.text || "",
           timestamp: timestampMillis,
           read: data.read || false,
-          isBotMessage: data.isBotMessage === true, // Explicitly check for true, defaults to false
+          isBotMessage: data.isBotMessage === true, // Explicitly check for true
           replyToMessageId: data.replyToMessageId || undefined,
           repliedToTextSnippet: data.repliedToTextSnippet || undefined,
         };
@@ -231,23 +228,22 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     const conversationDocRef = doc(db, 'conversations', messageData.conversationId);
     const messagesRef = messagesSubcollectionRef(messageData.conversationId);
     const batch = writeBatch(db);
-    const newMessageRef = doc(messagesRef); // Auto-generate ID
+    const newMessageRef = doc(messagesRef); 
 
-    // Ensure all fields are explicitly defined or null
     const messagePayload: Partial<Message> & { timestamp: any } = {
         conversationId: messageData.conversationId,
         senderId: messageData.senderId,
         text: messageData.text,
         read: false,
-        isBotMessage: messageData.isBotMessage === true ? true : false, // Default to false if undefined
+        isBotMessage: messageData.isBotMessage === true ? true : false, 
         replyToMessageId: messageData.replyToMessageId || null,
         repliedToTextSnippet: messageData.repliedToTextSnippet || null,
         timestamp: serverTimestamp(),
     };
-    // Remove null fields if you prefer them to be absent in Firestore, but null is fine.
+    
     Object.keys(messagePayload).forEach(key => {
         if (messagePayload[key as keyof typeof messagePayload] === undefined) {
-            delete messagePayload[key as keyof typeof messagePayload];
+            messagePayload[key as keyof typeof messagePayload] = null;
         }
     });
 
@@ -263,14 +259,13 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     await batch.commit();
     console.log(`%c[messagingService] Message sent by ${messageData.senderId} in conv ${messageData.conversationId}. New msg ID: ${newMessageRef.id}`, "color: green;");
 
-    // Send notifications to other participants
     const conversationSnap = await getDoc(conversationDocRef);
     if (conversationSnap.exists()) {
         const conversationData = conversationSnap.data();
         const participantsArray = Array.isArray(conversationData?.participants) ? conversationData.participants : [];
 
         for (const participantId of participantsArray) {
-            if (participantId !== messageData.senderId) { // Don't notify the sender
+            if (participantId !== messageData.senderId) { 
                 try {
                     await createNotification({
                         userId: participantId,
@@ -293,7 +288,6 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
   }
 };
 
-// Fetches minimal user details for display (name, avatar)
 export const getUserDetails = async (userId: string): Promise<{ name: string; avatar?: string } | null> => {
     if (!userId) return null;
     console.log(`%c[messagingService] getUserDetails: Fetching details for userId: ${userId}`, "color: #DAA520;");
@@ -302,7 +296,7 @@ export const getUserDetails = async (userId: string): Promise<{ name: string; av
         console.warn(`%c[messagingService] getUserDetails: No profile found for ${userId}, using generated name.`, "color: #DAA520;");
         return { name: generateAnonymousName(userId) };
     }
-    const displayName = profile.displayName || generateAnonymousName(userId); // Fallback to generated name
+    const displayName = profile.displayName || generateAnonymousName(userId); 
     console.log(`%c[messagingService] getUserDetails: Profile found for ${userId}. DisplayName: '${displayName}', Avatar: ${!!profile.avatarUrl}`, "color: #DAA520;");
     return {
         name: displayName,
@@ -310,7 +304,6 @@ export const getUserDetails = async (userId: string): Promise<{ name: string; av
     };
 };
 
-// Fetches post question for context in conversation list
 export const getPostDetails = async (postId: string): Promise<{ question: string } | null> => {
     if (!postId || postId === 'general_connection') return null;
     try {
