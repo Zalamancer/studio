@@ -26,6 +26,7 @@ export interface Message {
   text: string; // The content of the message
   timestamp: Timestamp; // When the message was sent (Firestore Timestamp)
   read: boolean; // Indicates if the message has been read (by the recipient)
+  isBotMessage?: boolean; // Optional: Indicates if the message is from a bot
   replyToMessageId?: string; // Optional: ID of the message this is a reply to
   repliedToTextSnippet?: string; // Optional: A snippet of the text of the message being replied to
 }
@@ -33,11 +34,16 @@ export interface Message {
 // Represents a message with a serializable timestamp (e.g., number) for client components
 export interface SerializableMessage extends Omit<Message, 'timestamp'> {
   timestamp: number; // Timestamp as milliseconds since epoch
+  // isBotMessage is inherited from Message via Omit if not re-declared
+  // but explicitly adding it here for clarity if Message could change
+  isBotMessage?: boolean; 
 }
 
 
 // Type for data needed to create a new message (uses client-side data, serverTimestamp used in service)
 export type NewMessageData = Omit<Message, 'id' | 'timestamp' | 'read'>;
+// We might need to adjust NewMessageData if isBotMessage should be settable at creation
+// For now, assuming isBotMessage is determined by the backend or not set by client directly for new messages
 
 // Type for data needed to create a new conversation
 export type NewConversationData = Omit<Conversation, 'id'>;

@@ -54,3 +54,22 @@ export type NewBidData = Omit<Bid, 'id' | 'timestamp' | 'bidderName' | 'bidderAv
 export interface ClientBid extends Omit<Bid, 'timestamp'> {
   timestamp: number; // Milliseconds since epoch
 }
+
+// --- Sector, SubSector, Industry Types ---
+export interface Industry {
+  name: string;
+  code: string;
+}
+
+export interface SubSector {
+  name: string;
+  code: string;
+  industries: Industry[];
+}
+
+export interface SectorWithSubSectors {
+  name: string;
+  code: string;
+  description?: string;
+  subSectors: SubSector[];
+}

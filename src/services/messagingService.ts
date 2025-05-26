@@ -12,18 +12,18 @@ import {
   Timestamp,
   doc,
   getDoc,
-  writeBatch, // Removed setDoc as batch handles creation/update
+  writeBatch,
   type QueryConstraint,
-  // Removed arrayUnion and documentId as they are not used here
+  onSnapshot, // Added for real-time listeners
+  Unsubscribe, // Type for the unsubscribe function
 } from 'firebase/firestore';
 import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message } from '@/types/messaging';
 import { fetchUserProfileBasic } from './connectionService';
-import { createNotification } from './notificationService'; // Import notification service
+import { createNotification } from './notificationService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 const conversationsCollectionRef = collection(db, 'conversations');
 const messagesSubcollectionRef = (conversationId: string) => collection(db, 'conversations', conversationId, 'messages');
-
 
 export const getConversationsForUser = async (userId: string): Promise<ClientConversation[]> => {
   if (!userId) {
@@ -35,180 +35,144 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
   try {
     const constraints: QueryConstraint[] = [
         where('participants', 'array-contains', userId),
+        orderBy('lastMessageTimestamp', 'desc'),
+        limit(50)
     ];
-    constraints.push(orderBy('lastMessageTimestamp', 'desc'));
-    constraints.push(limit(50));
 
     const q = query(conversationsCollectionRef, ...constraints);
-
-    console.log("[messagingService] Executing Firestore query for conversations...");
     const querySnapshot = await getDocs(q);
-    console.log(`[messagingService] Query snapshot received. Found ${querySnapshot.docs.length} documents.`);
-
     const conversations = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
-
       if (!data.participants || !Array.isArray(data.participants)) {
           console.warn(`[messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`);
           return null;
       }
-
       const lastTimestampMillis = data.lastMessageTimestamp instanceof Timestamp
             ? data.lastMessageTimestamp.toMillis()
             : null;
-
        const createdAtTimestampMillis = data.createdAt instanceof Timestamp
             ? data.createdAt.toMillis()
             : Date.now();
 
-      const clientConversation: ClientConversation = {
+      return {
         id: docSnap.id,
         participants: data.participants,
         postId: data.postId || undefined,
         lastMessage: data.lastMessage || null,
         lastMessageTimestamp: lastTimestampMillis,
         createdAt: createdAtTimestampMillis,
-      };
-      return clientConversation;
+      } as ClientConversation;
     }).filter((conv): conv is ClientConversation => conv !== null);
-
-
-    console.log(`[messagingService] Successfully mapped ${conversations.length} valid client conversations for user ${userId}`);
     return conversations;
 
   } catch (error: any) {
     console.error(`[messagingService] Error fetching conversations for user ${userId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error("[messagingService] Firestore permission denied. Check your security rules for the 'conversations' collection. Ensure the rules allow the 'list' operation for queries filtering by 'participants' containing the authenticated user's ID.");
-      throw new Error(`Failed to fetch conversations: Missing or insufficient permissions. Check Firestore Rules.`);
+      console.error("[messagingService] Firestore permission denied for 'conversations' collection.");
+      throw new Error(`Failed to fetch conversations: Missing or insufficient permissions.`);
     }
      if (error.code === 'failed-precondition' && error.message.includes('index')) {
-         console.error("[messagingService] Firestore query requires an index. Check the Firebase console for index creation prompts or manually create the necessary composite index on 'participants' and 'lastMessageTimestamp'.");
-         throw new Error("Firestore query requires an index for conversations. Please create it in the Firebase console.");
+         console.error("[messagingService] Firestore query requires an index for conversations.");
+         throw new Error("Firestore query requires an index for conversations.");
      }
     throw new Error(`Failed to fetch conversations: ${error.message}`);
   }
 };
 
-
 export const findOrCreateConversation = async (userId1: string, userId2: string, postId?: string | null): Promise<string> => {
-  if (userId1 === userId2) {
-    console.error("[messagingService] findOrCreateConversation: Attempted to create conversation with oneself.");
-    throw new Error("Cannot create a conversation with oneself.");
-  }
-  if (!userId1 || !userId2) {
-    console.error("[messagingService] findOrCreateConversation: userId1 or userId2 is missing.");
-    throw new Error("Both user IDs are required to find or create a conversation.");
-  }
+  if (userId1 === userId2) throw new Error("Cannot create a conversation with oneself.");
+  if (!userId1 || !userId2) throw new Error("Both user IDs are required.");
 
   const participants = [userId1, userId2].sort();
   const contextDescription = postId ? `post ${postId}` : 'general chat';
-  const clientAuthUid = auth.currentUser?.uid;
-
-  console.log(`%c[messagingService] findOrCreateConversation: Attempting for ${contextDescription} between ${userId1} and ${userId2}. Sorted: [${participants.join(', ')}]. Client Auth: ${clientAuthUid || 'NULL'}`, "color: orange;");
-
+  
   try {
-    const queryConstraints: QueryConstraint[] = [
-      where('participants', '==', participants),
-    ];
-
+    const queryConstraints: QueryConstraint[] = [where('participants', '==', participants)];
     if (postId === 'general_connection' || !postId) {
       queryConstraints.push(where('postId', '==', null));
     } else {
       queryConstraints.push(where('postId', '==', postId));
     }
-
     queryConstraints.push(limit(1));
 
     const q = query(conversationsCollectionRef, ...queryConstraints);
     const querySnapshot = await getDocs(q);
 
     if (!querySnapshot.empty) {
-      const existingConversationId = querySnapshot.docs[0].id;
-      console.log(`%c[messagingService] Conversation FOUND for ${contextDescription}: ${existingConversationId}`, "color: green;");
-      return existingConversationId;
-    } else {
-      console.log(`%c[messagingService] Conversation for ${contextDescription} NOT found. Attempting to CREATE...`, "color: orange;");
-      const newConversationData: NewConversationData = {
+      return querySnapshot.docs[0].id;
+    }
+    
+    const newConversationData: NewConversationData = {
         participants: participants,
-        postId: postId === 'general_connection' ? null : postId || null,
+        postId: postId === 'general_connection' ? undefined : (postId || undefined),
         createdAt: serverTimestamp() as Timestamp,
         lastMessage: null,
         lastMessageTimestamp: null,
-      };
+    };
+    const docRef = await addDoc(conversationsCollectionRef, newConversationData);
+    return docRef.id;
 
-      console.log(`%c[messagingService] Pre-Create Firestore Rule Check Values:`, "color: #1E90FF; font-weight:bold;");
-      console.log(`  Client Auth UID:                          '${clientAuthUid || 'NULL'}'`);
-      console.log(`  newConversationData.participants.length === 2: ${newConversationData.participants.length === 2}`);
-      console.log(`  newConversationData.participants.includes(clientAuthUid): ${clientAuthUid ? newConversationData.participants.includes(clientAuthUid) : false}`);
-      console.log(`  Data for new conversation:`, newConversationData);
-
-      const docRef = await addDoc(conversationsCollectionRef, newConversationData);
-      console.log(`%c[messagingService] Conversation CREATED successfully for ${contextDescription}: ${docRef.id}`, "color: green; font-weight:bold;");
-      return docRef.id;
-    }
   } catch (error: any) {
-    console.error(`[messagingService] Error finding or creating conversation for ${contextDescription} between ${userId1} and ${userId2}:`, error);
-    const currentUserForErrorLog = auth.currentUser;
-    console.error('  Current auth state at error:', currentUserForErrorLog ? `UID: ${currentUserForErrorLog.uid}` : 'No user authenticated');
-    console.error('  Participants used in query/create:', participants);
-    console.error('  PostID used:', postId);
-
-    if (error.code === 'permission-denied') {
-        console.error("[messagingService] Firestore permission denied for creating/accessing conversation. Check security rules.");
-        console.error("Ensure rule allows 'create' on '/conversations/{conversationId}' when authenticated, participants array is size 2, contains the auth uid, and handles postId correctly.");
-        console.error("Ensure rule allows 'list' (or 'query') on '/conversations' with appropriate where clauses (participants, postId).");
-        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
-    }
-    if (error.code === 'failed-precondition' && error.message.includes('index')) {
-         console.error("Firestore query requires an index. Please create the necessary index in the Firebase console (e.g., composite on 'participants' and 'postId').");
-         throw new Error("Firestore query requires an index for conversations. Please create it.");
-     }
+    console.error(`[messagingService] Error finding/creating conversation for ${contextDescription}:`, error);
     throw new Error(`Failed to find or create conversation: ${error.message}`);
   }
 };
 
-
-export const getMessagesForConversation = async (conversationId: string): Promise<SerializableMessage[]> => {
-  if (!conversationId) return [];
-
-  try {
-    const messagesRef = messagesSubcollectionRef(conversationId);
-    const q = query(
-      messagesRef,
-      orderBy('timestamp', 'asc'),
-      limit(100)
-    );
-    const querySnapshot = await getDocs(q);
-    const messages = querySnapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as Message;
-      const timestampMillis = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : Date.now();
-
-      return {
-        id: docSnap.id,
-        conversationId: conversationId,
-        senderId: data.senderId,
-        text: data.text,
-        timestamp: timestampMillis,
-        read: data.read || false,
-        replyToMessageId: data.replyToMessageId || undefined,
-        repliedToTextSnippet: data.repliedToTextSnippet || undefined,
-      } as SerializableMessage;
-    });
-    return messages;
-  } catch (error: any) {
-    console.error(`[messagingService] Error fetching messages for conversation ${conversationId}:`, error);
-     if (error.code === 'permission-denied') {
-        console.error("[messagingService] Firestore permission denied for reading messages. Check security rules.");
-         throw new Error(`Permission denied when trying to fetch messages. Check Firestore Rules for subcollections.`);
-    }
-    if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.error("Firestore query for messages requires an index. Create an index on 'timestamp' (asc) in the 'messages' subcollection.");
-        throw new Error("Firestore query requires an index for messages. Please create it.");
-    }
-    throw new Error(`Failed to fetch messages: ${error.message}`);
+// New real-time message listener
+export const getMessagesForConversation = (
+  conversationId: string,
+  onUpdate: (messages: SerializableMessage[]) => void,
+  onError: (error: Error) => void
+): Unsubscribe => {
+  if (!conversationId) {
+    onError(new Error("Conversation ID is required to fetch messages."));
+    return () => {}; // Return a no-op unsubscribe function
   }
+
+  const messagesRef = messagesSubcollectionRef(conversationId);
+  const q = query(
+    messagesRef,
+    orderBy('timestamp', 'asc'),
+    limit(100) // Consider pagination for very long conversations
+  );
+
+  console.log(`[messagingService] Setting up onSnapshot for conversationId: ${conversationId}`); 
+
+  const unsubscribe = onSnapshot(q, 
+    (querySnapshot) => {
+      console.log("[messagingService] onSnapshot fired. Docs count:", querySnapshot.docs.length, "Has pending writes:", querySnapshot.metadata.hasPendingWrites);
+      const messages = querySnapshot.docs.map((docSnap) => {
+        const data = docSnap.data() as Message; 
+        const timestampMillis = data.timestamp instanceof Timestamp ? data.timestamp.toMillis() : Date.now();
+        return {
+          id: docSnap.id,
+          conversationId: conversationId,
+          senderId: data.senderId,
+          text: data.text,
+          timestamp: timestampMillis,
+          read: data.read || false,
+          isBotMessage: data.isBotMessage || false,
+          replyToMessageId: data.replyToMessageId || undefined,
+          repliedToTextSnippet: data.repliedToTextSnippet || undefined,
+        } as SerializableMessage;
+      });
+      onUpdate(messages);
+    },
+    (error) => {
+      console.error(`[messagingService] Error in real-time messages listener for ${conversationId}:`, error);
+      if (error.code === 'permission-denied') {
+          onError(new Error(`Permission denied fetching messages. Check Firestore Rules.`));
+      } else if (error.code === 'failed-precondition' && error.message.includes('index')) {
+          onError(new Error("Firestore query for messages requires an index."));
+      } else {
+          onError(new Error(`Failed to fetch messages: ${error.message}`));
+      }
+    }
+  );
+
+  return unsubscribe; // Return the unsubscribe function provided by onSnapshot
 };
+
 
 export const sendMessage = async (messageData: NewMessageData): Promise<string> => {
   if (!messageData.text || !messageData.senderId || !messageData.conversationId) {
@@ -217,11 +181,10 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
   try {
     const conversationDocRef = doc(db, 'conversations', messageData.conversationId);
     const messagesRef = messagesSubcollectionRef(messageData.conversationId);
-
     const batch = writeBatch(db);
     const newMessageRef = doc(messagesRef);
 
-    const messagePayload: Omit<Message, 'id' | 'timestamp'> = {
+    const messagePayload: Omit<Message, 'id' | 'timestamp' | 'isBotMessage'> & { isBotMessage?: boolean } = {
         conversationId: messageData.conversationId,
         senderId: messageData.senderId,
         text: messageData.text,
@@ -242,10 +205,9 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
 
     await batch.commit();
 
-    // Create notification for other participants
     const conversationSnap = await getDoc(conversationDocRef);
     if (conversationSnap.exists()) {
-        const conversationData = conversationSnap.data() as ClientConversation; // Use Client for participants
+        const conversationData = conversationSnap.data() as ClientConversation;
         for (const participantId of conversationData.participants) {
             if (participantId !== messageData.senderId) {
                 await createNotification({
@@ -262,10 +224,6 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
 
   } catch (error: any) {
     console.error('[messagingService] Error sending message:', error);
-    if (error.code === 'permission-denied') {
-        console.error("[messagingService] Firestore permission denied for sending message/updating conversation. Check security rules.");
-        throw new Error(`Permission denied when trying to send message. Check Firestore Rules.`);
-    }
     throw new Error(`Failed to send message: ${error.message}`);
   }
 };
@@ -275,7 +233,7 @@ export const getUserDetails = async (userId: string): Promise<{ name: string; av
     const profile = await fetchUserProfileBasic(userId);
     if (!profile) return null;
     return {
-        name: profile.displayName || generateAnonymousName(userId), // Fallback to generated name if displayName is somehow missing
+        name: profile.displayName || generateAnonymousName(userId),
         avatar: profile.avatarUrl,
     };
 };
@@ -289,13 +247,9 @@ export const getPostDetails = async (postId: string): Promise<{ question: string
             const postData = postSnap.data();
             return { question: postData.question || 'Post details unavailable' };
         }
-        console.warn(`[messagingService] Post details not found for postId: ${postId}`);
         return null;
     } catch (error: any) {
         console.error(`[messagingService] Error fetching post details for ${postId}:`, error);
-         if (error.code === 'permission-denied') {
-             console.error(`[messagingService] Permission denied fetching post ${postId}. Check rules.`);
-         }
         return null;
     }
 };

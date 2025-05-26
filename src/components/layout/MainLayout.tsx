@@ -50,8 +50,6 @@ import {
 import type {
   NewPostData,
   SectorWithSubSectors,
-  SubSector,
-  Industry
 } from '@/types/post';
 import {
   addPostToFirestore
@@ -68,7 +66,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { getReviewsForProfile } from '@/services/reviewService';
-
 
 export const detailedSectorsData: SectorWithSubSectors[] = [
   {

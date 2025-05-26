@@ -1,7 +1,7 @@
 // functions/src/data/sectorData.ts
 /* eslint-disable max-len */
 
-import type {SectorWithSubSectors} from "./sectorTypes";
+import type {SectorWithSubSectors, SubSector, Industry} from "./sectorTypes";
 
 // This data is a copy from src/components/layout/MainLayout.tsx
 // Ensure it's kept in sync if the main app's version changes,
@@ -271,3 +271,20 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     ],
   },
 ];
+
+export const findIndustryByName = (
+  industryName: string
+): { industry: Industry; subSector: SubSector; sector: SectorWithSubSectors } | null => {
+  for (const sector of detailedSectorsData) {
+    for (const subSector of sector.subSectors) {
+      if (subSector.industries) { // Check if industries array exists
+        for (const industry of subSector.industries) {
+          if (industry.name === industryName) {
+            return {industry, subSector, sector};
+          }
+        }
+      }
+    }
+  }
+  return null; // Industry not found
+};
