@@ -18,7 +18,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDownLeft, ArrowLeft } from 'lucide-react';
+import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDownLeft, ArrowLeft, Users } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
@@ -119,20 +119,34 @@ ConversationListItem.displayName = 'ConversationListItem';
 
 interface MessageBubbleProps {
   message: SerializableMessage;
-  isOwnMessage: boolean;
+  currentUserId: string; // Pass currentUserId to MessageBubble
   onStartReply: (message: SerializableMessage) => void;
 }
 
-const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwnMessage, onStartReply }) => {
+const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, currentUserId, onStartReply }) => {
+  // Explicitly determine isOwnMessage based on currentUserId and ensure bot messages are not "own"
+  const isOwnMessage = !message.isBotMessage && message.senderId === currentUserId;
+  console.log(`[MessageBubble] PROPS RECEIVED: messageId=${message.id}, text="${message.text.substring(0,20)}...", isBotMessage=${message.isBotMessage}, senderId=${message.senderId}, currentUserId=${currentUserId}, calculatedIsOwnMessage=${isOwnMessage}`);
+
   const timestamp = message.timestamp
     ? new Date(message.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
     : 'Sending...';
 
-  console.log(`  [MessageBubble] Rendering message ID: ${message.id}, text: "${message.text.substring(0,30)}...", isBotMessage: ${message.isBotMessage}`);
+  let bubbleClasses = cn(
+    "rounded-lg px-3 py-2 max-w-[75%] break-words shadow-sm relative",
+    isOwnMessage ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
+  );
+
+  if (message.isBotMessage) {
+    console.log(`[MessageBubble] RENDERING BOT MESSAGE: ${message.id}`);
+    // Apply a very distinct, unmissable style for bot messages for debugging
+    bubbleClasses = cn(bubbleClasses, "bg-lime-300 text-black border-2 border-lime-700");
+  }
+
 
   return (
     <div className={cn("flex group mb-1", isOwnMessage ? "justify-end" : "justify-start")}>
-       {!isOwnMessage && (
+       {!isOwnMessage && !message.isBotMessage && ( // Only show reply for non-bot, non-own messages
         <Button
           variant="ghost"
           size="icon"
@@ -143,20 +157,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwn
           <CornerDownLeft className="h-3.5 w-3.5" />
         </Button>
       )}
-      <div className={cn(
-        "rounded-lg px-3 py-2 max-w-[75%] break-words shadow-sm relative",
-        isOwnMessage
-          ? "bg-primary text-primary-foreground"
-          : "bg-muted text-foreground",
-        message.isBotMessage && !isOwnMessage ? "bg-pink-100 text-pink-700 border-2 border-pink-300 dark:bg-pink-900/50 dark:text-pink-200 dark:border-pink-700" : "" // More visible debug style
-      )}>
+      <div className={bubbleClasses}>
+        {message.isBotMessage && (
+          <strong className="text-red-700 block mb-1">[BOT DEBUG TEXT]: </strong>
+        )}
         {message.replyToMessageId && message.repliedToTextSnippet && (
           <div className={cn(
             "text-xs p-1.5 rounded-md mb-1 border-l-2",
-            isOwnMessage
+             isOwnMessage && !message.isBotMessage
               ? "bg-card text-primary border-primary/30"
-              : "bg-accent text-accent-foreground border-accent/50",
-             message.isBotMessage && !isOwnMessage ? "border-pink-500/50 bg-pink-200 text-pink-700 dark:bg-pink-800/50 dark:text-pink-300" : ""
+              : !message.isBotMessage ? "bg-accent/50 text-accent-foreground/80 border-accent/50" : "bg-lime-200 text-lime-800 border-lime-500/50" // Bot reply snippet style
           )}>
             <p className="italic truncate opacity-80">{message.repliedToTextSnippet}</p>
           </div>
@@ -164,12 +174,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, isOwn
         <p className="text-sm">{message.text}</p>
         <p className={cn(
              "text-xs mt-1",
-             isOwnMessage ? "text-primary-foreground/80 text-right" : "text-muted-foreground/80 text-left"
+             isOwnMessage && !message.isBotMessage ? "text-primary-foreground/80 text-right" : "text-muted-foreground/80 text-left",
+             message.isBotMessage && "text-black/70 text-left" // Timestamp style for bot message
         )}>
             {timestamp}
         </p>
       </div>
-      {isOwnMessage && (
+      {isOwnMessage && !message.isBotMessage && ( // Only show reply for own, non-bot messages
         <Button
           variant="ghost"
           size="icon"
@@ -192,7 +203,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     initialMessageText,
 }) => {
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationId || null);
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState(initialMessageText || '');
   const [replyingTo, setReplyingTo] = useState<SerializableMessage | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -203,8 +214,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
 
   const [messages, setMessages] = useState<SerializableMessage[]>([]);
-  const [isLoadingMessages, setIsLoadingMessages] = useState(true);
-  const [messagesError, setMessagesError] = useState<Error | null>(null);
+  const [isLoadingMessagesState, setIsLoadingMessagesState] = useState(true); // Renamed to avoid conflict
+  const [messagesErrorState, setMessagesErrorState] = useState<Error | null>(null); // Renamed
+
 
   const {
       data: conversations = [],
@@ -215,7 +227,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     queryKey: ['conversations', currentUserId],
     queryFn: () => getConversationsForUser(currentUserId),
     enabled: !!currentUserId,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 1, // Reduced stale time
     refetchOnWindowFocus: true,
     retry: 1,
   });
@@ -253,25 +265,27 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     console.log("[MessagingInterface] Messages useEffect. SelectedConversationId:", selectedConversationId);
     if (!selectedConversationId) {
       setMessages([]);
-      setIsLoadingMessages(false);
-      setMessagesError(null);
+      setIsLoadingMessagesState(false);
+      setMessagesErrorState(null);
       return;
     }
 
-    setIsLoadingMessages(true);
-    setMessagesError(null);
+    setIsLoadingMessagesState(true);
+    setMessagesErrorState(null);
 
     const unsubscribe = getMessagesForConversation(
       selectedConversationId,
-      (newMessages) => {
-        console.log(`%c[MessagingInterface] onUpdate FROM SERVICE called for conv ${selectedConversationId}. New messages count: ${newMessages.length}`, "color: green; font-weight: bold;", newMessages);
-        setMessages(newMessages);
-        setIsLoadingMessages(false);
+      (newMessagesFromListener) => {
+        console.log(`%c[MessagingInterface] onUpdate FROM SERVICE called for conv ${selectedConversationId}. New messages count: ${newMessagesFromListener.length}`, "color: green; font-weight: bold;");
+        const botMessagesInThisUpdate = newMessagesFromListener.filter(m => m.isBotMessage);
+        console.log(`%c  [MessagingInterface] Bot messages in this onUpdate: ${botMessagesInThisUpdate.length}`, "color: green; font-weight: bold;", botMessagesInThisUpdate);
+        setMessages(newMessagesFromListener);
+        setIsLoadingMessagesState(false);
       },
       (error) => {
         console.error(`%c[MessagingInterface] Error fetching real-time messages for ${selectedConversationId}:`, "color: red;", error);
-        setMessagesError(error);
-        setIsLoadingMessages(false);
+        setMessagesErrorState(error);
+        setIsLoadingMessagesState(false);
         toast({
             variant: "destructive",
             title: "Error Loading Messages",
@@ -291,7 +305,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     onSuccess: () => {
         setNewMessage('');
         setReplyingTo(null);
-        queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
+        // No need to invalidate 'messages' query here, as onSnapshot handles updates.
+        queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] }); // Invalidate conversations to update lastMessage
     },
     onError: (error: Error) => {
         toast({
@@ -309,7 +324,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
            }, 100);
            return () => clearTimeout(timer);
        }
-   }, [messages]);
+   }, [messages]); // Trigger scroll on new messages
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -335,8 +350,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 setSelectedConversationId(initialConversationId);
                 if (isMobile && activeMobileView !== 'chat') setActiveMobileView('chat');
              }
-         } else if (!selectedConversationId && !isMobile && conversations.length > 0) {
-            //setSelectedConversationId(conversations[0].id); // Auto-select first on desktop
          }
      } else if (!isLoadingConversations && !selectedConversationId && !isConversationsError) {
          setSelectedConversationId(null);
@@ -357,7 +370,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        isMobile,
        activeMobileView,
        initialMessageText,
-       newMessage
+       newMessage // Added newMessage here
     ]);
 
    const handleConversationSelect = useCallback((conversationId: string) => {
@@ -365,8 +378,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setActiveMobileView('chat');
     }
-  }, [isMobile, setActiveMobileView, setSelectedConversationId]); // Removed setSelectedConversationId as it's directly set
-
+  }, [isMobile]); // Removed setActiveMobileView and setSelectedConversationId as they are directly used
 
    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
    const otherParticipantId = selectedConversation?.participants.find(p => p !== currentUserId);
@@ -390,14 +402,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const handleStartReply = useCallback((message: SerializableMessage) => {
     setReplyingTo(message);
     messageInputRef.current?.focus();
-  }, [messageInputRef]);
+  }, [messageInputRef]); // messageInputRef is stable
 
   const handleCancelReply = useCallback(() => {
     setReplyingTo(null);
   }, []);
 
   return (
-    <div className="flex h-full">
+    <div className="flex h-full"> {/* Ensure this div takes full height of its parent */}
       <div
         className={cn(
           "flex flex-col border-r bg-background",
@@ -495,7 +507,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                          className={cn(
                              "text-primary hover:underline text-xs items-center gap-1 ml-auto flex-shrink-0",
                              "focus:outline-none focus:ring-1 focus:ring-ring rounded p-1",
-                             "hidden md:flex"
+                             "hidden md:flex" // Hidden on mobile
                          )}
                          title="View Post Details"
                          aria-label="View Post Details"
@@ -506,30 +518,26 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             </div>
 
             <ScrollArea className="flex-grow bg-background">
-              {/* Apply padding to an inner div for messages */}
               <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
-                {isLoadingMessages ? (
+                {isLoadingMessagesState ? (
                      <div className="flex justify-center items-center h-full">
                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
                      </div>
-                 ) : messagesError ? (
-                     <p className="text-sm text-destructive text-center">{messagesError.message || "Error loading messages."}</p>
+                 ) : messagesErrorState ? (
+                     <p className="text-sm text-destructive text-center">{messagesErrorState.message || "Error loading messages."}</p>
                  ) : messages.length === 0 ? (
                      <p className="text-sm text-muted-foreground text-center h-full flex items-center justify-center">
                           Start the conversation!
                      </p>
                  ) : (
-                   messages.map((msg) => {
-                     console.log(`[MessagingInterface] Rendering message: ID=${msg.id}, Sender=${msg.senderId}, IsBot=${msg.isBotMessage}, Text="${msg.text?.substring(0,20)}..."`);
-                     return (
+                   messages.map((msg) => (
                        <MessageBubble
                          key={msg.id}
                          message={msg}
-                         isOwnMessage={msg.senderId === currentUserId}
+                         currentUserId={currentUserId} // Pass currentUserId
                          onStartReply={handleStartReply}
                        />
-                     );
-                   })
+                     ))
                  )}
                  <div ref={messagesEndRef} />
               </div>
@@ -555,14 +563,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                   placeholder="Type your message..."
                   value={newMessage}
                   onChange={(e) => setNewMessage(e.target.value)}
-                  disabled={sendMessageMutation.isPending || isLoadingMessages}
+                  disabled={sendMessageMutation.isPending || isLoadingMessagesState}
                   className="flex-grow bg-background"
                   aria-label="Message input"
                 />
                 <Button
                   type="submit"
                   size="icon"
-                  disabled={!newMessage.trim() || sendMessageMutation.isPending || isLoadingMessages}
+                  disabled={!newMessage.trim() || sendMessageMutation.isPending || isLoadingMessagesState}
                   aria-label="Send message"
                 >
                    {sendMessageMutation.isPending ? (
@@ -602,4 +610,3 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
-

@@ -16,7 +16,7 @@ import {
   writeBatch,
   type QueryConstraint,
   onSnapshot, // Added for real-time listeners
-  Unsubscribe, // Type for the unsubscribe function
+  type Unsubscribe, // Type for the unsubscribe function
 } from 'firebase/firestore';
 import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message } from '@/types/messaging';
 import { fetchUserProfileBasic } from './connectionService';
@@ -32,6 +32,9 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
     return [];
   }
   console.log(`%c[messagingService] Fetching conversations for user: ${userId}`, "color: dodgerblue;");
+  const currentClientAuthUid = auth.currentUser?.uid;
+  console.log(`%c  [messagingService] getConversationsForUser - Client auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: dodgerblue;");
+
 
   try {
     const constraints: QueryConstraint[] = [
@@ -41,16 +44,19 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
     ];
 
     const q = query(conversationsCollectionRef, ...constraints);
+    console.log("%c  [messagingService] Executing Firestore query for conversations...", "color: dodgerblue;");
     const querySnapshot = await getDocs(q);
+    console.log(`%c  [messagingService] Query snapshot received. Found ${querySnapshot.docs.length} documents.`, "color: dodgerblue;");
+
     const conversations = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       if (!data.participants || !Array.isArray(data.participants)) {
-          console.warn(`%c[messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`, "color: orange;");
+          console.warn(`%c  [messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`, "color: orange;");
           return null;
       }
       const lastTimestampMillis = data.lastMessageTimestamp instanceof Timestamp
             ? data.lastMessageTimestamp.toMillis()
-            : (typeof data.lastMessageTimestamp === 'number' ? data.lastMessageTimestamp : null); // Handle already serialized
+            : (typeof data.lastMessageTimestamp === 'number' ? data.lastMessageTimestamp : null);
 
        const createdAtTimestampMillis = data.createdAt instanceof Timestamp
             ? data.createdAt.toMillis()
@@ -123,12 +129,12 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
     console.log(`%c[messagingService] No existing conversation found for ${contextDescription}. Creating new one.`, "color: orange;");
     const newConversationData: NewConversationData = {
         participants: participants,
-        postId: postIdForQuery, 
+        postId: postIdForQuery,
         createdAt: serverTimestamp() as Timestamp,
         lastMessage: null,
         lastMessageTimestamp: null,
     };
-
+    // Log for security rule debugging
     console.log(`%c[messagingService] Pre-Create Firestore Rule Check Values:
         - clientAuthUid:                               '${currentClientAuthUid || 'NULL'}'
         - newConversationData.participants.length === 2: ${newConversationData.participants.length === 2}
@@ -146,7 +152,7 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
         console.error("[messagingService] Firestore permission denied for creating/accessing conversation. Check security rules.");
         console.error("Ensure rule allows 'create' on '/conversations/{conversationId}' when authenticated, participants array is size 2, contains the auth uid, and handles postId correctly.");
         console.error("Ensure rule allows 'list' (or 'query') on '/conversations' with appropriate where clauses (participants, postId).");
-        throw new Error(`Permission denied when trying to access or create conversation. Check Firestore Rules.`);
+        throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
          console.error("[messagingService] Firestore query requires an index. Please create the necessary index in the Firebase console (e.g., composite on 'participants' and 'postId').");
@@ -166,46 +172,49 @@ export const getMessagesForConversation = (
     onError(new Error("Conversation ID is required to fetch messages."));
     return () => {};
   }
-  console.log(`%c[messagingService] getMessagesForConversation: Setting up listener for conversationId: ${conversationId}`, "color: cyan;");
+  console.log(`%c[Service] getMessagesForConversation: Setting up listener for conversationId: ${conversationId}`, "color: cyan;");
 
   const messagesRef = messagesSubcollectionRef(conversationId);
   const q = query(
     messagesRef,
     orderBy('timestamp', 'asc'),
-    limit(100) // Fetch last 100 messages, adjust as needed
+    limit(100)
   );
 
   const unsubscribe = onSnapshot(q,
     (querySnapshot) => {
-      console.log(`%c[messagingService] onSnapshot fired for ${conversationId}. Docs count: ${querySnapshot.docs.length}`, "color: cyan;");
+      console.log(`%c[Service] onSnapshot fired for ${conversationId}. Docs count: ${querySnapshot.docs.length}`, "color: cyan;");
       const messages = querySnapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as Message; // Assume Message type
-        console.log(`    Mapping doc ${docSnap.id} - Text from DB: "${data.text}", isBotMessage from DB: ${data.isBotMessage}`);
+        const data = docSnap.data() as Message;
+        console.log(`    [Service] Mapping doc ${docSnap.id} - Raw data: `, data); // Log raw data
         const timestampMillis = data.timestamp instanceof Timestamp
             ? data.timestamp.toMillis()
-            : (typeof data.timestamp === 'number' ? data.timestamp : Date.now()); // Handle if already number
+            : (typeof data.timestamp === 'number' ? data.timestamp : Date.now());
 
-        return {
+        const serializableMsg: SerializableMessage = {
           id: docSnap.id,
           conversationId: conversationId,
           senderId: data.senderId,
-          text: data.text || "", // Ensure text is always a string
+          text: data.text || "",
           timestamp: timestampMillis,
           read: data.read || false,
           isBotMessage: data.isBotMessage === true, // Explicitly check for true
           replyToMessageId: data.replyToMessageId || undefined,
           repliedToTextSnippet: data.repliedToTextSnippet || undefined,
-        } as SerializableMessage;
+        };
+        console.log(`    [Service] Mapped message: isBotMessage = ${serializableMsg.isBotMessage}`, serializableMsg);
+        return serializableMsg;
       });
-      console.log(`%c[messagingService] onSnapshot for ${conversationId} - Calling onUpdate with ${messages.length} messages.`, "color: cyan; font-weight: bold;", messages);
+      const botMessageCount = messages.filter(m => m.isBotMessage).length;
+      console.log(`%c[Service] getMessagesForConversation - onUpdate: Calling with ${messages.length} total messages. BOT MESSAGES IN THIS BATCH: ${botMessageCount}`, "color: dodgerblue; font-weight: bold;");
       onUpdate(messages);
     },
     (error) => {
-      console.error(`%c[messagingService] Error in real-time messages listener for ${conversationId}:`, "color: red;", error);
+      console.error(`%c[Service] Error in real-time messages listener for ${conversationId}:`, "color: red;", error);
       if (error.code === 'permission-denied') {
           onError(new Error(`Permission denied fetching messages. Check Firestore Rules.`));
       } else if (error.code === 'failed-precondition' && error.message.includes('index')) {
-          onError(new Error("Firestore query for messages requires an index."));
+          onError(new Error("Firestore query for messages requires an index. Please create it in the Firebase console."));
       } else {
           onError(new Error(`Failed to fetch messages: ${error.message}`));
       }
@@ -224,15 +233,15 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     const conversationDocRef = doc(db, 'conversations', messageData.conversationId);
     const messagesRef = messagesSubcollectionRef(messageData.conversationId);
     const batch = writeBatch(db);
-    const newMessageRef = doc(messagesRef); // Auto-generate ID
+    const newMessageRef = doc(messagesRef);
 
-    const messagePayload: Partial<Message> = { // Use Partial to build up
+    const messagePayload: Partial<Message> = {
         conversationId: messageData.conversationId,
         senderId: messageData.senderId,
         text: messageData.text,
-        read: false, // New messages are unread
+        read: false,
     };
-    if (messageData.isBotMessage !== undefined) {
+    if (messageData.isBotMessage !== undefined) { // Check if isBotMessage is explicitly passed
         messagePayload.isBotMessage = messageData.isBotMessage;
     }
     if (messageData.replyToMessageId) {
@@ -244,7 +253,7 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
 
     batch.set(newMessageRef, {
       ...messagePayload,
-      timestamp: serverTimestamp(), // Use Firestore server timestamp
+      timestamp: serverTimestamp(),
     });
 
     batch.update(conversationDocRef, {
@@ -256,19 +265,24 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     await batch.commit();
     console.log(`%c[messagingService] Message sent by ${messageData.senderId} in conv ${messageData.conversationId}. New msg ID: ${newMessageRef.id}`, "color: green;");
 
-    // Create notifications for other participants
     const conversationSnap = await getDoc(conversationDocRef);
     if (conversationSnap.exists()) {
-        const conversationData = conversationSnap.data() as ClientConversation; // Assuming ClientConversation structure
-        for (const participantId of conversationData.participants) {
-            if (participantId !== messageData.senderId) { // Don't notify the sender
-                await createNotification({
-                    userId: participantId, // The recipient of the notification
-                    type: 'new_message',
-                    senderId: messageData.senderId, // The user who sent the message
-                    conversationId: messageData.conversationId,
-                    textSnippet: messageData.text.substring(0, 100), // Snippet of the new message
-                });
+        const conversationData = conversationSnap.data(); // Removed type assertion for broader compatibility
+        const participantsArray = Array.isArray(conversationData?.participants) ? conversationData.participants : [];
+
+        for (const participantId of participantsArray) {
+            if (participantId !== messageData.senderId) {
+                try {
+                    await createNotification({
+                        userId: participantId,
+                        type: 'new_message',
+                        senderId: messageData.senderId,
+                        conversationId: messageData.conversationId,
+                        textSnippet: messageData.text.substring(0, 100),
+                    });
+                } catch (notificationError) {
+                    console.error(`[messagingService] Failed to create notification for participant ${participantId} in conv ${messageData.conversationId}:`, notificationError);
+                }
             }
         }
     }
@@ -280,16 +294,14 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
   }
 };
 
-// Helper to get basic user details for display
 export const getUserDetails = async (userId: string): Promise<{ name: string; avatar?: string } | null> => {
     if (!userId) return null;
     console.log(`%c[messagingService] getUserDetails: Fetching details for userId: ${userId}`, "color: #DAA520;");
     const profile = await fetchUserProfileBasic(userId);
     if (!profile) {
         console.warn(`%c[messagingService] getUserDetails: No profile found for ${userId}, using generated name.`, "color: #DAA520;");
-        return { name: generateAnonymousName(userId) }; // Fallback to generated name
+        return { name: generateAnonymousName(userId) };
     }
-    // Prioritize companyName, then actualDisplayName (from Google/etc.), then mentionName
     const displayName = profile.companyName || profile.actualDisplayName || profile.mentionName || generateAnonymousName(userId);
     console.log(`%c[messagingService] getUserDetails: Profile found for ${userId}. DisplayName: '${displayName}', Avatar: ${!!profile.avatarUrl}`, "color: #DAA520;");
     return {
@@ -298,7 +310,6 @@ export const getUserDetails = async (userId: string): Promise<{ name: string; av
     };
 };
 
-// Helper to get post details (just the question for context)
 export const getPostDetails = async (postId: string): Promise<{ question: string } | null> => {
     if (!postId || postId === 'general_connection') return null;
     try {
