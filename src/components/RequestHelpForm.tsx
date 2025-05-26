@@ -41,13 +41,13 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@radix-ui/react-tabs';
 import { Calendar } from "@/components/ui/calendar"
 import { format } from "date-fns"
-import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
+import type { SectorWithSubSectors, SubSector, Industry } from '@/components/CreatePostForm';
 
-const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024;
+const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif"];
 
 const requestHelpFormSchema = z.object({
@@ -73,6 +73,7 @@ export interface RequestHelpFormData extends z.infer<typeof requestHelpFormSchem
   // No need to redefine fields here, z.infer does it.
   // Just ensure mentionedUserIds is handled if needed.
   mentionedUserIds?: string[]; // Added this to ensure it can be passed if logic exists
+  imageFile: File | null;
 }
 
 
@@ -333,32 +334,33 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
   }, [form.formState.isDirty, form.formState.isSubmitting]);
 
   const filteredDescriptionSuggestions = useMemo(() => {
+    // Filter suggestible users to match UserProfileBasic structure, primarily using mentionName
+    const mappedSuggestibleUsers: UserProfileBasic[] = suggestibleUsers.map((user: any) => ({
+      userId: user.userId, // Assuming userId is always present
+      mentionName: user.mentionName,
+      isBotAccount: user.isBotAccount,
+    }));
+
     if (!showDescriptionDetailsSuggestions) return [];
-    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc-help', actualDisplayName: 'Loading users...', mentionName: 'loading-desc-help' } as UserProfileBasic];
-    
-    const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
+    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc-help', mentionName: 'Loading users...' }];
+
+    const profilesSource = mappedSuggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
     let results: UserProfileBasic[];
 
     if (debouncedDescriptionDetailsQuery.trim() === '') {
         results = profilesSource.slice(0, 25);
     } else {
         const queryLower = debouncedDescriptionDetailsQuery.toLowerCase();
-        results = profilesSource.filter(
-            p => p.mentionName.toLowerCase().includes(queryLower) ||
-                 (p.actualDisplayName && p.actualDisplayName.toLowerCase().includes(queryLower)) ||
-                 (p.companyName && p.companyName.toLowerCase().includes(queryLower))
-        ).slice(0, 10);
+        results = profilesSource.filter(p => p.mentionName.toLowerCase().includes(queryLower)).slice(0, 10); // Limit suggestions and filter by mentionName
     }
-
     if (results.length === 0 && debouncedDescriptionDetailsQuery.trim() !== '') {
-        return [{ userId: 'no-match-desc-help', actualDisplayName: `No users matching "@${debouncedDescriptionDetailsQuery}"`, mentionName:'no-match-desc-help' } as UserProfileBasic];
+        return [{ userId: 'no-match-desc-help', mentionName: `No users matching "@${debouncedDescriptionDetailsQuery}"` }];
     }
     if (results.length === 0) {
-        return [{ userId: 'no-users-desc-help', actualDisplayName: 'No users to suggest for this context.', mentionName: 'no-users-desc-help' } as UserProfileBasic];
+        return [{ userId: 'no-users-desc-help', mentionName: 'No users to suggest for this context.' }];
     }
     return results;
   }, [debouncedDescriptionDetailsQuery, suggestibleUsers, isLoadingSuggestibleUsers, showDescriptionDetailsSuggestions, currentUserId]);
-
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-0">
@@ -428,7 +430,6 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                                     {...field}
                                     ref={(e) => {
                                       field.ref(e);
-                                      descriptionDetailsTextareaRef.current = e;
                                     }}
                                     onChange={handleDescriptionDetailsChange}
                                     onFocus={handleDescriptionDetailsFocus}
@@ -449,34 +450,29 @@ export const RequestHelpForm: React.FC<RequestHelpFormProps> = ({ onSubmit, avai
                                 onOpenAutoFocus={(e) => e.preventDefault()}
                               >
                               {filteredDescriptionSuggestions.map(profile => {
-                                    const displayableName = profile.actualDisplayName || profile.companyName;
-                                    const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
-
+                                    // Use mentionName for display as per instructions
                                     return (
-                                        profile.userId === 'loading-desc-help' || profile.userId === 'no-users-desc-help' || profile.userId === 'no-match-desc-help' ? (
-                                            <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
+                                        ['loading-desc-help', 'no-users-desc-help', 'no-match-desc-help'].includes(profile.userId) ? (                                            <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground" data-ai-hint="suggestion message">
                                                 {profile.actualDisplayName}
+                                                {profile.displayName}
                                             </div>
                                         ) : (
                                             <Button
                                                 key={profile.userId}
-                                                variant="ghost"
+                                                variant="ghost" // Use the derived displayName for display
                                                 size="sm"
                                                 className="w-full justify-start h-auto px-2 py-1 text-xs"
                                                 onMouseDown={(e) => e.preventDefault()}
                                                 onClick={() => handleSelectDescriptionDetailsSuggestion(profile)}
                                             >
-                                                <Avatar className="h-5 w-5 mr-2">
+                                                <Avatar className="h-5 w-5 mr-2" data-ai-hint="user avatar">
                                                     <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
                                                     <AvatarFallback className="text-xs">{getSharedInitials(profile.mentionName)}</AvatarFallback>
                                                 </Avatar>
-                                                <div className="flex flex-col items-start">
-                                                  {showSecondaryNameLine && (
-                                                      <span className="font-medium text-foreground">{displayableName}</span>
-                                                  )}
-                                                  <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
-                                                      @{profile.mentionName}
-                                                  </span>
+                                                <div className="flex items-center">
+                                                  <span className="font-medium text-foreground">
+                                                        @{profile.mentionName}
+                                                    </span>
                                                 </div>
                                             </Button>
                                         )

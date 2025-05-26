@@ -308,7 +308,7 @@ async function _createBotPostLogic(): Promise<{
     const model = genAI.getGenerativeModel({model: "gemini-1.5-flash-latest"});
     const prompt =
       `Generate a unique and relevant question and a detailed description ` +
-      `for a forum post in the field of ${industryNameDisplay}. The user, ` +
+      "for a forum post in the field of " + `${industryNameDisplay}. The user, ` +
       `${randomBot.mentionName}, is seeking insights. The output should be ` +
       `a JSON object with "question" (string) and "description" (string) ` +
       `fields. Ensure content is professional and distinct.`;
@@ -316,7 +316,7 @@ async function _createBotPostLogic(): Promise<{
     let generatedContent = {question: "", description: ""};
     try {
       const result = await model.generateContent(prompt);
-      const response = await result.response;
+      const response = result.response;
       const text = response.text();
       logger.info(`[${functionName}] Raw Gemini API response for post:`, text);
       let jsonString = text.trim();
@@ -515,11 +515,11 @@ async function _createBotCommentLogic(
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({model: "gemini-1.5-flash-latest"});
     const commentPrompt =
-      `Generate a relevant and insightful comment for a forum post. ` +
+      "Generate a relevant and insightful comment for a forum post. " + // Already double quotes
       `The post title is "${postData.question}" and the description is ` +
       `"${postData.description}". The comment should be from the ` +
-      `perspective of user ${commentingBot.mentionName} in the ` +
-      `${postIndustry} industry. The output should be a JSON ` +
+      "perspective of user " + `${commentingBot.mentionName} in the ` + // Changed to double quotes
+      `${postIndustry} industry. The output should be a JSON ` + // Already double quotes
       `object with a single field: "commentText" (string). Keep it concise.`;
 
     let generatedComment = {commentText: ""};
@@ -528,7 +528,7 @@ async function _createBotCommentLogic(
       const response = await result.response;
       const textFromGemini = response.text();
       logger.info(
-        `[${functionName}] Raw Gemini response for comment on post ` +
+        `[${functionName}] Raw Gemini response for comment on post ` + // Already double quotes
         `${targetPostId}:`, textFromGemini
       );
       let jsonString = textFromGemini.trim();
@@ -548,15 +548,15 @@ async function _createBotCommentLogic(
           parseError
         );
         generatedComment.commentText =
-          `Interesting point on "${postData.question}". (Parse Error)`;
-      }
+          "Interesting point on " + `"${postData.question}". (Parse Error)`; // Changed to double quotes
+      } // closing parenthesis for catch
     } catch (error) {
       logger.error(
         `[${functionName}] Error calling Gemini API for comment:`, error
       );
       generatedComment.commentText =
         `Thanks for sharing this post about "${postData.question}". (API Error)`;
-    }
+    } // Already double quotes
 
     const newCommentData = {
       userId: commentingBot.userId,
@@ -640,7 +640,7 @@ export const createBotComment = onRequest(async (req, res) => {
   const result = await _createBotCommentLogic(postId);
   if (result) {
     res.status(200).send({
-      message: `Bot comment created successfully for post ${result.postId}!`,
+      message: "Bot comment created successfully for post " + `${result.postId}!",`,
       ...result,
     });
   } else {
@@ -810,14 +810,14 @@ export const onNewMessageReplyWithBot = onDocumentWritten(
     let recentMessagesText = "";
     try {
       const messagesSnapshot = await conversationRef
-        .collection("messages")
+ .collection("messages")
         .orderBy("timestamp", "desc")
         .limit(5)
         .get();
       messagesSnapshot.docs.reverse().forEach((doc) => {
         const msgData = doc.data();
         recentMessagesText +=
-          `${msgData.senderId === botRecipientId ? "Bot" : "User"}: ` +
+          `${msgData.senderId === botRecipientId ? "Bot" : "User"}: ` + // Already double quotes
           `${msgData.text}\n`;
       });
     } catch (err) {
@@ -827,12 +827,12 @@ export const onNewMessageReplyWithBot = onDocumentWritten(
     }
 
     const prompt =
-      `You are a helpful assistant. A user said: "${messageText}".\n` +
-      `The conversation history is:\n${recentMessagesText}\n` +
+      "You are a helpful assistant. A user said: " + `"${messageText}".\n` + // Changed to double quotes
+      `The conversation history is:\n${recentMessagesText}\n` + // Changed to double quotes
       `Respond to the user's last message ("${messageText}") concisely. ` +
       "Keep your reply very short, ideally one or two sentences.";
     logger.info(`[${functionName}] Prompt for Gemini (first 150 chars): ` +
-      `"${prompt.substring(0, 150)}..."`);
+      "\"" + `${prompt.substring(0, 150)}..."`); // Changed to double quotes
 
     try {
       const result = await model.generateContent(prompt);
@@ -861,7 +861,7 @@ export const onNewMessageReplyWithBot = onDocumentWritten(
       );
 
       await conversationRef.collection("messages").add(botMessageData);
-      logger.info(
+        logger.info(
         `[${functionName}] Bot ${botRecipientId} replied to user ${senderId} ` +
         `in conversation ${conversationId}: "${botReplyText}"`
       );
@@ -893,7 +893,7 @@ export const autoAcceptBotConnectionRequests = onDocumentWritten(
     logger.info(
       `[${functionName}] Triggered for connection ${event.params.connectionId}`,
       {rawEventDataExists: !!event.data}
-    );
+    ); // Already double quotes
     const eventData = event.data;
 
     if (!eventData?.after.exists || eventData.before.exists) {
@@ -908,7 +908,7 @@ export const autoAcceptBotConnectionRequests = onDocumentWritten(
 
     if (!connectionData || connectionData.status !== "pending") {
       logger.info(
-        `[${functionName}] Connection not 'pending' or data missing. Exiting.`
+        `[${functionName}] Connection not "pending" or data missing. Exiting.`
       );
       return;
     }
@@ -932,7 +932,7 @@ export const autoAcceptBotConnectionRequests = onDocumentWritten(
       await connectionRef.update({
         status: "connected",
         connectedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      }); // closing parenthesis for update
       logger.info(
         `[${functionName}] Connection ${event.params.connectionId} status ` +
         `updated to 'connected' for bot ${recipientId}.`

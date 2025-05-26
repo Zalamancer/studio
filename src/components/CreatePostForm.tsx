@@ -366,17 +366,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', mentionName: 'loading-desc', displayName: 'Loading users...' } as UserProfileBasic];
     
     const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
-    let results: UserProfileBasic[];
+    let results: UserProfileBasic[] = [];
 
     if (debouncedDescriptionQuery.trim() === '') {
         results = profilesSource.slice(0, 25); // Show more when query is empty
     } else {
         const queryLower = debouncedDescriptionQuery.toLowerCase();
-        results = profilesSource.filter(
-            p => (p.mentionName.toLowerCase().includes(queryLower)) ||
-                 (p.actualDisplayName && p.actualDisplayName.toLowerCase().includes(queryLower)) ||
-                 (p.companyName && p.companyName.toLowerCase().includes(queryLower))
-        ).slice(0, 10);
+        results = profilesSource.filter(p => p.mentionName.toLowerCase().includes(queryLower) || p.displayName.toLowerCase().includes(queryLower)).slice(0, 10);
     }
 
     if (results.length === 0 && debouncedDescriptionQuery.trim() !== '') {
@@ -452,13 +448,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                         onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focus on popover open
                      >
                        {filteredDescriptionSuggestions.map(profile => {
-                            const displayableName = profile.actualDisplayName || profile.companyName;
-                            const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
+                            const showSecondaryNameLine = profile.displayName && profile.mentionName && profile.displayName.toLowerCase() !== profile.mentionName.toLowerCase();
                             
                             return (
                                 profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
                                     <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
-                                        {profile.displayName} {/* Use displayName for these placeholder messages */}
+                                        {profile.displayName}
                                     </div>
                                 ) : (
                                     <Button
@@ -475,7 +470,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                         </Avatar>
                                         <div className="flex flex-col items-start">
                                             {showSecondaryNameLine && (
-                                                <span className="font-medium text-foreground">{displayableName}</span>
+                                                <span className="font-medium text-foreground">{profile.displayName}</span>
                                             )}
                                             <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
                                                 @{profile.mentionName}
