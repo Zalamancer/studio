@@ -17,7 +17,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDownLeft, ArrowLeft, Users } from 'lucide-react';
+import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDownLeft, ArrowLeft } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
@@ -123,8 +123,14 @@ interface MessageBubbleProps {
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, currentUserId, onStartReply }) => {
+  // A bot message is never "owned" by the current human user for styling purposes.
   const isOwnMessage = !message.isBotMessage && message.senderId === currentUserId;
-  console.log(`[MessageBubble] PROPS RECEIVED: messageId=${message.id}, text="${message.text.substring(0,20)}...", isBotMessage=${message.isBotMessage}, senderId=${message.senderId}, currentUserId=${currentUserId}, calculatedIsOwnMessage=${isOwnMessage}`);
+  
+  // Log props for debugging if needed
+  // console.log(`[MessageBubble] PROPS RECEIVED: messageId=${message.id}, text="${message.text.substring(0,20)}...", isBotMessage=${message.isBotMessage}, senderId=${message.senderId}, currentUserId=${currentUserId}, calculatedIsOwnMessage=${isOwnMessage}`);
+  // if (message.isBotMessage) {
+  //   console.log(`[MessageBubble] RENDERING BOT MESSAGE: ${message.id}`);
+  // }
 
   const timestamp = message.timestamp
     ? new Date(message.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -135,15 +141,16 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, curre
     isOwnMessage ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
   );
 
-  if (message.isBotMessage) {
-    console.log(`[MessageBubble] RENDERING BOT MESSAGE: ${message.id}`);
-    bubbleClasses = cn(bubbleClasses, "bg-lime-300 text-black border-2 border-lime-700");
-  }
-
+  // No special styling for bot messages anymore, they use the standard "received message" style.
+  // if (message.isBotMessage) {
+  //   // Example: if you wanted a *very subtle* differentiation, you could add a class here.
+  //   // bubbleClasses = cn(bubbleClasses, "border-l-2 border-accent"); 
+  // }
 
   return (
     <div className={cn("flex group mb-1", isOwnMessage ? "justify-end" : "justify-start")}>
-       {!isOwnMessage && !message.isBotMessage && (
+       {/* Reply button appears for all messages not sent by the current user, including bot messages */}
+       {!isOwnMessage && (
         <Button
           variant="ghost"
           size="icon"
@@ -155,32 +162,28 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, curre
         </Button>
       )}
       <div className={bubbleClasses}>
-        {message.isBotMessage && (
-          <strong className="text-red-700 block mb-1">[BOT DEBUG TEXT]: </strong>
-        )}
         {message.replyToMessageId && message.repliedToTextSnippet && (
           <div className={cn(
             "text-xs p-1.5 rounded-md mb-1 border-l-2",
-             isOwnMessage && !message.isBotMessage
-              ? "bg-card text-primary border-primary/30"
-              : message.isBotMessage 
-              ? "bg-lime-200 text-lime-800 border-lime-500/50" 
-              : "bg-accent/50 text-accent-foreground/80 border-accent/50"
+             isOwnMessage
+              ? "bg-card text-primary border-primary/30" // Snippet style if replying from own message
+              : "bg-accent/50 text-accent-foreground/80 border-accent/50" // Snippet style if replying from other's message (including bot's)
           )}>
             <p className="italic truncate opacity-80">{message.repliedToTextSnippet}</p>
           </div>
         )}
         <p className="text-sm">
+          {/* Removed [BOT DEBUG TEXT]: prefix */}
           {message.text}
         </p>
         <p className={cn(
              "text-xs mt-1",
-             isOwnMessage && !message.isBotMessage ? "text-primary-foreground/80 text-right" : "text-muted-foreground/80 text-left",
-             message.isBotMessage && "text-black/70 text-left"
+             isOwnMessage ? "text-primary-foreground/80 text-right" : "text-muted-foreground/80 text-left"
         )}>
             {timestamp}
         </p>
       </div>
+      {/* Reply button for own messages (excluding bot messages, which are never "own") */}
       {isOwnMessage && ( 
         <Button
           variant="ghost"
@@ -218,7 +221,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const [isLoadingMessagesState, setIsLoadingMessagesState] = useState(true);
   const [messagesErrorState, setMessagesErrorState] = useState<Error | null>(null);
 
-
   const {
       data: conversations = [],
       isLoading: isLoadingConversations,
@@ -250,6 +252,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
      queryFn: async () => {
        const postIds = conversations.map(c => c.postId).filter((id): id is string => !!id && id !== 'general_connection');
        const detailsMap = new Map<string, { question: string } | null>();
+       if (postIds.length === 0) return detailsMap; // Return empty map if no postIds
        await Promise.all(postIds.map(async (postId) => {
          const details = await getPostDetails(postId);
          detailsMap.set(postId, details);
@@ -277,9 +280,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     const unsubscribe = getMessagesForConversation(
       selectedConversationId,
       (newMessagesFromListener) => {
-        console.log(`%c[MessagingInterface] onUpdate FROM SERVICE called for conv ${selectedConversationId}. New messages count: ${newMessagesFromListener.length}`, "color: green; font-weight: bold;");
-        const botMessagesInUpdate = newMessagesFromListener.filter(m => m.isBotMessage);
-        console.log(`%c  [MessagingInterface] Bot messages in this onUpdate: ${botMessagesInUpdate.length}`, "color: green; font-weight: bold;", botMessagesInUpdate);
+        // console.log(`%c[MessagingInterface] onUpdate FROM SERVICE called for conv ${selectedConversationId}. New messages count: ${newMessagesFromListener.length}`, "color: green; font-weight: bold;");
+        // const botMessagesInUpdate = newMessagesFromListener.filter(m => m.isBotMessage);
+        // console.log(`%c  [MessagingInterface] Bot messages in this update: ${botMessagesInUpdate.length}`, "color: green; font-weight: bold;", botMessagesInUpdate);
         setMessages(newMessagesFromListener);
         setIsLoadingMessagesState(false);
       },
@@ -338,14 +341,13 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             }
             if (initialMessageText && newMessage === '') { 
                 setNewMessage(initialMessageText);
-                messageInputRef.current?.focus();
+                setTimeout(() => messageInputRef.current?.focus(), 0);
             }
         } else {
              console.warn(`[MessagingInterface] initialConversationId '${initialConversationId}' not found in loaded conversations.`);
         }
     } else if (!initialConversationId && conversations.length > 0 && !selectedConversationId && !isMobile) {
-        // Optionally select the first conversation on desktop if no initial one is provided
-        // setSelectedConversationId(conversations[0].id);
+        // No default selection for desktop to avoid unexpected chat opening
     }
   }, [initialConversationId, conversations, initialMessageText, isMobile, activeMobileView, selectedConversationId]);
 
@@ -357,7 +359,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setActiveMobileView('chat');
     }
-  }, [isMobile]);
+  }, [isMobile, setActiveMobileView, setSelectedConversationId, setNewMessage, setReplyingTo]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -377,7 +379,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     sendMessageMutation.mutate(messageData);
   };
 
-
    const selectedConversation = conversations.find(c => c.id === selectedConversationId);
    const otherParticipantId = selectedConversation?.participants.find(p => p !== currentUserId);
 
@@ -393,18 +394,18 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        : headerParticipantDetails?.name || generateAnonymousName(otherParticipantId || 'Select Conversation');
    const otherParticipantInitials = getInitials(otherParticipantName);
    const otherParticipantAvatar = headerParticipantDetails?.avatar;
-   const selectedPostQuestion = selectedConversation?.postId && selectedConversation.postId !== 'general_connection'
-        ? postDetailsMap?.get(selectedConversation.postId)?.question
+   const selectedPostQuestion = selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && postDetailsMap
+        ? postDetailsMap.get(selectedConversation.postId)?.question
         : null;
 
   const handleStartReply = useCallback((message: SerializableMessage) => {
     setReplyingTo(message);
-    messageInputRef.current?.focus();
-  }, []);
+    setTimeout(() => messageInputRef.current?.focus(), 0);
+  }, [messageInputRef, setReplyingTo]);
 
   const handleCancelReply = useCallback(() => {
     setReplyingTo(null);
-  }, []);
+  }, [setReplyingTo]);
 
   return (
     <div className="flex h-full">
@@ -445,7 +446,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 <p className="p-4 text-sm text-muted-foreground text-center">No messages yet.</p>
             ) : (
               conversations.map((conv) => {
-                 const postQuestion = conv.postId && conv.postId !== 'general_connection' ? postDetailsMap?.get(conv.postId)?.question : null;
+                 const postQuestionText = conv.postId && conv.postId !== 'general_connection' && postDetailsMap ? postDetailsMap.get(conv.postId)?.question : null;
                  const shouldHighlight = highlightPostId === conv.postId && selectedConversationId === conv.id;
                  return (
                      <ConversationListItem
@@ -454,7 +455,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                          isSelected={selectedConversationId === conv.id}
                          currentUserId={currentUserId}
                          onSelect={handleConversationSelect}
-                         postQuestion={postQuestion}
+                         postQuestion={postQuestionText}
                          highlight={shouldHighlight}
                      />
                  );

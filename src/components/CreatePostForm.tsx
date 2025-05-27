@@ -425,10 +425,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                           className="resize-y min-h-[120px] flex-1" // Ensure it grows
                           {...field}
                           ref={(e) => {
-                            field.ref(e);
+                            // Assign the element to the current property of the ref
                             descriptionTextareaRef.current = e;
+                            // Also call the field.ref to connect with the form library
+                            field.ref(e);
                           }}
-                          onChange={handleDescriptionChange}
+                         onChange={handleDescriptionChange}
                           onFocus={handleDescriptionFocus}
                            onBlurCapture={() => setTimeout(() => { // Use onBlurCapture for Textarea
                             // Delay hiding to allow click on popover items

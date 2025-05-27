@@ -313,13 +313,12 @@ async function _createBotPostLogic(): Promise<{
 
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({model: "gemini-1.5-flash-latest"});
-    const prompt =
-      `Generate a unique and relevant question and a detailed description ` +
-      `for a forum post in the field of ${industryNameDisplay}. The user, ` +
-      `${randomBot.mentionName}, is seeking insights. Output should be JSON: ` +
-      `{"question": "string", "description": "string"}. Ensure content is ` +
-      "professional and distinct.";
-
+    const prompt = `
+      Generate a unique and relevant question and a detailed description
+      for a forum post in the field of ${industryNameDisplay}. The user,
+      ${randomBot.mentionName}, is seeking insights. Output should be JSON:
+      {"question": "string", "description": "string"}.
+      Ensure content is professional and distinct.`;
     let generatedContent = {question: "", description: ""};
     try {
       const result = await model.generateContent(prompt);
@@ -420,6 +419,7 @@ async function _createBotCommentLogic(
 ): Promise<BotComment | null> {
   const functionName = "_createBotCommentLogic";
   logger.info(
+
     `[${functionName}] Attempting bot comment. Target post: ` +
     `${postId || "auto-select"}`,
   );
@@ -508,23 +508,28 @@ async function _createBotCommentLogic(
       logger.info(
         `[${functionName}] No existing bot for post ${targetPostId}. Creating.`,
       );
-      const newBotUser = await _createBotUserLogic(postIndustry); // Target industry
-      if (newBotUser && newBotUser.userId !== originalPosterId) {
-        commentingBot = newBotUser;
-      } else if (newBotUser && newBotUser.userId === originalPosterId) {
-        logger.warn(
-          `[${functionName}] New bot is OP for post ${targetPostId}. Try another.`,
-        );
-        const altBot = await _createBotUserLogic(postIndustry);
-        if (altBot && altBot.userId !== originalPosterId) {
-          commentingBot = altBot;
+      const maxAttempts = 3; // Limit attempts to create a non-OP bot
+      for (let i = 0; i < maxAttempts; i++) {
+        const newBotUser = await _createBotUserLogic(postIndustry); // Target industry
+        if (newBotUser && newBotUser.userId !== originalPosterId) {
+          commentingBot = newBotUser;
+          logger.info(
+            `[${functionName}] Successfully created a non-OP bot ` +
+            `${commentingBot.userId} on attempt ${i + 1}.`,
+          );
+          break; // Found a suitable bot, exit loop
+        } else if (newBotUser) {
+          logger.warn(
+            `[${functionName}] New bot created is OP for post ${targetPostId}` +
+            ` on attempt ${i + 1}. Trying again...`,
+          );
         } else {
           logger.error(
-            `[${functionName}] Failed to create distinct bot. Aborting comment.`,
+            `[${functionName}] Failed to create a new bot on attempt ${i + 1}.`,
           );
-          return null;
         }
-      } else {
+      }
+      if (!commentingBot) {
         logger.error(
           `[${functionName}] Failed to create new bot for comment. Aborting.`,
         );
@@ -541,8 +546,8 @@ async function _createBotCommentLogic(
     const model = genAI.getGenerativeModel({model: "gemini-1.5-flash-latest"});
     const commentPrompt =
       "Generate a relevant, insightful comment for a forum post. " +
-      `Post title: "${postData.question}". Description: ` +
-      `"${postData.description}". Comment from user ` +
+      `"Post title: "${postData.question}". Description: " ` +
+      `"${postData.description}". Comment from user "` +
       `${commentingBot.mentionName} in ${postIndustry} industry. ` +
       "Output JSON: {\"commentText\": \"string\"}. Keep it concise.";
 
@@ -552,8 +557,8 @@ async function _createBotCommentLogic(
       const response = await result.response;
       const textFromGemini = response.text();
       logger.info(
-        `[${functionName}] Raw Gemini response for comment on post ` +
-        `${targetPostId}:`, textFromGemini,
+        `[${functionName}] Raw Gemini response for comment on post ${targetPostId}:`,
+        textFromGemini,
       );
       let jsonString = textFromGemini.trim();
       const markdownMatch = jsonString.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/);
@@ -611,7 +616,7 @@ async function _createBotCommentLogic(
     };
   } catch (error) {
     logger.error(
-      `[${functionName}] Error creating bot comment for post ` +
+      `[${functionName}] Error creating bot comment for post `+
       `${targetPostId || "unknown"}:`, error,
     );
     return null;
@@ -719,7 +724,7 @@ export const onNewMessageReplyWithBot = onDocumentWritten(
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({model: "gemini-1.5-flash-latest"});
 
-    let recentMessagesText = "";
+    const recentMessages: string[] = [];
     try {
       const messagesSnapshot = await conversationRef.collection("messages")
         .orderBy("timestamp", "desc") // Corrected to 'timestamp'
@@ -727,9 +732,7 @@ export const onNewMessageReplyWithBot = onDocumentWritten(
         .get();
       messagesSnapshot.docs.reverse().forEach((doc) => {
         const msgData = doc.data();
-        recentMessagesText +=
-          `${msgData.senderId === botRecipientId ? "Bot" : "User"}: ` +
-          `${msgData.text}\n`;
+        recentMessages.push(`${msgData.senderId === botRecipientId ? "Bot" : "User"}: ${msgData.text}`);
       });
     } catch (err) {
       logger.error(
@@ -738,10 +741,13 @@ export const onNewMessageReplyWithBot = onDocumentWritten(
     }
 
     const prompt =
-      "You are a helpful assistant. A user said: " + `"${messageText}".\n` +
-      `The conversation history is:\n${recentMessagesText}\n` +
-      `Respond to the user's last message ("${messageText}") concisely. ` +
-      "Keep your reply very short, ideally one or two sentences.";
+    recentMessages.length > 0
+      ? "You are a helpful assistant. A user said: \"" + messageText + "\".\n" +
+        "The conversation history is:\n" + recentMessages.join("\n") + "\n" +
+        "Respond to the user's last message (\"" + messageText + "\") concisely. " +
+        "Keep your reply very short, ideally one or two sentences."
+      : "You are a helpful assistant. Respond concisely.";  
+  
     logger.info(
       `[${functionName}] Prompt for Gemini (first 150 chars): ` +
       `"${prompt.substring(0, 150)}..."`,
