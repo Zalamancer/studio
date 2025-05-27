@@ -22,7 +22,6 @@ import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
-import type { Unsubscribe } from 'firebase/firestore';
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -103,7 +102,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
                      "bg-secondary text-secondary-foreground hover:bg-secondary/80",
                      "p-1 rounded-md",
                      "focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-ring",
-                     "hidden md:flex" // Hidden on mobile for cleaner list items
+                     "hidden md:flex"
                  )}
                  title="View Post Details"
                  aria-label="View Post Details"
@@ -124,6 +123,7 @@ interface MessageBubbleProps {
 
 const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, currentUserId, onStartReply }) => {
   const isOwnMessage = !message.isBotMessage && message.senderId === currentUserId;
+  console.log(`[MessageBubble] PROPS RECEIVED: messageId=${message.id}, text="${message.text.substring(0,20)}...", isBotMessage=${message.isBotMessage}, senderId=${message.senderId}, currentUserId=${currentUserId}, calculatedIsOwnMessage=${isOwnMessage}`);
 
   const timestamp = message.timestamp
     ? new Date(message.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -134,9 +134,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, curre
     isOwnMessage ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
   );
 
-  // if (message.isBotMessage) {
-  //   console.log(`[MessageBubble] RENDERING BOT MESSAGE: ${message.id}`);
-  // }
+  if (message.isBotMessage) {
+    console.log(`[MessageBubble] RENDERING BOT MESSAGE: ${message.id}`);
+    // Use default styling for bot messages, same as other user's messages
+    bubbleClasses = cn("rounded-lg px-3 py-2 max-w-[75%] break-words shadow-sm relative", "bg-muted text-foreground");
+  }
+
 
   return (
     <div className={cn("flex group mb-1", isOwnMessage ? "justify-end" : "justify-start")}>
@@ -194,10 +197,10 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     initialMessageText,
 }) => {
   const isMobile = useIsMobile();
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationId || null);
   const [activeMobileView, setActiveMobileView] = useState<'list' | 'chat'>(initialConversationId ? 'chat' : 'list');
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationId || null);
 
-  const [newMessage, setNewMessage] = useState(initialMessageText || '');
+  const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<SerializableMessage | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -207,6 +210,16 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const [messages, setMessages] = useState<SerializableMessage[]>([]);
   const [isLoadingMessagesState, setIsLoadingMessagesState] = useState(true);
   const [messagesErrorState, setMessagesErrorState] = useState<Error | null>(null);
+
+
+  useEffect(() => {
+    if (initialMessageText && selectedConversationId && newMessage === '') {
+      console.log(`[MessagingInterface] initialMessageText effect: Setting newMessage to "${initialMessageText}" for conv ${selectedConversationId}`);
+      setNewMessage(initialMessageText);
+      setTimeout(() => messageInputRef.current?.focus(), 0);
+    }
+  }, [initialMessageText, selectedConversationId, newMessage]);
+
 
   const {
       data: conversations = [],
@@ -253,7 +266,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
    const postDetailsMap = postDetailsQueries.data;
 
   useEffect(() => {
-    // console.log("[MessagingInterface] Messages useEffect. SelectedConversationId:", selectedConversationId);
     if (!selectedConversationId) {
       setMessages([]);
       setIsLoadingMessagesState(false);
@@ -267,9 +279,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     const unsubscribe = getMessagesForConversation(
       selectedConversationId,
       (newMessagesFromListener) => {
-        // console.log(`%c[MessagingInterface] onUpdate FROM SERVICE called for conv ${selectedConversationId}. New messages count: ${newMessagesFromListener.length}`, "color: green; font-weight: bold;");
-        // const botMessagesInUpdate = newMessagesFromListener.filter(m => m.isBotMessage);
-        // console.log(`%c  [MessagingInterface] Bot messages in this update: ${botMessagesInUpdate.length}`, "color: green; font-weight: bold;", botMessagesInUpdate);
+        console.log(`%c[MessagingInterface] onUpdate FROM SERVICE called for conv ${selectedConversationId}. New messages count: ${newMessagesFromListener.length}`, "color: green; font-weight: bold;");
+        const botMessagesInUpdate = newMessagesFromListener.filter(m => m.isBotMessage);
+        console.log(`%c  [MessagingInterface] Bot messages in this onUpdate: ${botMessagesInUpdate.length}`, "color: green; font-weight: bold;", botMessagesInUpdate);
         setMessages(newMessagesFromListener);
         setIsLoadingMessagesState(false);
       },
@@ -286,7 +298,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     );
 
     return () => {
-        // console.log(`%c[MessagingInterface] Unsubscribing from messages for conv ${selectedConversationId}`, "color: orange;");
         if (unsubscribe) unsubscribe();
     };
   }, [selectedConversationId, toast]);
@@ -329,21 +340,17 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         } else {
              console.warn(`[MessagingInterface] initialConversationId '${initialConversationId}' not found in loaded conversations.`);
         }
+    }  else if (!initialConversationId && conversations.length > 0 && !selectedConversationId && !isMobile) {
+       // Auto-select first conversation on desktop if none is selected and no initialConversationId
+       // setSelectedConversationId(conversations[0].id);
     }
   }, [initialConversationId, conversations, isMobile, activeMobileView, selectedConversationId]);
-
-  useEffect(() => {
-     if (initialMessageText && selectedConversationId && newMessage === '') {
-        setNewMessage(initialMessageText);
-        setTimeout(() => messageInputRef.current?.focus(), 0);
-     }
-  }, [initialMessageText, selectedConversationId, newMessage]);
 
 
    const handleConversationSelect = useCallback((conversationId: string) => {
     setSelectedConversationId(conversationId);
-    setNewMessage('');
-    setReplyingTo(null);
+    setNewMessage(''); // Clear message input when switching conversations
+    setReplyingTo(null); // Clear replyingTo state
     if (isMobile) {
       setActiveMobileView('chat');
     }
@@ -389,7 +396,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const handleStartReply = useCallback((message: SerializableMessage) => {
     setReplyingTo(message);
     setTimeout(() => messageInputRef.current?.focus(), 0);
-  }, [messageInputRef]);
+  }, [messageInputRef]); // messageInputRef is stable
 
   const handleCancelReply = useCallback(() => {
     setReplyingTo(null);
@@ -400,10 +407,10 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       {/* Conversation List Panel */}
       <div
         className={cn(
-          "flex flex-col border-r bg-background min-w-0", // Added min-w-0
+          "flex flex-col border-r bg-background min-w-0", 
           isMobile
             ? activeMobileView === 'list' ? "w-full flex" : "hidden"
-            : "w-1/3 lg:w-1/4 flex"
+            : "md:w-2/5 flex" // Increased width for desktop
         )}
       >
         <div className={cn("border-b", isMobile ? "p-3" : "p-4")}>
@@ -436,7 +443,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             ) : (
               conversations.map((conv) => {
                  const postQuestionText = conv.postId && conv.postId !== 'general_connection' && postDetailsMap ? postDetailsMap.get(conv.postId)?.question : null;
-                 // Highlight logic for initialConversationId already handled by selectedConversationId state
                  return (
                      <ConversationListItem
                          key={conv.id}
@@ -460,7 +466,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
           "flex flex-col",
           isMobile
             ? activeMobileView === 'chat' ? "w-full flex" : "hidden"
-            : "w-2/3 lg:w-3/4 flex"
+            : "md:w-3/5 flex" // Adjusted width for desktop
         )}
       >
         {selectedConversationId ? (
@@ -519,14 +525,17 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                           Start the conversation!
                      </p>
                  ) : (
-                   messages.map((msg) => (
+                   messages.map((msg) => {
+                     console.log(`[MessagingInterface] Rendering message: ID=${msg.id}, Sender=${msg.senderId}, IsBot=${msg.isBotMessage}, Text="${msg.text.substring(0,20)}..."`);
+                     return (
                        <MessageBubble
                          key={msg.id}
                          message={msg}
                          currentUserId={currentUserId}
                          onStartReply={handleStartReply}
                        />
-                     ))
+                     );
+                   })
                  )}
                  <div ref={messagesEndRef} />
               </div>
