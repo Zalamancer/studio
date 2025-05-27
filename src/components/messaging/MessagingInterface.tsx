@@ -27,7 +27,6 @@ import type { Unsubscribe } from 'firebase/firestore';
 interface MessagingInterfaceProps {
   currentUserId: string;
   initialConversationId?: string | null;
-  highlightPostId?: string | null;
   initialMessageText?: string;
 }
 
@@ -103,7 +102,8 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
                      "absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity",
                      "bg-secondary text-secondary-foreground hover:bg-secondary/80",
                      "p-1 rounded-md",
-                     "focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-ring"
+                     "focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-ring",
+                     "hidden md:flex" // Hidden on mobile for cleaner list items
                  )}
                  title="View Post Details"
                  aria-label="View Post Details"
@@ -123,14 +123,7 @@ interface MessageBubbleProps {
 }
 
 const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, currentUserId, onStartReply }) => {
-  // A bot message is never "owned" by the current human user for styling purposes.
   const isOwnMessage = !message.isBotMessage && message.senderId === currentUserId;
-  
-  // Log props for debugging if needed
-  // console.log(`[MessageBubble] PROPS RECEIVED: messageId=${message.id}, text="${message.text.substring(0,20)}...", isBotMessage=${message.isBotMessage}, senderId=${message.senderId}, currentUserId=${currentUserId}, calculatedIsOwnMessage=${isOwnMessage}`);
-  // if (message.isBotMessage) {
-  //   console.log(`[MessageBubble] RENDERING BOT MESSAGE: ${message.id}`);
-  // }
 
   const timestamp = message.timestamp
     ? new Date(message.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -141,15 +134,12 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, curre
     isOwnMessage ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"
   );
 
-  // No special styling for bot messages anymore, they use the standard "received message" style.
   // if (message.isBotMessage) {
-  //   // Example: if you wanted a *very subtle* differentiation, you could add a class here.
-  //   // bubbleClasses = cn(bubbleClasses, "border-l-2 border-accent"); 
+  //   console.log(`[MessageBubble] RENDERING BOT MESSAGE: ${message.id}`);
   // }
 
   return (
     <div className={cn("flex group mb-1", isOwnMessage ? "justify-end" : "justify-start")}>
-       {/* Reply button appears for all messages not sent by the current user, including bot messages */}
        {!isOwnMessage && (
         <Button
           variant="ghost"
@@ -166,14 +156,13 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, curre
           <div className={cn(
             "text-xs p-1.5 rounded-md mb-1 border-l-2",
              isOwnMessage
-              ? "bg-card text-primary border-primary/30" // Snippet style if replying from own message
-              : "bg-accent/50 text-accent-foreground/80 border-accent/50" // Snippet style if replying from other's message (including bot's)
+              ? "bg-card text-primary border-primary/30"
+              : "bg-accent/50 text-accent-foreground/80 border-accent/50"
           )}>
             <p className="italic truncate opacity-80">{message.repliedToTextSnippet}</p>
           </div>
         )}
         <p className="text-sm">
-          {/* Removed [BOT DEBUG TEXT]: prefix */}
           {message.text}
         </p>
         <p className={cn(
@@ -183,8 +172,7 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, curre
             {timestamp}
         </p>
       </div>
-      {/* Reply button for own messages (excluding bot messages, which are never "own") */}
-      {isOwnMessage && ( 
+      {isOwnMessage && (
         <Button
           variant="ghost"
           size="icon"
@@ -203,14 +191,13 @@ MessageBubble.displayName = 'MessageBubble';
 export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     currentUserId,
     initialConversationId,
-    highlightPostId,
     initialMessageText,
 }) => {
   const isMobile = useIsMobile();
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationId || null);
   const [activeMobileView, setActiveMobileView] = useState<'list' | 'chat'>(initialConversationId ? 'chat' : 'list');
 
-  const [newMessage, setNewMessage] = useState('');
+  const [newMessage, setNewMessage] = useState(initialMessageText || '');
   const [replyingTo, setReplyingTo] = useState<SerializableMessage | null>(null);
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -252,7 +239,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
      queryFn: async () => {
        const postIds = conversations.map(c => c.postId).filter((id): id is string => !!id && id !== 'general_connection');
        const detailsMap = new Map<string, { question: string } | null>();
-       if (postIds.length === 0) return detailsMap; // Return empty map if no postIds
+       if (postIds.length === 0) return detailsMap;
        await Promise.all(postIds.map(async (postId) => {
          const details = await getPostDetails(postId);
          detailsMap.set(postId, details);
@@ -266,7 +253,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
    const postDetailsMap = postDetailsQueries.data;
 
   useEffect(() => {
-    console.log("[MessagingInterface] Messages useEffect. SelectedConversationId:", selectedConversationId);
+    // console.log("[MessagingInterface] Messages useEffect. SelectedConversationId:", selectedConversationId);
     if (!selectedConversationId) {
       setMessages([]);
       setIsLoadingMessagesState(false);
@@ -299,7 +286,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     );
 
     return () => {
-        console.log(`%c[MessagingInterface] Unsubscribing from messages for conv ${selectedConversationId}`, "color: orange;");
+        // console.log(`%c[MessagingInterface] Unsubscribing from messages for conv ${selectedConversationId}`, "color: orange;");
         if (unsubscribe) unsubscribe();
     };
   }, [selectedConversationId, toast]);
@@ -339,23 +326,24 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             if (isMobile && activeMobileView !== 'chat') {
               setActiveMobileView('chat');
             }
-            if (initialMessageText && newMessage === '') { 
-                setNewMessage(initialMessageText);
-                setTimeout(() => messageInputRef.current?.focus(), 0);
-            }
         } else {
              console.warn(`[MessagingInterface] initialConversationId '${initialConversationId}' not found in loaded conversations.`);
         }
-    } else if (!initialConversationId && conversations.length > 0 && !selectedConversationId && !isMobile) {
-        // No default selection for desktop to avoid unexpected chat opening
     }
-  }, [initialConversationId, conversations, initialMessageText, isMobile, activeMobileView, selectedConversationId]);
+  }, [initialConversationId, conversations, isMobile, activeMobileView, selectedConversationId]);
+
+  useEffect(() => {
+     if (initialMessageText && selectedConversationId && newMessage === '') {
+        setNewMessage(initialMessageText);
+        setTimeout(() => messageInputRef.current?.focus(), 0);
+     }
+  }, [initialMessageText, selectedConversationId, newMessage]);
 
 
    const handleConversationSelect = useCallback((conversationId: string) => {
     setSelectedConversationId(conversationId);
-    setNewMessage(''); 
-    setReplyingTo(null); 
+    setNewMessage('');
+    setReplyingTo(null);
     if (isMobile) {
       setActiveMobileView('chat');
     }
@@ -370,7 +358,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         conversationId: selectedConversationId,
         senderId: currentUserId,
         text: newMessage.trim(),
-        isBotMessage: false, 
+        isBotMessage: false,
         ...(replyingTo && {
           replyToMessageId: replyingTo.id,
           repliedToTextSnippet: replyingTo.text.substring(0, 75) + (replyingTo.text.length > 75 ? "..." : "")
@@ -401,17 +389,18 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const handleStartReply = useCallback((message: SerializableMessage) => {
     setReplyingTo(message);
     setTimeout(() => messageInputRef.current?.focus(), 0);
-  }, [messageInputRef, setReplyingTo]);
+  }, [messageInputRef]);
 
   const handleCancelReply = useCallback(() => {
     setReplyingTo(null);
-  }, [setReplyingTo]);
+  }, []);
 
   return (
     <div className="flex h-full">
+      {/* Conversation List Panel */}
       <div
         className={cn(
-          "flex flex-col border-r bg-background",
+          "flex flex-col border-r bg-background min-w-0", // Added min-w-0
           isMobile
             ? activeMobileView === 'list' ? "w-full flex" : "hidden"
             : "w-1/3 lg:w-1/4 flex"
@@ -422,7 +411,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
               <MessageSquare className="h-5 w-5" /> All Messages
           </h2>
         </div>
-        <ScrollArea className="flex-grow bg-background">
+        <ScrollArea className={cn("flex-grow", isMobile ? "bg-background" : "bg-card")}>
           <div className={cn(isMobile ? "p-1" : "p-2", "space-y-1")}>
             {isLoadingConversations ? (
               Array.from({ length: 5 }).map((_, i) => (
@@ -447,7 +436,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             ) : (
               conversations.map((conv) => {
                  const postQuestionText = conv.postId && conv.postId !== 'general_connection' && postDetailsMap ? postDetailsMap.get(conv.postId)?.question : null;
-                 const shouldHighlight = highlightPostId === conv.postId && selectedConversationId === conv.id;
+                 // Highlight logic for initialConversationId already handled by selectedConversationId state
                  return (
                      <ConversationListItem
                          key={conv.id}
@@ -456,7 +445,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                          currentUserId={currentUserId}
                          onSelect={handleConversationSelect}
                          postQuestion={postQuestionText}
-                         highlight={shouldHighlight}
+                         highlight={initialConversationId === conv.id && selectedConversationId === conv.id}
                      />
                  );
              })
@@ -465,6 +454,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         </ScrollArea>
       </div>
 
+      {/* Message Display Panel */}
       <div
         className={cn(
           "flex flex-col",
@@ -506,7 +496,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                          className={cn(
                              "text-primary hover:underline text-xs items-center gap-1 ml-auto flex-shrink-0",
                              "focus:outline-none focus:ring-1 focus:ring-ring rounded p-1",
-                             "hidden md:flex" 
+                             "hidden md:flex"
                          )}
                          title="View Post Details"
                          aria-label="View Post Details"
