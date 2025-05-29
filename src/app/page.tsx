@@ -3,7 +3,7 @@
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -26,21 +26,21 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/ui/label'; // Added Label import
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from 'react-hook-form';
+import { useForm } from 'react-hook-form'; // Import useForm from react-hook-form
 import {
   Loader2, Trash2, MessageSquare, Sparkles, HandHelping, Briefcase, Link as LinkIcon,
-  X, DollarSign, CalendarDays, Star, User, FileText, Compass, Home, Network, Info, CornerDownRight, Send, AtSign
+  X, DollarSign, CalendarDays, Star, User, FileText, Compass, Home, Network, CornerDownRight, Send, AtSign
 } from "lucide-react";
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addBidToPost, getBidsForPost } from '@/services/bidService';
 import type { ClientBid, NewBidData } from '@/types/bid';
 import { formatDistanceToNow } from 'date-fns';
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
@@ -58,26 +58,14 @@ import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectio
 import type { UserProfileBasic } from '@/types/connection';
 import { availableTags } from '@/components/layout/MainLayout';
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
-import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
+import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_PAGE } from '@/lib/utils';
 import dynamic from 'next/dynamic';
+import { PostCard } from '@/components/board-page/PostCard'; // Import PostCard
 
-// Helper for TextWithMentions - moved here for self-containment within page.tsx scope if needed
-// but ideally this could be a shared utility if TextWithMentions becomes shared.
-// const IS_UID_REGEX_PAGE = /^[a-zA-Z0-9]{20,28}$/;
-
-// --- PostDetailPanel dynamic import ---
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
-  {
-    loading: () => (
-      <div className="md:col-span-1 flex justify-center items-center p-8">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-      </div>
-    ),
-    ssr: false
-  }
+  { loading: () => <div className="md:col-span-1 flex justify-center items-center p-8"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>, ssr: false }
 );
-
 
 // Main Board Page Component
 const BoardPageContent = () => {
@@ -91,6 +79,7 @@ const BoardPageContent = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
+
   // --- Data Fetching ---
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -98,6 +87,7 @@ const BoardPageContent = () => {
     staleTime: 1000 * 60 * 1, // 1 minute
     refetchOnWindowFocus: true,
   });
+
 
   // --- Post Deletion Logic ---
   const deletePostMutation = useMutation({
@@ -125,19 +115,19 @@ const BoardPageContent = () => {
       return;
     }
     deletePostMutation.mutate(postId);
-  }, [user, deletePostMutation, toast]);
+  }, [user, deletePostMutation, toast, queryClient, selectedPost, router]);
+
 
   // --- Post Selection & URL Handling ---
   const openPostCallback = useCallback((postToOpen: Post) => {
+    console.log("[BoardPageContent] openPostCallback, opening post:", postToOpen.id);
     if (selectedPost && selectedPost.id === postToOpen.id) {
       setSelectedPost(null);
-      // If closing the currently URL-selected post, clear the URL
       if (searchParams?.get('postId') === postToOpen.id) {
         router.replace('/', undefined, { shallow: true });
       }
     } else {
       setSelectedPost(postToOpen);
-      // Update URL if not already matching, but don't push if it's already the one from URL
       if (searchParams?.get('postId') !== postToOpen.id) {
         router.push(`/?postId=${postToOpen.id}`, { scroll: false });
       }
@@ -146,26 +136,30 @@ const BoardPageContent = () => {
 
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
+    console.log(`[BoardPageContent] useEffect for URL postId: postIdFromUrl='${postIdFromUrl}', posts.length=${posts.length}, currentSelectedPostId='${selectedPost?.id}'`);
+
     if (postIdFromUrl && posts.length > 0) {
-      // Only try to open if no post is selected or if the selected post doesn't match the URL
-      // This prevents re-opening if the user manually closed it while the URL param was still there
       if (!selectedPost || selectedPost.id !== postIdFromUrl) {
         const postToOpen = posts.find(p => p.id === postIdFromUrl);
         if (postToOpen) {
+          console.log(`  Found post in URL: ${postIdFromUrl}. Setting as selectedPost.`);
           setSelectedPost(postToOpen);
-          // Don't clear URL here immediately; let user interaction (closing sheet) handle it
-          // or a separate effect that cleans up if selectedPost becomes null and URL still has postId
+          // DO NOT clear URL here, it's handled by the close button or by selecting another post.
         } else {
+          console.warn(`  Post with ID '${postIdFromUrl}' from URL not found in fetched posts. Clearing URL.`);
           toast({ variant: "destructive", title: "Post Not Found", description: "The requested post could not be found or is no longer available." });
-          router.replace('/', undefined, { shallow: true }); // Clean URL if post not found
+          router.replace('/', undefined, { shallow: true });
         }
+      } else {
+        console.log(`  Post ID in URL ('${postIdFromUrl}') already matches selectedPost. No action needed to open.`);
       }
     } else if (!postIdFromUrl && selectedPost) {
-      // If URL is cleared but a post is still selected (e.g. user navigated back), deselect it
-      // This scenario might need refinement based on desired UX for back button
-      // setSelectedPost(null);
+      // This condition can be tricky. If user navigates back, or if URL is cleared by other means,
+      // and selectedPost is still set, it means the panel should remain open.
+      // No action needed here to close it based on URL clearing alone.
+      console.log(`  No postId in URL, but a post is selected ('${selectedPost.id}'). Panel remains open.`);
     }
-  }, [searchParams, posts, router, toast, selectedPost]); // Added selectedPost to deps for robustness
+  }, [searchParams, posts, router, toast, selectedPost]); // selectedPost is needed to prevent re-opening if already selected from URL.
 
 
   // --- Filtering and Display Logic ---
@@ -200,7 +194,7 @@ const BoardPageContent = () => {
   );
 
   const renderPosts = useCallback((postsToRender: Post[]) => (
-    <div className="columns-1 sm:columns-2 gap-4 space-y-4"> {/* Changed to 2 columns for md and up */}
+    <div className="columns-1 md:columns-2 gap-4 space-y-4"> {/* Ensure 2 columns for md and up */}
       {postsToRender.length > 0 ? (
         postsToRender.map((post) => (
           <PostCard
@@ -298,5 +292,3 @@ const BoardPageContent = () => {
 };
 
 export default BoardPageContent;
-
-    
