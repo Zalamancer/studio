@@ -11,7 +11,7 @@ import {
   serverTimestamp,
   deleteDoc,
   doc,
-  where
+  where,
 } from 'firebase/firestore';
 import type { Post, NewPostData } from '@/types/post';
 
@@ -19,7 +19,6 @@ const postsCollectionRef = collection(db, 'posts');
 
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
-    // Ensure all optional fields that might be undefined are set to null for Firestore
     const dataForFirestore: { [key: string]: any } = {
       question: postData.question,
       tags: postData.tags || [],
@@ -35,25 +34,29 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
       requestType: postData.requestType || 'post',
       maxBudget: postData.maxBudget === undefined ? null : postData.maxBudget,
-      deadline: postData.deadline instanceof Date 
-        ? Timestamp.fromDate(postData.deadline) 
-        : (postData.deadline === null ? null : (postData.deadline || null)), // Handle null explicitly or if undefined
       createdAt: serverTimestamp(),
+      // Handle deadline separately: only include if it's a valid Date
     };
+
+    if (postData.deadline instanceof Date) {
+      dataForFirestore.deadline = Timestamp.fromDate(postData.deadline);
+    } else {
+      dataForFirestore.deadline = null;
+    }
 
     // Specific handling for description fields based on requestType
     if (postData.requestType === 'help_request') {
-      dataForFirestore.descriptionDetails = postData.descriptionDetails || ""; // Mandatory for help_request
+      dataForFirestore.descriptionDetails = postData.descriptionDetails || "";
       dataForFirestore.descriptionTried = postData.descriptionTried || null;
       dataForFirestore.descriptionOutcome = postData.descriptionOutcome || null;
-      dataForFirestore.description = null; // Ensure general description is null for help requests
+      dataForFirestore.description = null;
     } else { // 'post' or default
       dataForFirestore.description = postData.description || null;
       dataForFirestore.descriptionDetails = null;
       dataForFirestore.descriptionTried = null;
       dataForFirestore.descriptionOutcome = null;
     }
-    
+
     // Ensure no undefined values are sent (Firestore doesn't allow them)
     Object.keys(dataForFirestore).forEach(key => {
       if (dataForFirestore[key] === undefined) {
@@ -83,6 +86,7 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
 };
 
 export const getPostsFromFirestore = async (): Promise<Post[]> => {
+  console.log("[postService] getPostsFromFirestore: Fetching posts...");
   try {
     const q = query(postsCollectionRef, orderBy('createdAt', 'desc'), limit(50));
     const querySnapshot = await getDocs(q);
@@ -95,35 +99,37 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             userId: data.userId,
             tags: data.tags || [],
             question: data.question || "",
-            description: data.description, // Will be undefined if not present
-            descriptionDetails: data.descriptionDetails, // Will be undefined if not present
-            descriptionTried: data.descriptionTried, // Will be undefined if not present
-            descriptionOutcome: data.descriptionOutcome, // Will be undefined if not present
+            description: data.description || null,
+            descriptionDetails: data.descriptionDetails || null,
+            descriptionTried: data.descriptionTried || null,
+            descriptionOutcome: data.descriptionOutcome || null,
             sector: data.sector || "",
-            subSector: data.subSector,
-            industry: data.industry,
+            subSector: data.subSector || null,
+            industry: data.industry || null,
             businessType: data.businessType || "",
             safetyIndicator: data.safetyIndicator || "Medium",
             ratingScore: data.ratingScore || 0,
             createdAt: createdAt,
-            naicsCode: data.naicsCode,
+            naicsCode: data.naicsCode || null,
             imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
             mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
             requestType: data.requestType || 'post',
-            maxBudget: data.maxBudget,
+            maxBudget: data.maxBudget === undefined ? null : data.maxBudget,
             deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined,
        } as Post;
     });
     console.log(`[postService] Fetched ${posts.length} posts from Firestore.`);
     return posts;
   } catch (error: any) {
+    if (error.code === 'permission-denied') {
+        console.warn(`[postService] getPostsFromFirestore: Permission denied when fetching posts. Returning empty array. Details: ${error.message}`);
+        return []; // Return empty array instead of throwing
+    }
+    // For other errors, log them and re-throw so UI can potentially handle them or show a generic error.
     console.error('[postService] Error fetching posts from Firestore:', error);
     console.error("Firestore Error Code:", error.code);
     console.error("Firestore Error Message:", error.message);
-     if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied for reading. Check your security rules.");
-    }
-    return [];
+    throw error; // Re-throw other types of errors
   }
 };
 
@@ -172,22 +178,22 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         userId: data.userId,
         tags: data.tags || [],
         question: data.question || "",
-        description: data.description,
-        descriptionDetails: data.descriptionDetails,
-        descriptionTried: data.descriptionTried,
-        descriptionOutcome: data.descriptionOutcome,
+        description: data.description || null,
+        descriptionDetails: data.descriptionDetails || null,
+        descriptionTried: data.descriptionTried || null,
+        descriptionOutcome: data.descriptionOutcome || null,
         sector: data.sector || "",
-        subSector: data.subSector,
-        industry: data.industry,
+        subSector: data.subSector || null,
+        industry: data.industry || null,
         businessType: data.businessType || "",
         safetyIndicator: data.safetyIndicator || "Medium",
         ratingScore: data.ratingScore || 0,
         createdAt: createdAt,
-        naicsCode: data.naicsCode,
+        naicsCode: data.naicsCode || null,
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
         mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
         requestType: data.requestType || 'post',
-        maxBudget: data.maxBudget,
+        maxBudget: data.maxBudget === undefined ? null : data.maxBudget,
         deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined,
       } as Post;
     });
@@ -196,13 +202,15 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
     return posts;
 
   } catch (error: any) {
-    console.error(`[postService] Error fetching posts for user ${userId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error(`Firestore permission denied fetching posts for user ${userId}. Check rules.`);
-      throw new Error('Permission denied fetching user posts.');
+      console.warn(`[postService] getPostsByUserId: Permission denied fetching posts for user ${userId}. Returning empty array. Details: ${error.message}`);
+      return []; // Return empty array instead of throwing
     }
+    // For other errors, log them and re-throw or handle as appropriate.
+    console.error(`[postService] Error fetching posts for user ${userId}:`, error);
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      console.error("Firestore query for user posts requires an index. Create a composite index on 'userId' (==) and 'createdAt' (desc) in the Firebase console for the 'posts' collection.");
+      console.error("[postService] Firestore query for user posts requires an index. Create a composite index on 'userId' (==) and 'createdAt' (desc) in the Firebase console for the 'posts' collection.");
+      // Note: Throwing here might be desired to alert developers to missing indexes.
       throw new Error("Firestore query requires an index for user posts. Please create it in the Firebase console.");
     }
     throw new Error(`Failed to fetch posts for user ${userId}: ${error.message}`);
