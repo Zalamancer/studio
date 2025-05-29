@@ -1,12 +1,11 @@
 
-// src/components/CreatePostForm.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
@@ -47,13 +46,13 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import { Calendar } from "@/components/ui/calendar";
 import { format } from 'date-fns';
 
 const MAX_FILE_SIZE_MB = 2;
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024; // 2MB
+const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 
 const postFormSchema = z.object({
@@ -62,9 +61,9 @@ const postFormSchema = z.object({
   }),
   question: z.string().min(10, "Question must be at least 10 characters.").max(200, "Question cannot exceed 200 characters."),
   
-  descriptionDetails: z.string().min(10, "Details are required (min 10 characters).").max(5000, "Details cannot exceed 5000 characters."),
-  descriptionTried: z.string().max(2000, "This field cannot exceed 2000 characters.").optional(),
-  descriptionOutcome: z.string().max(2000, "This field cannot exceed 2000 characters.").optional(),
+  descriptionDetails: z.string().min(10, { message: "Details in 'Problem Details' tab must be at least 10 characters." }),
+  descriptionTried: z.string().optional(),
+  descriptionOutcome: z.string().optional(),
   
   tags: z.array(z.string()).min(1, "Please select at least one tag."),
   sector: z.string().min(1, "Please select a sector."),
@@ -73,7 +72,7 @@ const postFormSchema = z.object({
   
   imageFile: z.instanceof(File).optional().nullable()
     .refine(file => !file || file.size <= MAX_FILE_SIZE_BYTES, {
-      message: "Max image size is " + (MAX_FILE_SIZE_BYTES / 1024 / 1024) + "MB." // Using string concatenation
+      message: "Max image size is " + (MAX_FILE_SIZE_BYTES / 1024 / 1024) + "MB."
     })
     .refine(
       file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
@@ -102,27 +101,6 @@ export interface CreatePostFormProps {
   currentUserId: string | null;
   onDialogClose?: () => void;
 }
-
-// Local getInitials function
-const getInitials = (name: string | undefined | null): string => {
-  if (!name || typeof name !== 'string' || name.trim() === '') return '?';
-  const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
-  const pseudonymRegex = /^[A-Z][a-z]+([A-Z][a-zA-Z]*)[0-9]{3,}$/;
-  const match = nameToProcess.match(pseudonymRegex);
-  if (match) {
-    const firstLetter = nameToProcess.charAt(0);
-    const animalPart = match[1];
-    const secondLetter = animalPart.charAt(0);
-    return (firstLetter + secondLetter).toUpperCase();
-  }
-  const words = nameToProcess.split(/\s+/).filter(Boolean);
-  if (words.length === 0) return '?';
-  if (words.length === 1) return words[0].substring(0, 1).toUpperCase();
-  const firstInitial = words[0].substring(0, 1);
-  const lastInitial = words[words.length - 1].substring(0, 1);
-  return (firstInitial + lastInitial).toUpperCase();
-};
-
 
 export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   onSubmit,
@@ -199,14 +177,18 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   }, [form]);
 
   useEffect(() => {
-    if (onDialogClose && form.formState.isSubmitSuccessful) {
+    // This effect handles resetting the form when the dialog is closed AND the submission was successful.
+    // The onDialogClose prop itself is just a function to call to tell MainLayout to close.
+    // Actual form reset should happen based on submission success or explicit cancel.
+    if (form.formState.isSubmitSuccessful && onDialogClose) {
       const timer = setTimeout(() => {
         resetForm();
-        if (onDialogClose) onDialogClose();
-      }, 100);
+        onDialogClose(); // Call the passed function to close the dialog
+      }, 100); // Short delay to allow toast to show
       return () => clearTimeout(timer);
     }
   }, [form.formState.isSubmitSuccessful, onDialogClose, resetForm]);
+
 
   const selectedSectorCode = form.watch("sector");
   useEffect(() => {
@@ -260,7 +242,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
       const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
-      if (!/\s/.test(potentialQuery) && !/\\n/.test(potentialQuery) && !/\r/.test(potentialQuery)) { // Corrected regex for newline
+      if (!/\s/.test(potentialQuery) && !/\\n/.test(potentialQuery) && !/\r/.test(potentialQuery)) { 
         activeQuery = potentialQuery;
       }
     }
@@ -323,8 +305,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   }, [showProblemDetailsSuggestions]);
 
   const filteredDescriptionSuggestions = useMemo(() => {
-    if (!showDescriptionSuggestions) return [];
-    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
+    if (!showProblemDetailsSuggestions) return [];
+    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', mentionName: 'loading-desc', displayName: 'Loading users...' } as UserProfileBasic];
 
     let source = suggestibleUsers;
     if (debouncedProblemDetailsQuery.trim() === '') {
@@ -333,17 +315,18 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       const queryLower = debouncedProblemDetailsQuery.toLowerCase();
       source = source.filter(p =>
           p.mentionName.toLowerCase().includes(queryLower) ||
-          (p.displayName && p.displayName.toLowerCase().includes(queryLower))
+          (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
+          (p.companyName && p.companyName.toLowerCase().includes(queryLower))
       );
     }
     if (source.length === 0 && debouncedProblemDetailsQuery.trim() !== '') {
-        return [{ userId: 'no-match-desc', displayName: `No users matching "@${debouncedProblemDetailsQuery}"`, mentionName: 'no-match-desc' } as UserProfileBasic];
+        return [{ userId: 'no-match-desc', mentionName: 'no-match-desc', displayName: `No users matching "@${debouncedProblemDetailsQuery}"` } as UserProfileBasic];
     }
     if (source.length === 0) {
-        return [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
+        return [{ userId: 'no-users-desc', mentionName: 'no-users-desc', displayName: 'No users to suggest.' } as UserProfileBasic];
     }
     return source.slice(0, 10);
-  }, [suggestibleUsers, isLoadingSuggestibleUsers, showDescriptionSuggestions, debouncedProblemDetailsQuery]);
+  }, [suggestibleUsers, isLoadingSuggestibleUsers, showProblemDetailsSuggestions, debouncedProblemDetailsQuery]);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -477,7 +460,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             />
             
             {/* Unified Tabbed Description Area for ALL post types */}
-            <div className="flex-grow flex flex-col space-y-2">
+             <div className="flex-grow flex flex-col space-y-2">
                 <Label className="text-base font-semibold text-foreground">
                     Details <span className="text-destructive">*</span>
                 </Label>
@@ -487,7 +470,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                       <FileQuestion className="mr-1.5 h-4 w-4" /> Problem Details <span className="text-destructive ml-0.5">*</span>
                     </TabsTrigger>
                     <TabsTrigger value="tried" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
-                      <Brain className="mr-1.5 h-4 w-4" /> What I've Tried
+                      <Brain className="mr-1.5 h-4 w-4" /> What I&apos;ve Tried
                     </TabsTrigger>
                     <TabsTrigger value="outcome" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
                       <Target className="mr-1.5 h-4 w-4" /> Expected Outcome
@@ -498,32 +481,32 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <FormField control={form.control} name="descriptionDetails" render={({ field }) => (
                       <FormItem className="flex-grow flex flex-col">
                         <FormLabel className="sr-only">Problem Details</FormLabel>
-                        <Popover open={showDescriptionSuggestions && filteredDescriptionSuggestions.length > 0 && !['loading-desc', 'no-users-desc', 'no-match-desc'].includes(filteredDescriptionSuggestions[0]?.userId)} onOpenChange={(open) => { setShowDescriptionSuggestions(open); if (!open) setDescriptionMentionQuery('');}}>
+                        <Popover open={showProblemDetailsSuggestions && filteredDescriptionSuggestions.length > 0 && !['loading-desc', 'no-users-desc', 'no-match-desc'].includes(filteredDescriptionSuggestions[0]?.userId)} onOpenChange={(open) => { setShowProblemDetailsSuggestions(open); if (!open) setProblemDetailsMentionQuery('');}}>
                           <PopoverTrigger asChild>
                             <FormControl>
                               <Textarea
                                 placeholder="Describe the specific problem, idea, or need... (@mention users)"
                                 className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
                                 {...field}
-                                ref={descriptionTextareaRef}
+                                ref={problemDetailsTextareaRef}
                                 value={field.value || ''}
-                                onChange={handleDescriptionChange}
+                                onChange={handleProblemDetailsChange}
                                 onFocus={handleDescriptionFocus}
-                                onBlurCapture={() => setTimeout(() => { if (descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement as Node) && descriptionTextareaRef.current !== document.activeElement) { setShowDescriptionSuggestions(false);}}, 150)}
+                                onBlurCapture={() => setTimeout(() => { if (problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && problemDetailsTextareaRef.current !== document.activeElement) { setShowProblemDetailsSuggestions(false);}}, 150)}
                                 disabled={isSubmitting}
                               />
                             </FormControl>
                           </PopoverTrigger>
-                          <PopoverContent ref={descriptionSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                          <PopoverContent ref={problemDetailsSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                             {filteredDescriptionSuggestions.map(profile => {
-                                const displayableName = profile.companyName || profile.actualDisplayName || profile.mentionName;
-                                const showSecondaryNameLine = (profile.companyName || profile.actualDisplayName) && (profile.companyName || profile.actualDisplayName) !== profile.mentionName;
+                                const displayableName = profile.actualDisplayName || profile.companyName;
+                                const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
                                 return (
                                     ['loading-desc', 'no-users-desc', 'no-match-desc'].includes(profile.userId) ? (
                                         <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
                                     ) : (
-                                        <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectDescriptionSuggestion(profile)}>
-                                            <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getSharedInitials(profile.mentionName)}</AvatarFallback></Avatar>
+                                        <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectDescriptionDetailsSuggestion(profile)}>
+                                            <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback></Avatar>
                                             <div className="flex flex-col items-start">
                                                 {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
                                                 <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
@@ -541,10 +524,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   <TabsContent value="tried" className="mt-0 p-4 bg-background min-h-[150px] flex-grow flex flex-col rounded-b-md">
                     <FormField control={form.control} name="descriptionTried" render={({ field }) => (
                       <FormItem className="flex-grow flex flex-col">
-                        <FormLabel className="sr-only">What I've Tried</FormLabel>
+                        <FormLabel className="sr-only">What I&apos;ve Tried</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="Solutions or approaches you've already attempted (optional)..."
+                            placeholder="Solutions or approaches you&apos;ve already attempted (optional)..."
                             className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
                             value={field.value || ''}
                             onChange={field.onChange}
@@ -561,7 +544,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                         <FormLabel className="sr-only">Expected Outcome</FormLabel>
                         <FormControl>
                           <Textarea
-                            placeholder="Ideal result or solution you're looking for (optional)?"
+                            placeholder="Ideal result or solution you&apos;re looking for (optional)?"
                             className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
                             value={field.value || ''}
                             onChange={field.onChange}
@@ -574,7 +557,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   </TabsContent>
                 </Tabs>
             </div>
-
 
             {requestType === 'help_request' && (
               <>
@@ -701,8 +683,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
         <DialogFooter className="pt-8 md:col-span-2">
             {onDialogClose && (<DialogClose asChild><Button type="button" variant="outline" onClick={resetForm} disabled={isSubmitting || isCompressing || isLoadingSuggestibleUsers}>Cancel</Button></DialogClose>)}
-            <Button type="submit" disabled={isSubmitting || isCompressing || (showDescriptionSuggestions && isLoadingSuggestibleUsers)}>
-                {(isSubmitting || isCompressing || (showDescriptionSuggestions && isLoadingSuggestibleUsers) ) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : ('Submit Post')}
+            <Button type="submit" disabled={isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers)}>
+                {(isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) ) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : ('Submit Post')}
             </Button>
         </DialogFooter>
       </form>
@@ -711,7 +693,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             <AlertDialogHeader>
               <AlertDialogTitle>Image Too Large</AlertDialogTitle>
               <AlertDialogDescription>
-                The selected image exceeds ${MAX_FILE_SIZE_MB}MB ({(originalTooLargeFile?.size ? originalTooLargeFile.size / (1024 * 1024) : 0).toFixed(2)}MB).
+                The selected image exceeds {MAX_FILE_SIZE_MB}MB ({(originalTooLargeFile?.size ? originalTooLargeFile.size / (1024 * 1024) : 0).toFixed(2)}MB).
                 Would you like to compress it to fit? Compression may slightly reduce quality.
               </AlertDialogDescription>
             </AlertDialogHeader>
