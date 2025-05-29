@@ -1,3 +1,4 @@
+
 // src/components/CreatePostForm.tsx
 "use client";
 
@@ -14,9 +15,9 @@ import {
   FormControl,
   FormField,
   FormItem,
-  FormLabel,
   FormMessage,
-  FormDescription
+  FormDescription, // Keep FormDescription
+  FormLabel,
 } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -24,7 +25,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Loader2, Upload, XCircle, ImageDown, FileText, HandHelping, DollarSign, CalendarDays, AtSign, Briefcase, Info, Sparkles, User, HelpingHand, Lightbulb } from 'lucide-react';
+import {
+    Loader2, Upload, XCircle, ImageDown, FileText, HandHelping, DollarSign, CalendarDays,
+    AtSign, Briefcase, Info, Sparkles, User, Lightbulb, HelpingHand, FileQuestion, Brain, Target, Type
+} from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
@@ -43,63 +47,45 @@ import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-
-export interface Industry {
-  name: string;
-  code: string;
-  description?: string;
-}
-
-export interface SubSector {
-  name: string;
-  code: string;
-  description?: string;
-  industries: Industry[];
-}
-export interface SectorWithSubSectors {
-  name: string;
-  code: string;
-  description?: string;
-  subSectors: SubSector[];
-}
-
+import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Calendar } from "@/components/ui/calendar";
+import { format } from 'date-fns';
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 
-
-const postFormSchema = z.object({
+const postFormSchemaBase = z.object({
   requestType: z.enum(['post', 'help_request'], {
     required_error: "You must select a post type.",
   }),
-  question: z.string().min(10, "Question must be at least 10 characters long.").max(200, "Question cannot exceed 200 characters."),
-  
+  question: z.string().min(10, "Question must be at least 10 characters.").max(200, "Question cannot exceed 200 characters."),
   // Tabbed descriptions are now standard
-  descriptionDetails: z.string().min(10, "Details are required (min 10 characters).").max(5000, "Details cannot exceed 5000 characters."),
+  descriptionDetails: z.string().min(10, "Problem details must be at least 10 characters.").max(5000, "Details cannot exceed 5000 characters."),
   descriptionTried: z.string().max(2000, "This field cannot exceed 2000 characters.").optional(),
   descriptionOutcome: z.string().max(2000, "This field cannot exceed 2000 characters.").optional(),
-
   tags: z.array(z.string()).min(1, "Please select at least one tag."),
   sector: z.string().min(1, "Please select a sector."),
   subSector: z.string().optional(),
   industry: z.string().optional(),
-  image: z.instanceof(File).optional().nullable()
+  imageFile: z.instanceof(File).optional().nullable()
     .refine(file => !file || file.size <= MAX_FILE_SIZE_BYTES, `Max image size is 2MB.`)
     .refine(
       file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
       "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported."
     ),
-  maxBudget: z.string().transform(val => val === '' ? undefined : val).pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional()).optional(),
+  maxBudget: z.string().transform(val => val === '' ? undefined : val)
+    .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
+    .optional(),
   deadline: z.date().optional().nullable(),
 });
 
+export type PostFormValues = z.infer<typeof postFormSchemaBase>;
 
-export type CreatePostFormValues = z.infer<typeof postFormSchema>;
-
-export interface CreatePostFormData extends Omit<CreatePostFormValues, 'image' | 'maxBudget'> {
+export interface CreatePostFormData extends Omit<PostFormValues, 'imageFile' | 'maxBudget'> {
   imageFile?: File | null;
   mentionedUserIds?: string[];
-  maxBudget?: number; // Will be parsed from string
+  maxBudget?: number;
 }
 
 export interface CreatePostFormProps {
@@ -109,50 +95,31 @@ export interface CreatePostFormProps {
   isSubmitting: boolean;
   currentUserId: string | null;
   onDialogClose?: () => void;
+  initialRequestType?: 'post' | 'help_request';
 }
 
-// Local getInitials function
-const getLocalInitials = (name: string | undefined | null): string => {
-    if (!name || typeof name !== 'string' || name.trim() === '') return '?';
-    const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
-    const pseudonymRegex = /^[A-Z][a-z]+([A-Z][a-zA-Z]*)[0-9]{3,}$/;
-    const match = nameToProcess.match(pseudonymRegex);
-    if (match) {
-        const firstLetter = nameToProcess.charAt(0);
-        const animalPart = match[1];
-        const secondLetter = animalPart.charAt(0);
-        return (firstLetter + secondLetter).toUpperCase();
-    }
-    const words = nameToProcess.split(/\s+/).filter(Boolean);
-    if (words.length === 0) return '?';
-    if (words.length === 1) return words[0].substring(0, 1).toUpperCase();
-    const firstInitial = words[0].substring(0, 1);
-    const lastInitial = words[words.length - 1].substring(0, 1);
-    return (firstInitial + lastInitial).toUpperCase();
-};
-
-
-export const CreatePostForm: React.FC<CreatePostFormProps> = ({
+const CreatePostForm: React.FC<CreatePostFormProps> = ({
   onSubmit,
   availableTags,
   detailedSectorsData,
   isSubmitting,
   currentUserId,
   onDialogClose,
+  initialRequestType = 'post',
 }) => {
-  const form = useForm<CreatePostFormValues>({
-    resolver: zodResolver(postFormSchema),
+  const form = useForm<PostFormValues>({
+    resolver: zodResolver(postFormSchemaBase),
     defaultValues: {
-      requestType: 'post',
+      requestType: initialRequestType,
       question: "",
-      descriptionDetails: "", // Now the primary description
+      descriptionDetails: "",
       descriptionTried: "",
       descriptionOutcome: "",
       tags: [],
       sector: "",
       subSector: "",
       industry: "",
-      image: null,
+      imageFile: null,
       maxBudget: undefined,
       deadline: undefined,
     },
@@ -163,27 +130,25 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   const [currentSubSectors, setCurrentSubSectors] = useState<SubSector[]>([]);
   const [currentIndustries, setCurrentIndustries] = useState<Industry[]>([]);
   const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-  const [selectedImageFile, setSelectedImageFile] = useState<File | null>(null);
 
   const [isCompressing, setIsCompressing] = useState(false);
   const [originalTooLargeFile, setOriginalTooLargeFile] = useState<File | null>(null);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
 
-  const [descriptionDetailsMentionQuery, setDescriptionDetailsMentionQuery] = useState('');
-  const [showDescriptionDetailsSuggestions, setShowDescriptionDetailsSuggestions] = useState(false);
-  const [debouncedDescriptionDetailsQuery, setDebouncedDescriptionDetailsQuery] = useState('');
-  const descriptionDetailsTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const descriptionDetailsSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
+  const [problemDetailsMentionQuery, setProblemDetailsMentionQuery] = useState('');
+  const [showProblemDetailsSuggestions, setShowProblemDetailsSuggestions] = useState(false);
+  const [debouncedProblemDetailsQuery, setDebouncedProblemDetailsQuery] = useState('');
+  const problemDetailsTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const problemDetailsSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
 
   const [selectedMentionedUserIds, setSelectedMentionedUserIds] = useState<Set<string>>(new Set());
   const [activeDescriptionTab, setActiveDescriptionTab] = useState("details");
 
   const requestType = form.watch("requestType");
 
-
   const resetForm = useCallback(() => {
     form.reset({
-      requestType: 'post',
+      requestType: initialRequestType,
       question: "",
       descriptionDetails: "",
       descriptionTried: "",
@@ -192,30 +157,26 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       sector: "",
       subSector: "",
       industry: "",
-      image: null,
+      imageFile: null,
       maxBudget: undefined,
       deadline: undefined,
     });
     setImagePreviewUrl(null);
-    setSelectedImageFile(null);
     setOriginalTooLargeFile(null);
     setShowCompressionDialog(false);
     setCurrentSubSectors([]);
     setCurrentIndustries([]);
-    setDescriptionDetailsMentionQuery(''); setShowDescriptionDetailsSuggestions(false);
+    setProblemDetailsMentionQuery('');
+    setShowProblemDetailsSuggestions(false);
     setSelectedMentionedUserIds(new Set());
     setActiveDescriptionTab("details");
-  }, [form]);
+  }, [form, initialRequestType]);
 
   useEffect(() => {
-    if (onDialogClose) {
-      // This logic might need adjustment based on how onDialogClose is triggered by the parent.
-      // Typically, the parent Dialog's onOpenChange(false) would trigger unmounting or similar,
-      // and form reset might be better handled there if the form is unmounted.
-      // For now, if onDialogClose is called (implying dialog is closing), reset the form.
+    if (onDialogClose && form.formState.isSubmitSuccessful) {
+        resetForm();
     }
-  }, [onDialogClose, resetForm]);
-
+  }, [form.formState.isSubmitSuccessful, onDialogClose, resetForm]);
 
   const selectedSectorCode = form.watch("sector");
   useEffect(() => {
@@ -244,107 +205,50 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
   useEffect(() => {
     const handler = setTimeout(() => {
-      setDebouncedDescriptionDetailsQuery(descriptionDetailsMentionQuery);
+      setDebouncedProblemDetailsQuery(problemDetailsMentionQuery);
     }, 300);
     return () => clearTimeout(handler);
-  }, [descriptionDetailsMentionQuery]);
+  }, [problemDetailsMentionQuery]);
 
   const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
-    queryKey: ['suggestibleUsersForCreatePost', debouncedDescriptionDetailsQuery, currentUserId],
-    queryFn: () => getSuggestibleUsers(debouncedDescriptionDetailsQuery, debouncedDescriptionDetailsQuery ? 10 : 25),
-    enabled: showDescriptionDetailsSuggestions && !!currentUserId,
+    queryKey: ['suggestibleUsersForCreatePost', debouncedProblemDetailsQuery, currentUserId],
+    queryFn: () => getSuggestibleUsers(debouncedProblemDetailsQuery, debouncedProblemDetailsQuery ? 10 : 25),
+    enabled: (requestType === 'post' || activeDescriptionTab === 'details') && showProblemDetailsSuggestions && !!currentUserId,
   });
 
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    form.setValue("image", null); 
-    setSelectedImageFile(null);
-    setOriginalTooLargeFile(null);
-    setImagePreviewUrl(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-
-    if (file) {
-      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a JPG, PNG, GIF, or WebP image." });
-        return;
-      }
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        setOriginalTooLargeFile(file);
-        setShowCompressionDialog(true);
-        return;
-      }
-      setSelectedImageFile(file);
-      form.setValue("image", file);
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreviewUrl(reader.result as string);
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleCompressAndSetImage = async () => {
-    if (!originalTooLargeFile) return;
-    setIsCompressing(true);
-    setShowCompressionDialog(false);
-    toast({ title: "Compressing image...", description: "Please wait." });
-    try {
-      const compressedFile = await imageCompression(originalTooLargeFile, { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true });
-      setSelectedImageFile(compressedFile);
-      form.setValue("image", compressedFile);
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreviewUrl(reader.result as string);
-      reader.readAsDataURL(compressedFile);
-      toast({ title: "Image Compressed", description: "Proceed with upload." });
-    } catch (error) {
-      console.error("Image compression error:", error);
-      toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress. Try a smaller file." });
-      form.setValue("image", null);
-      setImagePreviewUrl(null);
-      setSelectedImageFile(null);
-    } finally {
-      setIsCompressing(false);
-      setOriginalTooLargeFile(null);
-    }
-  };
-
-  const handleRemoveImage = () => {
-    setSelectedImageFile(null);
-    setImagePreviewUrl(null);
-    form.setValue("image", null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-  };
-
-  const evaluateMentionState = useCallback((text: string, cursorPosition: number, setQuery: (q: string) => void, setShowSuggestionsBool: (s: boolean) => void) => {
+  const evaluateMentionState = useCallback((text: string, cursorPosition: number, setQuery: React.Dispatch<React.SetStateAction<string>>, setShowSuggestionsBool: React.Dispatch<React.SetStateAction<boolean>>) => {
+    console.log("[CreatePostForm] evaluateMentionState - Text:", text, "Cursor:", cursorPosition);
     let activeQuery = null;
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
       const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
-      if (!/\s/.test(potentialQuery) && !/\\n/.test(potentialQuery)) {
+      if (!/\s/.test(potentialQuery) && !/\r?\n|\r/.test(potentialQuery)) { // Check for newlines too
         activeQuery = potentialQuery;
       }
     }
+    console.log("[CreatePostForm] evaluateMentionState - Active Query:", activeQuery);
     setQuery(activeQuery !== null ? activeQuery : '');
     setShowSuggestionsBool(activeQuery !== null);
   }, []);
 
-
-  const handleDescriptionDetailsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+  const handleProblemDetailsChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     form.setValue("descriptionDetails", value, { shouldValidate: true, shouldDirty: true });
-    if (descriptionDetailsTextareaRef.current) {
-      evaluateMentionState(value, descriptionDetailsTextareaRef.current.selectionStart || 0, setDescriptionDetailsMentionQuery, setShowDescriptionDetailsSuggestions);
+    if (problemDetailsTextareaRef.current) {
+      evaluateMentionState(value, problemDetailsTextareaRef.current.selectionStart || 0, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions);
     }
   };
-  
-  const handleDescriptionDetailsFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
-    evaluateMentionState(e.target.value, e.target.selectionStart || 0, setDescriptionDetailsMentionQuery, setShowDescriptionDetailsSuggestions);
+
+  const handleProblemDetailsFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
+      evaluateMentionState(e.target.value, e.target.selectionStart || 0, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions);
   };
 
   const handleSelectDescriptionDetailsSuggestion = useCallback((profile: UserProfileBasic) => {
-    if (!descriptionDetailsTextareaRef.current || !profile.mentionName) return;
+    if (!problemDetailsTextareaRef.current || !profile.mentionName) return;
     const currentValue = form.getValues("descriptionDetails") || "";
-    const cursorPosition = descriptionDetailsTextareaRef.current.selectionStart || 0;
+    const cursorPosition = problemDetailsTextareaRef.current.selectionStart || 0;
     const textBeforeCursor = currentValue.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
@@ -356,34 +260,33 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId));
       const newCursorPosition = textBeforeMention.length + `@${profile.mentionName} `.length;
       setTimeout(() => {
-        descriptionDetailsTextareaRef.current?.focus();
-        descriptionDetailsTextareaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+        problemDetailsTextareaRef.current?.focus();
+        problemDetailsTextareaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
       }, 0);
     }
-    setShowDescriptionDetailsSuggestions(false);
-    setDescriptionDetailsMentionQuery('');
+    setShowProblemDetailsSuggestions(false);
+    setProblemDetailsMentionQuery('');
   }, [form, setSelectedMentionedUserIds]);
-
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showDescriptionDetailsSuggestions && descriptionDetailsSuggestionsPopoverRef.current && !descriptionDetailsSuggestionsPopoverRef.current.contains(event.target as Node) && descriptionDetailsTextareaRef.current && !descriptionDetailsTextareaRef.current.contains(event.target as Node)) {
-        setShowDescriptionDetailsSuggestions(false);
+      if (showProblemDetailsSuggestions && problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(event.target as Node) && problemDetailsTextareaRef.current && !problemDetailsTextareaRef.current.contains(event.target as Node)) {
+        setShowProblemDetailsSuggestions(false);
       }
     };
-    if (showDescriptionDetailsSuggestions) {
+    if (showProblemDetailsSuggestions) {
       document.addEventListener('mousedown', handleClickOutside);
     }
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showDescriptionDetailsSuggestions]);
+  }, [showProblemDetailsSuggestions]);
 
 
   const filteredDescriptionSuggestions = useMemo(() => {
-    if (!showDescriptionDetailsSuggestions) return [];
+    if (!showProblemDetailsSuggestions) return [];
     if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
-    
+
     let source = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
-    const query = debouncedDescriptionDetailsQuery;
+    const query = debouncedProblemDetailsQuery;
 
     if (query.trim() === '') {
         source = source.slice(0, 5);
@@ -397,32 +300,78 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (source.length === 0 && query.trim() !== '') {
         return [{ userId: 'no-match-desc', displayName: `No users matching "@${query}"`, mentionName: 'no-match-desc' } as UserProfileBasic];
     }
-     if (source.length === 0) {
+    if (source.length === 0) {
         return [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
     }
     return source.slice(0,10);
-  }, [suggestibleUsers, isLoadingSuggestibleUsers, currentUserId, showDescriptionDetailsSuggestions, debouncedDescriptionDetailsQuery]);
+  }, [suggestibleUsers, isLoadingSuggestibleUsers, currentUserId, showProblemDetailsSuggestions, debouncedProblemDetailsQuery]);
 
 
-  const handleSubmitForm = (values: CreatePostFormValues) => {
+  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    form.setValue("imageFile", null, { shouldValidate: true });
+    setOriginalTooLargeFile(null);
+    setImagePreviewUrl(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+
+    if (file) {
+      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a JPG, PNG, GIF, or WebP image." });
+        form.setValue("imageFile", null, { shouldValidate: true }); // Ensure form field is cleared
+        return;
+      }
+      if (file.size > MAX_FILE_SIZE_BYTES) {
+        setOriginalTooLargeFile(file);
+        setShowCompressionDialog(true);
+        form.setValue("imageFile", null, { shouldValidate: true }); // Ensure form field is cleared
+        return;
+      }
+      form.setValue("imageFile", file, { shouldValidate: true });
+      const reader = new FileReader();
+      reader.onloadend = () => setImagePreviewUrl(reader.result as string);
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleCompressAndSetImage = async () => {
+    if (!originalTooLargeFile) return;
+    setIsCompressing(true);
+    setShowCompressionDialog(false);
+    toast({ title: "Compressing image...", description: "Please wait." });
+    try {
+      const compressedFile = await imageCompression(originalTooLargeFile, { maxSizeMB: 1, maxWidthOrHeight: 1920, useWebWorker: true });
+      form.setValue("imageFile", compressedFile, { shouldValidate: true });
+      const reader = new FileReader();
+      reader.onloadend = () => setImagePreviewUrl(reader.result as string);
+      reader.readAsDataURL(compressedFile);
+      toast({ title: "Image Compressed", description: "Proceed with upload." });
+    } catch (error) {
+      console.error("[CreatePostForm] Image compression error:", error);
+      toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress. Try a smaller file." });
+      form.setValue("imageFile", null, { shouldValidate: true });
+      setImagePreviewUrl(null);
+    } finally {
+      setIsCompressing(false);
+      setOriginalTooLargeFile(null);
+    }
+  };
+
+  const handleRemoveImage = () => {
+    setImagePreviewUrl(null);
+    form.setValue("imageFile", null, { shouldValidate: true });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleSubmitForm = (values: PostFormValues) => {
     console.log("[CreatePostForm] Values submitted:", JSON.stringify(values, null, 2));
-    
     const finalMentionedUids = Array.from(selectedMentionedUserIds);
-    
     const submitData: CreatePostFormData = {
       ...values,
-      imageFile: selectedImageFile,
+      imageFile: values.imageFile,
       mentionedUserIds: finalMentionedUids,
-      maxBudget: values.maxBudget,
-      descriptionDetails: values.descriptionDetails, // Always from the first tab now
-      descriptionTried: values.descriptionTried,
-      descriptionOutcome: values.descriptionOutcome,
+      maxBudget: values.maxBudget ? parseFloat(String(values.maxBudget)) : undefined,
     };
     onSubmit(submitData);
-    if (onDialogClose) {
-        onDialogClose(); // Call parent's close handler
-    }
-    // resetForm(); // Reset form handled by parent dialog onOpenChange or by onDialogClose
   };
 
   return (
@@ -431,36 +380,36 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 p-1">
           {/* Left Column */}
           <div className="space-y-6 flex flex-col">
-             <FormField
+            <FormField
               control={form.control}
               name="requestType"
               render={({ field }) => (
                 <FormItem className="space-y-3">
                   <FormLabel className="text-base font-semibold text-foreground">What kind of post is this? <span className="text-destructive">*</span></FormLabel>
-                    <div className="flex items-center gap-3">
-                        <Button
-                            type="button"
-                            variant={field.value === 'post' ? 'default' : 'outline'}
-                            onClick={() => field.onChange('post')}
-                            className={cn("flex-1 py-2.5 text-sm rounded-md shadow-sm transition-all duration-150 ease-in-out",
-                                field.value === 'post' ? "ring-2 ring-primary ring-offset-2" : "hover:bg-muted/70"
-                            )}
-                            disabled={isSubmitting}
-                        >
-                            <Lightbulb className="mr-2 h-4 w-4"/> General Post / Idea
-                        </Button>
-                        <Button
-                            type="button"
-                            variant={field.value === 'help_request' ? 'default' : 'outline'}
-                            onClick={() => field.onChange('help_request')}
-                            className={cn("flex-1 py-2.5 text-sm rounded-md shadow-sm transition-all duration-150 ease-in-out",
-                                field.value === 'help_request' ? "ring-2 ring-primary ring-offset-2" : "hover:bg-muted/70"
-                            )}
-                            disabled={isSubmitting}
-                        >
-                           <HelpingHand className="mr-2 h-4 w-4"/> Request Help
-                        </Button>
-                    </div>
+                  <div className="flex items-center gap-3">
+                     <Button
+                        type="button"
+                        variant={field.value === 'post' ? 'default' : 'outline'}
+                        onClick={() => field.onChange('post')}
+                        className={cn("flex-1 py-2.5 text-sm rounded-md shadow-sm transition-all duration-150 ease-in-out",
+                           field.value === 'post' ? "ring-2 ring-primary ring-offset-2" : "hover:bg-muted/70"
+                        )}
+                        disabled={isSubmitting}
+                     >
+                        <Lightbulb className="mr-2 h-4 w-4"/> General Post
+                     </Button>
+                     <Button
+                        type="button"
+                        variant={field.value === 'help_request' ? 'default' : 'outline'}
+                        onClick={() => field.onChange('help_request')}
+                        className={cn("flex-1 py-2.5 text-sm rounded-md shadow-sm transition-all duration-150 ease-in-out",
+                           field.value === 'help_request' ? "ring-2 ring-primary ring-offset-2" : "hover:bg-muted/70"
+                        )}
+                        disabled={isSubmitting}
+                     >
+                        <HelpingHand className="mr-2 h-4 w-4"/> Request Help
+                     </Button>
+                  </div>
                   <FormMessage />
                 </FormItem>
               )}
@@ -479,54 +428,151 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               )}
             />
 
+            {/* Unified Tabbed Description Area */}
             <div className="flex-grow flex flex-col space-y-2">
-                <Label className="text-base font-semibold text-foreground">Details <span className="text-destructive">*</span></Label>
-                <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full flex-grow flex flex-col border rounded-md">
-                    <TabsList className="inline-flex h-10 items-center justify-center rounded-none bg-muted p-0 text-muted-foreground w-full border-b">
-                        <TabsTrigger value="details" className="tab-trigger flex-1 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Details <span className="text-destructive ml-0.5">*</span></TabsTrigger>
-                        <TabsTrigger value="tried" className="tab-trigger flex-1 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">What I've Tried</TabsTrigger>
-                        <TabsTrigger value="outcome" className="tab-trigger flex-1 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none">Expected Outcome</TabsTrigger>
+                <Label className="text-base font-semibold text-foreground">
+                    Details <span className="text-destructive">*</span>
+                </Label>
+                <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full flex-grow flex flex-col">
+                    <TabsList className="inline-flex h-auto items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
+                        <TabsTrigger value="details" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
+                            <FileQuestion className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Problem Details <span className="text-destructive ml-0.5">*</span>
+                        </TabsTrigger>
+                        <TabsTrigger value="tried" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
+                            <Brain className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> What I've Tried
+                        </TabsTrigger>
+                        <TabsTrigger value="outcome" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
+                            <Target className="mr-1.5 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Expected Outcome
+                        </TabsTrigger>
                     </TabsList>
-                    <TabsContent value="details" className="tab-content flex-grow flex flex-col p-3">
+
+                    <TabsContent value="details" className="mt-2 rounded-md border p-4 bg-background min-h-[150px] flex-grow flex flex-col">
                         <FormField control={form.control} name="descriptionDetails" render={({ field }) => (
-                          <FormItem className="flex-grow flex flex-col">
-                            <FormLabel className="sr-only">Problem Details</FormLabel>
-                            <Popover open={showDescriptionDetailsSuggestions && filteredDescriptionSuggestions.length > 0 && !['loading-desc', 'no-users-desc', 'no-match-desc'].includes(filteredDescriptionSuggestions[0]?.userId)} onOpenChange={(open) => { setShowDescriptionDetailsSuggestions(open); if (!open) setDescriptionDetailsMentionQuery('');}}>
-                                <PopoverTrigger asChild>
-                                    <FormControl>
-                                        <Textarea placeholder="Describe the specific problem, idea, or need... (@mention users)" className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none" {...field} ref={descriptionDetailsTextareaRef} value={field.value || ''} onChange={handleDescriptionDetailsChange} onFocus={handleDescriptionDetailsFocus} onBlurCapture={() => setTimeout(() => { if (descriptionDetailsSuggestionsPopoverRef.current && !descriptionDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && descriptionDetailsTextareaRef.current !== document.activeElement) { setShowDescriptionDetailsSuggestions(false);}}, 150)} disabled={isSubmitting}/>
-                                    </FormControl>
-                                </PopoverTrigger>
-                                 <PopoverContent ref={descriptionDetailsSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                                    {filteredDescriptionSuggestions.map(profile => {
-                                        const displayableName = profile.displayName || profile.mentionName;
-                                        const showSecondaryNameLine = profile.displayName && profile.displayName.toLowerCase() !== profile.mentionName.toLowerCase();
-                                        return (
-                                            ['loading-desc', 'no-users-desc', 'no-match-desc'].includes(profile.userId) ? (
-                                                <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
-                                            ) : (
-                                                <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectDescriptionDetailsSuggestion(profile)}>
-                                                    <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getLocalInitials(profile.mentionName)}</AvatarFallback></Avatar>
-                                                    <div className="flex flex-col items-start">
-                                                        {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
-                                                        <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
-                                                    </div>
-                                                </Button>
-                                            )
-                                        );
-                                    })}
-                                </PopoverContent>
-                            </Popover>
-                            <FormMessage />
-                          </FormItem>
+                            <FormItem className="flex-grow flex flex-col">
+                                <FormLabel className="sr-only">Problem Details</FormLabel>
+                                <Popover open={showProblemDetailsSuggestions && filteredDescriptionSuggestions.length > 0 && !['loading-desc', 'no-users-desc', 'no-match-desc'].includes(filteredDescriptionSuggestions[0]?.userId)} onOpenChange={(open) => { setShowProblemDetailsSuggestions(open); if (!open) setProblemDetailsMentionQuery('');}}>
+                                    <PopoverTrigger asChild>
+                                        <FormControl>
+                                            <Textarea
+                                                placeholder="Describe the specific problem, idea, or need... (@mention users)"
+                                                className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                                                {...field}
+                                                ref={problemDetailsTextareaRef}
+                                                value={field.value || ''}
+                                                onChange={handleProblemDetailsChange}
+                                                onFocus={handleProblemDetailsFocus}
+                                                onBlurCapture={() => setTimeout(() => { if (problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && problemDetailsTextareaRef.current !== document.activeElement) { setShowProblemDetailsSuggestions(false);}}, 150)}
+                                                disabled={isSubmitting}
+                                            />
+                                        </FormControl>
+                                    </PopoverTrigger>
+                                    <PopoverContent ref={problemDetailsSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                                        {filteredDescriptionSuggestions.map(profile => {
+                                            const displayableName = profile.companyName || profile.displayName;
+                                            const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
+                                            return (
+                                                ['loading-desc', 'no-users-desc', 'no-match-desc'].includes(profile.userId) ? (
+                                                    <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
+                                                ) : (
+                                                    <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectDescriptionDetailsSuggestion(profile)}>
+                                                        <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback></Avatar>
+                                                        <div className="flex flex-col items-start">
+                                                            {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
+                                                            <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
+                                                        </div>
+                                                    </Button>
+                                                )
+                                            );
+                                        })}
+                                    </PopoverContent>
+                                </Popover>
+                                <FormMessage />
+                            </FormItem>
                         )} />
                     </TabsContent>
-                    <TabsContent value="tried" className="tab-content flex-grow flex flex-col p-3"><FormField control={form.control} name="descriptionTried" render={({ field }) => (<FormItem className="flex-grow flex flex-col"><FormLabel className="sr-only">What I've Tried</FormLabel><FormControl><Textarea placeholder="Solutions or approaches you've already attempted (optional)..." className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none" {...field} value={field.value || ''} onChange={field.onChange} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} /></TabsContent>
-                    <TabsContent value="outcome" className="tab-content flex-grow flex flex-col p-3"><FormField control={form.control} name="descriptionOutcome" render={({ field }) => (<FormItem className="flex-grow flex flex-col"><FormLabel className="sr-only">Expected Outcome</FormLabel><FormControl><Textarea placeholder="Ideal result or solution you're looking for (optional)?" className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none" {...field} value={field.value || ''} onChange={field.onChange} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} /></TabsContent>
+                    <TabsContent value="tried" className="mt-2 rounded-md border p-4 bg-background min-h-[150px] flex-grow flex flex-col">
+                        <FormField control={form.control} name="descriptionTried" render={({ field }) => (
+                            <FormItem className="flex-grow flex flex-col">
+                                <FormLabel className="sr-only">What I've Tried</FormLabel>
+                                <FormControl>
+                                    <Textarea
+                                        placeholder="Solutions or approaches you've already attempted (optional)..."
+                                        className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                                        value={field.value || ''}
+                                        onChange={field.onChange}
+                                        disabled={isSubmitting}
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                    </TabsContent>
+                    <TabsContent value="outcome" className="mt-2 rounded-md border p-4 bg-background min-h-[150px] flex-grow flex flex-col">
+                        <FormField control={form.control} name="descriptionOutcome" render={({ field }) => (
+                            <FormItem className="flex-grow flex flex-col">
+                                <FormLabel className="sr-only">Expected Outcome</FormLabel>
+                                <FormControl>
+                                    <Textarea
+                                        placeholder="Ideal result or solution you're looking for (optional)?"
+                                        className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                                        value={field.value || ''}
+                                        onChange={field.onChange}
+                                        disabled={isSubmitting}
+                                    />
+                                </FormControl>
+                                <FormMessage />
+                            </FormItem>
+                        )} />
+                    </TabsContent>
                 </Tabs>
             </div>
 
-            <FormField control={form.control} name="image" render={() => (
+            {requestType === 'help_request' && (
+              <>
+                <FormField control={form.control} name="maxBudget" render={({ field }) => (
+                  <FormItem>
+                    <FormLabel className="flex items-center gap-1"><DollarSign className="h-4 w-4 text-green-600" />Maximum Budget (Optional)</FormLabel>
+                    <FormControl><Input type="text" placeholder="e.g., 500 (USD)" {...field} value={field.value === undefined ? '' : String(field.value)} onChange={e => { const val = e.target.value; if (/^\d*\.?\d*$/.test(val) || val === "") field.onChange(val === '' ? undefined : val);}} disabled={isSubmitting} /></FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+                <FormField control={form.control} name="deadline" render={({ field }) => (
+                  <FormItem className="flex flex-col">
+                    <FormLabel className="flex items-center gap-1"><CalendarDays className="h-4 w-4 text-muted-foreground" />Deadline (Optional)</FormLabel>
+                     <Popover>
+                        <PopoverTrigger asChild>
+                            <Button
+                                variant={"outline"}
+                                className={cn(
+                                "w-full justify-start text-left font-normal",
+                                !field.value && "text-muted-foreground"
+                                )}
+                                disabled={isSubmitting}
+                                type="button"
+                            >
+                                <span className="flex items-center justify-between w-full">
+                                    <span>{field.value && field.value instanceof Date ? format(field.value, "PPP") : "Pick a date"}</span>
+                                    <CalendarDays className="h-4 w-4 opacity-50" />
+                                </span>
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                           <Calendar
+                             mode="single"
+                             selected={field.value instanceof Date ? field.value : undefined}
+                             onSelect={(date) => field.onChange(date instanceof Date ? date : undefined)}
+                             disabled={(date) => date < new Date(new Date().setDate(new Date().getDate() -1)) || isSubmitting}
+                             initialFocus
+                           />
+                        </PopoverContent>
+                    </Popover>
+                    <FormMessage />
+                  </FormItem>
+                )} />
+              </>
+            )}
+
+            <FormField control={form.control} name="imageFile" render={({ field }) => ( // Pass field here to use field.onChange later for reset
               <FormItem>
                 <FormLabel>Image (Optional)</FormLabel>
                 <FormControl><Input type="file" accept="image/png, image/jpeg, image/gif, image/webp" ref={fileInputRef} onChange={handleImageChange} className="hidden" disabled={isSubmitting || isCompressing} /></FormControl>
@@ -534,7 +580,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isCompressing}> {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />} {imagePreviewUrl ? "Change Image" : "Upload Image"} </Button>
                   {imagePreviewUrl && (<Button type="button" variant="ghost" size="sm" onClick={handleRemoveImage} disabled={isSubmitting || isCompressing}><XCircle className="mr-2 h-4 w-4 text-destructive" /> Remove</Button>)}
                 </div>
-                {imagePreviewUrl && (<div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto"><Image src={imagePreviewUrl} alt="Preview" fill style={{objectFit:"contain"}} className="rounded-md" data-ai-hint="user image upload"/></div>)}
+                {imagePreviewUrl && (<div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto"><Image src={imagePreviewUrl} alt="Preview" fill style={{objectFit:"contain"}} className="rounded-md" data-ai-hint="user upload"/></div>)}
                 <FormDescription>Max 2MB. JPG, PNG, GIF, WebP accepted.</FormDescription>
                 <FormMessage />
               </FormItem>
@@ -547,7 +593,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <FormItem>
                 <FormLabel>Sector <span className="text-destructive">*</span></FormLabel>
                 <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                  <FormControl><SelectTrigger><SelectValue placeholder="Select a main sector" /></SelectTrigger></FormControl>
+                  <SelectTrigger><SelectValue placeholder="Select a main sector" /></SelectTrigger>
                   <SelectContent>{detailedSectorsData.map(sector => (<SelectItem key={sector.code} value={sector.code}>{sector.name} ({sector.code})</SelectItem>))}</SelectContent>
                 </Select>
                 <FormDescription>Choose the primary sector for your post.</FormDescription>
@@ -558,7 +604,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <FormItem>
                 <FormLabel>Sub-sector (Optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting || currentSubSectors.length === 0}>
-                  <FormControl><SelectTrigger><SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "No sub-sectors available"} /></SelectTrigger></FormControl>
+                  <SelectTrigger><SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "No sub-sectors available"} /></SelectTrigger>
                   <SelectContent>{currentSubSectors.map(sub => (<SelectItem key={sub.code} value={sub.code}>{sub.name} ({sub.code})</SelectItem>))}</SelectContent>
                 </Select>
                 <FormDescription>Choose a specific sub-sector if applicable.</FormDescription>
@@ -569,7 +615,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <FormItem>
                 <FormLabel>Industry (Optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting || currentIndustries.length === 0}>
-                  <FormControl><SelectTrigger><SelectValue placeholder={currentIndustries.length > 0 ? "Select an industry" : "No industries available"} /></SelectTrigger></FormControl>
+                  <SelectTrigger><SelectValue placeholder={currentIndustries.length > 0 ? "Select an industry" : "No industries available"} /></SelectTrigger>
                   <SelectContent>{currentIndustries.map(ind => (<SelectItem key={ind.code} value={ind.code}>{ind.name} ({ind.code})</SelectItem>))}</SelectContent>
                 </Select>
                 <FormDescription>Choose a specific industry if applicable.</FormDescription>
@@ -584,7 +630,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   {availableTags.map(tag => (
                     <FormField key={tag} control={form.control} name="tags" render={({ field }) => (
                       <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                        <Checkbox checked={field.value?.includes(tag)} onCheckedChange={checked => checked ? field.onChange([...(field.value || []), tag]) : field.onChange((field.value || []).filter(v => v !== tag))} disabled={isSubmitting} />
+                        <FormControl>
+                            <Checkbox
+                            checked={field.value?.includes(tag)}
+                            onCheckedChange={checked => checked ? field.onChange([...(field.value || []), tag]) : field.onChange((field.value || []).filter(v => v !== tag))}
+                            disabled={isSubmitting}
+                            />
+                        </FormControl>
                         <FormLabel className="font-normal text-sm">{tag}</FormLabel>
                       </FormItem>
                     )} />
@@ -593,52 +645,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 <FormMessage />
               </FormItem>
             )} />
-
-            {requestType === 'help_request' && (
-              <>
-                <FormField control={form.control} name="maxBudget" render={({ field }) => (
-                  <FormItem>
-                    <FormLabel className="flex items-center gap-1 text-base font-semibold text-foreground"><DollarSign className="h-4 w-4 text-green-600" />Maximum Budget (Optional)</FormLabel>
-                    <FormControl><Input type="text" placeholder="e.g., 500 (USD)" {...field} value={field.value === undefined ? '' : String(field.value)} onChange={e => { const val = e.target.value; if (/^\d*\.?\d*$/.test(val) || val === "") field.onChange(val === '' ? undefined : val);}} disabled={isSubmitting} /></FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-                <FormField control={form.control} name="deadline" render={({ field }) => (
-                  <FormItem className="flex flex-col">
-                    <FormLabel className="flex items-center gap-1 text-base font-semibold text-foreground"><CalendarDays className="h-4 w-4 text-muted-foreground" />Deadline (Optional)</FormLabel>
-                     <Popover>
-                        <PopoverTrigger asChild>
-                             <Button
-                                variant={"outline"}
-                                className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                                )}
-                                disabled={isSubmitting}
-                                type="button"
-                            >
-                                <span className="flex items-center justify-between w-full">
-                                    <span>{field.value && field.value instanceof Date ? new Date(field.value).toLocaleDateString() : "Pick a date"}</span>
-                                    <CalendarDays className="h-4 w-4 opacity-50" />
-                                </span>
-                            </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                            {/* Ensure Calendar is imported and used correctly */}
-                        </PopoverContent>
-                    </Popover>
-                    <FormMessage />
-                  </FormItem>
-                )} />
-              </>
-            )}
           </div>
         </div>
 
         <DialogFooter className="pt-8 md:col-span-2">
             {onDialogClose && (<DialogClose asChild><Button type="button" variant="outline" onClick={resetForm} disabled={isSubmitting || isCompressing || isLoadingSuggestibleUsers}>Cancel</Button></DialogClose>)}
-            <Button type="submit" disabled={isSubmitting || isCompressing || (isLoadingSuggestibleUsers && showDescriptionDetailsSuggestions)}>
-                {(isSubmitting || isCompressing || (isLoadingSuggestibleUsers && showDescriptionDetailsSuggestions) ) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : ('Submit Post')}
+            <Button type="submit" disabled={isSubmitting || isCompressing || ( (activeDescriptionTab === 'details' || requestType === 'post') && showProblemDetailsSuggestions && isLoadingSuggestibleUsers)}>
+                {(isSubmitting || isCompressing || ( (activeDescriptionTab === 'details' || requestType === 'post') && showProblemDetailsSuggestions && isLoadingSuggestibleUsers) ) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : ('Submit Post')}
             </Button>
         </DialogFooter>
       </form>
@@ -652,7 +665,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { setSelectedImageFile(null); setOriginalTooLargeFile(null); setImagePreviewUrl(null); if (fileInputRef.current) fileInputRef.current.value = ''; setShowCompressionDialog(false); }}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => { form.setValue("imageFile", null, { shouldValidate: true }); setOriginalTooLargeFile(null); setImagePreviewUrl(null); if (fileInputRef.current) fileInputRef.current.value = ''; setShowCompressionDialog(false); }}>Cancel</AlertDialogCancel>
               <AlertDialogAction onClick={handleCompressAndSetImage} className="bg-primary hover:bg-primary/90"><ImageDown className="mr-2 h-4 w-4" /> Compress Image</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
