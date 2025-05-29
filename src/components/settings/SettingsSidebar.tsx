@@ -6,7 +6,7 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { User, ShieldCheck, Bell, Lock, CreditCard } from 'lucide-react'; // Added CreditCard
+import { User, ShieldCheck, Bell, Lock, CreditCard } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 
 const settingsLinks = [
@@ -14,14 +14,14 @@ const settingsLinks = [
   { name: 'Verification', href: '/settings/verification', icon: ShieldCheck },
   { name: 'Account', href: '/settings/account', icon: Lock },
   { name: 'Notifications', href: '/settings/notifications', icon: Bell },
-  { name: 'Payment Method', href: '/settings/payment-method', icon: CreditCard }, // New Link
+  { name: 'Payment Method', href: '/settings/payment-method', icon: CreditCard },
 ];
 
-const SettingsSidebar = () => {
+const SettingsSidebar = React.memo(() => { // Wrapped with React.memo
   const pathname = usePathname();
 
   return (
-    <Card className="sticky top-20 shadow-sm border-border"> {/* Add sticky positioning */}
+    <Card className="sticky top-20 shadow-sm border-border">
       <CardContent className="p-4">
         <nav className="space-y-1">
           {settingsLinks.map((link) => {
@@ -53,6 +53,8 @@ const SettingsSidebar = () => {
       </CardContent>
     </Card>
   );
-};
+});
+
+SettingsSidebar.displayName = 'SettingsSidebar'; // Added display name for React.memo
 
 export default SettingsSidebar;
