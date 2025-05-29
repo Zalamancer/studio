@@ -17,6 +17,7 @@ import {
   FormItem,
   FormLabel,
   FormMessage,
+  FormDescription, // Added FormDescription
 } from "@/components/ui/form";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -46,20 +47,39 @@ import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { format } from "date-fns";
-import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
+import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout'; // For detailedSectorsData prop type
 
 const MAX_FILE_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif"];
+
+// Define a local getInitials function consistent with pseudonymUtils
+const getLocalInitials = (name: string | undefined | null): string => {
+    if (!name || typeof name !== 'string' || name.trim() === '') return '?';
+    const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
+    const pseudonymRegex = /^[A-Z][a-z]+[A-Z][a-zA-Z]*[0-9]{3,}$/;
+    const match = nameToProcess.match(pseudonymRegex);
+    if (match) {
+        const firstLetter = nameToProcess.charAt(0);
+        const animalPart = match[1];
+        const secondLetter = animalPart.charAt(0);
+        return (firstLetter + secondLetter).toUpperCase();
+    }
+    const words = nameToProcess.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '?';
+    if (words.length === 1) return words[0].substring(0, 1).toUpperCase();
+    const firstInitial = words[0].substring(0, 1);
+    const lastInitial = words[words.length - 1].substring(0, 1);
+    return (firstInitial + lastInitial).toUpperCase();
+};
+
 
 const postFormSchema = z.object({
   requestType: z.enum(['post', 'help_request'], {
     required_error: "You must select a post type.",
   }),
   question: z.string().min(10, "Question must be at least 10 characters long.").max(200, "Question cannot exceed 200 characters."),
-  // General description (for 'post' type)
-  description: z.string().optional(),
-  // Tabbed descriptions (for 'help_request' type)
-  descriptionDetails: z.string().optional(),
+  description: z.string().optional(), // For 'post' type
+  descriptionDetails: z.string().optional(), // For 'help_request' type
   descriptionTried: z.string().optional(),
   descriptionOutcome: z.string().optional(),
   tags: z.array(z.string()).min(1, "Please select at least one tag."),
@@ -72,7 +92,7 @@ const postFormSchema = z.object({
       file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
       "Only .jpg, .jpeg, .png and .gif formats are supported."
     ),
-  maxBudget: z.string().transform(val => val === '' ? undefined : val).pipe(z.coerce.number().positive("Budget must be a positive number.").optional()),
+  maxBudget: z.string().transform(val => val === '' ? undefined : val).pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional()),
   deadline: z.date().optional().nullable(),
 }).superRefine((data, ctx) => {
   if (data.requestType === 'post' && (!data.description || data.description.trim().length < 10)) {
@@ -89,12 +109,19 @@ const postFormSchema = z.object({
       path: ["descriptionDetails"],
     });
   }
+  if (data.maxBudget !== undefined && data.maxBudget < 0) {
+    ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Budget cannot be negative.",
+        path: ["maxBudget"],
+    });
+  }
 });
 
-export interface CreatePostFormData extends Omit<z.infer<typeof postFormSchema>, 'maxBudget' | 'image'> {
+export interface CreatePostFormData extends Omit<z.infer<typeof postFormSchema>, 'image' | 'maxBudget'> {
   imageFile?: File | null;
   mentionedUserIds?: string[];
-  maxBudget?: number; // Ensure maxBudget is number here after Zod coercion
+  maxBudget?: number;
 }
 
 export interface CreatePostFormProps {
@@ -103,7 +130,7 @@ export interface CreatePostFormProps {
   detailedSectorsData: SectorWithSubSectors[];
   isSubmitting: boolean;
   currentUserId: string | null;
-  onDialogClose?: () => void; // For resetting form when dialog closes
+  onDialogClose?: () => void;
 }
 
 
@@ -161,57 +188,37 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   const problemDetailsSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [selectedProblemDetailsMentionedUserIds, setSelectedProblemDetailsMentionedUserIds] = useState<Set<string>>(new Set());
 
+
   const requestType = form.watch("requestType");
 
-  // Debounce active mention query
-  const activeRawQuery = requestType === 'help_request' ? problemDetailsMentionQuery : descriptionMentionQuery;
+  // Reset form when dialog closes (if onDialogClose is provided)
+  const resetForm = useCallback(() => {
+    form.reset();
+    setImagePreviewUrl(null);
+    setSelectedImageFile(null);
+    setOriginalTooLargeFile(null);
+    setShowCompressionDialog(false);
+    setCurrentSubSectors([]);
+    setCurrentIndustries([]);
+    setDescriptionMentionQuery(''); setShowDescriptionSuggestions(false); setSelectedDescriptionMentionedUserIds(new Set());
+    setProblemDetailsMentionQuery(''); setShowProblemDetailsSuggestions(false); setSelectedProblemDetailsMentionedUserIds(new Set());
+  }, [form]);
+
   useEffect(() => {
-    const handler = setTimeout(() => {
-      if (requestType === 'help_request') {
-        setDebouncedProblemDetailsQuery(activeRawQuery);
-      } else {
-        setDebouncedDescriptionQuery(activeRawQuery);
-      }
-    }, 300);
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [activeRawQuery, requestType]);
-
-  const debouncedActiveQuery = requestType === 'help_request' ? debouncedProblemDetailsQuery : debouncedDescriptionQuery;
-  const showActiveSuggestions = requestType === 'help_request' ? showProblemDetailsSuggestions : showDescriptionSuggestions;
-
-  const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
-    queryKey: ['suggestibleUsersForCreatePost', debouncedActiveQuery, currentUserId, requestType],
-    queryFn: () => getSuggestibleUsers(debouncedActiveQuery, debouncedActiveQuery ? 10 : 25),
-    enabled: showActiveSuggestions && !!currentUserId,
-  });
-
-
-  // Form reset when dialog closes (if onDialogClose is provided)
-  useEffect(() => {
-    if (onDialogClose) { // Simple check if the prop exists
-      form.reset();
-      setImagePreviewUrl(null);
-      setSelectedImageFile(null);
-      setOriginalTooLargeFile(null);
-      setShowCompressionDialog(false);
-      setCurrentSubSectors([]);
-      setCurrentIndustries([]);
-      // Reset mention states
-      setDescriptionMentionQuery(''); setShowDescriptionSuggestions(false); setSelectedDescriptionMentionedUserIds(new Set());
-      setProblemDetailsMentionQuery(''); setShowProblemDetailsSuggestions(false); setSelectedProblemDetailsMentionedUserIds(new Set());
+    if (onDialogClose) { // This effect relies on the parent controlling the dialog's open state
+        resetForm();
     }
-  }, [form, onDialogClose]); // Assuming onDialogClose changes when dialog is opened/closed, or add isCreatePostOpen if passed
+  }, [onDialogClose, resetForm]);
 
 
+  // Cascading dropdown logic
   const selectedSectorCode = form.watch("sector");
   useEffect(() => {
     if (selectedSectorCode) {
       const selectedMainSector = detailedSectorsData.find(s => s.code === selectedSectorCode);
       setCurrentSubSectors(selectedMainSector?.subSectors || []);
-      form.setValue("subSector", "", { shouldValidate: true });
-      form.setValue("industry", "", { shouldValidate: true });
+      form.setValue("subSector", "", { shouldValidate: false }); // Don't validate yet
+      form.setValue("industry", "", { shouldValidate: false });
       setCurrentIndustries([]);
     } else {
       setCurrentSubSectors([]);
@@ -224,17 +231,38 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (selectedSubSectorCode) {
       const selectedSub = currentSubSectors.find(ss => ss.code === selectedSubSectorCode);
       setCurrentIndustries(selectedSub?.industries || []);
-      form.setValue("industry", "", { shouldValidate: true });
+      form.setValue("industry", "", { shouldValidate: false });
     } else {
       setCurrentIndustries([]);
     }
   }, [selectedSubSectorCode, currentSubSectors, form]);
 
+  // Debounce for mention queries
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      if (requestType === 'post') {
+        setDebouncedDescriptionQuery(descriptionMentionQuery);
+      } else if (requestType === 'help_request') {
+        setDebouncedProblemDetailsQuery(problemDetailsMentionQuery);
+      }
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [descriptionMentionQuery, problemDetailsMentionQuery, requestType]);
+
+  const activeDebouncedQuery = requestType === 'post' ? debouncedDescriptionQuery : debouncedProblemDetailsQuery;
+
+  const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
+    queryKey: ['suggestibleUsersForCreatePost', activeDebouncedQuery, currentUserId, requestType],
+    queryFn: () => getSuggestibleUsers(activeDebouncedQuery, activeDebouncedQuery ? 10 : 25),
+    enabled: (requestType === 'post' && showDescriptionSuggestions && !!currentUserId) || (requestType === 'help_request' && showProblemDetailsSuggestions && !!currentUserId),
+  });
+
+
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    form.setValue("image", null, { shouldValidate: true }); 
-    setSelectedImageFile(null); 
-    setOriginalTooLargeFile(null); 
+    form.setValue("image", null, { shouldValidate: true });
+    setSelectedImageFile(null);
+    setOriginalTooLargeFile(null);
     setImagePreviewUrl(null);
 
     if (file) {
@@ -290,30 +318,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
-  const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
-    const mentionedUserIds = requestType === 'help_request' 
-      ? Array.from(selectedProblemDetailsMentionedUserIds)
-      : Array.from(selectedDescriptionMentionedUserIds);
-
-    const submitData: CreatePostFormData = {
-      ...values,
-      maxBudget: values.maxBudget, // Already a number or undefined from Zod transform
-      imageFile: selectedImageFile,
-      mentionedUserIds,
-    };
-    onSubmit(submitData);
-    // Form reset is now handled by useEffect watching onDialogClose or a similar prop from MainLayout
-  };
-
   const evaluateMentionState = useCallback((text: string, cursorPosition: number, type: 'description' | 'problemDetails') => {
-    console.log("[CreatePostForm] evaluateMentionState - Text:", text, "Cursor:", cursorPosition, "Type:", type);
     let activeQuery = null;
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
       const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
-      if (!/\s/.test(potentialQuery) && !/\n/.test(potentialQuery)) { // Check for newline as well
+      if (!/\s/.test(potentialQuery) && !/\\n/.test(potentialQuery)) { // Corrected regex for newline
         activeQuery = potentialQuery;
       }
     }
@@ -321,16 +333,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (type === 'description') {
       setDescriptionMentionQuery(activeQuery !== null ? activeQuery : '');
       setShowDescriptionSuggestions(activeQuery !== null);
-      console.log("[CreatePostForm] Description Mention - Query:", activeQuery, "Show:", activeQuery !== null);
-    } else {
+    } else { // problemDetails
       setProblemDetailsMentionQuery(activeQuery !== null ? activeQuery : '');
       setShowProblemDetailsSuggestions(activeQuery !== null);
-      console.log("[CreatePostForm] Problem Details Mention - Query:", activeQuery, "Show:", activeQuery !== null);
     }
   }, []);
 
-
-  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>, fieldOnChange: (value: string) => void, type: 'description' | 'problemDetails') => {
+  const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>, fieldOnChange: (value: string) => void, type: 'description' | 'problemDetails') => {
     const value = e.target.value;
     fieldOnChange(value);
     const textareaRef = type === 'description' ? descriptionTextareaRef : problemDetailsTextareaRef;
@@ -338,14 +347,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       evaluateMentionState(value, textareaRef.current.selectionStart || 0, type);
     }
   };
-
-  const handleDescriptionFocus = (e: React.FocusEvent<HTMLTextAreaElement>, type: 'description' | 'problemDetails') => {
+  
+  const handleTextareaFocus = (e: React.FocusEvent<HTMLTextAreaElement>, type: 'description' | 'problemDetails') => {
     if (e.target) {
-      evaluateMentionState(e.target.value, e.target.selectionStart || 0, type);
+        evaluateMentionState(e.target.value, e.target.selectionStart || 0, type);
     }
   };
-
-  const handleSelectSuggestion = (profile: UserProfileBasic, type: 'description' | 'problemDetails') => {
+  
+  const handleSelectSuggestion = useCallback((profile: UserProfileBasic, type: 'description' | 'problemDetails') => {
     const textareaRef = type === 'description' ? descriptionTextareaRef : problemDetailsTextareaRef;
     const currentFieldValue = type === 'description' ? form.getValues("description") : form.getValues("descriptionDetails");
     const fieldName = type === 'description' ? "description" : "descriptionDetails";
@@ -374,44 +383,92 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     }
     setShowSuggestionsFn(false);
     setMentionQueryFn('');
-  };
+  }, [form]);
+
+
+  const activeSuggestions = useMemo(() => {
+    const source = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
+    const activeQuery = requestType === 'post' ? debouncedDescriptionQuery : debouncedProblemDetailsQuery;
+
+    if (isLoadingSuggestibleUsers && activeQuery) {
+        return [{ userId: 'loading-form', displayName: 'Loading users...', mentionName: 'loading-form' } as UserProfileBasic];
+    }
+    if (activeQuery.trim() === '') {
+        return source.slice(0,5);
+    }
+    const queryLower = activeQuery.toLowerCase();
+    const filtered = source.filter(p =>
+        p.mentionName.toLowerCase().includes(queryLower) ||
+        (p.companyName && p.companyName.toLowerCase().includes(queryLower))
+    );
+    if (filtered.length === 0 && activeQuery.trim() !== '') {
+        return [{ userId: 'no-match-form', displayName: `No users matching "@${activeQuery}"`, mentionName: 'no-match-form' } as UserProfileBasic];
+    }
+    return filtered.slice(0,10);
+  }, [suggestibleUsers, isLoadingSuggestibleUsers, currentUserId, requestType, debouncedDescriptionQuery, debouncedProblemDetailsQuery]);
+
+  const showActiveSuggestionsPopover = useMemo(() => {
+    const activeShowFlag = requestType === 'post' ? showDescriptionSuggestions : showProblemDetailsSuggestions;
+    return activeShowFlag && activeSuggestions.length > 0 && !['loading-form', 'no-match-form'].includes(activeSuggestions[0]?.userId);
+  }, [requestType, showDescriptionSuggestions, showProblemDetailsSuggestions, activeSuggestions]);
+
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showDescriptionSuggestions && descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(event.target as Node) && descriptionTextareaRef.current && !descriptionTextareaRef.current.contains(event.target as Node)) {
-        setShowDescriptionSuggestions(false);
-      }
-      if (showProblemDetailsSuggestions && problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(event.target as Node) && problemDetailsTextareaRef.current && !problemDetailsTextareaRef.current.contains(event.target as Node)) {
-        setShowProblemDetailsSuggestions(false);
+      const activePopoverRef = requestType === 'post' ? descriptionSuggestionsPopoverRef : problemDetailsSuggestionsPopoverRef;
+      const activeTextareaRef = requestType === 'post' ? descriptionTextareaRef : problemDetailsTextareaRef;
+      const activeShowSuggestions = requestType === 'post' ? showDescriptionSuggestions : showProblemDetailsSuggestions;
+      const setActiveShowSuggestions = requestType === 'post' ? setShowDescriptionSuggestions : setShowProblemDetailsSuggestions;
+
+      if (activeShowSuggestions && activePopoverRef.current && !activePopoverRef.current.contains(event.target as Node) && activeTextareaRef.current && !activeTextareaRef.current.contains(event.target as Node)) {
+        setActiveShowSuggestions(false);
       }
     };
     if (showDescriptionSuggestions || showProblemDetailsSuggestions) {
       document.addEventListener('mousedown', handleClickOutside);
     }
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-    };
-  }, [showDescriptionSuggestions, showProblemDetailsSuggestions]);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showDescriptionSuggestions, showProblemDetailsSuggestions, requestType]);
 
-  const filteredSuggestions = useMemo(() => {
-    if (!showActiveSuggestions) return [];
-    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-form', displayName: 'Loading users...', mentionName: 'loading-form' } as UserProfileBasic];
-    
-    let source = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
-    if (debouncedActiveQuery.trim() === '') {
-      source = source.slice(0, 5); // Show top 5 if no query
-    } else {
-      const queryLower = debouncedActiveQuery.toLowerCase();
-      source = source.filter(p => 
-        p.mentionName.toLowerCase().includes(queryLower) || 
-        (p.displayName && p.displayName.toLowerCase().includes(queryLower))
-      );
-      source = source.slice(0,10);
-    }
-    if (source.length === 0 && debouncedActiveQuery.trim() !== '') return [{ userId: 'no-match-form', displayName: `No users matching "@${debouncedActiveQuery}"`, mentionName: 'no-match-form' } as UserProfileBasic];
-    if (source.length === 0) return [{ userId: 'no-users-form', displayName: 'No users to suggest.', mentionName: 'no-users-form' } as UserProfileBasic];
-    return source;
-  }, [showActiveSuggestions, isLoadingSuggestibleUsers, suggestibleUsers, currentUserId, debouncedActiveQuery]);
+
+  const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
+    const mentionedUserIds = requestType === 'help_request'
+      ? Array.from(selectedProblemDetailsMentionedUserIds)
+      : Array.from(selectedDescriptionMentionedUserIds);
+
+    const submitData: CreatePostFormData = {
+      ...values,
+      imageFile: selectedImageFile,
+      mentionedUserIds,
+      maxBudget: values.maxBudget,
+    };
+    onSubmit(submitData);
+  };
+
+  const renderMentionSuggestions = (type: 'description' | 'problemDetails') => {
+    const popoverRef = type === 'description' ? descriptionSuggestionsPopoverRef : problemDetailsSuggestionsPopoverRef;
+    return (
+        <PopoverContent ref={popoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+            {activeSuggestions.map(profile => {
+                const displayableName = profile.companyName || profile.mentionName;
+                const showPrimaryName = profile.companyName && profile.companyName.toLowerCase() !== profile.mentionName.toLowerCase();
+                return (
+                    ['loading-form', 'no-match-form'].includes(profile.userId) ? (
+                        <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
+                    ) : (
+                        <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectSuggestion(profile, type)}>
+                            <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getLocalInitials(profile.mentionName)}</AvatarFallback></Avatar>
+                            <div className="flex flex-col items-start">
+                                {showPrimaryName && (<span className="font-medium text-foreground">{displayableName}</span>)}
+                                <span className={cn("text-muted-foreground", !showPrimaryName && "font-medium text-foreground")}>@{profile.mentionName}</span>
+                            </div>
+                        </Button>
+                    )
+                );
+            })}
+        </PopoverContent>
+    );
+  };
 
 
   return (
@@ -430,12 +487,11 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <RadioGroup
                       onValueChange={(value) => {
                         field.onChange(value);
-                        // Reset description fields when type changes
                         form.setValue("description", "");
                         form.setValue("descriptionDetails", "");
                         form.setValue("descriptionTried", "");
                         form.setValue("descriptionOutcome", "");
-                        form.trigger(); // Re-validate form
+                        form.trigger(['description', 'descriptionDetails']);
                       }}
                       defaultValue={field.value}
                       className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-4"
@@ -462,7 +518,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               render={({ field }) => (
                 <FormItem>
                   <FormLabel>Question / Need <span className="text-destructive">*</span></FormLabel>
-                  <FormControl><Input placeholder="e.g., Seeking expertise in B2B marketing automation" {...field} disabled={isSubmitting} /></FormControl>
+                  <FormControl><Input placeholder="e.g., How to improve B2B lead generation?" {...field} disabled={isSubmitting} /></FormControl>
                   <FormDescription>Keep it concise and clear (max 200 characters).</FormDescription>
                   <FormMessage />
                 </FormItem>
@@ -476,7 +532,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 render={({ field }) => (
                   <FormItem className="flex-grow flex flex-col">
                     <FormLabel>Description <span className="text-destructive">*</span></FormLabel>
-                     <Popover open={showDescriptionSuggestions && filteredSuggestions.length > 0 && !['loading-form', 'no-users-form', 'no-match-form'].includes(filteredSuggestions[0]?.userId)} onOpenChange={(open) => {setShowDescriptionSuggestions(open); if(!open) setDescriptionMentionQuery('');}}>
+                    <Popover open={showActiveSuggestionsPopover && requestType === 'post'} onOpenChange={(open) => { if (requestType === 'post') setShowDescriptionSuggestions(open); if(!open && requestType === 'post') setDescriptionMentionQuery('');}}>
                       <PopoverTrigger asChild>
                         <FormControl>
                           <Textarea
@@ -485,32 +541,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                             {...field}
                             ref={descriptionTextareaRef}
                             value={field.value || ''}
-                            onChange={(e) => handleDescriptionChange(e, field.onChange, 'description')}
-                            onFocus={(e) => handleDescriptionFocus(e, 'description')}
-                            onBlurCapture={() => setTimeout(() => { if (descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement as Node) && descriptionTextareaRef.current !== document.activeElement) { setShowDescriptionSuggestions(false);}}, 150)}
+                            onChange={(e) => handleTextareaChange(e, field.onChange, 'description')}
+                            onFocus={(e) => handleTextareaFocus(e, 'description')}
+                            onBlurCapture={() => setTimeout(() => { if (requestType === 'post' && descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement as Node) && descriptionTextareaRef.current !== document.activeElement) { setShowDescriptionSuggestions(false);}}, 150)}
                             disabled={isSubmitting}
                           />
                         </FormControl>
                       </PopoverTrigger>
-                      <PopoverContent ref={descriptionSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e)=>e.preventDefault()}>
-                        {filteredSuggestions.map(profile => {
-                            const displayableName = profile.actualDisplayName || profile.companyName;
-                            const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
-                            return (
-                                ['loading-form', 'no-users-form', 'no-match-form'].includes(profile.userId) ? (
-                                 <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
-                                ) : (
-                                <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e)=>e.preventDefault()} onClick={() => handleSelectSuggestion(profile, 'description')}>
-                                    <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback></Avatar>
-                                    <div className="flex flex-col items-start">
-                                    {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
-                                    <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
-                                    </div>
-                                </Button>
-                                )
-                            );
-                        })}
-                      </PopoverContent>
+                      {renderMentionSuggestions('description')}
                     </Popover>
                     <FormDescription>Provide more context (min 10 characters).</FormDescription>
                     <FormMessage />
@@ -521,7 +559,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
             {requestType === 'help_request' && (
               <div className="flex-grow flex flex-col space-y-2">
-                <Label className="text-base font-semibold text-foreground">Describe Your Request <span className="text-destructive">*</span></Label>
+                <Label className="text-base font-semibold text-foreground">Describe Your Request</Label>
                 <Tabs defaultValue="details" className="w-full flex-grow flex flex-col">
                   <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 border-b-2 border-border rounded-none h-auto">
                     <TabsTrigger value="details" className={cn("text-xs px-3 py-2.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none data-[state=active]:bg-primary/5 hover:bg-muted/50 focus-visible:ring-0 focus-visible:ring-offset-0", form.getFieldState("descriptionDetails").invalid && "data-[state=inactive]:border-b-2 data-[state=inactive]:border-destructive")}>Problem Details <span className="text-destructive ml-0.5">*</span></TabsTrigger>
@@ -532,39 +570,21 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <FormField control={form.control} name="descriptionDetails" render={({ field }) => (
                       <FormItem className="flex-grow flex flex-col">
                         <FormLabel className="sr-only">Problem Details</FormLabel>
-                        <Popover open={showProblemDetailsSuggestions && filteredSuggestions.length > 0 && !['loading-form', 'no-users-form', 'no-match-form'].includes(filteredSuggestions[0]?.userId)} onOpenChange={(open) => {setShowProblemDetailsSuggestions(open); if(!open) setProblemDetailsMentionQuery('');}}>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Textarea placeholder="Describe the specific problem or need... (@mention users)" className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none" {...field} ref={problemDetailsTextareaRef} value={field.value || ''} onChange={(e) => handleDescriptionChange(e, field.onChange, 'problemDetails')} onFocus={(e) => handleDescriptionFocus(e, 'problemDetails')} onBlurCapture={() => setTimeout(() => { if (problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && problemDetailsTextareaRef.current !== document.activeElement) { setShowProblemDetailsSuggestions(false);}}, 150)} disabled={isSubmitting}/>
-                            </FormControl>
-                          </PopoverTrigger>
-                           <PopoverContent ref={problemDetailsSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e)=>e.preventDefault()}>
-                            {filteredSuggestions.map(profile => {
-                                const displayableName = profile.actualDisplayName || profile.companyName;
-                                const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
-                                return (
-                                    ['loading-form', 'no-users-form', 'no-match-form'].includes(profile.userId) ? (
-                                     <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
-                                    ) : (
-                                    <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e)=>e.preventDefault()} onClick={() => handleSelectSuggestion(profile, 'problemDetails')}>
-                                        <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback></Avatar>
-                                        <div className="flex flex-col items-start">
-                                        {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
-                                        <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
-                                        </div>
-                                    </Button>
-                                    )
-                                );
-                            })}
-                          </PopoverContent>
+                        <Popover open={showActiveSuggestionsPopover && requestType === 'help_request'} onOpenChange={(open) => { if (requestType === 'help_request') setShowProblemDetailsSuggestions(open); if(!open && requestType === 'help_request') setProblemDetailsMentionQuery('');}}>
+                            <PopoverTrigger asChild>
+                                <FormControl>
+                                    <Textarea placeholder="Describe the specific problem or need... (@mention users)" className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none" {...field} ref={problemDetailsTextareaRef} value={field.value || ''} onChange={(e) => handleTextareaChange(e, field.onChange, 'problemDetails')} onFocus={(e) => handleTextareaFocus(e, 'problemDetails')}  onBlurCapture={() => setTimeout(() => { if (requestType === 'help_request' && problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && problemDetailsTextareaRef.current !== document.activeElement) { setShowProblemDetailsSuggestions(false);}}, 150)} disabled={isSubmitting}/>
+                                </FormControl>
+                            </PopoverTrigger>
+                            {renderMentionSuggestions('problemDetails')}
                         </Popover>
                         <FormDescription>Min 20 characters.</FormDescription>
                         <FormMessage />
                       </FormItem>
                     )} />
                   </TabsContent>
-                  <TabsContent value="tried" className="mt-0 flex-grow flex flex-col border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background min-h-[150px]"><FormField control={form.control} name="descriptionTried" render={({ field }) => (<FormItem className="flex-grow flex flex-col"><FormLabel className="sr-only">What I've Tried</FormLabel><FormControl><Textarea placeholder="Describe solutions or approaches you've already attempted (optional)..." className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} /></TabsContent>
-                  <TabsContent value="outcome" className="mt-0 flex-grow flex flex-col border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background min-h-[150px]"><FormField control={form.control} name="descriptionOutcome" render={({ field }) => (<FormItem className="flex-grow flex flex-col"><FormLabel className="sr-only">Expected Outcome</FormLabel><FormControl><Textarea placeholder="What is the ideal result or solution you're looking for (optional)?" className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none" {...field} value={field.value || ''} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} /></TabsContent>
+                  <TabsContent value="tried" className="mt-0 flex-grow flex flex-col border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background min-h-[150px]"><FormField control={form.control} name="descriptionTried" render={({ field }) => (<FormItem className="flex-grow flex flex-col"><FormLabel className="sr-only">What I've Tried</FormLabel><FormControl><Textarea placeholder="Describe solutions or approaches you've already attempted (optional)..." className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none" value={field.value || ''} onChange={field.onChange} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} /></TabsContent>
+                  <TabsContent value="outcome" className="mt-0 flex-grow flex flex-col border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background min-h-[150px]"><FormField control={form.control} name="descriptionOutcome" render={({ field }) => (<FormItem className="flex-grow flex flex-col"><FormLabel className="sr-only">Expected Outcome</FormLabel><FormControl><Textarea placeholder="What is the ideal result or solution you're looking for (optional)?" className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none" value={field.value || ''} onChange={field.onChange} disabled={isSubmitting} /></FormControl><FormMessage /></FormItem>)} /></TabsContent>
                 </Tabs>
               </div>
             )}
@@ -577,7 +597,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isCompressing}> {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />} {imagePreviewUrl ? "Change Image" : "Upload Image"} </Button>
                   {imagePreviewUrl && (<Button type="button" variant="ghost" size="sm" onClick={handleRemoveImage} disabled={isSubmitting || isCompressing}><XCircle className="mr-2 h-4 w-4 text-destructive" /> Remove</Button>)}
                 </div>
-                {imagePreviewUrl && (<div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto"><Image src={imagePreviewUrl} alt="Preview" fill style={{objectFit:"contain"}} className="rounded-md" data-ai-hint="uploaded content"/></div>)}
+                {imagePreviewUrl && (<div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto"><Image src={imagePreviewUrl} alt="Preview" fill style={{objectFit:"contain"}} className="rounded-md" data-ai-hint="user upload"/></div>)}
                 <FormDescription>Max 2MB. JPG, PNG, GIF accepted.</FormDescription>
                 <FormMessage />
               </FormItem>
@@ -624,7 +644,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   {availableTags.map(tag => (
                     <FormField key={tag} control={form.control} name="tags" render={({ field }) => (
                       <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                        <FormControl><Checkbox checked={field.value?.includes(tag)} onCheckedChange={checked => checked ? field.onChange([...(field.value || []), tag]) : field.onChange((field.value || []).filter(v => v !== tag))} disabled={isSubmitting} /></FormControl>
+                        <Checkbox checked={field.value?.includes(tag)} onCheckedChange={checked => checked ? field.onChange([...(field.value || []), tag]) : field.onChange((field.value || []).filter(v => v !== tag))} disabled={isSubmitting} />
                         <FormLabel className="font-normal text-sm">{tag}</FormLabel>
                       </FormItem>
                     )} />
@@ -684,7 +704,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         <DialogFooter className="pt-8 md:col-span-2">
             {onDialogClose && (<DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting || isCompressing || isLoadingSuggestibleUsers}>Cancel</Button></DialogClose>)}
             <Button type="submit" disabled={isSubmitting || isCompressing || isLoadingSuggestibleUsers}>
-                {(isSubmitting || isCompressing) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : (requestType === 'help_request' ? 'Submit Help Request' : 'Submit Post')}
+                {(isSubmitting || isCompressing || (isLoadingSuggestibleUsers && (showDescriptionSuggestions || showProblemDetailsSuggestions) ) ) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : (requestType === 'help_request' ? 'Submit Help Request' : 'Submit Post')}
             </Button>
         </DialogFooter>
       </form>
