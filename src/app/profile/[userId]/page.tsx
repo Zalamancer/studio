@@ -1,5 +1,8 @@
-
-// src/app/profile/[userId]/page.tsx
+// Tip: If this BusinessProfilePage component becomes too large or complex,
+// consider further splitting its internal sections (like Review Submission, Review List, etc.)
+// into their own dedicated components within a 'profile' sub-directory,
+// similar to how PostDetailPanel was refactored.
+// This file can then act as a bridge, importing and orchestrating these smaller components.
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -73,11 +76,11 @@ const BusinessProfilePage = () => {
     return isValid;
   }, [profileUserIdFromParams]);
 
+  // Enhanced logging for enabled flag
   useEffect(() => {
-    if (profileUserIdFromParams && !IS_VALID_FIREBASE_UID_REGEX.test(profileUserIdFromParams)) {
-      console.warn(`%c[BusinessProfilePage] Detected invalid profileUserIdFromParams in URL: '${profileUserIdFromParams}'`, "color: orange; font-size: 12px;");
-    }
-  }, [profileUserIdFromParams]);
+    console.log(`%c[BusinessProfilePage] DEBUG: isProfileIdActuallyValidUid changed or component mounted. Value: ${isProfileIdActuallyValidUid}`, "color: purple");
+  }, [isProfileIdActuallyValidUid]);
+
 
   const { data: viewedUserProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileData | null, Error>({
     queryKey: ['fullUserProfile', profileUserId],
@@ -89,7 +92,7 @@ const BusinessProfilePage = () => {
       console.log(`%c[BusinessProfilePage] fetchFullUserProfile queryFn: Fetching for profileUserId '${profileUserId}'`, "color: dodgerblue;");
       return fetchFullUserProfile(profileUserId);
     },
-    enabled: !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId),
+    enabled: !!profileUserId && isProfileIdActuallyValidUid, // Ensure it's also valid
   });
 
   const connectionStatusQueryEnabled = useMemo(() => {
@@ -108,11 +111,11 @@ const BusinessProfilePage = () => {
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
-       if (!currentUser?.uid || !profileUserId || !IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) || currentUser.uid === profileUserId) {
+       if (!currentUser?.uid || !profileUserId || currentUser.uid === profileUserId) {
          console.error(`%c[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions for calling service. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`, "color: red;");
          return 'not_connected';
        }
-       if (!IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) {
+       if (!IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) { // Explicit check before calling service
             console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.`);
             return 'not_connected';
         }
@@ -123,7 +126,7 @@ const BusinessProfilePage = () => {
   });
 
   const reviewsQueryEnabled = useMemo(() => {
-    const enabled = !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) && !!currentUser;
+    const enabled = !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) && !!currentUser; // currentUser check helps too
     console.log(`%c[BusinessProfilePage] REVIEWS QUERY CHECK:
       - profileUserId: ${profileUserId || 'NULL'}
       - IS_VALID_FIREBASE_UID_REGEX.test(profileUserId): ${profileUserId ? IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) : 'N/A'}
@@ -137,15 +140,25 @@ const BusinessProfilePage = () => {
     queryKey: ['reviews', profileUserId, 'received'],
     queryFn: () => {
         console.log(`%c[BusinessProfilePage] getReviewsForProfile queryFn: Fetching for profileUserId '${profileUserId}'`, "color: dodgerblue;");
-        return (profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) ? getReviewsForProfile(profileUserId) : Promise.resolve([]);
+        if (!profileUserId || !IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) {
+          console.warn("[BusinessProfilePage] getReviewsForProfile: Invalid profileUserId, returning empty array.");
+          return Promise.resolve([]);
+        }
+        return getReviewsForProfile(profileUserId);
     },
     enabled: reviewsQueryEnabled,
   });
 
   const { data: reviewsGivenByThisProfile = [], isLoading: isLoadingReviewsGiven, error: reviewsGivenError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'givenBy'],
-    queryFn: () => (profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) ? getReviewsGivenByUserId(profileUserId) : Promise.resolve([]),
-    enabled: reviewsQueryEnabled, // Same condition as reviews received for simplicity, might optimize later
+    queryFn: () => {
+        if (!profileUserId || !IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) {
+          console.warn("[BusinessProfilePage] getReviewsGivenByUserId: Invalid profileUserId, returning empty array.");
+          return Promise.resolve([]);
+        }
+        return getReviewsGivenByUserId(profileUserId);
+    },
+    enabled: reviewsQueryEnabled,
   });
 
 
@@ -175,19 +188,21 @@ const BusinessProfilePage = () => {
       let weight = 1.0;
       const histAvg = review.reviewerHistoricalAvgRating;
 
-      if (histAvg === null) {
+      if (histAvg === null) { // No prior review history for that reviewer AT THE TIME they left this specific review
         weight = 0.9; // Slightly less weight for new reviewers
-        console.log(`  Review ${index + 1} by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=NULL, AssignedWeight=${weight.toFixed(1)}`);
+        console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=NULL, AssignedWeight=${weight.toFixed(1)}`);
       } else if (typeof histAvg === 'number') {
-        if (histAvg < 2.5) { // Harsh reviewer
+        if (histAvg < 2.5) { // Historically harsh reviewer
           weight = 0.6;
-          console.log(`  Review ${index + 1} by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Harsh), AssignedWeight=${weight.toFixed(1)}`);
-        } else if (histAvg >= 4.0) { // Lenient reviewer
+           console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Harsh), AssignedWeight=${weight.toFixed(1)}`);
+        } else if (histAvg >= 4.0) { // Historically lenient reviewer
           weight = 1.1;
-          console.log(`  Review ${index + 1} by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Lenient), AssignedWeight=${weight.toFixed(1)}`);
+           console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Lenient), AssignedWeight=${weight.toFixed(1)}`);
         } else { // Neutral reviewer
-            console.log(`  Review ${index + 1} by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Neutral), AssignedWeight=${weight.toFixed(1)}`);
+            console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Neutral), AssignedWeight=${weight.toFixed(1)}`);
         }
+      } else { // Should not happen if data is clean, but good to log
+        console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=UNEXPECTED_TYPE (${typeof histAvg}), AssignedWeight=${weight.toFixed(1)}`);
       }
       totalWeightedRating += review.rating * weight;
       totalWeight += weight;
@@ -213,7 +228,7 @@ const BusinessProfilePage = () => {
     mutationFn: async (data: { rating: number; comment: string }) => {
       if (!currentUser || !profileUserId || !IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) throw new Error("User, profile ID missing, or invalid profile ID.");
       
-      const reviewerProfileData = await fetchFullUserProfile(currentUser.uid);
+      const reviewerProfileData = await fetchFullUserProfile(currentUser.uid); // Fetch full profile for the reviewer
 
       if (editingReview) {
         const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
@@ -223,7 +238,7 @@ const BusinessProfilePage = () => {
         const newReviewData: NewReviewData = {
           targetUserId: profileUserId,
           reviewerId: currentUser.uid,
-          reviewerName: reviewerProfileData?.mentionName || generateAnonymousName(currentUser.uid),
+          reviewerName: reviewerProfileData?.mentionName || generateAnonymousName(currentUser.uid), // Use mentionName
           reviewerAvatar: reviewerProfileData?.avatarUrl || undefined,
           rating: data.rating,
           comment: data.comment,
@@ -267,6 +282,7 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
+
   if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
@@ -281,7 +297,7 @@ const BusinessProfilePage = () => {
     );
   }
 
-  if (authLoading || (isLoadingProfile && !viewedUserProfileData && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId || ''))) {
+  if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdActuallyValidUid)) {
      return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -314,7 +330,7 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!profileUserId || !viewedUserProfileData) {
+  if (!viewedUserProfileData) { // This check will also catch if profileUserId was invalid and queryFn returned null.
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -324,7 +340,8 @@ const BusinessProfilePage = () => {
     );
   }
 
-  if (profileError && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) {
+  // This specific error check is for errors after a valid UID was attempted.
+  if (profileError && isProfileIdActuallyValidUid) {
       return (
           <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
              <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -341,12 +358,11 @@ const BusinessProfilePage = () => {
   const headerDisplayNameForAvatar = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
   const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerDisplayNameForTitle;
   
-  let nameForConnectionButton = headerDisplayNameForAvatar;
+  let nameForConnectionButton = headerDisplayNameForAvatar; // Default
   if (viewedUserProfileData.companyName) {
       nameForConnectionButton = viewedUserProfileData.companyName;
-  } else {
-      nameForConnectionButton = headerDisplayNameForAvatar;
   }
+
 
   const canViewDescription = isOwnProfile ||
     !viewedUserProfileData.descriptionVisibility ||
@@ -356,7 +372,6 @@ const BusinessProfilePage = () => {
   const displayDescription = canViewDescription ? (viewedUserProfileData.description || "No profile description provided.") : "[Description Hidden by User]";
   const headerAvatarUrl = viewedUserProfileData.avatarUrl || undefined;
   const displayEstablished = viewedUserProfileData.established || "Year not set";
-
   const displayableSectorInfo = viewedUserProfileData.industryName || viewedUserProfileData.subSectorName || viewedUserProfileData.sectorName;
 
 
@@ -387,7 +402,7 @@ const BusinessProfilePage = () => {
                           <Briefcase className="h-4 w-4" /> {displayableSectorInfo}
                       </span>
                   )}
-                  {displayEstablished !== "Year not set" && (
+                   {displayEstablished !== "Year not set" && (
                     <span className="text-muted-foreground flex items-center gap-1">
                       <CalendarDays className="h-4 w-4" /> Est: {displayEstablished}
                     </span>
@@ -466,7 +481,7 @@ const BusinessProfilePage = () => {
                </p>
             </div>
             
-            {viewedUserProfileData.sectorName && (
+            {(viewedUserProfileData.sectorName || viewedUserProfileData.subSectorName || viewedUserProfileData.industryName) && (
                 <>
                     <hr className="border-border"/>
                     <div>
@@ -474,10 +489,10 @@ const BusinessProfilePage = () => {
                             <Briefcase className="h-5 w-5 text-primary" /> Business Classification
                         </h3>
                         <div className="space-y-1 text-sm">
-                            <p><strong className="text-foreground/80">Sector:</strong> {viewedUserProfileData.sectorName}</p>
-                            {viewedUserProfileData.subSectorName && <p><strong className="text-foreground/80">Sub-Sector:</strong> {viewedUserProfileData.subSectorName}</p>}
-                            {viewedUserProfileData.industryName && <p><strong className="text-foreground/80">Industry:</strong> {viewedUserProfileData.industryName}</p>}
-                            {viewedUserProfileData.naicsCode && <p><strong className="text-foreground/80">NAICS Code:</strong> <Badge variant="outline">{viewedUserProfileData.naicsCode}</Badge></p>}
+                           {viewedUserProfileData.sectorName && <p><strong className="text-foreground/80">Sector:</strong> {viewedUserProfileData.sectorName}</p>}
+                           {viewedUserProfileData.subSectorName && <p><strong className="text-foreground/80">Sub-Sector:</strong> {viewedUserProfileData.subSectorName}</p>}
+                           {viewedUserProfileData.industryName && <p><strong className="text-foreground/80">Industry:</strong> {viewedUserProfileData.industryName}</p>}
+                           {viewedUserProfileData.naicsCode && <p><strong className="text-foreground/80">NAICS Code:</strong> <Badge variant="outline">{viewedUserProfileData.naicsCode}</Badge></p>}
                         </div>
                     </div>
                 </>
@@ -658,4 +673,4 @@ const BusinessProfilePage = () => {
 
 export default BusinessProfilePage;
 
-    
+```
