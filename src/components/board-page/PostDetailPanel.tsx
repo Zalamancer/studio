@@ -1,28 +1,26 @@
 
 // Tip: This component is getting large. Consider extracting Bidding and Comments sections
 // into their own child components in the future if more functionality is added to them.
-// src/components/board-page/PostDetailPanel.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation'; // For redirect after bid/offer
+import { useRouter } from 'next/navigation';
 import { Card, CardHeader, CardContent, CardFooter } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Post } from '@/types/post';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-// Textarea import removed as it's not directly used in PostDetailPanel anymore (it's in PostDetailComments)
-import { Label } from '@/components/ui/label';
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Loader2, Send, DollarSign, HandHelping, User, X, Trash2, MessageSquare, Info, AtSign, Briefcase, FileText, Link as LinkIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
-import { extractMentionedUids } from '@/lib/mentionUtils'; // Assuming this is centralized
+import { extractMentionedUids } from '@/lib/mentionUtils';
 import { addCommentToPost, getCommentsForPost } from '@/services/commentService';
 import type { NewCommentData, ClientComment } from '@/types/comment';
 import { fetchUserProfileBasic, getSuggestibleUsers, getConnectionStatus } from '@/services/connectionService';
@@ -31,38 +29,17 @@ import { addBidToPost, getBidsForPost } from '@/services/bidService';
 import type { ClientBid, NewBidData } from '@/types/bid';
 import { findOrCreateConversation } from '@/services/messagingService';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from "@/components/ui/alert-dialog";
-import { ZodError, z } from 'zod';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { Form as RHForm, Controller, useForm } from "react-hook-form"; // Renamed Form to RHForm
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"; // For displaying tabbed descriptions
-
 import { PostDetailHeader } from './PostDetailHeader';
 import { PostDetailContentBody } from './PostDetailContentBody';
 import { PostDetailBidding } from './PostDetailBidding';
 import { PostDetailComments } from './PostDetailComments';
 
-// Comment about potential future refactoring:
-// This PostDetailPanel component is responsible for displaying all details of a selected post,
-// including its content, bidding interface (if applicable), and comments.
-// If it grows significantly larger, consider breaking down the Bidding and Comments sections
-// into their own more focused child components.
-
 interface PostDetailPanelProps {
-  post: Post;
+  post: Post | null; // Allow post to be null initially or if not found
   currentUser: FirebaseUser | null;
   onClose: () => void;
   onDelete: (postId: string) => void;
+  deletePostMutationIsPending?: boolean; // Make it optional
 }
 
 export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
@@ -70,10 +47,11 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   currentUser,
   onClose,
   onDelete,
+  deletePostMutationIsPending = false, // Default to false
 }) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
-  const user = currentUser; // Alias for clarity
+  const user = currentUser;
 
   // --- State for New Comment Input ---
   const [newComment, setNewComment] = useState('');
@@ -84,7 +62,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
 
-  // --- Data Fetching for Mention Suggestions in New Comment ---
+  // Debounce mention query for new comments
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedNewCommentMentionQuery(newCommentMentionQuery);
@@ -92,30 +70,14 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     return () => clearTimeout(handler);
   }, [newCommentMentionQuery]);
 
+  // Fetch general users for @mention suggestions in the new comment input
   const { data: generalSuggestibleUsers = [], isLoading: isLoadingGeneralSuggestions } = useQuery<UserProfileBasic[]>({
     queryKey: ['generalSuggestibleUsersForPanel', post?.id, user?.uid, debouncedNewCommentMentionQuery],
     queryFn: () => getSuggestibleUsers(debouncedNewCommentMentionQuery, debouncedNewCommentMentionQuery ? 10 : 25),
     enabled: !!post && !!user && showNewCommentSuggestions,
-    staleTime: 1000 * 60 * 5,
+    staleTime: 1000 * 60 * 5, // 5 minutes
   });
-  
-  const newCommentMentionProfilesMap = useMemo(() => {
-    const map = new Map<string, UserProfileBasic>();
-    if (generalSuggestibleUsers) {
-      generalSuggestibleUsers.forEach(profile => {
-        if (user && profile.userId !== user.uid) { 
-           map.set(profile.userId, profile);
-        }
-      });
-    }
-    if (post?.userId && user && post.userId !== user.uid && !map.has(post.userId)) {
-      map.set(post.userId, { userId: post.userId, mentionName: generateAnonymousName(post.userId), displayName: generateAnonymousName(post.userId) });
-    }
-    // Logic to add existing commenters to the map was removed as generalSuggestibleUsers is now used
-    return map;
-  }, [generalSuggestibleUsers, user, post?.userId]);
 
-  // --- Mutation for Adding a Comment ---
   const addCommentMutation = useMutation({
     mutationFn: (commentDataWithPostId: NewCommentData & { postId: string }) => {
       const { postId: pId, ...restData } = commentDataWithPostId;
@@ -126,8 +88,10 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       setNewCommentMentionQuery('');
       setShowNewCommentSuggestions(false);
       toast({ title: "Comment Added" });
-      if (post) queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
-      if (post) queryClient.invalidateQueries({ queryKey: ['posts'] }); 
+      if (post) {
+        queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
+        queryClient.invalidateQueries({ queryKey: ['posts'] }); // To update commentCount on PostCard
+      }
     },
     onError: (error: Error) => {
       toast({ variant: "destructive", title: "Comment Failed", description: `Could not add comment: ${error.message}.` });
@@ -137,28 +101,8 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     }
   });
 
-  // --- Handlers for New Comment Input and Mentions ---
-  const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !post || !newComment.trim() || isSubmittingComment) return;
-    setIsSubmittingComment(true);
-
-    const profilesToSearch = Array.from(newCommentMentionProfilesMap.values());
-    const finalMentionedUids = extractMentionedUids(newComment.trim(), profilesToSearch);
-
-    const commentData: NewCommentData & { postId: string } = {
-      postId: post.id,
-      userId: user.uid,
-      text: newComment.trim(),
-      mentionName: generateAnonymousName(user.uid),
-      mentionedUserIds: finalMentionedUids,
-      likeCount: 0,
-      likedBy: [],
-    };
-    addCommentMutation.mutate(commentData);
-  }, [user, post, newComment, isSubmittingComment, newCommentMentionProfilesMap, addCommentMutation, queryClient, toast]); // Added queryClient and toast
-
   const evaluateNewCommentMentionState = useCallback((text: string, cursorPosition: number) => {
+    console.log("[PostDetailPanel] evaluateNewCommentMentionState - Text:", text, "Cursor:", cursorPosition);
     let activeQuery = null;
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
@@ -171,17 +115,50 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     }
     setNewCommentMentionQuery(activeQuery !== null ? activeQuery : '');
     setShowNewCommentSuggestions(activeQuery !== null);
+    console.log("[PostDetailPanel] evaluateNewCommentMentionState - Active Query:", activeQuery, "Show Suggestions:", activeQuery !== null);
   }, [setNewCommentMentionQuery, setShowNewCommentSuggestions]);
+
+
+  const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !post || !newComment.trim() || isSubmittingComment) return;
+    setIsSubmittingComment(true);
+
+    const profilesToSearch = [...generalSuggestibleUsers];
+    // Ensure post author is in the search list if not already from general suggestions
+    if (post.userId && !profilesToSearch.some(p => p.userId === post.userId)) {
+        const authorProfile = await fetchUserProfileBasic(post.userId);
+        if (authorProfile) profilesToSearch.push(authorProfile);
+    }
+
+    const finalMentionedUids = extractMentionedUids(newComment.trim(), profilesToSearch);
+    console.log("[PostDetailPanel] handleCommentSubmit - Final mentioned UIDs:", finalMentionedUids);
+
+    const commentData: NewCommentData & { postId: string } = {
+      postId: post.id,
+      userId: user.uid,
+      text: newComment.trim(),
+      mentionName: generateAnonymousName(user.uid), // Use the standard mention name
+      mentionedUserIds: finalMentionedUids,
+      likeCount: 0,
+      likedBy: [],
+    };
+    addCommentMutation.mutate(commentData);
+  }, [user, post, newComment, isSubmittingComment, generalSuggestibleUsers, addCommentMutation, toast, queryClient]);
+
 
   const handleNewCommentInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setNewComment(value);
-    evaluateNewCommentMentionState(value, e.target.selectionStart || 0);
-  }, [setNewComment, evaluateNewCommentMentionState]);
+    if (newCommentInputRef.current) {
+      evaluateNewCommentMentionState(value, newCommentInputRef.current.selectionStart || 0);
+    }
+  }, [evaluateNewCommentMentionState, setNewComment]);
 
   const handleNewCommentInputFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
     evaluateNewCommentMentionState(e.target.value, e.target.selectionStart || 0);
   }, [evaluateNewCommentMentionState]);
+
 
   const handleSelectNewCommentSuggestion = useCallback((profile: UserProfileBasic) => {
     if (!newCommentInputRef.current || !profile.mentionName) return;
@@ -193,8 +170,9 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     if (lastAtIndex > -1) {
       const textBeforeMention = currentValue.substring(0, lastAtIndex);
       const textAfterCursor = currentValue.substring(cursorPosition);
-      setNewComment(`${textBeforeMention}@${profile.mentionName} ${textAfterCursor}`);
-      const newCursorPosition = textBeforeMention.length + `@${profile.mentionName} `.length;
+      const mentionToInsert = profile.mentionName;
+      setNewComment(`${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`);
+      const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
       setTimeout(() => {
         newCommentInputRef.current?.focus();
         newCommentInputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
@@ -206,7 +184,13 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (showNewCommentSuggestions && newCommentSuggestionsPopoverRef.current && !newCommentSuggestionsPopoverRef.current.contains(event.target as Node) && newCommentInputRef.current && !newCommentInputRef.current.contains(event.target as Node)) {
+      if (
+        showNewCommentSuggestions &&
+        newCommentSuggestionsPopoverRef.current &&
+        !newCommentSuggestionsPopoverRef.current.contains(event.target as Node) &&
+        newCommentInputRef.current &&
+        !newCommentInputRef.current.contains(event.target as Node)
+      ) {
         setShowNewCommentSuggestions(false);
       }
     };
@@ -217,49 +201,50 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showNewCommentSuggestions]);
-  
+
   const filteredNewCommentSuggestions = useMemo(() => {
     if (!showNewCommentSuggestions) return [];
-    if (isLoadingGeneralSuggestions) return [{ userId: 'loading-main-comment', mentionName: 'loading...', displayName: 'Loading users...' } as UserProfileBasic];
-    
-    let profilesSource = Array.from(newCommentMentionProfilesMap.values());
-    if (debouncedNewCommentMentionQuery.trim() === '') {
-        // No query, show users from the general list (already limited by getSuggestibleUsers)
-    } else {
-      const queryLower = debouncedNewCommentMentionQuery.toLowerCase();
-      profilesSource = profilesSource.filter(p => 
-        p.mentionName.toLowerCase().includes(queryLower) ||
-        (p.displayName && p.displayName.toLowerCase().includes(queryLower))
-      );
-    }
-    if (profilesSource.length === 0 && debouncedNewCommentMentionQuery.trim() !== '') return [{ userId: 'no-match-main-comment', mentionName: 'no-match', displayName: `No users matching "@${debouncedNewCommentMentionQuery}"` } as UserProfileBasic];
-    if (profilesSource.length === 0) return [{ userId: 'no-users-main-comment', mentionName: 'no-users', displayName: 'No users to suggest.' } as UserProfileBasic];
-    return profilesSource.slice(0, 10); // Ensure max 10 are shown even if service returns more
-  }, [showNewCommentSuggestions, isLoadingGeneralSuggestions, newCommentMentionProfilesMap, debouncedNewCommentMentionQuery]);
+    if (isLoadingGeneralSuggestions && debouncedNewCommentMentionQuery) return [{ userId: 'loading-main-comment', displayName: 'Loading users...', mentionName: 'loading-main-comment', companyName: undefined, actualDisplayName: undefined } as UserProfileBasic];
 
-  // --- Fetch Connection Status for Connect/Message Button ---
+    let source = generalSuggestibleUsers;
+    // The getSuggestibleUsers service already filters if debouncedNewCommentMentionQuery is present
+    // If debouncedNewCommentMentionQuery is empty, getSuggestibleUsers returns a broader list (e.g., top 25)
+
+    if (source.length === 0 && debouncedNewCommentMentionQuery.trim() !== '') return [{ userId: 'no-match-main-comment', displayName: `No users matching "@${debouncedNewCommentMentionQuery}"`, mentionName: 'no-match-main-comment', companyName: undefined, actualDisplayName: undefined } as UserProfileBasic];
+    if (source.length === 0) return [{ userId: 'no-users-main-comment', displayName: 'No users to suggest.', mentionName: 'no-users-main-comment', companyName: undefined, actualDisplayName: undefined } as UserProfileBasic];
+    
+    return source.slice(0, 10); // Show up to 10 suggestions
+  }, [showNewCommentSuggestions, isLoadingGeneralSuggestions, generalSuggestibleUsers, debouncedNewCommentMentionQuery]);
+
+
   const { data: connectionStatus } = useQuery<ConnectionStatus | null>({
     queryKey: ['connectionStatus', currentUser?.uid, post?.userId],
     queryFn: () => (currentUser && post?.userId) ? getConnectionStatus(currentUser.uid, post.userId) : Promise.resolve(null),
-    enabled: !!currentUser && !!post?.userId && currentUser.uid !== post.userId,
+    enabled: !!currentUser && !!post?.userId && currentUser.uid !== post?.userId,
   });
 
   if (!post) {
-    // This case should ideally be handled by the parent component
-    return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return (
+      <Card className="md:col-span-1 flex flex-col flex-1 items-center justify-center bg-card border-border rounded-lg shadow-xl p-8 sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)]">
+        <MessageSquare className="h-16 w-16 text-muted-foreground/30 mb-4" />
+        <p className="text-lg text-muted-foreground">Select a post to view details</p>
+      </Card>
+    );
   }
+  
+  console.log("[PostDetailPanel] Rendering. Post ID:", post.id, "User Shapes length:", post.commentCount); // Example userShapes logging if it were a prop
 
   return (
-    <Card className="flex flex-col flex-1 overflow-hidden sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)]">
+    <Card className="flex flex-col flex-1 overflow-hidden bg-card border-border rounded-lg shadow-xl sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)]">
       <PostDetailHeader
         post={post}
         currentUser={user}
         onClose={onClose}
         onDelete={() => onDelete(post.id)}
-        deletePostMutationIsPending={false} // This needs to come from parent (BoardPageContent)
+        deletePostMutationIsPending={deletePostMutationIsPending}
         connectionStatus={connectionStatus}
       />
-      <ScrollArea className="flex-grow bg-background">
+      <ScrollArea className="flex-grow bg-background"> {/* Main content scroll */}
         <PostDetailContentBody post={post} />
         <PostDetailBidding post={post} currentUser={user} onClosePanel={onClose} />
         <PostDetailComments post={post} currentUser={user} />
@@ -279,6 +264,16 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                   value={newComment}
                   onChange={handleNewCommentInputChange}
                   onFocus={handleNewCommentInputFocus}
+                  onKeyDownCapture={(e) => {
+                    if (showNewCommentSuggestions && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape')) {
+                      if (e.key !== 'Escape') e.preventDefault(); // Prevent default for arrow keys and Enter if suggestions are open
+                    }
+                  }}
+                  onBlurCapture={() => setTimeout(() => {
+                    if (newCommentSuggestionsPopoverRef.current && !newCommentSuggestionsPopoverRef.current.contains(document.activeElement as Node) && newCommentInputRef.current !== document.activeElement) {
+                      if (showNewCommentSuggestions) setShowNewCommentSuggestions(false);
+                    }
+                  }, 150)} // Delay to allow click on suggestion
                   disabled={!user || isSubmittingComment}
                   className="flex-grow bg-background h-9 text-sm"
                   aria-label="New comment input"
@@ -298,8 +293,8 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
               onOpenAutoFocus={(e) => e.preventDefault()}
             >
               {filteredNewCommentSuggestions.map(profile => {
-                const displayableName = profile.displayName || profile.mentionName; // Fallback to mentionName if displayName is empty
-                const showSecondaryNameLine = profile.displayName && profile.displayName.toLowerCase() !== profile.mentionName.toLowerCase();
+                const displayableName = profile.displayName; // This is already derived: actual || company || mention
+                const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
                 
                 return (
                   (profile.userId === 'loading-main-comment' || profile.userId === 'no-users-main-comment' || profile.userId === 'no-match-main-comment') ? (
@@ -310,7 +305,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                       variant="ghost"
                       size="sm"
                       className="w-full justify-start h-auto px-2 py-1 text-xs"
-                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseDown={(e) => e.preventDefault()} // Prevent input blur on click
                       onClick={() => handleSelectNewCommentSuggestion(profile)}
                     >
                       <Avatar className="h-5 w-5 mr-2">
@@ -318,9 +313,9 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                         <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col items-start">
-                        {showSecondaryNameLine && (
+                        {showSecondaryNameLine ? (
                           <span className="font-medium text-foreground">{displayableName}</span>
-                        )}
+                        ) : null}
                         <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
                           @{profile.mentionName}
                         </span>
@@ -342,5 +337,5 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 });
 
 PostDetailPanel.displayName = "PostDetailPanel";
-// Default export handled by dynamic import in page.tsx
-// export default PostDetailPanel; // Remove if dynamically imported
+
+    
