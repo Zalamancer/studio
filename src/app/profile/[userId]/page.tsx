@@ -1,3 +1,4 @@
+
 // Tip: If this BusinessProfilePage component becomes too large or complex,
 // consider further splitting its internal sections (like Review Submission, Review List, etc.)
 // into their own dedicated components within a 'profile' sub-directory,
@@ -38,7 +39,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import { useToast } from "@/hooks/use-toast"; // Added import for useToast
+import { useToast } from "@/hooks/use-toast";
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
@@ -69,17 +70,16 @@ const BusinessProfilePage = () => {
 
   const profileUserId = profileUserIdFromParams;
 
-  const isProfileIdActuallyValidUid = useMemo(() => {
+  const isProfileIdValidUid = useMemo(() => {
     if (!profileUserIdFromParams) return false;
     const isValid = IS_VALID_FIREBASE_UID_REGEX.test(profileUserIdFromParams);
-    console.log(`%c[BusinessProfilePage] isProfileIdActuallyValidUid for '${profileUserIdFromParams}': ${isValid}`, isValid ? "color: green" : "color: orange");
+    console.log(`%c[BusinessProfilePage] isProfileIdValidUid for '${profileUserIdFromParams}': ${isValid}`, isValid ? "color: green" : "color: orange");
     return isValid;
   }, [profileUserIdFromParams]);
 
-  // Enhanced logging for enabled flag
   useEffect(() => {
-    console.log(`%c[BusinessProfilePage] DEBUG: isProfileIdActuallyValidUid changed or component mounted. Value: ${isProfileIdActuallyValidUid}`, "color: purple");
-  }, [isProfileIdActuallyValidUid]);
+    console.log(`%c[BusinessProfilePage] DEBUG: isProfileIdValidUid changed or component mounted. Value: ${isProfileIdValidUid}`, "color: purple");
+  }, [isProfileIdValidUid]);
 
 
   const { data: viewedUserProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileData | null, Error>({
@@ -92,7 +92,7 @@ const BusinessProfilePage = () => {
       console.log(`%c[BusinessProfilePage] fetchFullUserProfile queryFn: Fetching for profileUserId '${profileUserId}'`, "color: dodgerblue;");
       return fetchFullUserProfile(profileUserId);
     },
-    enabled: !!profileUserId && isProfileIdActuallyValidUid, // Ensure it's also valid
+    enabled: !!profileUserId && isProfileIdValidUid,
   });
 
   const connectionStatusQueryEnabled = useMemo(() => {
@@ -115,7 +115,7 @@ const BusinessProfilePage = () => {
          console.error(`%c[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions for calling service. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`, "color: red;");
          return 'not_connected';
        }
-       if (!IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) { // Explicit check before calling service
+       if (!IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) {
             console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.`);
             return 'not_connected';
         }
@@ -126,15 +126,14 @@ const BusinessProfilePage = () => {
   });
 
   const reviewsQueryEnabled = useMemo(() => {
-    const enabled = !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) && !!currentUser; // currentUser check helps too
+    const enabled = !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId); // Removed currentUser check as read for reviews is public for authenticated
     console.log(`%c[BusinessProfilePage] REVIEWS QUERY CHECK:
       - profileUserId: ${profileUserId || 'NULL'}
       - IS_VALID_FIREBASE_UID_REGEX.test(profileUserId): ${profileUserId ? IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) : 'N/A'}
-      - !!currentUser: ${!!currentUser}
       - FINAL enabled flag for reviews query: ${enabled}`,
     "color: mediumpurple; background: #eee; padding: 2px;");
     return enabled;
-  }, [profileUserId, currentUser]);
+  }, [profileUserId]);
 
   const { data: reviewsReceived = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'received'],
@@ -158,7 +157,7 @@ const BusinessProfilePage = () => {
         }
         return getReviewsGivenByUserId(profileUserId);
     },
-    enabled: reviewsQueryEnabled,
+    enabled: reviewsQueryEnabled && !!currentUser, // Only fetch reviews given if we have a current user context for potential future display logic
   });
 
 
@@ -188,20 +187,20 @@ const BusinessProfilePage = () => {
       let weight = 1.0;
       const histAvg = review.reviewerHistoricalAvgRating;
 
-      if (histAvg === null) { // No prior review history for that reviewer AT THE TIME they left this specific review
-        weight = 0.9; // Slightly less weight for new reviewers
+      if (histAvg === null) {
+        weight = 0.9;
         console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=NULL, AssignedWeight=${weight.toFixed(1)}`);
       } else if (typeof histAvg === 'number') {
-        if (histAvg < 2.5) { // Historically harsh reviewer
+        if (histAvg < 2.5) {
           weight = 0.6;
            console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Harsh), AssignedWeight=${weight.toFixed(1)}`);
-        } else if (histAvg >= 4.0) { // Historically lenient reviewer
+        } else if (histAvg >= 4.0) {
           weight = 1.1;
            console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Lenient), AssignedWeight=${weight.toFixed(1)}`);
-        } else { // Neutral reviewer
+        } else {
             console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Neutral), AssignedWeight=${weight.toFixed(1)}`);
         }
-      } else { // Should not happen if data is clean, but good to log
+      } else {
         console.log(`  Review ${index + 1} (ID: ${review.id}) by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=UNEXPECTED_TYPE (${typeof histAvg}), AssignedWeight=${weight.toFixed(1)}`);
       }
       totalWeightedRating += review.rating * weight;
@@ -227,8 +226,8 @@ const BusinessProfilePage = () => {
   const addOrUpdateReviewMutation = useMutation({
     mutationFn: async (data: { rating: number; comment: string }) => {
       if (!currentUser || !profileUserId || !IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) throw new Error("User, profile ID missing, or invalid profile ID.");
-      
-      const reviewerProfileData = await fetchFullUserProfile(currentUser.uid); // Fetch full profile for the reviewer
+
+      const reviewerProfileData = await fetchFullUserProfile(currentUser.uid);
 
       if (editingReview) {
         const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
@@ -238,7 +237,7 @@ const BusinessProfilePage = () => {
         const newReviewData: NewReviewData = {
           targetUserId: profileUserId,
           reviewerId: currentUser.uid,
-          reviewerName: reviewerProfileData?.mentionName || generateAnonymousName(currentUser.uid), // Use mentionName
+          reviewerName: reviewerProfileData?.mentionName || generateAnonymousName(currentUser.uid),
           reviewerAvatar: reviewerProfileData?.avatarUrl || undefined,
           rating: data.rating,
           comment: data.comment,
@@ -282,14 +281,14 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-
-  if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
+  if (profileUserIdFromParams && !isProfileIdValidUid) {
     return (
-      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
+      <div className="w-full flex flex-col items-center justify-center p-8 min-h-[calc(100vh-10rem)]">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
         <h1 className="text-2xl font-semibold text-destructive mb-2">Invalid Profile Identifier</h1>
-        <p className="text-muted-foreground">
+        <p className="text-muted-foreground text-center">
           The user identifier in the URL (<code>{profileUserIdFromParams}</code>) does not seem to be valid.
+          <br />
           Please check the link or try navigating from a valid user link.
         </p>
         <Button onClick={() => router.push('/')} className="mt-6">Go to Homepage</Button>
@@ -297,9 +296,9 @@ const BusinessProfilePage = () => {
     );
   }
 
-  if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdActuallyValidUid)) {
+  if (authLoading || (isLoadingProfile && isProfileIdValidUid && !viewedUserProfileData)) {
      return (
-      <div className="container mx-auto p-4 md:p-8 max-w-4xl">
+      <div className="w-full container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
            <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
              <div className="flex flex-col md:flex-row items-start md:items-center gap-4 animate-pulse">
@@ -330,20 +329,30 @@ const BusinessProfilePage = () => {
      );
   }
 
-  if (!viewedUserProfileData) { // This check will also catch if profileUserId was invalid and queryFn returned null.
+  if (!viewedUserProfileData && isProfileIdValidUid && !isLoadingProfile) {
     return (
-      <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
+      <div className="w-full flex flex-col items-center justify-center p-8 min-h-[calc(100vh-10rem)]">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
-        <p className="text-muted-foreground font-semibold">Business profile data could not be loaded or profile ID is missing/invalid.</p>
+        <p className="text-muted-foreground font-semibold">Business profile not found for ID: {profileUserId}.</p>
+         <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
+      </div>
+    );
+  }
+  
+  if (!viewedUserProfileData) { // Fallback if profileUserId itself was invalid and didn't trigger earlier return
+    return (
+      <div className="w-full flex flex-col items-center justify-center p-8 min-h-[calc(100vh-10rem)]">
+        <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
+        <p className="text-muted-foreground font-semibold">Profile data could not be loaded.</p>
          <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
       </div>
     );
   }
 
-  // This specific error check is for errors after a valid UID was attempted.
-  if (profileError && isProfileIdActuallyValidUid) {
+
+  if (profileError && isProfileIdValidUid) {
       return (
-          <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
+          <div className="w-full flex flex-col items-center justify-center p-8 min-h-[calc(100vh-10rem)]">
              <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
              <p className="text-muted-foreground font-semibold">Error loading profile: {profileError.message}</p>
              <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
@@ -358,7 +367,7 @@ const BusinessProfilePage = () => {
   const headerDisplayNameForAvatar = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
   const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerDisplayNameForTitle;
   
-  let nameForConnectionButton = headerDisplayNameForAvatar; // Default
+  let nameForConnectionButton = headerDisplayNameForAvatar;
   if (viewedUserProfileData.companyName) {
       nameForConnectionButton = viewedUserProfileData.companyName;
   }
@@ -413,11 +422,6 @@ const BusinessProfilePage = () => {
                     </span>
                  )}
                 </div>
-                 <div className="mt-2 flex flex-wrap gap-2 justify-center md:justify-start">
-                    {(viewedUserProfileData.tags || []).map((tag) => (
-                      <Badge key={tag} variant="secondary">{tag}</Badge>
-                    ))}
-                  </div>
               </div>
               <div className="flex flex-col items-center md:items-end gap-2 ml-auto mt-4 md:mt-0 w-full md:w-auto">
                   <div className="text-center md:text-right mb-1">
@@ -672,5 +676,3 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
-
-```
