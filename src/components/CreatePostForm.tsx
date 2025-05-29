@@ -1,9 +1,8 @@
 
-// src/components/CreatePostForm.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -16,10 +15,10 @@ import {
   FormField,
   FormItem,
   FormMessage,
-  FormDescription,
   FormLabel,
+  FormDescription,
 } from "@/components/ui/form";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"; // Keep if used
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -47,8 +46,8 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
-import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout'; // Corrected to import from MainLayout
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
+import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import { Calendar } from "@/components/ui/calendar";
 import { format } from 'date-fns';
 
@@ -87,16 +86,12 @@ const postFormSchema = z.object({
 });
 
 
-export interface CreatePostFormData extends Omit<z.infer<typeof postFormSchema>, 'imageFile' | 'maxBudget' | 'tags' | 'deadline' | 'description'> {
+export interface CreatePostFormData extends Omit<z.infer<typeof postFormSchema>, 'imageFile' | 'maxBudget' | 'tags' | 'deadline'> {
   imageFile?: File | null;
   mentionedUserIds?: string[];
   maxBudget?: number | null;
   tags: string[];
   deadline?: Date | null;
-  descriptionDetails: string; // Ensure this is part of the form data type
-  descriptionTried?: string;
-  descriptionOutcome?: string;
-  // description?: string; // Removed old single description
 }
 
 export interface CreatePostFormProps {
@@ -107,6 +102,26 @@ export interface CreatePostFormProps {
   currentUserId: string | null;
   onDialogClose?: () => void;
 }
+
+const getLocalInitials = (name: string | undefined | null): string => {
+    if (!name || typeof name !== 'string' || name.trim() === '') return '?';
+    const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
+    const pseudonymRegex = /^[A-Z][a-z]+([A-Z][a-zA-Z]*)[0-9]{3,}$/;
+    const match = nameToProcess.match(pseudonymRegex);
+    if (match) {
+        const firstLetter = nameToProcess.charAt(0);
+        const animalPart = match[1];
+        const secondLetter = animalPart.charAt(0);
+        return (firstLetter + secondLetter).toUpperCase();
+    }
+    const words = nameToProcess.split(/\s+/).filter(Boolean);
+    if (words.length === 0) return '?';
+    if (words.length === 1) return words[0].substring(0, 1).toUpperCase();
+    const firstInitial = words[0].substring(0, 1);
+    const lastInitial = words[words.length - 1].substring(0, 1);
+    return (firstInitial + lastInitial).toUpperCase();
+};
+
 
 export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   onSubmit,
@@ -185,7 +200,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (form.formState.isSubmitSuccessful && onDialogClose) {
       const timer = setTimeout(() => {
         resetForm();
-        onDialogClose(); 
+        if (onDialogClose) onDialogClose(); 
       }, 100); 
       return () => clearTimeout(timer);
     }
@@ -225,7 +240,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   }, [problemDetailsMentionQuery]);
 
   const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
-    queryKey: ['suggestibleUsersForCreatePost', debouncedProblemDetailsQuery, currentUserId],
+    queryKey: ['suggestibleUsersForCreatePostForm', debouncedProblemDetailsQuery, currentUserId],
     queryFn: () => getSuggestibleUsers(debouncedProblemDetailsQuery, debouncedProblemDetailsQuery ? 10 : 25),
     enabled: showProblemDetailsSuggestions && !!currentUserId,
   });
@@ -236,7 +251,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     setQuery: React.Dispatch<React.SetStateAction<string>>,
     setShowSuggestionsBool: React.Dispatch<React.SetStateAction<boolean>>
   ) => {
-    console.log("[CreatePostForm] evaluateMentionState - Text:", text, "Cursor:", cursorPosition);
     let activeQuery = null;
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
@@ -247,7 +261,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         activeQuery = potentialQuery;
       }
     }
-    console.log("[CreatePostForm] evaluateMentionState - Active Query:", activeQuery);
     setQuery(activeQuery !== null ? activeQuery : '');
     setShowSuggestionsBool(activeQuery !== null);
   }, []);
@@ -310,12 +323,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
 
     let source = suggestibleUsers;
-    if (debouncedProblemDetailsQuery.trim() === '') {
+     if (debouncedProblemDetailsQuery.trim() === '') {
         source = source.slice(0, 5); 
     } else {
       const queryLower = debouncedProblemDetailsQuery.toLowerCase();
       source = source.filter(p =>
-          p.mentionName.toLowerCase().includes(queryLower) ||
+          (p.mentionName && p.mentionName.toLowerCase().includes(queryLower)) ||
           (p.displayName && p.displayName.toLowerCase().includes(queryLower))
       );
     }
@@ -391,12 +404,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       requestType: values.requestType,
       question: values.question,
       descriptionDetails: values.descriptionDetails,
-      descriptionTried: values.descriptionTried,
-      descriptionOutcome: values.descriptionOutcome,
+      descriptionTried: values.descriptionTried || null,
+      descriptionOutcome: values.descriptionOutcome || null,
       tags: values.tags || [],
       sector: values.sector,
-      subSector: values.subSector,
-      industry: values.industry,
+      subSector: values.subSector || null,
+      industry: values.industry || null,
       imageFile: values.imageFile,
       mentionedUserIds: finalMentionedUserIds,
       maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? parseFloat(String(values.maxBudget)) : null,
@@ -451,7 +464,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               name="question"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Question / Need <span className="text-destructive">*</span></FormLabel>
+                  <FormLabel>Question / Title <span className="text-destructive">*</span></FormLabel>
                   <FormControl><Input placeholder="e.g., Seeking expertise in B2B marketing automation" {...field} disabled={isSubmitting} /></FormControl>
                   <FormDescription>Keep it concise and clear (max 200 characters).</FormDescription>
                   <FormMessage />
@@ -459,102 +472,103 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               )}
             />
             
+            {/* Unified Tabbed Description Section */}
             <div className="flex-grow flex flex-col space-y-2">
-                <Label className="text-base font-semibold text-foreground">
-                    Description Details <span className="text-destructive">*</span>
-                </Label>
-                <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full flex-grow flex flex-col">
-                  <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
-                    <TabsTrigger value="details" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
-                      <FileQuestion className="mr-1.5 h-4 w-4" /> Problem Details <span className="text-destructive ml-0.5">*</span>
-                    </TabsTrigger>
-                    <TabsTrigger value="tried" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
-                      <Brain className="mr-1.5 h-4 w-4" /> What I&apos;ve Tried
-                    </TabsTrigger>
-                    <TabsTrigger value="outcome" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
-                      <Target className="mr-1.5 h-4 w-4" /> Expected Outcome
-                    </TabsTrigger>
-                  </TabsList>
+              <Label className="text-base font-semibold text-foreground">
+                Details <span className="text-destructive">*</span>
+              </Label>
+              <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full flex-grow flex flex-col">
+                <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
+                  <TabsTrigger value="details" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
+                    <FileQuestion className="mr-1.5 h-4 w-4" /> Details <span className="text-destructive ml-0.5">*</span>
+                  </TabsTrigger>
+                  <TabsTrigger value="tried" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
+                    <Brain className="mr-1.5 h-4 w-4" /> What I&apos;ve Tried
+                  </TabsTrigger>
+                  <TabsTrigger value="outcome" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
+                    <Target className="mr-1.5 h-4 w-4" /> Expected Outcome
+                  </TabsTrigger>
+                </TabsList>
 
-                  <TabsContent value="details" className="mt-2 flex-grow flex flex-col rounded-md border p-4 bg-background min-h-[150px]">
-                    <FormField control={form.control} name="descriptionDetails" render={({ field }) => (
-                      <FormItem className="flex-grow flex flex-col">
-                        <FormLabel className="sr-only">Problem Details</FormLabel>
-                        <Popover open={showProblemDetailsSuggestions && filteredDescriptionSuggestions.length > 0 && !['loading-desc', 'no-users-desc', 'no-match-desc'].includes(filteredDescriptionSuggestions[0]?.userId)} onOpenChange={(open) => { setShowProblemDetailsSuggestions(open); if (!open) setProblemDetailsMentionQuery('');}}>
-                          <PopoverTrigger asChild>
-                            <FormControl>
-                              <Textarea
-                                placeholder="Describe the specific problem, idea, or need... (@mention users)"
-                                className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
-                                {...field}
-                                ref={problemDetailsTextareaRef}
-                                value={field.value || ''}
-                                onChange={handleProblemDetailsChange}
-                                onFocus={handleProblemDetailsFocus}
-                                onBlurCapture={() => setTimeout(() => { if (problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && problemDetailsTextareaRef.current !== document.activeElement) { setShowProblemDetailsSuggestions(false);}}, 150)}
-                                disabled={isSubmitting}
-                              />
-                            </FormControl>
-                          </PopoverTrigger>
-                          <PopoverContent ref={problemDetailsSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
-                            {filteredDescriptionSuggestions.map(profile => {
-                                const displayableName = profile.displayName || profile.companyName || profile.mentionName;
-                                const showSecondaryNameLine = (profile.displayName || profile.companyName) && (profile.displayName || profile.companyName)?.toLowerCase() !== profile.mentionName.toLowerCase();
-                                return (
-                                    ['loading-desc', 'no-users-desc', 'no-match-desc'].includes(profile.userId) ? (
-                                        <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
-                                    ) : (
-                                        <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectProblemDetailsSuggestion(profile)}>
-                                            <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getSharedInitials(profile.mentionName)}</AvatarFallback></Avatar>
-                                            <div className="flex flex-col items-start">
-                                                {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
-                                                <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
-                                            </div>
-                                        </Button>
-                                    )
-                                );
-                            })}
-                          </PopoverContent>
-                        </Popover>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </TabsContent>
-                  <TabsContent value="tried" className="mt-2 flex-grow flex flex-col rounded-md border p-4 bg-background min-h-[150px]">
-                    <FormField control={form.control} name="descriptionTried" render={({ field }) => (
-                      <FormItem className="flex-grow flex flex-col">
-                        <FormLabel className="sr-only">What I&apos;ve Tried</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Solutions or approaches you&apos;ve already attempted (optional)..."
-                            className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
-                            value={field.value || ''}
-                            onChange={field.onChange}
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </TabsContent>
-                  <TabsContent value="outcome" className="mt-2 flex-grow flex flex-col rounded-md border p-4 bg-background min-h-[150px]">
-                    <FormField control={form.control} name="descriptionOutcome" render={({ field }) => (
-                      <FormItem className="flex-grow flex flex-col">
-                        <FormLabel className="sr-only">Expected Outcome</FormLabel>
-                        <FormControl>
-                          <Textarea
-                            placeholder="Ideal result or solution you&apos;re looking for (optional)?"
-                            className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
-                            value={field.value || ''}
-                            onChange={field.onChange}
-                            disabled={isSubmitting}
-                          />
-                        </FormControl>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                  </TabsContent>
-                </Tabs>
+                <TabsContent value="details" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md border p-4 bg-background min-h-[150px]">
+                  <FormField control={form.control} name="descriptionDetails" render={({ field }) => (
+                    <FormItem className="h-full flex flex-col">
+                      <FormLabel className="sr-only">Problem Details</FormLabel>
+                      <Popover open={showProblemDetailsSuggestions && filteredDescriptionSuggestions.length > 0 && !['loading-desc', 'no-users-desc', 'no-match-desc'].includes(filteredDescriptionSuggestions[0]?.userId)} onOpenChange={(open) => { setShowProblemDetailsSuggestions(open); if (!open) setProblemDetailsMentionQuery('');}}>
+                        <PopoverTrigger asChild>
+                          <FormControl>
+                            <Textarea
+                              placeholder="Describe the specific problem, idea, or need... (@mention users)"
+                              className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                              {...field}
+                              ref={problemDetailsTextareaRef}
+                              value={field.value || ''}
+                              onChange={handleProblemDetailsChange}
+                              onFocus={handleProblemDetailsFocus}
+                              onBlurCapture={() => setTimeout(() => { if (problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && problemDetailsTextareaRef.current !== document.activeElement) { setShowProblemDetailsSuggestions(false);}}, 150)}
+                              disabled={isSubmitting}
+                            />
+                          </FormControl>
+                        </PopoverTrigger>
+                        <PopoverContent ref={problemDetailsSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                          {filteredDescriptionSuggestions.map(profile => {
+                              const displayableName = profile.actualDisplayName || profile.companyName || profile.mentionName;
+                              const showSecondaryNameLine = (profile.actualDisplayName || profile.companyName) && profile.mentionName && (profile.actualDisplayName || profile.companyName)?.toLowerCase() !== profile.mentionName.toLowerCase();
+                              return (
+                                  ['loading-desc', 'no-users-desc', 'no-match-desc'].includes(profile.userId) ? (
+                                      <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
+                                  ) : (
+                                      <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectProblemDetailsSuggestion(profile)}>
+                                          <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getLocalInitials(profile.mentionName)}</AvatarFallback></Avatar>
+                                          <div className="flex flex-col items-start">
+                                              {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
+                                              <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
+                                          </div>
+                                      </Button>
+                                  )
+                              );
+                          })}
+                        </PopoverContent>
+                      </Popover>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </TabsContent>
+                <TabsContent value="tried" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md border p-4 bg-background min-h-[150px]">
+                  <FormField control={form.control} name="descriptionTried" render={({ field }) => (
+                    <FormItem className="h-full flex flex-col">
+                      <FormLabel className="sr-only">What I&apos;ve Tried</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Solutions or approaches you&apos;ve already attempted (optional)..."
+                          className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </TabsContent>
+                <TabsContent value="outcome" className="mt-2 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-md border p-4 bg-background min-h-[150px]">
+                  <FormField control={form.control} name="descriptionOutcome" render={({ field }) => (
+                    <FormItem className="h-full flex flex-col">
+                      <FormLabel className="sr-only">Expected Outcome</FormLabel>
+                      <FormControl>
+                        <Textarea
+                          placeholder="Ideal result or solution you&apos;re looking for (optional)?"
+                          className="flex-grow resize-y min-h-[120px] flex-1 border-0 p-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none"
+                          value={field.value || ''}
+                          onChange={field.onChange}
+                          disabled={isSubmitting}
+                        />
+                      </FormControl>
+                      <FormMessage />
+                    </FormItem>
+                  )} />
+                </TabsContent>
+              </Tabs>
             </div>
 
             {requestType === 'help_request' && (
@@ -571,20 +585,20 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <FormLabel className="flex items-center gap-1"><CalendarIcon className="h-4 w-4 text-muted-foreground" />Deadline (Optional)</FormLabel>
                      <Popover>
                        <PopoverTrigger asChild>
-                          <Button
+                        <Button
                             variant={"outline"}
                             className={cn(
-                              "w-full justify-start text-left font-normal",
-                              !field.value && "text-muted-foreground"
+                            "w-full justify-start text-left font-normal",
+                            !field.value && "text-muted-foreground"
                             )}
                             disabled={isSubmitting}
                             type="button"
-                          >
-                             <span className="flex items-center justify-between w-full">
+                        >
+                            <span className="flex items-center justify-between w-full">
                                 <span>{field.value && field.value instanceof Date ? format(field.value, "PPP") : "Pick a date"}</span>
                                 <CalendarIcon className="h-4 w-4 opacity-50" />
-                              </span>
-                          </Button>
+                            </span>
+                        </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                            <Calendar
@@ -605,7 +619,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             <FormField control={form.control} name="imageFile" render={() => ( 
               <FormItem>
                 <FormLabel>Image (Optional)</FormLabel>
-                <FormControl><Input type="file" accept="image/png, image/jpeg, image/gif, image/webp" ref={fileInputRef} onChange={handleImageChange} className="hidden" disabled={isSubmitting || isCompressing} /></FormControl>
+                <FormControl><Input type="file" accept={ACCEPTED_IMAGE_TYPES.join(",")} ref={fileInputRef} onChange={handleImageChange} className="hidden" disabled={isSubmitting || isCompressing} /></FormControl>
                 <div className="mt-2 flex items-center gap-4">
                   <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isCompressing}> {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />} {imagePreviewUrl ? "Change Image" : "Upload Image"} </Button>
                   {imagePreviewUrl && (<Button type="button" variant="ghost" size="sm" onClick={handleRemoveImage} disabled={isSubmitting || isCompressing}><XCircle className="mr-2 h-4 w-4 text-destructive" /> Remove</Button>)}
