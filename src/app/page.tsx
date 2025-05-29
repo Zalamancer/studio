@@ -19,15 +19,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@/components/ui/alert-dialog"; // Added AlertDialogTrigger
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 
 import {
   Loader2, Trash2, MessageSquare, Sparkles, HandHelping, Briefcase,
-  X, DollarSign, Info, Link as LinkIcon, Eye, AtSign, CalendarDays, Star, FileText, User
-} from "lucide-react"; // Added AtSign, CalendarDays, Star, FileText, User
+  X, DollarSign, CalendarDays, Star, FileText, User, Link as LinkIcon, AtSign, CornerDownRight
+} from "lucide-react";
 import Image from 'next/image';
-import { useForm } from 'react-hook-form'; // Added useForm
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addBidToPost, getBidsForPost } from '@/services/bidService';
@@ -35,6 +35,8 @@ import type { ClientBid, NewBidData } from '@/types/bid';
 import { formatDistanceToNow } from 'date-fns';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Label } from "@/components/ui/label";
+
 
 import { cn } from "@/lib/utils";
 import type { Post } from '@/types/post';
@@ -46,12 +48,10 @@ import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService';
 import { availableTags } from '@/components/layout/MainLayout';
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
-import { extractMentionedUids } from '@/lib/mentionUtils'; // Assuming this is now centralized
-import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_PAGE } from '@/lib/utils'; // Assuming this is centralized
-import dynamic from 'next/dynamic';
-import Link from 'next/link';
+import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 
-// Dynamic Imports for major components
+import dynamic from 'next/dynamic';
+
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
   {
@@ -73,6 +73,7 @@ const PostCard = dynamic(() =>
   }
 );
 
+
 const BoardPageContent = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -87,16 +88,19 @@ const BoardPageContent = () => {
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: getPostsFromFirestore,
-    staleTime: 1000 * 60 * 1,
+    staleTime: 1000 * 60 * 1, // 1 minute
     refetchOnWindowFocus: true,
   });
 
   const deletePostMutation = useMutation({
     mutationFn: deletePostFromFirestore,
-    onSuccess: () => {
+    onSuccess: (_, postId) => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       toast({ title: "Post Deleted", description: "The post has been removed." });
-      setSelectedPost(null);
+      if (selectedPost?.id === postId) {
+        setSelectedPost(null);
+        router.replace('/', undefined, { shallow: true });
+      }
     },
     onError: (error: Error) => {
       toast({ variant: "destructive", title: "Deletion Failed", description: `Could not delete post: ${error.message}.` });
@@ -113,22 +117,23 @@ const BoardPageContent = () => {
       return;
     }
     deletePostMutation.mutate(postId);
-  }, [user, deletePostMutation, toast, queryClient]);
+  }, [user, deletePostMutation, toast, queryClient, selectedPost?.id, router]); // Added selectedPost and router
 
   const openPostCallback = useCallback((postToOpen: Post) => {
+    console.log("[BoardPageContent] openPostCallback triggered for post:", postToOpen.id);
     if (selectedPost && selectedPost.id === postToOpen.id) {
       setSelectedPost(null);
-      router.replace('/', undefined, { shallow: true });
+      router.replace('/', undefined, { shallow: true }); // Clear URL if toggling off
     } else {
       setSelectedPost(postToOpen);
-      // Optional: Update URL, but ensure it doesn't cause re-open loop.
-      // router.push(`/?postId=${postToOpen.id}`, undefined, { shallow: true });
+      // Update URL, but ensure it doesn't cause re-open loop.
+      // router.push(`/?postId=${postToOpen.id}`, undefined, { shallow: true }); // This was causing issues
     }
   }, [selectedPost, router]);
 
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
-    console.log(`[BoardPageContent] useEffect for URL - postIdFromUrl: ${postIdFromUrl}, posts.length: ${posts.length}, selectedPost: ${selectedPost?.id}`);
+    console.log(`[BoardPageContent] useEffect for URL - postIdFromUrl: ${postIdFromUrl}, posts.length: ${posts.length}`);
 
     if (postIdFromUrl && posts.length > 0) {
       if (!selectedPost || selectedPost.id !== postIdFromUrl) {
@@ -136,15 +141,15 @@ const BoardPageContent = () => {
         if (postToOpen) {
           console.log("[BoardPageContent] Opening post from URL:", postToOpen.id);
           setSelectedPost(postToOpen);
+          // Don't clear URL here, allow sheet close to do it or user navigation
         } else {
           console.warn("[BoardPageContent] PostId from URL not found:", postIdFromUrl);
-          toast({ variant: "destructive", title: "Post Not Found", description: "The requested post could not be found." });
-          router.replace('/', undefined, { shallow: true });
+          toast({ variant: "destructive", title: "Post Not Found", description: "The requested post could not be found or is no longer available." });
+          router.replace('/', undefined, { shallow: true }); // Clear invalid postId
         }
       }
     }
-  }, [searchParams, posts, router, toast]); // Removed selectedPost from dependencies to avoid re-open loop
-
+  }, [searchParams, posts, router, toast]); // selectedPost removed
 
   const handleTagClick = useCallback((tag: string) => {
     setSelectedTags(prevTags =>
@@ -177,7 +182,7 @@ const BoardPageContent = () => {
   );
 
   const renderPosts = useCallback((postsToRender: Post[]) => (
-    <div className="columns-1 md:columns-2 gap-4 space-y-4"> {/* Updated to two columns */}
+    <div className="columns-1 md:columns-2 gap-4 space-y-4"> {/* Ensure two columns for md and up */}
       {postsToRender.length > 0 ? (
         postsToRender.map((post) => (
           <PostCard
@@ -199,7 +204,7 @@ const BoardPageContent = () => {
 
   // Main Return
   return (
-    <div className="container mx-auto p-4 pt-6 flex flex-col flex-grow"> {/* Ensure flex-grow and flex-col */}
+    <div className="container mx-auto p-4 pt-6 flex flex-col flex-grow">
       <div className="mb-6 flex flex-wrap items-center gap-2">
         <span className="text-sm font-medium text-muted-foreground mr-2">Filter by Tag:</span>
         {availableTags.map((tag) => (
@@ -224,10 +229,10 @@ const BoardPageContent = () => {
         )}
       </div>
 
-      <div className="md:grid md:grid-cols-2 md:gap-8 flex-grow"> {/* Ensure flex-grow */}
+      <div className="md:grid md:grid-cols-2 md:gap-8 flex-grow">
         {/* Left Column: Post List */}
-        <div className="md:col-span-1 flex flex-col overflow-hidden"> {/* Ensure flex-col and overflow-hidden */}
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-grow"> {/* flex-grow */}
+        <div className="md:col-span-1 flex flex-col overflow-hidden">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-grow">
             <TabsList className="grid w-full grid-cols-3 mb-4">
               <TabsTrigger value="recommended" className="flex items-center gap-1.5 text-xs sm:text-sm"><Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Recommended</TabsTrigger>
               <TabsTrigger value="help_requests" className="flex items-center gap-1.5 text-xs sm:text-sm"><HandHelping className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Help Requests</TabsTrigger>
@@ -247,13 +252,15 @@ const BoardPageContent = () => {
 
         {/* Right Column: Selected Post Details or Placeholder */}
         {selectedPost ? (
-          <div className="md:col-span-1 flex flex-col">
+          <div className="md:col-span-1 flex flex-col sticky top-20 max-h-[calc(100vh-6rem)] overflow-hidden">
+             {/* Added max-h and overflow-hidden for height constraint */}
             <DynamicPostDetailPanel
               post={selectedPost}
               currentUser={user}
               onClose={() => {
                 setSelectedPost(null);
-                if (searchParams?.get('postId')) {
+                // Only clear URL if it was for the post being closed
+                if (searchParams?.get('postId') === selectedPost.id) {
                     router.replace('/', undefined, { shallow: true });
                 }
               }}
