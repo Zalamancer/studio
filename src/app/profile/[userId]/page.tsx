@@ -35,7 +35,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-
+import { useToast } from "@/hooks/use-toast"; // Added import for useToast
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
@@ -109,9 +109,13 @@ const BusinessProfilePage = () => {
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
        if (!currentUser?.uid || !profileUserId || !IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) || currentUser.uid === profileUserId) {
-         console.error(`%c[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`, "color: red;");
+         console.error(`%c[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions for calling service. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`, "color: red;");
          return 'not_connected';
        }
+       if (!IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) {
+            console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.`);
+            return 'not_connected';
+        }
         console.log(`%c[BusinessProfilePage] Querying connection status between ${currentUser.uid} and ${profileUserId}`, "color: dodgerblue;");
        return getConnectionStatus(currentUser.uid, profileUserId);
     },
@@ -119,7 +123,7 @@ const BusinessProfilePage = () => {
   });
 
   const reviewsQueryEnabled = useMemo(() => {
-    const enabled = !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) && !!currentUser; // Only fetch if user is logged in to see reviews
+    const enabled = !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) && !!currentUser;
     console.log(`%c[BusinessProfilePage] REVIEWS QUERY CHECK:
       - profileUserId: ${profileUserId || 'NULL'}
       - IS_VALID_FIREBASE_UID_REGEX.test(profileUserId): ${profileUserId ? IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) : 'N/A'}
@@ -141,7 +145,7 @@ const BusinessProfilePage = () => {
   const { data: reviewsGivenByThisProfile = [], isLoading: isLoadingReviewsGiven, error: reviewsGivenError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'givenBy'],
     queryFn: () => (profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) ? getReviewsGivenByUserId(profileUserId) : Promise.resolve([]),
-    enabled: reviewsQueryEnabled,
+    enabled: reviewsQueryEnabled, // Same condition as reviews received for simplicity, might optimize later
   });
 
 
@@ -173,16 +177,16 @@ const BusinessProfilePage = () => {
 
       if (histAvg === null) {
         weight = 0.9; // Slightly less weight for new reviewers
-        console.log(`  Review ${index + 1} by ${review.reviewerName}: Rating=${review.rating}, ReviewerHistAvg=NULL, AssignedWeight=${weight.toFixed(1)}`);
+        console.log(`  Review ${index + 1} by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=NULL, AssignedWeight=${weight.toFixed(1)}`);
       } else if (typeof histAvg === 'number') {
-        if (histAvg < 2.5) {
-          weight = 0.6; // Harsh reviewer
-          console.log(`  Review ${index + 1} by ${review.reviewerName}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Harsh), AssignedWeight=${weight.toFixed(1)}`);
-        } else if (histAvg >= 4.0) {
-          weight = 1.1; // Lenient reviewer
-          console.log(`  Review ${index + 1} by ${review.reviewerName}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Lenient), AssignedWeight=${weight.toFixed(1)}`);
+        if (histAvg < 2.5) { // Harsh reviewer
+          weight = 0.6;
+          console.log(`  Review ${index + 1} by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Harsh), AssignedWeight=${weight.toFixed(1)}`);
+        } else if (histAvg >= 4.0) { // Lenient reviewer
+          weight = 1.1;
+          console.log(`  Review ${index + 1} by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Lenient), AssignedWeight=${weight.toFixed(1)}`);
         } else { // Neutral reviewer
-          console.log(`  Review ${index + 1} by ${review.reviewerName}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Neutral), AssignedWeight=${weight.toFixed(1)}`);
+            console.log(`  Review ${index + 1} by ${review.reviewerName || generateAnonymousName(review.reviewerId)}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Neutral), AssignedWeight=${weight.toFixed(1)}`);
         }
       }
       totalWeightedRating += review.rating * weight;
@@ -209,7 +213,7 @@ const BusinessProfilePage = () => {
     mutationFn: async (data: { rating: number; comment: string }) => {
       if (!currentUser || !profileUserId || !IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) throw new Error("User, profile ID missing, or invalid profile ID.");
       
-      const reviewerProfileData = await fetchFullUserProfile(currentUser.uid); // Fetch full profile for mentionName
+      const reviewerProfileData = await fetchFullUserProfile(currentUser.uid);
 
       if (editingReview) {
         const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
@@ -338,8 +342,11 @@ const BusinessProfilePage = () => {
   const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerDisplayNameForTitle;
   
   let nameForConnectionButton = headerDisplayNameForAvatar;
-  // Visibility for companyName is now implicit: if it exists, it's shown.
-  // The ConnectionButton name logic doesn't need to check visibility settings anymore for companyName here.
+  if (viewedUserProfileData.companyName) {
+      nameForConnectionButton = viewedUserProfileData.companyName;
+  } else {
+      nameForConnectionButton = headerDisplayNameForAvatar;
+  }
 
   const canViewDescription = isOwnProfile ||
     !viewedUserProfileData.descriptionVisibility ||
@@ -367,7 +374,7 @@ const BusinessProfilePage = () => {
               </Avatar>
               <div className="flex-grow text-center md:text-left">
                 <CardTitle className="text-3xl font-bold text-foreground">
-                   {headerDisplayNameForTitle}
+                   {displayCompanyNameForAboutHeading}
                 </CardTitle>
                 <div className="flex items-center justify-center md:justify-start gap-x-3 gap-y-1 mt-1 flex-wrap text-sm">
                   {viewedUserProfileData.mentionName && (
@@ -650,3 +657,5 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
+
+    
