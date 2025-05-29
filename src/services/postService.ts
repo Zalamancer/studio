@@ -19,7 +19,7 @@ const postsCollectionRef = collection(db, 'posts');
 
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
-    const requestType = postData.requestType || 'post'; // Default to 'post' if not specified
+    const requestType = postData.requestType || 'post';
 
     const dataForFirestore: { [key: string]: any } = {
       userId: postData.userId,
@@ -36,28 +36,26 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
       requestType: requestType,
       createdAt: serverTimestamp(),
+      commentCount: 0, // Initialize comment count
     };
 
     // Handle description fields based on requestType
     if (requestType === 'help_request') {
-      dataForFirestore.descriptionDetails = postData.descriptionDetails || ""; // Should be validated as non-empty by form
+      dataForFirestore.descriptionDetails = postData.descriptionDetails || "";
       dataForFirestore.descriptionTried = postData.descriptionTried || null;
       dataForFirestore.descriptionOutcome = postData.descriptionOutcome || null;
       dataForFirestore.maxBudget = postData.maxBudget === undefined ? null : postData.maxBudget;
       dataForFirestore.deadline = postData.deadline instanceof Date
         ? Timestamp.fromDate(postData.deadline)
-        : (postData.deadline || null); // Handles if it's already a Timestamp or null
-      dataForFirestore.description = null; // Ensure general description is null for help requests
+        : (postData.deadline || null);
     } else { // 'post' or default
-      dataForFirestore.description = postData.description || null;
-      dataForFirestore.descriptionDetails = null;
-      dataForFirestore.descriptionTried = null;
-      dataForFirestore.descriptionOutcome = null;
+      dataForFirestore.descriptionDetails = postData.descriptionDetails || null; // Primary description for all
+      dataForFirestore.descriptionTried = postData.descriptionTried || null; // Optional for general posts too
+      dataForFirestore.descriptionOutcome = postData.descriptionOutcome || null; // Optional for general posts too
       dataForFirestore.maxBudget = null;
       dataForFirestore.deadline = null;
     }
 
-    // Ensure no undefined values are sent to Firestore (convert to null)
     Object.keys(dataForFirestore).forEach(key => {
       if (dataForFirestore[key] === undefined) {
         dataForFirestore[key] = null;
@@ -100,7 +98,6 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             tags: data.tags || [],
             question: data.question || "",
             requestType: data.requestType || 'post',
-            description: data.description || null,
             descriptionDetails: data.descriptionDetails || null,
             descriptionTried: data.descriptionTried || null,
             descriptionOutcome: data.descriptionOutcome || null,
@@ -116,6 +113,7 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             naicsCode: data.naicsCode || null,
             imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
             mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
+            commentCount: data.commentCount || 0,
        } as Post;
     });
     console.log(`[postService] Fetched ${posts.length} posts from Firestore.`);
@@ -178,7 +176,6 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         tags: data.tags || [],
         question: data.question || "",
         requestType: data.requestType || 'post',
-        description: data.description || null,
         descriptionDetails: data.descriptionDetails || null,
         descriptionTried: data.descriptionTried || null,
         descriptionOutcome: data.descriptionOutcome || null,
@@ -194,6 +191,7 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         naicsCode: data.naicsCode || null,
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
         mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
+        commentCount: data.commentCount || 0,
       } as Post;
     });
 

@@ -1,17 +1,15 @@
-
+// src/components/board-page/PostCard.tsx
 "use client";
 
 import React from 'react';
-import { Card, CardHeader } from "@/components/ui/card";
+import { Card, CardHeader, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Image from 'next/image';
 import { Timestamp } from 'firebase/firestore';
 import { cn } from "@/lib/utils";
 import type { Post } from '@/types/post';
 import { TextWithMentions } from './TextWithMentions';
-import { HandHelping, DollarSign, Star } from 'lucide-react';
-
-const IS_UID_REGEX_POST_CARD = /^[a-zA-Z0-9]{20,}$/;
+import { HandHelping, DollarSign, Star, MessageSquare } from 'lucide-react'; // Added MessageSquare
 
 interface PostCardProps {
   post: Post;
@@ -22,11 +20,13 @@ interface PostCardProps {
 export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isSelected }) => {
   const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
-    : post.createdAt && typeof (post.createdAt as any)?.seconds === 'number'
+    : typeof (post.createdAt as any)?.seconds === 'number'
     ? new Timestamp((post.createdAt as any).seconds, (post.createdAt as any).nanoseconds).toDate().toLocaleDateString()
     : typeof post.createdAt === 'number'
     ? new Date(post.createdAt).toLocaleDateString()
     : 'Date unavailable';
+
+  const descriptionToShow = post.requestType === 'help_request' ? post.descriptionDetails : post.descriptionDetails; // Use descriptionDetails for both for consistency
 
   return (
     <Card
@@ -40,14 +40,14 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onOpen(post)}
     >
-      <CardHeader className="p-4">
+      <CardHeader className="p-4 pb-3">
         <div className="flex flex-wrap items-center gap-2 mb-2">
           {post.requestType === 'help_request' && (
             <Badge variant="outline" className="text-xs cursor-default border-amber-500 text-amber-600 bg-amber-500/10">
               <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
             </Badge>
           )}
-          {post.requestType === 'help_request' && post.maxBudget != null && ( // Changed from paymentAmount
+          {post.requestType === 'help_request' && post.maxBudget != null && (
             <Badge variant="secondary" className="text-xs cursor-default">
               <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
             </Badge>
@@ -59,14 +59,10 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
           ))}
         </div>
         <h3 className="text-base font-semibold leading-snug text-card-foreground line-clamp-3">{post.question}</h3>
-         {post.ratingScore != null && (
-          <div className="flex items-center text-xs text-muted-foreground mt-1">
-            <Star className={cn("h-3.5 w-3.5 mr-1", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
-            <span>{post.ratingScore.toFixed(1)}/5</span>
-          </div>
-        )}
+      </CardHeader>
+      <CardContent className="p-4 pt-0">
         {post.imageUrls && post.imageUrls.length > 0 && (
-          <div className="mt-2 rounded-md overflow-hidden aspect-[3/4] relative">
+          <div className="mb-3 rounded-md overflow-hidden aspect-[3/4] relative">
             <Image
               src={post.imageUrls[0]}
               alt={post.question}
@@ -77,26 +73,28 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
             />
           </div>
         )}
-        {/* Conditional rendering for descriptions */}
-        {post.requestType === 'help_request' ? (
-          post.descriptionDetails && (
-            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-              <TextWithMentions text={post.descriptionDetails} mentionedUserIds={post.mentionedUserIds || []} />
-            </p>
-          )
-        ) : (
-          post.description && (
-            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-              <TextWithMentions text={post.description} mentionedUserIds={post.mentionedUserIds || []} />
-            </p>
-          )
+        {descriptionToShow && (
+          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+            <TextWithMentions text={descriptionToShow} mentionedUserIds={post.mentionedUserIds || []} />
+          </p>
         )}
-        <p className="mt-2 text-xs text-muted-foreground/80">
-          Posted: {postDate}
-        </p>
-      </CardHeader>
+        <div className="flex items-center justify-between text-xs text-muted-foreground/80">
+          <span>Posted: {postDate}</span>
+          <div className="flex items-center gap-2">
+            {post.ratingScore != null && (
+              <div className="flex items-center">
+                <Star className={cn("h-3.5 w-3.5 mr-0.5", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
+                <span>{post.ratingScore.toFixed(1)}</span>
+              </div>
+            )}
+            <div className="flex items-center">
+                <MessageSquare className="h-3.5 w-3.5 mr-0.5" />
+                <span>{post.commentCount || 0}</span>
+            </div>
+          </div>
+        </div>
+      </CardContent>
     </Card>
   );
 });
 PostCard.displayName = 'PostCard';
-

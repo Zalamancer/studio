@@ -6,33 +6,35 @@ export interface Post {
   userId: string; // ID of the user who created the post
   tags: string[];
   question: string;
-  requestType: 'post' | 'help_request'; // Now non-optional, will default in form
+  requestType: 'post' | 'help_request'; // Now non-optional
 
-  // For requestType 'post'
-  description?: string | null;
-
-  // For requestType 'help_request'
-  descriptionDetails?: string | null; // This will be mandatory if requestType is 'help_request'
+  // Primary description field for all post types
+  descriptionDetails?: string | null; // Previously only for help_request, now primary
+  // Optional detailed fields, applicable more to help_request but can be used by 'post' too
   descriptionTried?: string | null;
   descriptionOutcome?: string | null;
-  maxBudget?: number | null;       // Optional for help_request
-  deadline?: Date | null;          // Optional for help_request, Stored as Date on client
+
+  // Fields more specific to 'help_request', optional for 'post'
+  maxBudget?: number | null;
+  deadline?: Date | null; // Stored as Date on client, Timestamp in Firestore
 
   // Common fields
   sector: string;
   subSector?: string | null;
   industry?: string | null;
-  businessType: string; // Consider making this optional or providing defaults
-  safetyIndicator: 'High' | 'Medium' | 'Low'; // Consider defaults
+  businessType: string;
+  safetyIndicator: 'High' | 'Medium' | 'Low';
   ratingScore: number;
   createdAt: Timestamp;
   naicsCode?: string | null;
   imageUrls?: string[];
   mentionedUserIds?: string[];
+  commentCount?: number; // Optional: to keep track of comments
 }
 
 // Type for data being added
-export type NewPostData = Omit<Post, 'id' | 'createdAt' | 'deadline'> & {
+// The old 'description' field is removed. 'descriptionDetails' is the new primary.
+export type NewPostData = Omit<Post, 'id' | 'createdAt' | 'deadline' | 'description'> & {
   createdAt?: Timestamp; // Allow serverTimestamp
   deadline?: Date | Timestamp | null; // Allow Date from client, convert to Timestamp in service, or null
 };
@@ -57,6 +59,7 @@ export interface ClientBid extends Omit<Bid, 'timestamp'> {
 }
 
 // --- Sector, SubSector, Industry Types ---
+// These are defined in MainLayout.tsx but re-exporting or centralizing them could be good
 export interface Industry {
   name: string;
   code: string;
