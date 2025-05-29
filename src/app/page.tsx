@@ -1,4 +1,4 @@
-// src/app/page.tsx
+
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -8,29 +8,39 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
+  Card,
+  CardContent,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
-  // AlertDialogFooter, // No longer needed here as it's in PostDetailPanel
+  AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import { useForm } from 'react-hook-form';
 import {
-  Loader2, Trash2, MessageSquare, Sparkles, HandHelping, Briefcase,
-  X, DollarSign, CalendarDays, Star, Link as LinkIcon, AtSign, CornerDownRight, Eye, User, FileText, Compass, Home, Network, Info
+  Loader2, Trash2, MessageSquare, Sparkles, HandHelping, Briefcase, Link as LinkIcon,
+  X, DollarSign, CalendarDays, Star, User, FileText, Compass, Home, Network, Info, CornerDownRight, Send, AtSign
 } from "lucide-react";
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { addBidToPost, getBidsForPost } from '@/services/bidService';
 import type { ClientBid, NewBidData } from '@/types/bid';
 import { formatDistanceToNow } from 'date-fns';
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"; // Removed FormLabel, using Label directly
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 import { cn } from "@/lib/utils";
@@ -41,26 +51,35 @@ import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postS
 import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService';
+import { ConnectionButton } from '@/components/ConnectionButton';
+import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService';
+import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
+import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
+import type { UserProfileBasic } from '@/types/connection';
 import { availableTags } from '@/components/layout/MainLayout';
-import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
-
-import { PostCard } from '@/components/board-page/PostCard';
 import dynamic from 'next/dynamic';
 
+// Helper for TextWithMentions - moved here for self-containment within page.tsx scope if needed
+// but ideally this could be a shared utility if TextWithMentions becomes shared.
+// const IS_UID_REGEX_PAGE = /^[a-zA-Z0-9]{20,28}$/;
+
+// --- PostDetailPanel dynamic import ---
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
   {
     loading: () => (
-      <div className="md:col-span-1 flex justify-center items-center p-8 bg-card border rounded-lg shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)]">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="ml-3 text-muted-foreground">Loading details...</p>
+      <div className="md:col-span-1 flex justify-center items-center p-8">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
       </div>
     ),
     ssr: false
   }
 );
 
+
+// Main Board Page Component
 const BoardPageContent = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -72,7 +91,7 @@ const BoardPageContent = () => {
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
-  // Fetch all posts
+  // --- Data Fetching ---
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
     queryFn: getPostsFromFirestore,
@@ -80,7 +99,7 @@ const BoardPageContent = () => {
     refetchOnWindowFocus: true,
   });
 
-  // Post Deletion
+  // --- Post Deletion Logic ---
   const deletePostMutation = useMutation({
     mutationFn: deletePostFromFirestore,
     onSuccess: (_, postId) => {
@@ -106,51 +125,50 @@ const BoardPageContent = () => {
       return;
     }
     deletePostMutation.mutate(postId);
-  }, [user, deletePostMutation, toast]); // Removed queryClient and selectedPost as they are handled in mutation callbacks or not direct deps
+  }, [user, deletePostMutation, toast]);
 
+  // --- Post Selection & URL Handling ---
   const openPostCallback = useCallback((postToOpen: Post) => {
-    console.log("[BoardPageContent] openPostCallback triggered for post:", postToOpen.id);
     if (selectedPost && selectedPost.id === postToOpen.id) {
-      console.log("[BoardPageContent] Deselecting post:", postToOpen.id);
       setSelectedPost(null);
-      // If the current URL has this postId, clear it
+      // If closing the currently URL-selected post, clear the URL
       if (searchParams?.get('postId') === postToOpen.id) {
         router.replace('/', undefined, { shallow: true });
       }
     } else {
-      console.log("[BoardPageContent] Selecting post:", postToOpen.id);
       setSelectedPost(postToOpen);
-      // Update URL to reflect selected post without full reload, only if not already set
-      // This helps if the panel is opened by direct click rather than URL
+      // Update URL if not already matching, but don't push if it's already the one from URL
       if (searchParams?.get('postId') !== postToOpen.id) {
         router.push(`/?postId=${postToOpen.id}`, { scroll: false });
       }
     }
   }, [selectedPost, router, searchParams]);
 
-
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
-    console.log(`[BoardPageContent] URL Effect - postIdFromUrl: ${postIdFromUrl}, posts.length: ${posts.length}, currentSelectedPostId: ${selectedPost?.id}`);
-
     if (postIdFromUrl && posts.length > 0) {
+      // Only try to open if no post is selected or if the selected post doesn't match the URL
+      // This prevents re-opening if the user manually closed it while the URL param was still there
       if (!selectedPost || selectedPost.id !== postIdFromUrl) {
         const postToOpen = posts.find(p => p.id === postIdFromUrl);
         if (postToOpen) {
-          console.log("[BoardPageContent] URL Effect: Opening post from URL:", postToOpen.id);
           setSelectedPost(postToOpen);
-          // No need to clear URL here, sheet closure should handle it if it was URL-opened
+          // Don't clear URL here immediately; let user interaction (closing sheet) handle it
+          // or a separate effect that cleans up if selectedPost becomes null and URL still has postId
         } else {
-          console.warn("[BoardPageContent] URL Effect: PostId from URL not found:", postIdFromUrl);
           toast({ variant: "destructive", title: "Post Not Found", description: "The requested post could not be found or is no longer available." });
-          router.replace('/', undefined, { shallow: true });
+          router.replace('/', undefined, { shallow: true }); // Clean URL if post not found
         }
       }
+    } else if (!postIdFromUrl && selectedPost) {
+      // If URL is cleared but a post is still selected (e.g. user navigated back), deselect it
+      // This scenario might need refinement based on desired UX for back button
+      // setSelectedPost(null);
     }
-    // This effect should primarily react to URL changes or posts loading.
-    // selectedPost is removed to prevent re-opening loops if not handled carefully by the onOpenChange of the panel itself.
-  }, [searchParams, posts, router, toast]);
+  }, [searchParams, posts, router, toast, selectedPost]); // Added selectedPost to deps for robustness
 
+
+  // --- Filtering and Display Logic ---
   const handleTagClick = useCallback((tag: string) => {
     setSelectedTags(prevTags =>
       prevTags.includes(tag)
@@ -177,12 +195,12 @@ const BoardPageContent = () => {
   );
 
   const opportunitiesPosts = useMemo(() =>
-    filteredPostsByTags.filter(post => post.requestType === 'post' || !post.requestType),
+    filteredPostsByTags.filter(post => post.requestType === 'post' || !post.requestType), // Default to 'post' if type is missing
     [filteredPostsByTags]
   );
 
   const renderPosts = useCallback((postsToRender: Post[]) => (
-    <div className="columns-1 md:columns-2 gap-4 space-y-4">
+    <div className="columns-1 sm:columns-2 gap-4 space-y-4"> {/* Changed to 2 columns for md and up */}
       {postsToRender.length > 0 ? (
         postsToRender.map((post) => (
           <PostCard
@@ -201,6 +219,7 @@ const BoardPageContent = () => {
       )}
     </div>
   ), [isLoadingPosts, selectedTags, openPostCallback, selectedPost?.id]);
+
 
   // Main Return
   return (
@@ -250,31 +269,34 @@ const BoardPageContent = () => {
         </div>
 
         {/* Right Column: Selected Post Details or Placeholder */}
-        <div className="md:col-span-1 relative"> {/* Added relative for sticky positioning context */}
-          {selectedPost ? (
+        {selectedPost ? (
+          <div className="md:col-span-1 flex flex-col mt-8 md:mt-0"> {/* Add margin top for mobile, none for desktop */}
             <DynamicPostDetailPanel
               post={selectedPost}
               currentUser={user}
               onClose={() => {
                 setSelectedPost(null);
-                // Only clear URL if it was for this post
+                // Clear URL only if it matches the selected post, to avoid clearing other potential params
                 if (searchParams?.get('postId') === selectedPost.id) {
-                    router.replace('/', undefined, { shallow: true });
+                  router.replace('/', undefined, { shallow: true });
                 }
               }}
               onDelete={handleDeletePost}
+              deletePostMutationIsPending={deletePostMutation.isPending}
             />
-          ) : (
-            <div className="hidden md:flex md:flex-col md:items-center md:justify-center h-full border rounded-lg bg-card/50 text-muted-foreground p-8 sticky top-20 max-h-[calc(100vh-6.5rem)]"> {/* Adjusted max-h */}
-              <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
-              <p className="text-lg">Select a post to view details</p>
-              <p className="text-sm mt-1">Details will appear here once you click on a post from the list.</p>
-            </div>
-          )}
-        </div>
+          </div>
+        ) : (
+          <div className="hidden md:flex md:col-span-1 flex-col items-center justify-center p-8 border rounded-lg bg-card/50 text-muted-foreground sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)]">
+            <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
+            <p className="text-lg">Select a post to view details</p>
+            <p className="text-sm mt-1">Details will appear here once you click on a post from the list.</p>
+          </div>
+        )}
       </div>
     </div>
   );
 };
 
 export default BoardPageContent;
+
+    
