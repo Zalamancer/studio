@@ -1,5 +1,5 @@
 // src/types/post.ts
-import type { Timestamp } from 'firebase/firestore';
+import type { Timestamp, FieldValue } from 'firebase/firestore';
 
 export interface Post {
   id: string; // Firestore uses string IDs for documents
@@ -8,9 +8,8 @@ export interface Post {
   question: string;
   requestType: 'post' | 'help_request'; // Now non-optional
 
-  // Primary description field for all post types
-  descriptionDetails?: string | null; // Previously only for help_request, now primary
-  // Optional detailed fields, applicable more to help_request but can be used by 'post' too
+  // Tabbed description fields for all post types
+  descriptionDetails: string | null; // Primary description, mandatory via form schema
   descriptionTried?: string | null;
   descriptionOutcome?: string | null;
 
@@ -29,37 +28,36 @@ export interface Post {
   naicsCode?: string | null;
   imageUrls?: string[];
   mentionedUserIds?: string[];
-  commentCount?: number; // Optional: to keep track of comments
+  commentCount?: number;
 }
 
 // Type for data being added
-// The old 'description' field is removed. 'descriptionDetails' is the new primary.
-export type NewPostData = Omit<Post, 'id' | 'createdAt' | 'deadline' | 'description'> & {
-  createdAt?: Timestamp; // Allow serverTimestamp
+export type NewPostData = Omit<Post, 'id' | 'createdAt' | 'deadline'> & {
+  createdAt?: FieldValue; // Allow serverTimestamp
   deadline?: Date | Timestamp | null; // Allow Date from client, convert to Timestamp in service, or null
 };
 
 
 // --- Bid System ---
+// (Bid types remain unchanged from previous definitions)
 export interface Bid {
-  id: string; // Firestore document ID
-  postId: string; // ID of the help request post this bid is for
-  bidderId: string; // UID of the user making the bid
-  bidderName?: string; // Anonymous name for display
+  id: string;
+  postId: string;
+  bidderId: string;
+  bidderName?: string;
   bidderAvatar?: string;
   bidAmount: number;
-  bidMessage?: string; // Optional message accompanying the bid
-  timestamp: Timestamp; // Firestore Timestamp when bid was placed
+  bidMessage?: string;
+  timestamp: Timestamp;
 }
 
 export type NewBidData = Omit<Bid, 'id' | 'timestamp' | 'bidderName' | 'bidderAvatar'>;
 
 export interface ClientBid extends Omit<Bid, 'timestamp'> {
-  timestamp: number; // Milliseconds since epoch
+  timestamp: number;
 }
 
 // --- Sector, SubSector, Industry Types ---
-// These are defined in MainLayout.tsx but re-exporting or centralizing them could be good
 export interface Industry {
   name: string;
   code: string;

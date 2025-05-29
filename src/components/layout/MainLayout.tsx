@@ -1,7 +1,7 @@
 // src/components/layout/MainLayout.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -23,28 +23,43 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, Settings, User, Bell, Factory, Handshake, HelpCircle } from "lucide-react";
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, Settings, User, Bell, HandHelping, Lightbulb, Handshake } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import type { CreatePostFormData, CreatePostFormProps, SectorWithSubSectors as CreatePostSectorType, SubSector as CreatePostSubSectorType, Industry as CreatePostIndustryType } from '@/components/CreatePostForm';
-// RequestHelpForm and RequestHelpFormData are no longer needed as we consolidate
-import type { NewPostData, SectorWithSubSectors as PostSectorType, SubSector as PostSubSectorType, Industry as PostIndustryType } from '@/types/post';
-import { addPostToFirestore, getPostsFromFirestore } from '@/services/postService';
+import type {
+  CreatePostFormData,
+  CreatePostFormProps, // Ensure CreatePostFormProps is imported if used for dynamic import typing
+  SectorWithSubSectors as CreatePostSectorType, // Rename to avoid conflict
+  SubSector as CreatePostSubSectorType,
+  Industry as CreatePostIndustryType
+} from '@/components/CreatePostForm';
+import type {
+  NewPostData,
+  SectorWithSubSectors as PostSectorType, // Rename to avoid conflict
+  SubSector as PostSubSectorType,
+  Industry as PostIndustryType
+} from '@/types/post'; // Ensure this is correct
+import { addPostToFirestore } from '@/services/postService';
 import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { getReviewsForProfile } from '@/services/reviewService';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
 import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
+import { getReviewsForProfile } from '@/services/reviewService';
+
 
 // Re-exporting the types locally if they are used by forms imported here
-export type { SectorWithSubSectors, SubSector, Industry } from '@/types/post';
+// Or ideally, have a central types definition for sectors if used in multiple places.
+export interface Industry extends PostIndustryType {}
+export interface SubSector extends PostSubSectorType {}
+export interface SectorWithSubSectors extends PostSectorType {}
 
-export const detailedSectorsData: PostSectorType[] = [
+
+export const detailedSectorsData: SectorWithSubSectors[] = [
   {
     name: "Agriculture, Forestry, Fishing and Hunting", code: "11",
     description: "Growing crops, raising animals, harvesting timber, and fishing.",
@@ -359,7 +374,6 @@ export default function MainLayout({
   const queryClient = useQueryClient();
 
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  // State and handlers for the "Request Help" dialog are removed
 
   useEffect(() => {
     const setVisualViewportHeight = () => {
@@ -401,23 +415,27 @@ export default function MainLayout({
         if (reviews && reviews.length > 0) {
           const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
           currentRatingScore = totalRating / reviews.length;
-          console.log(`%c[MainLayout] addPostMutation: Calculated totalRating: ${totalRating}, currentRatingScore: ${currentRatingScore}`, "color: #FF00FF;");
+          console.log(`%c[MainLayout] addPostMutation: Calculated totalRating: ${totalRating}, currentRatingScore: ${currentRatingScore.toFixed(1)}`, "color: #FF00FF;");
         } else {
           console.log(`%c[MainLayout] addPostMutation: No reviews found for user ${user.uid}. Rating score remains 0.`, "color: #FF00FF;");
         }
       } catch (ratingError: any) {
         console.error("[MainLayout] addPostMutation: Error fetching reviews for rating score:", ratingError.message, ratingError);
+        // Do not throw, proceed with rating 0
       }
       console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score before post: ${currentRatingScore}`, "color: magenta;");
+
 
       let uploadedImageUrls: string[] = [];
       if (formData.imageFile) {
         try {
+          console.log("[MainLayout] addPostMutation: Uploading image...");
           const singleUploadedUrl = await uploadPostImage(formData.imageFile, user.uid);
           if (singleUploadedUrl) uploadedImageUrls.push(singleUploadedUrl);
+          console.log("[MainLayout] addPostMutation: Image uploaded, URL:", singleUploadedUrl);
         } catch (uploadError) {
           console.error("[MainLayout] Image upload failed in mutationFn:", uploadError);
-          throw uploadError;
+          throw uploadError; // Re-throw to be caught by mutation's onError
         }
       }
 
@@ -425,29 +443,28 @@ export default function MainLayout({
       const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
       const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
 
-      const postDataForFirestore: NewPostData = {
+      const postDataForService: NewPostData = {
         userId: user.uid,
         question: formData.question,
+        requestType: formData.requestType,
+        descriptionDetails: formData.descriptionDetails, // Always pass this
+        descriptionTried: formData.descriptionTried || null,
+        descriptionOutcome: formData.descriptionOutcome || null,
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || formData.subSector || null,
         industry: industryDetails?.name || formData.industry || null,
         naicsCode: formData.industry || formData.subSector || formData.sector || null,
-        businessType: "Startup", // Default or consider adding to form
-        safetyIndicator: "Medium", // Default or consider adding to form
-        ratingScore: currentRatingScore,
+        businessType: "Startup", // Example, consider adding to form
+        safetyIndicator: "Medium", // Example
+        ratingScore: parseFloat(currentRatingScore.toFixed(1)), // Store as number
         imageUrls: uploadedImageUrls,
         mentionedUserIds: formData.mentionedUserIds || [],
-        requestType: formData.requestType, // This comes from the form
-        description: formData.requestType === 'post' ? formData.description : null,
-        descriptionDetails: formData.requestType === 'help_request' ? formData.descriptionDetails : null,
-        descriptionTried: formData.requestType === 'help_request' ? formData.descriptionTried : null,
-        descriptionOutcome: formData.requestType === 'help_request' ? formData.descriptionOutcome : null,
-        maxBudget: formData.requestType === 'help_request' && formData.maxBudget ? parseFloat(formData.maxBudget) : null,
-        deadline: formData.requestType === 'help_request' ? formData.deadline : null,
+        maxBudget: formData.requestType === 'help_request' ? formData.maxBudget : null,
+        deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
       };
-      console.log(`%c[MainLayout] addPostMutation: Post data PREPARED. RatingScore: ${currentRatingScore}. RequestType: ${postDataForFirestore.requestType}. Data:`, "color: #FF00FF;", postDataForFirestore);
-      return addPostToFirestore(postDataForFirestore);
+      console.log(`%c[MainLayout] addPostMutation: Post data PREPARED. RatingScore: ${postDataForService.ratingScore}. RequestType: ${postDataForService.requestType}. Data:`, "color: #FF00FF;", postDataForService);
+      return addPostToFirestore(postDataForService);
     },
     onSuccess: (newlyCreatedPostId, variables) => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
@@ -457,9 +474,9 @@ export default function MainLayout({
       setIsCreatePostOpen(false); // Close the unified dialog
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        const descriptionSource = variables.requestType === 'help_request' ? variables.descriptionDetails : variables.description;
+        const descriptionSource = variables.descriptionDetails; // Always use descriptionDetails as source
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) {
+          if (mentionedUid !== user.uid) { // Don't notify self for own mention
             try {
               await createNotification({
                 userId: mentionedUid,
@@ -477,11 +494,13 @@ export default function MainLayout({
         });
       }
     },
-    onError: (error: Error) => {
+    onError: (error: Error, variables) => {
       console.error("[MainLayout] addPostMutation onError:", error);
-      toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit: ${error.message}.` });
+      toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.` });
+      // setIsCreatePostOpen(false); // Keep dialog open on error
     },
   });
+
 
   const handleCreatePostSubmit = useCallback(
     async (formData: CreatePostFormData) => {
@@ -492,7 +511,7 @@ export default function MainLayout({
       console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       addPostMutation.mutate(formData);
     },
-    [user, toast, addPostMutation, queryClient] // queryClient might not be needed here if mutation handles invalidation
+    [user, toast, addPostMutation, queryClient]
   );
 
   const handleLogout = async () => {
@@ -513,12 +532,11 @@ export default function MainLayout({
 
   return (
     <div className={rootLayoutClasses}>
-      {!pathname.startsWith('/contracts') || !isMobile ? (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
               <div className="mr-4 hidden md:flex">
                 <Link href="/" className="mr-6 flex items-center space-x-2">
-                  <Factory className="h-6 w-6 text-primary" />
+                  <Handshake className="h-6 w-6 text-primary" />
                   <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
                     AnonyCollab
                   </span>
@@ -547,18 +565,24 @@ export default function MainLayout({
                   </div>
                 ) : user ? (
                   <>
-                    <Dialog open={isCreatePostOpen} onOpenChange={setIsCreatePostOpen}>
+                    <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
+                        setIsCreatePostOpen(open);
+                        if (!open) {
+                            // Optionally reset form state here if CreatePostForm doesn't do it internally
+                        }
+                    }}>
                     <DialogTrigger asChild>
                         <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
                         <PlusCircle className="mr-2 h-4 w-4" />
                         Create Post
                       </Button>
                     </DialogTrigger>
+                    {/* "Request Help" button removed, functionality merged into "Create Post" */}
                     <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
                       <DialogHeader className="p-6 pb-4 border-b">
-                        <DialogTitle>Create New Post / Request Help</DialogTitle>
+                        <DialogTitle>Create New Post</DialogTitle>
                         <DialogDescription>
-                          Share your question or need with the community. Select the type of post you want to create.
+                          Share your question, idea, or request help from the community. Select the type of post you want to create.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
@@ -601,6 +625,9 @@ export default function MainLayout({
                         <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
                           <Link href="/settings/profile" className="w-full cursor-pointer"><Settings className="mr-2 h-4 w-4" /><span>Settings</span></Link>
                         </DropdownMenuItem>
+                         <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                          <Link href="/subscription" className="w-full cursor-pointer"><CreditCard className="mr-2 h-4 w-4"/><span>Subscription</span></Link>
+                        </DropdownMenuItem>
                         <DynamicThemeToggle />
                         <DropdownMenuSeparator />
                         <DropdownMenuItem onClick={handleLogout} className="cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
@@ -616,16 +643,14 @@ export default function MainLayout({
               </div>
             </div>
           </header>
-        ) : null}
 
         <main className={cn(
           "flex-1 flex flex-col",
-          isMobile && pathname.startsWith('/contracts') ? "h-full" : "pb-16 md:pb-0"
+           "pb-16 md:pb-0" // Always apply bottom padding for mobile nav space
         )}>
           {children}
         </main>
 
-        {(!pathname.startsWith('/contracts') || !isMobile) && (
           <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14 md:hidden">
             <div className="container mx-auto flex justify-around items-center h-full">
               {navItems.map((item) => (
@@ -643,7 +668,6 @@ export default function MainLayout({
               ))}
             </div>
           </nav>
-        )}
     </div>
   );
 }

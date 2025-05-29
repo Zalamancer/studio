@@ -12,6 +12,7 @@ import {
   deleteDoc,
   doc,
   where,
+  FieldValue,
 } from 'firebase/firestore';
 import type { Post, NewPostData } from '@/types/post';
 
@@ -19,8 +20,6 @@ const postsCollectionRef = collection(db, 'posts');
 
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
-    const requestType = postData.requestType || 'post';
-
     const dataForFirestore: { [key: string]: any } = {
       userId: postData.userId,
       question: postData.question,
@@ -34,28 +33,28 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       ratingScore: postData.ratingScore || 0,
       imageUrls: Array.isArray(postData.imageUrls) ? postData.imageUrls : [],
       mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
-      requestType: requestType,
+      requestType: postData.requestType, // This is now always coming from the form
       createdAt: serverTimestamp(),
-      commentCount: 0, // Initialize comment count
+      commentCount: 0,
+
+      // Always include the tabbed description fields
+      descriptionDetails: postData.descriptionDetails || "", // Ensure empty string if not provided but was expected
+      descriptionTried: postData.descriptionTried || null,
+      descriptionOutcome: postData.descriptionOutcome || null,
     };
 
-    // Handle description fields based on requestType
-    if (requestType === 'help_request') {
-      dataForFirestore.descriptionDetails = postData.descriptionDetails || "";
-      dataForFirestore.descriptionTried = postData.descriptionTried || null;
-      dataForFirestore.descriptionOutcome = postData.descriptionOutcome || null;
+    // Fields specific to 'help_request'
+    if (postData.requestType === 'help_request') {
       dataForFirestore.maxBudget = postData.maxBudget === undefined ? null : postData.maxBudget;
       dataForFirestore.deadline = postData.deadline instanceof Date
         ? Timestamp.fromDate(postData.deadline)
-        : (postData.deadline || null);
-    } else { // 'post' or default
-      dataForFirestore.descriptionDetails = postData.descriptionDetails || null; // Primary description for all
-      dataForFirestore.descriptionTried = postData.descriptionTried || null; // Optional for general posts too
-      dataForFirestore.descriptionOutcome = postData.descriptionOutcome || null; // Optional for general posts too
+        : (postData.deadline || null); // Ensure it's null if undefined
+    } else {
       dataForFirestore.maxBudget = null;
       dataForFirestore.deadline = null;
     }
 
+    // Clean undefined before sending to Firestore
     Object.keys(dataForFirestore).forEach(key => {
       if (dataForFirestore[key] === undefined) {
         dataForFirestore[key] = null;
@@ -98,7 +97,7 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             tags: data.tags || [],
             question: data.question || "",
             requestType: data.requestType || 'post',
-            descriptionDetails: data.descriptionDetails || null,
+            descriptionDetails: data.descriptionDetails || null, // Main description
             descriptionTried: data.descriptionTried || null,
             descriptionOutcome: data.descriptionOutcome || null,
             maxBudget: data.maxBudget === undefined ? null : data.maxBudget,
@@ -120,7 +119,7 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
     return posts;
   } catch (error: any) {
     if (error.code === 'permission-denied') {
-        console.warn(`[postService] getPostsFromFirestore: Permission denied when fetching posts. Returning empty array. Details: ${error.message}`);
+        console.warn(`[postService] getPostsFromFirestore: Permission denied. Returning empty. Rules: allow read: if true;`, error.message);
         return [];
     }
     console.error('[postService] Error fetching posts from Firestore:', error);
@@ -162,10 +161,7 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
       limit(20)
     );
 
-    console.log("[postService] Executing Firestore query for user's posts...");
     const querySnapshot = await getDocs(q);
-    console.log(`[postService] Query snapshot received. Found ${querySnapshot.docs.length} posts for user ${userId}.`);
-
     const posts = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
       const createdAt = data.createdAt instanceof Timestamp ? data.createdAt : Timestamp.now();
@@ -176,7 +172,7 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         tags: data.tags || [],
         question: data.question || "",
         requestType: data.requestType || 'post',
-        descriptionDetails: data.descriptionDetails || null,
+        descriptionDetails: data.descriptionDetails || null, // Main description
         descriptionTried: data.descriptionTried || null,
         descriptionOutcome: data.descriptionOutcome || null,
         maxBudget: data.maxBudget === undefined ? null : data.maxBudget,
@@ -194,13 +190,12 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         commentCount: data.commentCount || 0,
       } as Post;
     });
-
     console.log(`[postService] Successfully mapped ${posts.length} posts for user ${userId}`);
     return posts;
 
   } catch (error: any) {
     if (error.code === 'permission-denied') {
-      console.warn(`[postService] getPostsByUserId: Permission denied fetching posts for user ${userId}. Returning empty array. Details: ${error.message}`);
+      console.warn(`[postService] getPostsByUserId: Permission denied for user ${userId}. Returning empty.`, error.message);
       return [];
     }
     console.error(`[postService] Error fetching posts for user ${userId}:`, error);
