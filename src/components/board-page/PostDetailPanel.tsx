@@ -14,29 +14,50 @@ import type { User as FirebaseUser } from 'firebase/auth';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
+import { Input } from "@/components/ui/input";
+import { Label } from '@/components/ui/label'; // Ensure Label is imported
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Send, DollarSign, HandHelping, User, MessageSquare } from 'lucide-react';
+import { Loader2, Send, DollarSign, HandHelping, User, MessageSquare, X, Info, TooltipIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_COMPONENT } from '@/lib/utils';
 import { extractMentionedUids } from '@/lib/mentionUtils';
-import { addCommentToPost, getCommentsForPost } from '@/services/commentService';
-import type { NewCommentData, ClientComment } from '@/types/comment';
+import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService';
+import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
 import { fetchUserProfileBasic, getSuggestibleUsers, getConnectionStatus } from '@/services/connectionService';
 import type { UserProfileBasic, ConnectionStatus } from '@/types/connection';
 import { addBidToPost, getBidsForPost } from '@/services/bidService';
 import type { ClientBid, NewBidData } from '@/types/bid';
 import { findOrCreateConversation } from '@/services/messagingService';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 import { PostDetailHeader } from './PostDetailHeader';
 import { PostDetailContentBody } from './PostDetailContentBody';
-// PostDetailBidding is integrated below
+import { PostDetailBidding } from './PostDetailBidding';
 import { PostDetailComments } from './PostDetailComments';
-// PostDetailActions was removed
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import { useForm, Form } from "@/components/ui/form"; // Added useForm and Form from ShadCN
+
+
+// Bid Form Schema and Values (if not already defined elsewhere)
+const bidFormSchema = z.object({
+  bidAmount: z.coerce.number().min(0, "Bid amount must be positive or zero.").optional(),
+  bidMessage: z.string().max(300, "Message too long.").optional(),
+});
+type BidFormValues = z.infer<typeof bidFormSchema>;
 
 
 interface PostDetailPanelProps {
@@ -57,9 +78,8 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const router = useRouter();
-  const user = currentUser; // Alias for clarity
+  const user = currentUser;
 
-  // State for New Comment Input
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [newCommentMentionQuery, setNewCommentMentionQuery] = useState('');
@@ -68,7 +88,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
 
-  // State for Inline Bidding
   const [inlineBidAmount, setInlineBidAmount] = useState<string>("");
   const [inlineBidError, setInlineBidError] = useState<string | null>(null);
   const [isProcessingOffer, setIsProcessingOffer] = useState(false);
@@ -87,7 +106,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     enabled: !!post && !!user && showNewCommentSuggestions,
     staleTime: 1000 * 60 * 5,
   });
-  
+
   const newCommentMentionProfilesMap = useMemo(() => {
     const map = new Map<string, UserProfileBasic>();
     if (generalSuggestibleUsers) {
@@ -99,7 +118,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     }
     return map;
   }, [generalSuggestibleUsers, user?.uid]);
-
 
   const addCommentMutation = useMutation({
     mutationFn: (commentDataWithPostId: NewCommentData & { postId: string }) => {
@@ -113,7 +131,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       toast({ title: "Comment Added" });
       if (post) {
         queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
-        queryClient.invalidateQueries({ queryKey: ['posts'] }); 
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
       }
     },
     onError: (error: Error) => {
@@ -141,7 +159,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     };
     addCommentMutation.mutate(commentData);
   }, [user, post, newComment, isSubmittingComment, generalSuggestibleUsers, addCommentMutation, toast, queryClient]);
-
 
   const evaluateNewCommentMentionState = useCallback((text: string, cursorPosition: number) => {
     let activeQuery = null;
@@ -212,19 +229,19 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showNewCommentSuggestions, newCommentSuggestionsPopoverRef, newCommentInputRef]);
-  
+
   const filteredNewCommentSuggestions = useMemo(() => {
     if (!showNewCommentSuggestions) return [];
     if (isLoadingGeneralSuggestions && debouncedNewCommentMentionQuery) {
       return [{ userId: 'loading-main-comment', mentionName: 'loading-main-comment', displayName: 'Loading users...' } as UserProfileBasic];
     }
-    
+
     let source = generalSuggestibleUsers || [];
     if (debouncedNewCommentMentionQuery.trim() === '') {
-       // Show all fetched generalSuggestibleUsers if no query
+      // Show general suggestions if query is empty
     } else {
       const queryLower = debouncedNewCommentMentionQuery.toLowerCase();
-      source = source.filter(p => 
+      source = source.filter(p =>
         p.mentionName.toLowerCase().includes(queryLower) ||
         (p.displayName && p.displayName.toLowerCase().includes(queryLower))
       );
@@ -234,7 +251,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     return source.slice(0, 10);
   }, [showNewCommentSuggestions, isLoadingGeneralSuggestions, generalSuggestibleUsers, debouncedNewCommentMentionQuery]);
 
-  // Bidding Logic
   const { data: bids = [], isLoading: isLoadingBids } = useQuery<ClientBid[], Error>({
     queryKey: ['bids', post?.id],
     queryFn: () => post ? getBidsForPost(post.id) : Promise.resolve([]),
@@ -245,7 +261,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     mutationFn: addBidToPost,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['bids', variables.postId] });
-      toast({ title: "Bid Process Initiated" });
     },
     onError: (error: Error) => {
       toast({ variant: "destructive", title: "Bid Failed", description: error.message });
@@ -263,23 +278,20 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     return bids.find(bid => bid.bidderId === user.uid);
   }, [currentUserHasBid, user, bids]);
 
-  const minimumBidAmount = useMemo(() => {
-    if (!bids || bids.length === 0) return null;
-    return Math.min(...bids.map(bid => bid.bidAmount));
-  }, [bids]);
+  const halfPrice = useMemo(() => post?.maxBudget ? Math.floor(post.maxBudget / 2) : 0, [post?.maxBudget]);
 
   const handleInlineBidChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
     setInlineBidAmount(value);
-    if (value === "") {
+    if (value.trim() === "") {
       setInlineBidError(null);
       return;
     }
-    const numValue = parseFloat(value);
     if (post?.maxBudget == null) {
-        setInlineBidError("Max budget not set for this request.");
-        return;
+      setInlineBidError("Max budget not set for this request.");
+      return;
     }
+    const numValue = parseFloat(value);
     if (isNaN(numValue)) setInlineBidError("Please enter a valid number.");
     else if (numValue < 0) setInlineBidError("Bid cannot be negative.");
     else if (numValue > post.maxBudget) {
@@ -317,122 +329,70 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       postId: post.id,
       bidderId: user.uid,
       bidAmount: parsedBidAmount,
-      bidMessage: `Bid placed: $${parsedBidAmount.toLocaleString()}`,
+      bidMessage: `Bid: $${parsedBidAmount.toLocaleString()}`,
     };
 
     try {
       await addBidMutation.mutateAsync(bidDetails);
       const conversationId = await findOrCreateConversation(user.uid, post.userId, post.id);
       if (conversationId) {
-        toast({ title: "Bid Placed & Conversation Ready", description: "Redirecting to Messages..." });
+        toast({ title: "Offer Sent & Chat Started", description: "Redirecting to Messages..." });
         router.push(`/contracts?conversationId=${conversationId}&postId=${post.id}&initialBidAmount=${parsedBidAmount}`);
         setInlineBidAmount("");
         setInlineBidError(null);
         if (onClose) onClose();
       } else {
-        throw new Error("Failed to initiate conversation after bid.");
+        throw new Error("Failed to initiate conversation after offer.");
       }
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Action Failed", description: error.message || "Could not place bid or start conversation." });
+      toast({ variant: "destructive", title: "Action Failed", description: error.message || "Could not place offer or start conversation." });
     } finally {
       setIsProcessingOffer(false);
     }
   }, [user, post, isProcessingOffer, inlineBidAmount, addBidMutation, router, toast, onClose, queryClient, setInlineBidError]);
 
   const { data: connectionStatus } = useQuery<ConnectionStatus | null>({
-    queryKey: ['connectionStatus', user?.uid, post?.userId],
-    queryFn: () => (user && post?.userId && IS_UID_REGEX_COMPONENT.test(post.userId)) ? getConnectionStatus(user.uid, post.userId) : Promise.resolve(null),
-    enabled: !!user && !!post?.userId && user.uid !== post.userId && IS_UID_REGEX_COMPONENT.test(post.userId),
+    queryKey: ['connectionStatus', currentUser?.uid, post?.userId],
+    queryFn: () => (currentUser && post?.userId && IS_UID_REGEX_COMPONENT.test(post.userId)) ? getConnectionStatus(currentUser.uid, post.userId) : Promise.resolve(null),
+    enabled: !!currentUser && !!post?.userId && currentUser.uid !== post.userId && IS_UID_REGEX_COMPONENT.test(post.userId),
   });
 
   if (!post) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
-  const showBiddingUI = post.requestType === 'help_request' && user && post.userId !== user.uid && post.maxBudget != null;
-  const halfPrice = useMemo(() => post.maxBudget ? Math.floor(post.maxBudget / 2) : 0, [post.maxBudget]);
-
-
   return (
     <TooltipProvider>
       <Card className="flex flex-col flex-1 overflow-hidden sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] border-border rounded-lg shadow-xl bg-card">
         <PostDetailHeader
           post={post}
-          currentUser={user}
+          currentUser={currentUser}
           onClose={onClose}
           onDelete={() => onDelete(post.id)}
           deletePostMutationIsPending={deletePostMutationIsPending}
           connectionStatus={connectionStatus}
         />
-        <ScrollArea className="flex-grow bg-background">
-          <PostDetailContentBody post={post} />
-          {showBiddingUI && !currentUserHasBid && (
-            <div className="px-4 pt-4 mt-4 border-t">
-              <div className="flex justify-between items-center mb-3">
-                 <h4 className="text-md font-semibold flex items-center gap-2">
-                     <DollarSign className="h-5 w-5 text-green-600" /> Bids ({isLoadingBids ? '...' : bids.length})
-                 </h4>
-                  <span className="text-xs text-muted-foreground font-normal">
-                    Min. bid: {bids.length > 0 && minimumBidAmount !== null ? `$${minimumBidAmount.toLocaleString()}` : 'N/A'}
-                  </span>
-              </div>
-              {isLoadingBids ? (
-                <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading bids...</div>
-              ) : bids.length === 0 ? (
-                <p className="text-sm text-muted-foreground italic">No bids placed yet. Be the first!</p>
-              ) : (
-                <div className="max-h-32 space-y-2 pr-1 overflow-y-auto">
-                  {bids.map(bid => (
-                    <Card key={bid.id} className="p-2.5 bg-muted/40 shadow-sm">
-                      <div className="flex items-start gap-2">
-                        <Avatar className="h-7 w-7">
-                          <AvatarImage src={bid.bidderAvatar} alt={bid.bidderName} />
-                          <AvatarFallback className="text-xs">{getInitials(bid.bidderName || 'U')}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-grow min-w-0">
-                          <div className="flex justify-between items-center">
-                            <p className="text-xs font-medium text-foreground truncate">{bid.bidderName}</p>
-                            <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">{formatDistanceToNow(new Date(bid.timestamp), { addSuffix: true })}</p>
-                          </div>
-                          <p className="text-sm font-semibold text-primary">${bid.bidAmount.toLocaleString()}</p>
-                          {bid.bidMessage && <p className="text-xs text-muted-foreground mt-0.5 break-words">{bid.bidMessage}</p>}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-          {currentUserHasBid && currentUserBid && showBiddingUI && (
-             <div className="px-4 pt-4 mt-4 border-t">
-                <h4 className="text-md font-semibold mb-1">Your Current Bid</h4>
-                <Card className="p-3 bg-primary/10 border-primary/30">
-                    <p className="text-lg font-bold text-primary">${currentUserBid.bidAmount.toLocaleString()}</p>
-                    {currentUserBid.bidMessage && <p className="text-sm text-muted-foreground mt-1">{currentUserBid.bidMessage}</p>}
-                    <p className="text-xs text-muted-foreground mt-1">
-                        Placed: {formatDistanceToNow(new Date(currentUserBid.timestamp), { addSuffix: true })}
-                    </p>
-                    {/* Add "Update Bid" / "Retract Bid" buttons here if needed in future */}
-                </Card>
-            </div>
-          )}
-          <PostDetailComments post={post} currentUser={user} />
+        <ScrollArea className="flex-grow bg-background"> {/* Main content scroll */}
+          <div className="p-4 space-y-4"> {/* Added padding here for overall content */}
+            <PostDetailContentBody post={post} />
+            <PostDetailBidding post={post} currentUser={currentUser} bids={bids} isLoadingBids={isLoadingBids} />
+          </div>
+          <PostDetailComments post={post} currentUser={currentUser} />
         </ScrollArea>
 
         <CardFooter className="p-3 border-t bg-card flex-shrink-0 flex-col items-stretch gap-2">
-          {/* Bidding Controls in Footer */}
-          {showBiddingUI && !currentUserHasBid && (
+          {/* Bidding Input Row - Shown if Help Request, not own post, has maxBudget, and user HAS NOT bid */}
+          {user && post.requestType === 'help_request' && post.userId !== user.uid && post.maxBudget != null && !currentUserHasBid && (
             <div className="space-y-2 pt-1">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-2 mb-2 flex-wrap justify-start">
                 <Button
-                  variant="outline"
-                  size="xs"
-                  onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }}
-                  disabled={isProcessingOffer}
-                  className="h-7 px-2 text-xs"
+                    variant="outline"
+                    size="xs"
+                    onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }}
+                    disabled={isProcessingOffer}
+                    className="h-7 px-2 text-xs"
                 >
-                  Bid FREE
+                    Bid FREE
                 </Button>
               </div>
               <div className="flex items-end gap-2">
@@ -443,7 +403,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                   <Input
                     id={`inlineBidAmount-${post.id}`}
                     type="number"
-                    placeholder="Custom amount"
+                    placeholder="Enter bid amount"
                     value={inlineBidAmount}
                     onChange={handleInlineBidChange}
                     className={cn("h-8 text-sm w-full bg-background", inlineBidError && "border-destructive ring-destructive focus-visible:ring-destructive")}
@@ -453,60 +413,58 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                     step="any"
                   />
                 </div>
-                <TooltipProvider>
-                  <Tooltip delayDuration={100}>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={handleOfferHelpAndBid}
-                        disabled={isProcessingOffer || !!inlineBidError || inlineBidAmount.trim() === "" || !user}
-                        className="bg-green-600 hover:bg-green-700 text-white h-8 flex-shrink-0 px-3"
-                      >
-                        {isProcessingOffer ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <HandHelping className="mr-1.5 h-4 w-4" />}
-                        Offer Help & Submit Bid
-                      </Button>
-                    </TooltipTrigger>
-                    {(!!inlineBidError || inlineBidAmount.trim() === "" || !user) && (
-                      <TooltipContent side="top" className="bg-destructive text-destructive-foreground text-xs p-1.5">
-                        <p>{!user ? "Log in to offer help" : (inlineBidError || "Please enter a valid bid amount.")}</p>
-                      </TooltipContent>
-                    )}
-                  </Tooltip>
-                </TooltipProvider>
+                  <TooltipProvider>
+                    <Tooltip delayDuration={100}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={handleOfferHelpAndBid}
+                          disabled={isProcessingOffer || !!inlineBidError || inlineBidAmount.trim() === "" || !user}
+                          className="bg-green-600 hover:bg-green-700 text-white h-8 flex-shrink-0 px-3"
+                        >
+                          {isProcessingOffer ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <HandHelping className="mr-1.5 h-4 w-4" />}
+                          Offer Help & Submit Bid
+                        </Button>
+                      </TooltipTrigger>
+                      {(!!inlineBidError || inlineBidAmount.trim() === "" || !user) && (
+                        <TooltipContent side="top" className="bg-destructive text-destructive-foreground text-xs p-1.5">
+                          <p>{!user ? "Log in to offer help" : (inlineBidError || "Please enter a valid bid amount.")}</p>
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
               </div>
               {inlineBidError && (<p className="text-xs text-destructive mt-1 text-left">{inlineBidError}</p>)}
             </div>
           )}
 
-          {showBiddingUI && currentUserHasBid && (
-             <div className="pt-1">
-                 <TooltipProvider>
-                     <Tooltip delayDuration={100}>
-                         <TooltipTrigger asChild>
-                             <Button
-                                 variant="default"
-                                 size="sm"
-                                 onClick={handleOfferHelpAndBid} // Should actually be handleStartChatAfterBid or similar
-                                 disabled={isProcessingOffer || !user}
-                                 className="bg-green-600 hover:bg-green-700 text-white h-9 w-full"
-                             >
-                                 {isProcessingOffer ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MessageSquare className="mr-1.5 h-4 w-4" />}
-                                 Message About Your Bid
-                             </Button>
-                         </TooltipTrigger>
-                         {!user && (
-                             <TooltipContent side="top" className="bg-destructive text-destructive-foreground text-xs p-1.5">
-                                 <p>Log in to message</p>
-                             </TooltipContent>
-                         )}
-                     </Tooltip>
-                 </TooltipProvider>
-             </div>
+          {/* Offer Help Button (if already bid or not a help request needing a bid, or if own post for some reason - though usually disabled) */}
+          {user && post.userId !== user.uid && (post.requestType !== 'help_request' || currentUserHasBid || post.maxBudget == null) && (
+            <TooltipProvider>
+              <Tooltip delayDuration={100}>
+                <TooltipTrigger asChild>
+                    <Button
+                        variant="default"
+                        size="sm"
+                        onClick={handleOfferHelpAndBid} // Will use existing bid if currentUserHasBid, or trigger conversation for non-help_requests
+                        disabled={isProcessingOffer || !user}
+                        className="bg-green-600 hover:bg-green-700 text-white h-9 w-full"
+                    >
+                        {isProcessingOffer ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <MessageSquare className="mr-1.5 h-4 w-4" />}
+                        {post.requestType === 'help_request' && currentUserHasBid ? "Message About Your Offer" : "Offer Help / Start Chat"}
+                    </Button>
+                </TooltipTrigger>
+                 {!user && (
+                    <TooltipContent side="top" className="bg-destructive text-destructive-foreground text-xs p-1.5">
+                        <p>Log in to offer help</p>
+                    </TooltipContent>
+                 )}
+              </Tooltip>
+            </TooltipProvider>
           )}
 
-
-          {/* Comment Input Area - Always visible if user is logged in */}
+          {/* Comment Input Form */}
           {user && (
             <Popover
               open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && !['loading-main-comment', 'no-users-main-comment', 'no-match-main-comment'].includes(filteredNewCommentSuggestions[0]?.userId)}
@@ -550,9 +508,9 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                 onOpenAutoFocus={(e) => e.preventDefault()}
               >
                 {filteredNewCommentSuggestions.map(profile => {
-                  const displayableName = profile.companyName || profile.mentionName;
-                  const showSecondaryNameLine = profile.companyName && profile.companyName.toLowerCase() !== profile.mentionName.toLowerCase();
-                  
+                  const displayableName = profile.actualDisplayName || profile.companyName || profile.mentionName;
+                  const showSecondaryNameLine = (profile.actualDisplayName || profile.companyName) && (profile.actualDisplayName || profile.companyName)?.toLowerCase() !== profile.mentionName.toLowerCase();
+
                   return (
                     (profile.userId === 'loading-main-comment' || profile.userId === 'no-users-main-comment' || profile.userId === 'no-match-main-comment') ? (
                       <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
@@ -562,7 +520,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                         variant="ghost"
                         size="sm"
                         className="w-full justify-start h-auto px-2 py-1 text-xs"
-                        onMouseDown={(e) => e.preventDefault()} 
+                        onMouseDown={(e) => e.preventDefault()}
                         onClick={() => handleSelectNewCommentSuggestion(profile)}
                       >
                         <Avatar className="h-5 w-5 mr-2">
@@ -589,8 +547,4 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     </TooltipProvider>
   );
 });
-
 PostDetailPanel.displayName = "PostDetailPanel";
-```
-
-I've removed the trailing backticks and corrected the default export name in `src/components/board-page/PostDetailPanel.tsx`. The file should now parse correctly.
