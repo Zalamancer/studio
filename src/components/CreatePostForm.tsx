@@ -41,7 +41,7 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils'; // Import getInitials
+import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 
 
 export interface Industry {
@@ -57,7 +57,7 @@ export interface SubSector {
 export interface SectorWithSubSectors {
   name: string;
   code: string;
-  description?: string; // Optional description for main sector
+  description?: string;
   subSectors: SubSector[];
 }
 
@@ -85,6 +85,12 @@ type PostFormValues = z.infer<typeof postFormSchema>;
 export interface CreatePostFormData extends Omit<PostFormValues, 'image'> {
   imageFile?: File | null;
   mentionedUserIds: string[];
+  // Fields specific to help requests, keep them optional for the base form data type
+  descriptionDetails?: string;
+  descriptionTried?: string;
+  descriptionOutcome?: string;
+  maxBudget?: number;
+  deadline?: Date;
 }
 
 
@@ -94,14 +100,10 @@ interface CreatePostFormProps {
   detailedSectorsData: SectorWithSubSectors[];
   isSubmitting: boolean;
   currentUserId: string | null;
+  requestType?: 'post' | 'help_request'; // To distinguish context if needed, though not used in this form
 }
 
-const getInitials = (name: string | undefined | null): string => {
-    return getSharedInitials(name);
-};
-
-
-export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availableTags, detailedSectorsData, isSubmitting, currentUserId }) => {
+const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availableTags, detailedSectorsData, isSubmitting, currentUserId }) => {
   const form = useForm<PostFormValues>({
     resolver: zodResolver(postFormSchema),
     defaultValues: {
@@ -127,8 +129,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
 
   const [descriptionMentionQuery, setDescriptionMentionQuery] = useState('');
-  const [showDescriptionSuggestions, setShowDescriptionSuggestions] = useState(false);
   const [debouncedDescriptionQuery, setDebouncedDescriptionQuery] = useState('');
+  const [showDescriptionSuggestions, setShowDescriptionSuggestions] = useState(false);
   const descriptionTextareaRef = useRef<HTMLTextAreaElement>(null);
   const descriptionSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [selectedMentionedUserIds, setSelectedMentionedUserIds] = useState<Set<string>>(new Set());
@@ -142,9 +144,9 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
   const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
     queryKey: ['suggestibleUsersForCreatePost', debouncedDescriptionQuery, currentUserId],
-    queryFn: () => getSuggestibleUsers(debouncedDescriptionQuery, debouncedDescriptionQuery ? 10 : 25),
+    queryFn: () => getSuggestibleUsers(debouncedDescriptionQuery, debouncedDescriptionQuery ? 10 : 25), // Fetch more if query is empty
     enabled: showDescriptionSuggestions && !!currentUserId,
-    staleTime: 1000 * 60 * 1,
+    staleTime: 1000 * 60 * 1, // Cache for 1 min
     retry: 1,
   });
 
@@ -166,7 +168,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       form.setValue("industry", "", { shouldValidate: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSectorCode, detailedSectorsData]); // form is not needed here
+  }, [selectedSectorCode, detailedSectorsData, form.setValue]);
 
   useEffect(() => {
     if (selectedSubSectorCode) {
@@ -178,11 +180,11 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       form.setValue("industry", "", { shouldValidate: true });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedSubSectorCode, currentSubSectors]); // form is not needed here
+  }, [selectedSubSectorCode, currentSubSectors, form.setValue]);
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    form.setValue("image", null);
+    form.setValue("image", null, { shouldValidate: true }); // Reset RHF state first
     setSelectedImageFile(null);
     setOriginalTooLargeFile(null);
     setImagePreviewUrl(null);
@@ -191,14 +193,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a JPG, PNG, or GIF image." });
         if (fileInputRef.current) fileInputRef.current.value = "";
-        form.setValue("image", null); 
         return;
       }
       if (file.size > MAX_FILE_SIZE_BYTES) {
         setOriginalTooLargeFile(file);
         setShowCompressionDialog(true);
         if (fileInputRef.current) fileInputRef.current.value = "";
-        form.setValue("image", null); 
         return;
       }
       setSelectedImageFile(file);
@@ -230,7 +230,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
       console.error("[CreatePostForm] Image compression error:", error);
       toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress image. Try a smaller file." });
       if (fileInputRef.current) fileInputRef.current.value = "";
-      form.setValue("image", null);
+      form.setValue("image", null, { shouldValidate: true });
       setImagePreviewUrl(null);
       setSelectedImageFile(null);
     } finally {
@@ -242,7 +242,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
   const handleRemoveImage = () => {
     setSelectedImageFile(null);
     setImagePreviewUrl(null);
-    form.setValue("image", null);
+    form.setValue("image", null, { shouldValidate: true });
     if (fileInputRef.current) {
       fileInputRef.current.value = "";
     }
@@ -251,17 +251,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
   const handleSubmitForm = (values: PostFormValues) => {
     console.log("[CreatePostForm] Values submitted:", JSON.stringify(values, null, 2));
     const submitData: CreatePostFormData = {
-        question: values.question,
-        description: values.description,
-        tags: values.tags,
-        sector: values.sector,
-        subSector: values.subSector,
-        industry: values.industry,
+        ...values,
         imageFile: selectedImageFile,
         mentionedUserIds: Array.from(selectedMentionedUserIds),
     };
     onSubmit(submitData);
-    form.reset(); // Reset form fields
+    form.reset();
     setSelectedImageFile(null);
     setImagePreviewUrl(null);
     if (fileInputRef.current) fileInputRef.current.value = "";
@@ -278,7 +273,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
         const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
-        if (!/\s/.test(potentialQuery) && !/\\n/.test(potentialQuery)) { // Corrected regex
+        if (!/\s/.test(potentialQuery) && !/\\n/.test(potentialQuery)) {
             activeQuery = potentialQuery;
         }
     }
@@ -303,9 +298,9 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     }
   };
 
-  const handleDescriptionFocus = () => {
+  const handleDescriptionFocus = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     if (descriptionTextareaRef.current) {
-        evaluateMentionState(descriptionTextareaRef.current.value, descriptionTextareaRef.current.selectionStart || 0);
+      evaluateMentionState(descriptionTextareaRef.current.value, descriptionTextareaRef.current.selectionStart || 0);
     }
   };
   
@@ -319,7 +314,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
     if (lastAtIndex > -1) {
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
-        const mentionToInsert = profile.mentionName; 
+        const mentionToInsert = profile.mentionName;
         const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
         
         form.setValue("description", newText, { shouldValidate: true, shouldDirty: true });
@@ -363,16 +358,19 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
 
   const filteredDescriptionSuggestions = useMemo(() => {
     if (!showDescriptionSuggestions) return [];
-    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', mentionName: 'loading-desc', displayName: 'Loading users...' } as UserProfileBasic];
+    if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
     
-    const profilesSource = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
-    let results: UserProfileBasic[] = [];
+    let results: UserProfileBasic[];
+    const source = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
 
     if (debouncedDescriptionQuery.trim() === '') {
-        results = profilesSource.slice(0, 25); // Show more when query is empty
+        results = source.slice(0, 25);
     } else {
         const queryLower = debouncedDescriptionQuery.toLowerCase();
-        results = profilesSource.filter(p => p.mentionName.toLowerCase().includes(queryLower) || p.displayName.toLowerCase().includes(queryLower)).slice(0, 10);
+        results = source.filter(p => 
+            p.mentionName.toLowerCase().includes(queryLower) ||
+            (p.displayName && p.displayName.toLowerCase().includes(queryLower))
+        ).slice(0, 10);
     }
 
     if (results.length === 0 && debouncedDescriptionQuery.trim() !== '') {
@@ -412,30 +410,29 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                 <FormItem className="flex-grow flex flex-col">
                   <FormLabel>Description (Optional)</FormLabel>
                   <Popover
-                    open={showDescriptionSuggestions && filteredDescriptionSuggestions.length > 0 && (filteredDescriptionSuggestions[0]?.userId !== 'loading-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-users-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-match-desc')}
-                    onOpenChange={(isOpen) => {
+                     open={showDescriptionSuggestions && filteredDescriptionSuggestions.length > 0 && (filteredDescriptionSuggestions[0]?.userId !== 'loading-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-users-desc' && filteredDescriptionSuggestions[0]?.userId !== 'no-match-desc')}
+                     onOpenChange={(isOpen) => {
                         setShowDescriptionSuggestions(isOpen);
-                        if (!isOpen) setDescriptionMentionQuery(''); // Clear query when popover closes
-                    }}
+                        if (!isOpen && document.activeElement !== descriptionTextareaRef.current) {
+                            setDescriptionMentionQuery('');
+                        }
+                     }}
                   >
                     <PopoverTrigger asChild>
                       <FormControl className="flex-grow">
                         <Textarea
                           placeholder="Provide more context or details... (@mention users)"
-                          className="resize-y min-h-[120px] flex-1" // Ensure it grows
+                          className="resize-y min-h-[120px] flex-1"
                           {...field}
                           ref={(e) => {
-                            // Assign the element to the current property of the ref
                             descriptionTextareaRef.current = e;
-                            // Also call the field.ref to connect with the form library
                             field.ref(e);
                           }}
-                         onChange={handleDescriptionChange}
+                          onChange={handleDescriptionChange}
                           onFocus={handleDescriptionFocus}
-                           onBlurCapture={() => setTimeout(() => { // Use onBlurCapture for Textarea
-                            // Delay hiding to allow click on popover items
+                          onBlurCapture={() => setTimeout(() => {
                             if (descriptionSuggestionsPopoverRef.current && !descriptionSuggestionsPopoverRef.current.contains(document.activeElement as Node) && descriptionTextareaRef.current !== document.activeElement) {
-                              setShowDescriptionSuggestions(false);
+                              if(showDescriptionSuggestions) setShowDescriptionSuggestions(false);
                             }
                           }, 150)}
                           disabled={isSubmitting}
@@ -447,11 +444,11 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                         className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
                         side="bottom"
                         align="start"
-                        onOpenAutoFocus={(e) => e.preventDefault()} // Prevent auto-focus on popover open
+                        onOpenAutoFocus={(e) => e.preventDefault()}
                      >
                        {filteredDescriptionSuggestions.map(profile => {
-                            const showSecondaryNameLine = profile.displayName && profile.mentionName && profile.displayName.toLowerCase() !== profile.mentionName.toLowerCase();
-                            
+                            const displayableName = profile.displayName; // This is already derived: companyName || mentionName
+                            const showPrimaryLine = displayableName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
                             return (
                                 profile.userId === 'loading-desc' || profile.userId === 'no-users-desc' || profile.userId === 'no-match-desc' ? (
                                     <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">
@@ -463,18 +460,18 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                         variant="ghost"
                                         size="sm"
                                         className="w-full justify-start h-auto px-2 py-1 text-xs"
-                                        onMouseDown={(e) => e.preventDefault()} // Prevent textarea blur on click
+                                        onMouseDown={(e) => e.preventDefault()}
                                         onClick={() => handleSelectDescriptionSuggestion(profile)}
                                     >
                                         <Avatar className="h-5 w-5 mr-2">
                                             <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
-                                            <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
+                                            <AvatarFallback className="text-xs">{getSharedInitials(profile.mentionName)}</AvatarFallback>
                                         </Avatar>
                                         <div className="flex flex-col items-start">
-                                            {showSecondaryNameLine && (
-                                                <span className="font-medium text-foreground">{profile.displayName}</span>
+                                            {showPrimaryLine && (
+                                                <span className="font-medium text-foreground">{displayableName}</span>
                                             )}
-                                            <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
+                                            <span className={cn("text-muted-foreground", !showPrimaryLine && "font-medium text-foreground")}>
                                                 @{profile.mentionName}
                                             </span>
                                         </div>
@@ -492,7 +489,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
              <FormField
                 control={form.control}
                 name="image"
-                render={({ field }) => ( // Destructure field here
+                render={({ field }) => (
                     <FormItem>
                         <FormLabel>Image (Optional)</FormLabel>
                         <FormControl>
@@ -500,7 +497,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                 type="file"
                                 accept="image/png, image/jpeg, image/gif"
                                 ref={fileInputRef}
-                                onChange={handleImageChange} // field.onChange is not directly used for file inputs with RHF like this
+                                onChange={handleImageChange}
                                 className="hidden"
                                 disabled={isSubmitting || isCompressing}
                             />
@@ -527,7 +524,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                             </div>
                         )}
                         <FormDescription>Max 2MB. JPG, PNG, GIF accepted.</FormDescription>
-                        <FormMessage /> {/* This will show errors for field.name="image" */}
+                        <FormMessage />
                     </FormItem>
                 )}
              />
@@ -613,8 +610,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                         name="tags"
                         render={({ field }) => (
                           <FormItem key={tag} className="flex flex-row items-center space-x-2 space-y-0">
-                            <FormControl>
-                              <Checkbox
+                            <Checkbox
                                 checked={field.value?.includes(tag)}
                                 onCheckedChange={(checked) =>
                                   checked
@@ -622,8 +618,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
                                     : field.onChange((field.value || []).filter(value => value !== tag))
                                 }
                                 disabled={isSubmitting}
-                              />
-                            </FormControl>
+                            />
                             <FormLabel className="font-normal text-sm">{tag}</FormLabel>
                           </FormItem>
                         )}
@@ -667,7 +662,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({ onSubmit, availa
             <AlertDialogCancel onClick={() => {
               setOriginalTooLargeFile(null);
               if (fileInputRef.current) fileInputRef.current.value = "";
-              form.setValue("image", null);
+              form.setValue("image", null, { shouldValidate: true });
               setImagePreviewUrl(null);
               setSelectedImageFile(null);
             }}>Cancel</AlertDialogCancel>

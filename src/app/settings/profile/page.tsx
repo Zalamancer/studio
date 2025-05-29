@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Upload, ImageDown, Building, Briefcase, Info, User, DollarSign, CheckCircle, Edit3, AtSign } from 'lucide-react'; // Added AtSign
+import { Loader2, Upload, ImageDown, Building, Briefcase, Info, User, DollarSign, CheckCircle, Edit3, AtSign } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
 import {
@@ -25,10 +25,10 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { detailedSectorsData } from '@/components/layout/MainLayout';
-import { updateUserProfileDetails, fetchFullUserProfile, type UserProfileUpdateData } from '@/services/connectionService';
-import type { VisibilitySetting, UserProfileData } from '@/types/connection';
+import { updateUserProfileDetails, fetchFullUserProfile } from '@/services/connectionService';
+import type { VisibilitySetting, UserProfileData, UserProfileUpdateData } from '@/types/connection';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
-import { uploadPostImage } from '@/services/storageService';
+import { uploadPostImage } from '@/services/storageService'; // Assuming this service handles avatar uploads too
 
 const MAX_FILE_SIZE_MB = 1;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -57,13 +57,10 @@ const ProfileSettingsPage = () => {
 
   // State for visibility settings
   const [descriptionVisibility, setDescriptionVisibility] = useState<VisibilitySetting>('everyone');
-  // Removed avatarVisibility, companyNameVisibility, actualDisplayNameVisibility, industryVisibility states
-
+  
   // State for displaying non-editable fields
-  const [fetchedMentionName, setFetchedMentionName] = useState('');
   const [fetchedCompanyName, setFetchedCompanyName] = useState('');
-  const [fetchedActualDisplayName, setFetchedActualDisplayName] = useState('');
-
+  const [fetchedMentionName, setFetchedMentionName] = useState('');
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentDbAvatarUrl, setCurrentDbAvatarUrl] = useState<string | null>(null);
@@ -77,7 +74,7 @@ const ProfileSettingsPage = () => {
 
   const currentYear = new Date().getFullYear();
   
-  const nameForAvatar = fetchedCompanyName || fetchedActualDisplayName || fetchedMentionName || user?.email || 'U';
+  const nameForAvatar = fetchedCompanyName || fetchedMentionName || user?.email || 'U';
 
 
   useEffect(() => {
@@ -87,13 +84,14 @@ const ProfileSettingsPage = () => {
     }
 
     const fetchProfile = async () => {
-      if (!user) { // Should already be guarded by authLoading, but defensive check
+      if (!user) {
         setIsFetchingProfile(false);
         return;
       }
       setIsFetchingProfile(true);
       console.log("[ProfileSettingsPage] fetchProfile: Fetching profile for user:", user.uid);
       try {
+        // Removed artificial delay
         const fullProfileData = await fetchFullUserProfile(user.uid);
         console.log("[ProfileSettingsPage] fetchProfile: Raw fullProfileData from service:", fullProfileData);
 
@@ -103,12 +101,9 @@ const ProfileSettingsPage = () => {
           setDescriptionVisibility(fullProfileData.descriptionVisibility || 'everyone');
           setEstablished(fullProfileData.established || '');
           setIncomeRange(fullProfileData.incomeRange || 'Prefer not to say');
-
-          // For read-only display
+          
           setFetchedCompanyName(fullProfileData.companyName || '');
-          setFetchedActualDisplayName(fullProfileData.actualDisplayName || '');
           setFetchedMentionName(fullProfileData.mentionName || generateAnonymousName(user.uid));
-
 
           const avatarToDisplay = fullProfileData.avatarUrl || null;
           setPreviewUrl(avatarToDisplay);
@@ -116,7 +111,7 @@ const ProfileSettingsPage = () => {
           console.log("[ProfileSettingsPage] Full profile data loaded and state set.");
         } else {
           console.warn("[ProfileSettingsPage] No full profile document found, setting defaults.");
-          setFetchedMentionName(generateAnonymousName(user.uid)); // Ensure mentionName is always set
+          setFetchedMentionName(generateAnonymousName(user.uid));
           setIndustry('');
           setDescription('');
           setDescriptionVisibility('everyone');
@@ -125,12 +120,11 @@ const ProfileSettingsPage = () => {
           setPreviewUrl(null);
           setCurrentDbAvatarUrl(null);
           setFetchedCompanyName('');
-          setFetchedActualDisplayName('');
         }
       } catch (error) {
         console.error("[ProfileSettingsPage] fetchProfile: Error fetching profile:", error);
         toast({ variant: "destructive", title: "Error Fetching Profile", description: "Could not load your profile data." });
-        setFetchedMentionName(generateAnonymousName(user?.uid || "")); // Fallback mention name
+        setFetchedMentionName(generateAnonymousName(user?.uid || ""));
       } finally {
         setIsFetchingProfile(false);
         console.log("[ProfileSettingsPage] fetchProfile: Finished fetching profile attempt.");
@@ -141,16 +135,10 @@ const ProfileSettingsPage = () => {
         fetchProfile();
     } else if (!authLoading && !user) {
         console.log("[ProfileSettingsPage] useEffect: Auth loaded, no user. Clearing form.");
-        setIndustry('');
-        setDescription('');
-        setDescriptionVisibility('everyone');
-        setEstablished('');
-        setIncomeRange('Prefer not to say');
-        setPreviewUrl(null);
-        setCurrentDbAvatarUrl(null);
-        setFetchedCompanyName('');
-        setFetchedActualDisplayName('');
-        setFetchedMentionName('');
+        setIndustry(''); setDescription(''); setDescriptionVisibility('everyone');
+        setEstablished(''); setIncomeRange('Prefer not to say');
+        setPreviewUrl(null); setCurrentDbAvatarUrl(null);
+        setFetchedCompanyName(''); setFetchedMentionName('');
         setIsFetchingProfile(false);
     }
   }, [user, authLoading, toast]); // Removed isFetchingProfile from dependencies
@@ -163,24 +151,20 @@ const ProfileSettingsPage = () => {
             toast({ variant: "destructive", title: "Invalid File Type", description: "Please select an image file (JPG, PNG, GIF, WebP)." });
              setSelectedFile(null); setOriginalTooLargeFile(null); setPreviewUrl(currentDbAvatarUrl);
              if (fileInputRef.current) fileInputRef.current.value = '';
-             form.setValue("image", null, { shouldValidate: true });
             return;
         }
         if (file.size > MAX_FILE_SIZE_BYTES) {
             setOriginalTooLargeFile(file); setShowCompressionDialog(true);
             setSelectedFile(null); setPreviewUrl(currentDbAvatarUrl);
             if (fileInputRef.current) fileInputRef.current.value = '';
-            form.setValue("image", null, { shouldValidate: true });
         } else {
             setSelectedFile(file); setOriginalTooLargeFile(null); setShowCompressionDialog(false);
             const reader = new FileReader();
             reader.onloadend = () => setPreviewUrl(reader.result as string);
             reader.readAsDataURL(file);
-            form.setValue("image", file, { shouldValidate: true }); // Update react-hook-form state
         }
     } else {
         setSelectedFile(null); setOriginalTooLargeFile(null); setPreviewUrl(currentDbAvatarUrl);
-        form.setValue("image", null, { shouldValidate: true });
     }
   };
 
@@ -197,14 +181,12 @@ const ProfileSettingsPage = () => {
             const reader = new FileReader();
             reader.onloadend = () => setPreviewUrl(reader.result as string);
             reader.readAsDataURL(compressedFile);
-            form.setValue("image", compressedFile, { shouldValidate: true });
             toast({ title: "Compression Successful", description: "The image has been compressed." });
         } catch (error) {
             console.error("[ProfileSettingsPage] Image compression error:", error);
             toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress image." });
             setSelectedFile(null); setOriginalTooLargeFile(null); setPreviewUrl(currentDbAvatarUrl);
             if (fileInputRef.current) fileInputRef.current.value = '';
-            form.setValue("image", null, { shouldValidate: true });
         } finally {
             setIsCompressing(false);
         }
@@ -225,7 +207,7 @@ const ProfileSettingsPage = () => {
     } else if (yearValue.length > 0 && yearValue.length < 4) {
       setEstablishedError("Year must be 4 digits.");
     } else {
-      setEstablishedError(null); // Clear error if field is empty or valid
+      setEstablishedError(null);
     }
   };
 
@@ -248,30 +230,26 @@ const ProfileSettingsPage = () => {
     }
 
     setIsSubmitting(true);
-    let newAvatarUrlForFirestore: string | null | undefined = undefined; // Undefined means don't update avatar
+    let newAvatarUrlForFirestore: string | null | undefined = undefined;
 
     try {
         if (selectedFile) {
             console.log("[ProfileSettingsPage] handleSubmit: Uploading new avatar...");
-            newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid); // Using uploadPostImage, consider renaming or genericizing
+            newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid);
             console.log("[ProfileSettingsPage] handleSubmit: New avatar URL:", newAvatarUrlForFirestore);
         } else if (previewUrl === null && currentDbAvatarUrl !== null) {
-            // This means the user explicitly removed an existing avatar
             console.log("[ProfileSettingsPage] handleSubmit: Avatar explicitly removed by user.");
-            newAvatarUrlForFirestore = null; // Send null to Firestore to delete the field
+            newAvatarUrlForFirestore = null;
         }
 
         const profileDataToUpdate: UserProfileUpdateData = {
-            industry: industry || null, // Send null if empty
+            industry: industry || null,
             description: description || null,
             descriptionVisibility: descriptionVisibility,
             established: established || null,
             incomeRange: incomeRange === "Prefer not to say" ? null : incomeRange,
-            // actualDisplayName and companyName are not editable here
-            // Their visibility settings are also removed from this form's direct update
         };
 
-        // Only include avatarUrl in the update if it has changed or is being removed
         if (newAvatarUrlForFirestore !== undefined) {
             profileDataToUpdate.avatarUrl = newAvatarUrlForFirestore;
         }
@@ -279,12 +257,11 @@ const ProfileSettingsPage = () => {
         console.log("[ProfileSettingsPage] handleSubmit: Data to update in Firestore:", profileDataToUpdate);
         await updateUserProfileDetails(user.uid, profileDataToUpdate);
 
-        // Update local state for avatar if it changed
         if (newAvatarUrlForFirestore !== undefined) {
             setCurrentDbAvatarUrl(newAvatarUrlForFirestore);
-            setPreviewUrl(newAvatarUrlForFirestore); // Ensure preview reflects saved state
+            setPreviewUrl(newAvatarUrlForFirestore);
         }
-        setSelectedFile(null); // Clear selected file after successful upload
+        setSelectedFile(null);
         setOriginalTooLargeFile(null);
 
         toast({ title: "Profile Updated", description: "Your profile information has been saved." });
@@ -300,11 +277,6 @@ const ProfileSettingsPage = () => {
         setIsSubmitting(false);
     }
   };
-
-  // Dummy form state for file input to prevent uncontrolled component warning
-  // Not directly used for react-hook-form validation for the file input itself
-  const form = { setValue: (name: string, value: any, options?: any) => {} };
-
 
   if (authLoading) {
     return (
@@ -337,7 +309,6 @@ const ProfileSettingsPage = () => {
     );
   }
 
-
   const renderVisibilitySelect = (
     id: string,
     value: VisibilitySetting,
@@ -368,17 +339,16 @@ const ProfileSettingsPage = () => {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-8">
 
-          {/* Read-only Identifiers Section */}
           <div className="space-y-4 p-4 border rounded-md bg-muted/20">
             <Label className="text-base font-medium text-foreground">Your Identifiers</Label>
-            <p className="text-xs text-muted-foreground">These names are used for identification and mentions. They are not editable here.</p>
+            <p className="text-xs text-muted-foreground">These names are used for identification. They are not directly editable here.</p>
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label htmlFor="mentionNameDisplay" className="text-sm font-medium flex items-center text-foreground/90">
                   <AtSign className="mr-2 h-4 w-4 text-primary" /> Mention Name (@)
                 </Label>
                 <Input id="mentionNameDisplay" value={fetchedMentionName ? `@${fetchedMentionName}` : "Loading..."} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                <p className="text-xs text-muted-foreground">Your unique anonymous identifier, used for @mentions.</p>
+                <p className="text-xs text-muted-foreground">Your unique anonymous identifier ("ColorAnimalNumber"). Auto-generated.</p>
               </div>
 
               {fetchedCompanyName && (
@@ -389,15 +359,6 @@ const ProfileSettingsPage = () => {
                   <Input id="companyNameDisplay" value={fetchedCompanyName} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
                    <p className="text-xs text-muted-foreground">Set during sign-up (for email/password accounts).</p>
                 </div>
-              )}
-              {fetchedActualDisplayName && fetchedActualDisplayName !== fetchedCompanyName && (
-                 <div className="space-y-1">
-                    <Label htmlFor="actualDisplayNameDisplay" className="text-sm font-medium flex items-center text-foreground/90">
-                       <User className="mr-2 h-4 w-4 text-primary" /> Display Name
-                    </Label>
-                    <Input id="actualDisplayNameDisplay" value={fetchedActualDisplayName} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                    <p className="text-xs text-muted-foreground">Your name, often from your Google profile.</p>
-                 </div>
               )}
             </div>
           </div>
@@ -418,7 +379,7 @@ const ProfileSettingsPage = () => {
                   {isCompressing ? <> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Compressing... </> : <> <Upload className="mr-2 h-4 w-4" /> Change Avatar </>}
                 </Button>
                 {previewUrl && (
-                  <Button type="button" variant="ghost" size="xs" onClick={() => { setPreviewUrl(null); setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; form.setValue("image", null, {shouldValidate: true }); }} disabled={isSubmitting || isCompressing} className="text-destructive hover:text-destructive">
+                  <Button type="button" variant="ghost" size="xs" onClick={() => { setPreviewUrl(null); setSelectedFile(null); if (fileInputRef.current) fileInputRef.current.value = ''; }} disabled={isSubmitting || isCompressing} className="text-destructive hover:text-destructive">
                     Remove Avatar
                   </Button>
                 )}
@@ -451,7 +412,7 @@ const ProfileSettingsPage = () => {
             <Label htmlFor="established" className="text-base font-medium">Year Established</Label>
             <Input
               id="established"
-              type="text" // Use text to allow custom validation, though number might seem intuitive
+              type="text"
               placeholder="e.g., 2010"
               value={established}
               onChange={handleEstablishedYearChange}
@@ -518,5 +479,3 @@ const ProfileSettingsPage = () => {
 };
 
 export default ProfileSettingsPage;
-
-    

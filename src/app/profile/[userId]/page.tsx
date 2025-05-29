@@ -67,66 +67,71 @@ const BusinessProfilePage = () => {
 
   const profileUserId = profileUserIdFromParams;
 
-  const isProfileIdActuallyValidUid = useMemo(() => {
+  const isProfileIdValidUid = useMemo(() => {
     if (!profileUserId) return false;
-    return IS_UID_REGEX_PROFILE_PAGE.test(profileUserId);
+    const isValid = IS_UID_REGEX_PROFILE_PAGE.test(profileUserId);
+    console.log(`%c[BusinessProfilePage] isProfileIdValidUid for '${profileUserId}': ${isValid}`, isValid ? "color: green" : "color: orange");
+    return isValid;
   }, [profileUserId]);
 
   useEffect(() => {
     if (profileUserIdFromParams && !IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams)) {
-      console.warn(`[BusinessProfilePage] Detected invalid profileUserIdFromParams: '${profileUserIdFromParams}'`);
+      console.warn(`%c[BusinessProfilePage] Detected invalid profileUserIdFromParams in URL: '${profileUserIdFromParams}'`, "color: orange; font-size: 12px;");
     }
   }, [profileUserIdFromParams]);
-
 
   const { data: viewedUserProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileData | null, Error>({
     queryKey: ['fullUserProfile', profileUserId],
     queryFn: async () => {
-      if (!profileUserId || !isProfileIdActuallyValidUid) {
-        console.warn(`[BusinessProfilePage] fetchFullUserProfile queryFn: Invalid profileUserId '${profileUserId}', or isProfileIdActuallyValidUid is false. Aborting fetch.`);
+      if (!profileUserId || !isProfileIdValidUid) {
+        console.warn(`%c[BusinessProfilePage] fetchFullUserProfile queryFn: Invalid profileUserId '${profileUserId}', or isProfileIdValidUid is false. Aborting fetch.`, "color: orange;");
         return null;
       }
-      console.log(`[BusinessProfilePage] fetchFullUserProfile queryFn: Fetching for profileUserId '${profileUserId}'`);
+      console.log(`%c[BusinessProfilePage] fetchFullUserProfile queryFn: Fetching for profileUserId '${profileUserId}'`, "color: dodgerblue;");
       return fetchFullUserProfile(profileUserId);
     },
-    enabled: !!profileUserId && isProfileIdActuallyValidUid,
+    enabled: !!profileUserId && isProfileIdValidUid,
   });
 
-  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
-  console.log(`%c[BusinessProfilePage] Connection Status Query:
-    - currentUser.uid: ${currentUser?.uid || 'NULL'}
-    - profileUserId: ${profileUserId || 'NULL'}
-    - IS_UID_REGEX_PROFILE_PAGE.test(profileUserId): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}
-    - currentUser.uid !== profileUserId: ${currentUser && profileUserId ? currentUser.uid !== profileUserId : 'N/A'}
-    - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`, "color: cyan;");
+  const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && isProfileIdValidUid && currentUser.uid !== profileUserId;
+
+  useEffect(() => {
+    console.log(`%c[BusinessProfilePage] Connection Status Query Check:
+      - currentUser.uid: ${currentUser?.uid || 'NULL'}
+      - profileUserId: ${profileUserId || 'NULL'}
+      - isProfileIdValidUid: ${isProfileIdValidUid}
+      - currentUser.uid !== profileUserId: ${currentUser && profileUserId ? currentUser.uid !== profileUserId : 'N/A'}
+      - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`,
+    "color: cyan; background: #eee; padding: 2px;");
+  }, [currentUser?.uid, profileUserId, isProfileIdValidUid, connectionStatusQueryEnabled]);
 
 
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
     queryFn: async () => {
        if (!currentUser?.uid || !profileUserId || !IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) || currentUser.uid === profileUserId) {
-         console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`);
+         console.error(`%c[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Invalid conditions. CurrentUser: ${currentUser?.uid}, ProfileUser: ${profileUserId}`, "color: red;");
          return 'not_connected';
        }
-       console.log(`[BusinessProfilePage] Querying connection status between ${currentUser.uid} and ${profileUserId}`);
+       console.log(`%c[BusinessProfilePage] Querying connection status between ${currentUser.uid} and ${profileUserId}`, "color: dodgerblue;");
        return getConnectionStatus(currentUser.uid, profileUserId);
     },
     enabled: connectionStatusQueryEnabled,
   });
 
-  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid && !!currentUser; // Added currentUser check
+  const reviewsQueryEnabled = !!profileUserId && isProfileIdValidUid;
   const { data: reviewsReceived = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'received'],
     queryFn: () => {
         console.log(`%c[BusinessProfilePage] getReviewsForProfile queryFn: Fetching for profileUserId '${profileUserId}'`, "color: dodgerblue;");
-        return (profileUserId && isProfileIdActuallyValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]);
+        return (profileUserId && isProfileIdValidUid) ? getReviewsForProfile(profileUserId) : Promise.resolve([]);
     },
     enabled: reviewsQueryEnabled,
   });
 
   const { data: reviewsGivenByThisProfile = [], isLoading: isLoadingReviewsGiven } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'given'],
-    queryFn: () => (profileUserId && isProfileIdActuallyValidUid) ? getReviewsGivenByUserId(profileUserId) : Promise.resolve([]),
+    queryFn: () => (profileUserId && isProfileIdValidUid) ? getReviewsGivenByUserId(profileUserId) : Promise.resolve([]),
     enabled: reviewsQueryEnabled,
   });
 
@@ -148,28 +153,34 @@ const BusinessProfilePage = () => {
   }, [currentUserReview]);
 
   const weightedAverageRatingReceived = useMemo(() => {
-    console.log(`%c[BusinessProfilePage] Calculating weightedAverageRatingReceived. Found ${reviewsReceived.length} reviews.`, "color: darkorange; font-weight: bold;");
     if (!reviewsReceived || reviewsReceived.length === 0) return 0;
     let totalWeightedRating = 0;
     let totalWeight = 0;
+    console.log(`%c[BusinessProfilePage] Calculating weightedAverageRatingReceived. Found ${reviewsReceived.length} reviews.`, "color: darkorange; font-weight: bold;");
     reviewsReceived.forEach((review, index) => {
       let weight = 1.0;
-      if (review.reviewerHistoricalAvgRating === null) {
-        weight = 0.9; 
-      } else if (typeof review.reviewerHistoricalAvgRating === 'number') {
-        if (review.reviewerHistoricalAvgRating < 2.5) weight = 0.6;
-        else if (review.reviewerHistoricalAvgRating >= 4.0) weight = 1.1;
+      const histAvg = review.reviewerHistoricalAvgRating;
+      if (histAvg === null) { // No prior history
+        weight = 0.9; // Example: Slightly less weight
+        console.log(`  Review ${index + 1} by ${review.reviewerName}: Rating=${review.rating}, ReviewerHistAvg=NULL, AssignedWeight=${weight.toFixed(1)}`);
+      } else if (typeof histAvg === 'number') {
+        if (histAvg < 2.5) {
+          weight = 0.6; // Harsh reviewer
+          console.log(`  Review ${index + 1} by ${review.reviewerName}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Harsh), AssignedWeight=${weight.toFixed(1)}`);
+        } else if (histAvg >= 4.0) {
+          weight = 1.1; // Lenient reviewer
+          console.log(`  Review ${index + 1} by ${review.reviewerName}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Lenient), AssignedWeight=${weight.toFixed(1)}`);
+        } else { // Neutral reviewer
+          console.log(`  Review ${index + 1} by ${review.reviewerName}: Rating=${review.rating}, ReviewerHistAvg=${histAvg.toFixed(1)} (Neutral), AssignedWeight=${weight.toFixed(1)}`);
+        }
       }
-      console.log(`%c  Review ${index + 1}: Rating=${review.rating}, ReviewerHistAvg=${review.reviewerHistoricalAvgRating}, AssignedWeight=${weight.toFixed(1)}`, "color: darkorange;");
       totalWeightedRating += review.rating * weight;
       totalWeight += weight;
     });
-    if (totalWeight === 0) {
-      console.log(`%c  TotalWeight is 0, returning 0.`, "color: darkorange;");
-      return 0;
-    }
+
+    if (totalWeight === 0) return 0;
     const average = totalWeightedRating / totalWeight;
-    console.log(`%c  Final: TotalWeightedRating=${totalWeightedRating.toFixed(2)}, TotalWeight=${totalWeight.toFixed(2)}, WeightedAverage=${average.toFixed(2)}`, "color: darkorange; font-weight: bold;");
+    console.log(`%c  Final Weighted: TotalWeightedRating=${totalWeightedRating.toFixed(2)}, TotalWeight=${totalWeight.toFixed(2)}, WeightedAverage=${average.toFixed(2)}`, "color: darkorange; font-weight: bold;");
     return average;
   }, [reviewsReceived]);
 
@@ -184,7 +195,7 @@ const BusinessProfilePage = () => {
 
   const addOrUpdateReviewMutation = useMutation({
     mutationFn: async (data: { rating: number; comment: string }) => {
-      if (!currentUser || !profileUserId || !isProfileIdActuallyValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
+      if (!currentUser || !profileUserId || !isProfileIdValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
       const reviewerProfile = await fetchFullUserProfile(currentUser.uid);
 
       if (editingReview) {
@@ -195,7 +206,7 @@ const BusinessProfilePage = () => {
         const newReviewData: NewReviewData = {
           targetUserId: profileUserId,
           reviewerId: currentUser.uid,
-          reviewerName: reviewerProfile?.mentionName || generateAnonymousName(currentUser.uid),
+          reviewerName: reviewerProfile?.mentionName || generateAnonymousName(currentUser.uid), // Use mentionName for reviewer
           reviewerAvatar: reviewerProfile?.avatarUrl || undefined,
           rating: data.rating,
           comment: data.comment,
@@ -239,7 +250,7 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-  if (profileUserIdFromParams && !IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams)) {
+  if (profileUserIdFromParams && !isProfileIdValidUid) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -253,7 +264,7 @@ const BusinessProfilePage = () => {
     );
   }
 
-  if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdActuallyValidUid)) {
+  if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdValidUid)) {
      return (
       <div className="w-full container mx-auto p-4 md:p-8 max-w-4xl">
          <Card className="overflow-hidden shadow-lg rounded-lg border-border">
@@ -296,7 +307,7 @@ const BusinessProfilePage = () => {
     );
   }
 
-  if (profileError && isProfileIdActuallyValidUid) {
+  if (profileError && isProfileIdValidUid) {
       return (
           <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
              <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -309,10 +320,17 @@ const BusinessProfilePage = () => {
   const isOwnProfile = currentUser?.uid === viewedUserProfileData.uid;
   const generatedNameForProfile = generateAnonymousName(viewedUserProfileData.uid);
   
-  const headerDisplayNameForTitle = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
-  const headerDisplayNameForAvatar = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
-  const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerDisplayNameForTitle;
-  const nameForConnectionButton = viewedUserProfileData.companyName || headerDisplayNameForAvatar;
+  // Determine the primary name for the header title
+  const headerPrimaryName = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
+  
+  // Name for avatar initials
+  const nameForAvatarInitials = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
+
+  // Name for "About X" section
+  const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerPrimaryName;
+
+  // Name for ConnectionButton's targetUserName prop
+  let nameForConnectionButton = viewedUserProfileData.companyName || headerPrimaryName;
 
   const canViewDescription = isOwnProfile ||
     !viewedUserProfileData.descriptionVisibility ||
@@ -320,7 +338,6 @@ const BusinessProfilePage = () => {
     (viewedUserProfileData.descriptionVisibility === 'connected' && connectionStatus === 'connected');
 
   const displayDescription = canViewDescription ? (viewedUserProfileData.description || "No profile description provided.") : "[Description Hidden by User]";
-
   const headerAvatarUrl = viewedUserProfileData.avatarUrl || undefined;
   const displayEstablished = viewedUserProfileData.established || "Year not set";
   const headerIndustry = viewedUserProfileData.industry || "Not specified";
@@ -332,14 +349,14 @@ const BusinessProfilePage = () => {
           <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
               <Avatar className="h-20 w-20 border-2 border-primary">
-                <AvatarImage src={headerAvatarUrl} alt={headerDisplayNameForAvatar} />
+                <AvatarImage src={headerAvatarUrl} alt={nameForAvatarInitials} />
                 <AvatarFallback className="text-2xl bg-primary text-primary-foreground">
-                  {getInitials(headerDisplayNameForAvatar)}
+                  {getInitials(nameForAvatarInitials)}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-grow text-center md:text-left">
                 <CardTitle className="text-3xl font-bold text-foreground">
-                   {headerDisplayNameForTitle}
+                   {headerPrimaryName}
                 </CardTitle>
                 <div className="flex items-center justify-center md:justify-start gap-x-3 gap-y-1 mt-1 flex-wrap text-sm">
                   {viewedUserProfileData.mentionName && (
@@ -404,7 +421,7 @@ const BusinessProfilePage = () => {
                           </div>
                        </div>
                     )}
-                   {currentUser && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
+                   {currentUser && !isOwnProfile && profileUserId && isProfileIdValidUid && (
                       <ConnectionButton
                         targetUserId={profileUserId}
                         targetUserName={nameForConnectionButton}
@@ -412,12 +429,12 @@ const BusinessProfilePage = () => {
                         className="mt-2 w-full md:w-auto"
                       />
                    )}
-                   {isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
+                   {isLoadingStatus && !isOwnProfile && profileUserId && isProfileIdValidUid && (
                        <Button disabled size="default" className="mt-2 w-full md:w-auto">
                            <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...
                        </Button>
                    )}
-                   {statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (
+                   {statusError && !isOwnProfile && profileUserId && isProfileIdValidUid && (
                        <p className="text-xs text-destructive mt-2 text-right">Error loading connection status</p>
                    )}
               </div>
@@ -446,7 +463,7 @@ const BusinessProfilePage = () => {
             )}
 
 
-            {currentUser && !isOwnProfile && isProfileIdActuallyValidUid && (
+            {currentUser && !isOwnProfile && isProfileIdValidUid && (
               <>
                 <Separator />
                 <div>
@@ -569,19 +586,19 @@ const BusinessProfilePage = () => {
 
              <div>
                 <h3 className="text-lg font-semibold text-foreground mb-4">Posts by {displayCompanyNameForAboutHeading}</h3>
-                {profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && (isOwnProfile || connectionStatus === 'connected' ) ? (
+                {profileUserId && isProfileIdValidUid && (isOwnProfile || connectionStatus === 'connected' ) ? (
                     <ProfilePostsSection userId={profileUserId} />
-                ) : isLoadingStatus && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
+                ) : isLoadingStatus && !isOwnProfile && profileUserId && isProfileIdValidUid ? (
                     <div className="flex items-center justify-center p-6">
                         <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
                         <p className="text-muted-foreground">Checking connection status...</p>
                     </div>
-                ) : statusError && !isOwnProfile && profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
+                ) : statusError && !isOwnProfile && profileUserId && isProfileIdValidUid ? (
                      <div className="flex items-center justify-center p-6 text-destructive gap-2 border rounded-lg bg-destructive/10">
                         <AlertTriangle className="h-5 w-5" />
                         <p>Could not load connection status for posts.</p>
                      </div>
-                ) : profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) ? (
+                ) : profileUserId && isProfileIdValidUid ? (
                     <div className="text-center p-6 border rounded-lg bg-muted/50">
                        <Info className="h-8 w-8 text-muted-foreground mx-auto mb-3" />
                        <p className="text-muted-foreground font-medium">
