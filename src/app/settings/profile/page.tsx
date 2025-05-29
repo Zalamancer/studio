@@ -24,11 +24,11 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { detailedSectorsData } from '@/components/layout/MainLayout';
+import { detailedSectorsData, type SectorWithSubSectors, type SubSector, type Industry as SectorIndustryType } from '@/components/layout/MainLayout'; // Import detailedSectorsData
 import { updateUserProfileDetails, fetchFullUserProfile } from '@/services/connectionService';
 import type { VisibilitySetting, UserProfileData, UserProfileUpdateData } from '@/types/connection';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
-import { uploadPostImage } from '@/services/storageService'; // Assuming this service handles avatar uploads too
+import { uploadPostImage } from '@/services/storageService';
 
 const MAX_FILE_SIZE_MB = 1;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -49,7 +49,6 @@ const ProfileSettingsPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // State for editable fields
-  const [industry, setIndustry] = useState('');
   const [description, setDescription] = useState('');
   const [established, setEstablished] = useState('');
   const [establishedError, setEstablishedError] = useState<string | null>(null);
@@ -57,10 +56,20 @@ const ProfileSettingsPage = () => {
 
   // State for visibility settings
   const [descriptionVisibility, setDescriptionVisibility] = useState<VisibilitySetting>('everyone');
-  
-  // State for displaying non-editable fields
-  const [fetchedCompanyName, setFetchedCompanyName] = useState('');
+  const [avatarVisibility, setAvatarVisibility] = useState<VisibilitySetting>('everyone');
+
+  // State for displaying non-editable fields from Firestore
   const [fetchedMentionName, setFetchedMentionName] = useState('');
+  const [fetchedCompanyName, setFetchedCompanyName] = useState('');
+
+  // State for NAICS selection
+  const [selectedSectorCode, setSelectedSectorCode] = useState<string | undefined>(undefined);
+  const [selectedSubSectorCode, setSelectedSubSectorCode] = useState<string | undefined>(undefined);
+  const [selectedIndustryCode, setSelectedIndustryCode] = useState<string | undefined>(undefined);
+
+  const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
+  const [availableIndustries, setAvailableIndustries] = useState<SectorIndustryType[]>([]);
+
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentDbAvatarUrl, setCurrentDbAvatarUrl] = useState<string | null>(null);
@@ -74,7 +83,7 @@ const ProfileSettingsPage = () => {
 
   const currentYear = new Date().getFullYear();
   
-  const nameForAvatar = fetchedCompanyName || fetchedMentionName || user?.email || 'U';
+  const displayedNameForAvatar = fetchedCompanyName || fetchedMentionName || user?.email || 'U';
 
 
   useEffect(() => {
@@ -84,19 +93,17 @@ const ProfileSettingsPage = () => {
     }
 
     const fetchProfile = async () => {
-      if (!user) {
+      if (!user) { // Should not happen if authLoading is false and no user, handled by parent conditional render
         setIsFetchingProfile(false);
         return;
       }
       setIsFetchingProfile(true);
       console.log("[ProfileSettingsPage] fetchProfile: Fetching profile for user:", user.uid);
       try {
-        // Removed artificial delay
         const fullProfileData = await fetchFullUserProfile(user.uid);
         console.log("[ProfileSettingsPage] fetchProfile: Raw fullProfileData from service:", fullProfileData);
 
         if (fullProfileData) {
-          setIndustry(fullProfileData.industry || '');
           setDescription(fullProfileData.description || '');
           setDescriptionVisibility(fullProfileData.descriptionVisibility || 'everyone');
           setEstablished(fullProfileData.established || '');
@@ -104,6 +111,24 @@ const ProfileSettingsPage = () => {
           
           setFetchedCompanyName(fullProfileData.companyName || '');
           setFetchedMentionName(fullProfileData.mentionName || generateAnonymousName(user.uid));
+          
+          // Set NAICS selections
+          if (fullProfileData.sectorName) {
+            const sector = detailedSectorsData.find(s => s.name === fullProfileData.sectorName);
+            if (sector) setSelectedSectorCode(sector.code);
+          }
+          if (fullProfileData.subSectorName && selectedSectorCode) {
+            const sector = detailedSectorsData.find(s => s.code === selectedSectorCode);
+            const subSector = sector?.subSectors.find(ss => ss.name === fullProfileData.subSectorName);
+            if (subSector) setSelectedSubSectorCode(subSector.code);
+          }
+          if (fullProfileData.industryName && selectedSubSectorCode) {
+            const sector = detailedSectorsData.find(s => s.code === selectedSectorCode);
+            const subSector = sector?.subSectors.find(ss => ss.code === selectedSubSectorCode);
+            const industry = subSector?.industries.find(ind => ind.name === fullProfileData.industryName);
+            if (industry) setSelectedIndustryCode(industry.code);
+          }
+
 
           const avatarToDisplay = fullProfileData.avatarUrl || null;
           setPreviewUrl(avatarToDisplay);
@@ -112,13 +137,10 @@ const ProfileSettingsPage = () => {
         } else {
           console.warn("[ProfileSettingsPage] No full profile document found, setting defaults.");
           setFetchedMentionName(generateAnonymousName(user.uid));
-          setIndustry('');
-          setDescription('');
-          setDescriptionVisibility('everyone');
-          setEstablished('');
-          setIncomeRange('Prefer not to say');
-          setPreviewUrl(null);
-          setCurrentDbAvatarUrl(null);
+          setDescription(''); setDescriptionVisibility('everyone');
+          setEstablished(''); setIncomeRange('Prefer not to say');
+          setSelectedSectorCode(undefined); setSelectedSubSectorCode(undefined); setSelectedIndustryCode(undefined);
+          setPreviewUrl(null); setCurrentDbAvatarUrl(null);
           setFetchedCompanyName('');
         }
       } catch (error) {
@@ -131,17 +153,45 @@ const ProfileSettingsPage = () => {
       }
     };
     
-    if (!authLoading && user && !isFetchingProfile) {
+    if (user && !isFetchingProfile) {
         fetchProfile();
-    } else if (!authLoading && !user) {
+    } else if (!user) {
         console.log("[ProfileSettingsPage] useEffect: Auth loaded, no user. Clearing form.");
-        setIndustry(''); setDescription(''); setDescriptionVisibility('everyone');
+        setDescription(''); setDescriptionVisibility('everyone');
         setEstablished(''); setIncomeRange('Prefer not to say');
+        setSelectedSectorCode(undefined); setSelectedSubSectorCode(undefined); setSelectedIndustryCode(undefined);
         setPreviewUrl(null); setCurrentDbAvatarUrl(null);
         setFetchedCompanyName(''); setFetchedMentionName('');
         setIsFetchingProfile(false);
     }
-  }, [user, authLoading, toast]); // Removed isFetchingProfile from dependencies
+  // Only re-fetch if user changes or if authLoading transitions from true to false
+  }, [user, authLoading, toast]); 
+
+
+  // Effect for cascading Sector -> SubSectors
+  useEffect(() => {
+    if (selectedSectorCode) {
+      const sector = detailedSectorsData.find(s => s.code === selectedSectorCode);
+      setAvailableSubSectors(sector?.subSectors || []);
+      setSelectedSubSectorCode(undefined); // Reset sub-sector
+      setAvailableIndustries([]);          // Reset industries
+      setSelectedIndustryCode(undefined);  // Reset industry
+    } else {
+      setAvailableSubSectors([]);
+      setAvailableIndustries([]);
+    }
+  }, [selectedSectorCode]);
+
+  // Effect for cascading SubSector -> Industries
+  useEffect(() => {
+    if (selectedSubSectorCode) {
+      const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorCode);
+      setAvailableIndustries(subSector?.industries || []);
+      setSelectedIndustryCode(undefined); // Reset industry
+    } else {
+      setAvailableIndustries([]);
+    }
+  }, [selectedSubSectorCode, availableSubSectors]);
 
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -242,12 +292,20 @@ const ProfileSettingsPage = () => {
             newAvatarUrlForFirestore = null;
         }
 
+        const sectorObj = detailedSectorsData.find(s => s.code === selectedSectorCode);
+        const subSectorObj = sectorObj?.subSectors.find(ss => ss.code === selectedSubSectorCode);
+        const industryObj = subSectorObj?.industries.find(i => i.code === selectedIndustryCode);
+
         const profileDataToUpdate: UserProfileUpdateData = {
-            industry: industry || null,
             description: description || null,
             descriptionVisibility: descriptionVisibility,
             established: established || null,
             incomeRange: incomeRange === "Prefer not to say" ? null : incomeRange,
+            sectorName: sectorObj?.name || null,
+            subSectorName: subSectorObj?.name || null,
+            industryName: industryObj?.name || null,
+            naicsCode: selectedIndustryCode || selectedSubSectorCode || selectedSectorCode || null,
+            avatarVisibility: avatarVisibility, // Still needed for the avatar's visibility setting
         };
 
         if (newAvatarUrlForFirestore !== undefined) {
@@ -288,16 +346,16 @@ const ProfileSettingsPage = () => {
       </Card>
     );
   }
-
+  
   if (isFetchingProfile) {
-    return (
-      <Card>
-        <CardHeader><CardTitle>Profile Settings</CardTitle><CardDescription>Manage your public business profile.</CardDescription></CardHeader>
-        <CardContent className="flex justify-center items-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Fetching profile...</p>
-        </CardContent>
-      </Card>
-    );
+      return (
+        <Card>
+          <CardHeader><CardTitle>Profile Settings</CardTitle><CardDescription>Manage your public business profile.</CardDescription></CardHeader>
+          <CardContent className="flex justify-center items-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-3 text-muted-foreground">Fetching profile...</p>
+          </CardContent>
+        </Card>
+      );
   }
 
   if (!user) {
@@ -340,15 +398,14 @@ const ProfileSettingsPage = () => {
         <form onSubmit={handleSubmit} className="space-y-8">
 
           <div className="space-y-4 p-4 border rounded-md bg-muted/20">
-            <Label className="text-base font-medium text-foreground">Your Identifiers</Label>
-            <p className="text-xs text-muted-foreground">These names are used for identification. They are not directly editable here.</p>
+            <Label className="text-base font-medium text-foreground">Your Identifiers (Read-Only)</Label>
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label htmlFor="mentionNameDisplay" className="text-sm font-medium flex items-center text-foreground/90">
                   <AtSign className="mr-2 h-4 w-4 text-primary" /> Mention Name (@)
                 </Label>
                 <Input id="mentionNameDisplay" value={fetchedMentionName ? `@${fetchedMentionName}` : "Loading..."} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                <p className="text-xs text-muted-foreground">Your unique anonymous identifier ("ColorAnimalNumber"). Auto-generated.</p>
+                <p className="text-xs text-muted-foreground">Your unique anonymous identifier. Auto-generated.</p>
               </div>
 
               {fetchedCompanyName && (
@@ -357,7 +414,7 @@ const ProfileSettingsPage = () => {
                     <Building className="mr-2 h-4 w-4 text-primary" /> Company Name
                   </Label>
                   <Input id="companyNameDisplay" value={fetchedCompanyName} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                   <p className="text-xs text-muted-foreground">Set during sign-up (for email/password accounts).</p>
+                   <p className="text-xs text-muted-foreground">Set during sign-up (for email/password accounts). Not directly editable here.</p>
                 </div>
               )}
             </div>
@@ -368,9 +425,9 @@ const ProfileSettingsPage = () => {
             <Label className="text-base font-medium">Company Logo / Avatar</Label>
             <div className="flex items-center gap-4">
               <Avatar className="h-20 w-20 border">
-                <AvatarImage src={previewUrl ?? undefined} alt={nameForAvatar} />
+                <AvatarImage src={previewUrl ?? undefined} alt={displayedNameForAvatar} />
                 <AvatarFallback className="bg-muted text-muted-foreground text-xl">
-                  {getInitials(nameForAvatar)}
+                  {getInitials(displayedNameForAvatar)}
                 </AvatarFallback>
               </Avatar>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, image/gif, image/webp" style={{ display: 'none' }} disabled={isSubmitting || isCompressing} />
@@ -388,23 +445,52 @@ const ProfileSettingsPage = () => {
             <p className="text-xs text-muted-foreground">Upload a JPG, PNG, GIF, or WebP. Max size {MAX_FILE_SIZE_MB}MB. Avatar is always visible if set.</p>
           </div>
 
-
-          <div className="space-y-1 p-4 border rounded-md bg-muted/20">
-            <Label htmlFor="industry" className="text-base font-medium flex items-center">
-              <Briefcase className="mr-2 h-4 w-4 text-primary" /> Industry
+          {/* Cascading NAICS Selectors */}
+          <div className="space-y-4 p-4 border rounded-md bg-muted/20">
+            <Label className="text-base font-medium flex items-center">
+              <Briefcase className="mr-2 h-4 w-4 text-primary" /> Business Classification
             </Label>
-            <Select value={industry} onValueChange={setIndustry} disabled={isSubmitting}>
-              <SelectTrigger id="industry" className="w-full text-sm">
-                <SelectValue placeholder="Select your industry" />
-              </SelectTrigger>
-              <SelectContent>
-                {detailedSectorsData.map((sector) => (
-                  <SelectItem key={sector.code} value={sector.name} className="text-sm">{sector.name}</SelectItem>
-                ))}
-                <SelectItem value="Other" className="text-sm">Other</SelectItem>
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground pt-1">Your industry is always visible if set.</p>
+            
+            <div className="space-y-2">
+              <Label htmlFor="sector" className="text-sm font-medium">Sector</Label>
+              <Select value={selectedSectorCode} onValueChange={setSelectedSectorCode} disabled={isSubmitting}>
+                <SelectTrigger id="sector"><SelectValue placeholder="Select main sector" /></SelectTrigger>
+                <SelectContent>
+                  {detailedSectorsData.map(sector => (
+                    <SelectItem key={sector.code} value={sector.code}>{sector.name} ({sector.code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="subSector" className="text-sm font-medium">Sub-Sector (Optional)</Label>
+              <Select value={selectedSubSectorCode} onValueChange={setSelectedSubSectorCode} disabled={isSubmitting || availableSubSectors.length === 0}>
+                <SelectTrigger id="subSector">
+                  <SelectValue placeholder={availableSubSectors.length > 0 ? "Select sub-sector" : "Select sector first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableSubSectors.map(sub => (
+                    <SelectItem key={sub.code} value={sub.code}>{sub.name} ({sub.code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="industry" className="text-sm font-medium">Industry (Optional)</Label>
+              <Select value={selectedIndustryCode} onValueChange={setSelectedIndustryCode} disabled={isSubmitting || availableIndustries.length === 0}>
+                <SelectTrigger id="industry">
+                  <SelectValue placeholder={availableIndustries.length > 0 ? "Select industry" : "Select sub-sector first"} />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableIndustries.map(ind => (
+                    <SelectItem key={ind.code} value={ind.code}>{ind.name} ({ind.code})</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <p className="text-xs text-muted-foreground pt-1">Your business classification is always visible if set.</p>
           </div>
 
 
@@ -479,3 +565,4 @@ const ProfileSettingsPage = () => {
 };
 
 export default ProfileSettingsPage;
+
