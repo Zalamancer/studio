@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -17,28 +18,49 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Loader2, Trash2, Send, Heart, CornerDownRight } from 'lucide-react';
+import { Loader2, Trash2, Send, Heart, CornerDownRight, User } from 'lucide-react';
 import type { ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
 import { deleteCommentFromPost, toggleLikeComment, addSubCommentToComment, getSubCommentsForComment } from '@/services/commentService';
 import { useToast } from '@/hooks/use-toast';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { TextWithMentions } from './TextWithMentions';
 import { SubCommentItem } from './SubCommentItem';
 
-// Define IS_UID_REGEX here or import from a shared location
 const IS_UID_REGEX_COMMENT = /^[a-zA-Z0-9]{20,}$/;
+
+// This function now needs the context of profiles available for mentioning in a reply.
+// It should resolve based on mentionName.
+const extractMentionedUidsForReply = (text: string, profilesToSearch: UserProfileBasic[]): string[] => {
+  const mentionRegex = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,})/g; // Targets ColorAnimalNumber format
+  const textualMentions = new Set<string>();
+  for (const match of text.matchAll(mentionRegex)) {
+    if (match[1]) textualMentions.add(match[1].trim());
+  }
+
+  const resolvedUids = new Set<string>();
+  for (const textualMention of textualMentions) {
+    const foundProfile = profilesToSearch.find(p => p.mentionName?.toLowerCase() === textualMention.toLowerCase());
+    if (foundProfile) {
+      resolvedUids.add(foundProfile.userId);
+    } else if (IS_UID_REGEX_COMMENT.test(textualMention)) { // Fallback for direct UID mention
+      const profileByUid = profilesToSearch.find(p => p.userId === textualMention);
+      if (profileByUid) resolvedUids.add(profileByUid.userId);
+    }
+  }
+  return Array.from(resolvedUids);
+};
 
 interface CommentItemProps {
   comment: ClientComment;
   currentUserId: string | null;
   postId: string;
-  onDelete: () => void;
-  extractMentionedUids: (text: string, profilesToSearch: UserProfileBasic[]) => string[]; // Pass this down
+  onDelete: (commentId: string) => void;
+  postAuthorId?: string; // Optional: To include post author in mention suggestions for replies
 }
 
 export const CommentItem: React.FC<CommentItemProps> = React.memo(({
@@ -46,7 +68,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
   currentUserId,
   postId,
   onDelete,
-  extractMentionedUids,
+  postAuthorId,
 }) => {
   const queryClient = useQueryClient();
   const { toast } = useToast();
@@ -66,7 +88,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
 
   const hasLiked = !!(currentUserId && comment.likedBy?.includes(currentUserId));
   const [isDeleting, setIsDeleting] = useState(false);
-  const displayAnonymousName = generateAnonymousName(comment.userId);
+  const displayAnonymousName = comment.mentionName || comment.userName || generateAnonymousName(comment.userId);
 
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -87,7 +109,8 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
     staleTime: 1000 * 60 * 1,
   });
 
-  const { data: suggestedProfilesForReply = [], isLoading: isLoadingProfilesForReply } = useQuery<UserProfileBasic[]>({
+  // Suggestible users for replies: post author, original commenter, existing sub-commenters, and a general list.
+  const { data: profilesForReplySuggestions = [], isLoading: isLoadingProfilesForReply } = useQuery<UserProfileBasic[]>({
     queryKey: ['suggestibleUsersForReply', comment.id, debouncedMentionQuery],
     queryFn: () => getSuggestibleUsers(debouncedMentionQuery, debouncedMentionQuery ? 10 : 25),
     enabled: isReplying && showSuggestions && !!user,
@@ -95,68 +118,65 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
     retry: 1,
   });
 
+  const allRelevantProfilesForReplyContext = useMemo(() => {
+    const profiles = new Map<string, UserProfileBasic>();
+    if (user) {
+        profiles.set(user.uid, { userId: user.uid, mentionName: generateAnonymousName(user.uid), displayName: user.displayName || generateAnonymousName(user.uid) });
+    }
+    if (postAuthorId) { // Add post author
+        profiles.set(postAuthorId, { userId: postAuthorId, mentionName: generateAnonymousName(postAuthorId), displayName: generateAnonymousName(postAuthorId) });
+    }
+    profiles.set(comment.userId, { userId: comment.userId, mentionName: displayAnonymousName, displayName: displayAnonymousName, avatarUrl: comment.userAvatar });
+    subComments.forEach(sc => {
+        if (!profiles.has(sc.userId)) {
+            profiles.set(sc.userId, { userId: sc.userId, mentionName: sc.mentionName || sc.userName || generateAnonymousName(sc.userId), displayName: sc.userName || generateAnonymousName(sc.userId), avatarUrl: sc.userAvatar });
+        }
+    });
+    profilesForReplySuggestions.forEach(p => { // Add general suggestions
+        if(!profiles.has(p.userId)) profiles.set(p.userId, p);
+    });
+    return Array.from(profiles.values());
+  }, [user, postAuthorId, comment, subComments, profilesForReplySuggestions, displayAnonymousName]);
+
+
   const filteredSuggestionsForReply = useMemo(() => {
     if (!showSuggestions || !isReplying) return [];
-    if (isLoadingProfilesForReply) {
+    if (isLoadingProfilesForReply && debouncedMentionQuery) { // Only show loading if there's a query
       return [{ userId: 'loading-reply', mentionName: 'loading-reply', displayName: 'Loading users...' } as UserProfileBasic];
     }
-    const profilesSource = suggestedProfilesForReply.filter(p => p.userId !== currentUserId && !!p.mentionName);
-    let results: UserProfileBasic[];
-    if (mentionQuery.trim() === '') {
-      results = profilesSource.slice(0, 5);
+    
+    let source = allRelevantProfilesForReplyContext.filter(p => p.userId !== currentUserId && !!p.mentionName);
+
+    if (debouncedMentionQuery.trim() === '') {
+      // Show original commenter and sub-commenters first if no query
+      const threadParticipants = new Map<string, UserProfileBasic>();
+      if(postAuthorId && !threadParticipants.has(postAuthorId)) threadParticipants.set(postAuthorId, {userId: postAuthorId, mentionName: generateAnonymousName(postAuthorId), displayName: generateAnonymousName(postAuthorId)});
+      if(!threadParticipants.has(comment.userId)) threadParticipants.set(comment.userId, {userId: comment.userId, mentionName: displayAnonymousName, displayName: displayAnonymousName, avatarUrl: comment.userAvatar});
+      subComments.forEach(sc => {
+        if(!threadParticipants.has(sc.userId)) threadParticipants.set(sc.userId, {userId: sc.userId, mentionName: sc.mentionName || sc.userName || generateAnonymousName(sc.userId), displayName: sc.userName || generateAnonymousName(sc.userId), avatarUrl: sc.userAvatar });
+      });
+      source = Array.from(threadParticipants.values()).filter(p => p.userId !== currentUserId);
+      if (source.length === 0 && profilesForReplySuggestions.length > 0) { // Fallback to general if no thread participants other than self
+        source = profilesForReplySuggestions.filter(p => p.userId !== currentUserId && !!p.mentionName).slice(0,5);
+      }
     } else {
-      const queryLower = mentionQuery.toLowerCase();
-      results = profilesSource.filter(
+      const queryLower = debouncedMentionQuery.toLowerCase();
+      source = source.filter(
         p => p.mentionName.toLowerCase().includes(queryLower) ||
-          (p.actualDisplayName && p.actualDisplayName.toLowerCase().includes(queryLower)) ||
-          (p.companyName && p.companyName.toLowerCase().includes(queryLower))
-      ).slice(0, 10);
+             (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
+             (p.companyName && p.companyName.toLowerCase().includes(queryLower))
+      );
     }
-    if (results.length === 0 && mentionQuery.trim() !== '') {
-      return [{ userId: 'no-match-reply', mentionName: 'no-match-reply', displayName: `No users matching "@${mentionQuery}"` } as UserProfileBasic];
+
+    if (source.length === 0 && debouncedMentionQuery.trim() !== '') {
+      return [{ userId: 'no-match-reply', mentionName: 'no-match-reply', displayName: `No users matching "@${debouncedMentionQuery}"` } as UserProfileBasic];
     }
-    if (results.length === 0) {
+    if (source.length === 0) {
       return [{ userId: 'no-users-reply', mentionName: 'no-users-reply', displayName: 'No users to suggest.' } as UserProfileBasic];
     }
-    return results;
-  }, [mentionQuery, suggestedProfilesForReply, isLoadingProfilesForReply, showSuggestions, isReplying, currentUserId]);
+    return source.slice(0, 10); // Limit to 10 suggestions max
+  }, [mentionQuery, debouncedMentionQuery, allRelevantProfilesForReplyContext, profilesForReplySuggestions, isLoadingProfilesForReply, showSuggestions, isReplying, currentUserId, comment.userId, subComments, displayAnonymousName, postAuthorId]);
 
-  const profilesForReplyMentionResolution = useMemo(() => {
-    const profiles: UserProfileBasic[] = [];
-    if (user && user.uid) {
-      profiles.push({
-        userId: user.uid,
-        mentionName: generateAnonymousName(user.uid),
-        displayName: user.displayName || generateAnonymousName(user.uid),
-        avatarUrl: user.photoURL || undefined,
-        actualDisplayName: user.displayName || undefined,
-      });
-    }
-    if (comment.userId && !profiles.find(p => p.userId === comment.userId)) {
-      profiles.push({
-        userId: comment.userId,
-        mentionName: comment.userName || generateAnonymousName(comment.userId),
-        displayName: comment.userName || generateAnonymousName(comment.userId),
-        avatarUrl: comment.userAvatar,
-      });
-    }
-    subComments.forEach(sc => {
-      if (!profiles.find(p => p.userId === sc.userId)) {
-        profiles.push({
-          userId: sc.userId,
-          mentionName: sc.userName || generateAnonymousName(sc.userId),
-          displayName: sc.userName || generateAnonymousName(sc.userId),
-          avatarUrl: sc.userAvatar,
-        });
-      }
-    });
-    (suggestedProfilesForReply || []).forEach(suggestedProfile => {
-      if (!profiles.find(p => p.userId === suggestedProfile.userId)) {
-        profiles.push(suggestedProfile);
-      }
-    });
-    return profiles;
-  }, [user, comment, subComments, suggestedProfilesForReply]);
 
   const handleDeleteClick = useCallback(async () => {
     if (isDeleting) return;
@@ -164,7 +184,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
     try {
       await deleteCommentFromPost(postId, comment.id);
       toast({ title: "Comment Deleted" });
-      onDelete();
+      onDelete(comment.id);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Delete Failed", description: `Could not delete comment: ${error.message}` });
     } finally {
@@ -176,11 +196,12 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
     e.preventDefault();
     if (!user || !newReply.trim() || isSubmittingReply) return;
     setIsSubmittingReply(true);
-    const finalMentionedUids = extractMentionedUids(newReply.trim(), profilesForReplyMentionResolution);
+    const finalMentionedUids = extractMentionedUidsForReply(newReply.trim(), allRelevantProfilesForReplyContext);
     const replyData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'> = {
       userId: user.uid,
       text: newReply.trim(),
       mentionedUserIds: finalMentionedUids,
+      // mentionName will be generated by the service or set from profile by service if needed
     };
     try {
       await addSubCommentToComment(postId, comment.id, replyData);
@@ -196,7 +217,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
     } finally {
       setIsSubmittingReply(false);
     }
-  }, [user, newReply, isSubmittingReply, postId, comment.id, showReplies, refetchSubComments, toast, extractMentionedUids, profilesForReplyMentionResolution]);
+  }, [user, newReply, isSubmittingReply, postId, comment.id, showReplies, refetchSubComments, toast, allRelevantProfilesForReplyContext]);
 
   const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
     let activeQuery = null;
@@ -217,6 +238,12 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
     setNewReply(value);
     evaluateMentionState(value, e.target.selectionStart || 0);
   }, [setNewReply, evaluateMentionState]);
+  
+  const handleMentionInputFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    evaluateMentionState(value, e.target.selectionStart || 0);
+  }, [evaluateMentionState]);
+
 
   const handleSelectSuggestion = useCallback((profile: UserProfileBasic) => {
     if (!replyInputRef.current || !profile.mentionName) return;
@@ -283,7 +310,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
     setIsReplying(prev => {
       if (!prev) {
         setNewReply('');
-        setReplyingToSubComment(null);
+        setReplyingToSubComment(null); // Clear sub-comment reply target
         evaluateMentionState("", 0);
         setTimeout(() => replyInputRef.current?.focus(), 0);
       } else {
@@ -296,23 +323,22 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
 
   const handleSubCommentDeleted = useCallback(() => refetchSubComments(), [refetchSubComments]);
 
-  // const handleStartSubCommentReply = useCallback((subCommentToReplyTo: ClientSubComment) => {
-  //   if (!user) return;
-  //   setIsReplying(true);
-  //   const subCommentAuthorMentionName = generateAnonymousName(subCommentToReplyTo.userId);
-  //   const initialReplyText = `@${subCommentAuthorMentionName} `;
-  //   setNewReply(initialReplyText);
-  //   setReplyingToSubComment(subCommentToReplyTo);
-  //   evaluateMentionState(initialReplyText, initialReplyText.length);
-  //   setTimeout(() => {
-  //     replyInputRef.current?.focus();
-  //     if (replyInputRef.current) {
-  //       const len = replyInputRef.current.value.length;
-  //       replyInputRef.current.setSelectionRange(len, len);
-  //     }
-  //   }, 0);
-  // }, [user, setNewReply, setIsReplying, setReplyingToSubComment, evaluateMentionState]);
-
+  const handleStartSubCommentReply = useCallback((subCommentToReplyTo: ClientSubComment) => {
+    if (!user) return;
+    setIsReplying(true); // Open the main reply input
+    const subCommentAuthorMentionName = subCommentToReplyTo.mentionName || subCommentToReplyTo.userName || generateAnonymousName(subCommentToReplyTo.userId);
+    const initialReplyText = `@${subCommentAuthorMentionName} `;
+    setNewReply(initialReplyText);
+    setReplyingToSubComment(subCommentToReplyTo); // Keep track of which sub-comment is being replied to if needed for context
+    evaluateMentionState(initialReplyText, initialReplyText.length);
+    setTimeout(() => {
+      replyInputRef.current?.focus();
+      if (replyInputRef.current) {
+        const len = replyInputRef.current.value.length;
+        replyInputRef.current.setSelectionRange(len, len);
+      }
+    }, 0);
+  }, [user, setNewReply, setIsReplying, setReplyingToSubComment, evaluateMentionState]);
 
   return (
     <div className="group border-b border-border/50 pb-4">
@@ -321,7 +347,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
           <Avatar className="h-8 w-8 mt-1 flex-shrink-0 cursor-pointer">
             <AvatarImage src={comment.userAvatar} alt={displayAnonymousName} />
             <AvatarFallback className="text-xs bg-muted text-muted-foreground">
-              {getSharedInitials(displayAnonymousName)}
+              {getInitials(displayAnonymousName)}
             </AvatarFallback>
           </Avatar>
         </Link>
@@ -333,9 +359,6 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
               </p>
             </Link>
             <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-              <p className="text-xs text-muted-foreground">
-                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </p>
               {user && (
                 <Button
                   variant="ghost"
@@ -349,6 +372,9 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
                   {(comment.likeCount ?? 0) > 0 ? <span className="text-xs ml-0.5">({comment.likeCount})</span> : ''}
                 </Button>
               )}
+               <p className="text-xs text-muted-foreground">
+                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
               {isOwnComment && (
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
@@ -381,7 +407,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
             </div>
           </div>
           <p className="text-sm text-muted-foreground break-words">
-            <TextWithMentions text={comment.text} mentionedUserIds={comment.mentionedUserIds || []} IS_UID_REGEX={IS_UID_REGEX_COMMENT}/>
+            <TextWithMentions text={comment.text} mentionedUserIds={comment.mentionedUserIds || []} />
           </p>
         </div>
       </div>
@@ -399,7 +425,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
 
       {isReplying && user && (
         <Popover
-          open={showSuggestions && filteredSuggestionsForReply.length > 0 && (filteredSuggestionsForReply[0]?.userId !== 'loading-reply' && filteredSuggestionsForReply[0]?.userId !== 'no-users-reply' && filteredSuggestionsForReply[0]?.userId !== 'no-match-reply')}
+          open={showSuggestions && filteredSuggestionsForReply.length > 0 && !['loading-reply', 'no-users-reply', 'no-match-reply'].includes(filteredSuggestionsForReply[0]?.userId)}
           onOpenChange={(open) => { setShowSuggestions(open); if (!open) setMentionQuery(''); }}
         >
           <PopoverTrigger asChild>
@@ -410,7 +436,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
                 placeholder={`Replying to ${displayAnonymousName}... (@mention someone)`}
                 value={newReply}
                 onChange={handleMentionInputChange}
-                onFocus={handleMentionInputChange}
+                onFocus={handleMentionInputFocus}
                 onKeyDown={(e) => { if (showSuggestions && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape')) { if (e.key !== 'Escape') e.preventDefault(); } }}
                 onBlurCapture={() => setTimeout(() => { if (suggestionsPopoverRef.current && !suggestionsPopoverRef.current.contains(document.activeElement as Node) && replyInputRef.current !== document.activeElement) { if (showSuggestions) setShowSuggestions(false); } }, 150)}
                 disabled={isSubmittingReply}
@@ -426,14 +452,14 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
           </PopoverTrigger>
           <PopoverContent ref={suggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="top" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
             {filteredSuggestionsForReply.map(profile => {
-              const displayableName = profile.actualDisplayName || profile.companyName;
-              const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
+                const displayableName = profile.companyName || profile.displayName;
+                const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
               return (
-                profile.userId === 'loading-reply' || profile.userId === 'no-users-reply' || profile.userId === 'no-match-reply' ? (
+                ['loading-reply', 'no-users-reply', 'no-match-reply'].includes(profile.userId) ? (
                   <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
                 ) : (
                   <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectSuggestion(profile)}>
-                    <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getSharedInitials(profile.mentionName)}</AvatarFallback></Avatar>
+                    <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback></Avatar>
                     <div className="flex flex-col items-start">
                       {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
                       <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
@@ -459,7 +485,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
                 postId={postId}
                 commentId={comment.id}
                 onDelete={handleSubCommentDeleted}
-                // onStartReply={handleStartSubCommentReply} // Removed for now
+                onStartReply={handleStartSubCommentReply}
               />
             ))}
         </div>

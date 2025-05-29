@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useCallback } from 'react';
@@ -15,17 +16,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Loader2, Trash2, Heart } from 'lucide-react'; // Removed CornerDownLeft
-import type { ClientSubComment } from '@/types/comment';
+import { Loader2, Trash2, Heart, CornerDownRight } from 'lucide-react';
+import type { ClientSubComment, ClientComment } from '@/types/comment'; // Added ClientComment for onStartReply
 import { deleteSubCommentFromComment, toggleLikeSubComment } from '@/services/commentService';
 import { useToast } from '@/hooks/use-toast';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { TextWithMentions } from './TextWithMentions';
 
-// Define IS_UID_REGEX here or import from a shared location
 const IS_UID_REGEX_SUB_COMMENT = /^[a-zA-Z0-9]{20,}$/;
 
 interface SubCommentItemProps {
@@ -34,7 +34,7 @@ interface SubCommentItemProps {
   postId: string;
   commentId: string;
   onDelete: () => void;
-  // onStartReply: (replyTo: ClientSubComment) => void; // Removed for now, can be re-added
+  onStartReply: (replyTo: ClientSubComment) => void; 
 }
 
 export const SubCommentItem: React.FC<SubCommentItemProps> = React.memo(({
@@ -43,16 +43,19 @@ export const SubCommentItem: React.FC<SubCommentItemProps> = React.memo(({
   postId,
   commentId,
   onDelete,
-  // onStartReply,
+  onStartReply,
 }) => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const { user } = useAuth(); // Use the global auth context
+  const { user } = useAuth();
   const isOwnSubComment = subComment.userId === currentUserId;
   const [isLiking, setIsLiking] = useState(false);
   const hasLiked = !!(currentUserId && subComment.likedBy?.includes(currentUserId));
   const [isDeleting, setIsDeleting] = useState(false);
-  const displayAnonymousName = generateAnonymousName(subComment.userId);
+  
+  // Use mentionName if userName (from old data) is missing, otherwise use generateAnonymousName
+  const displayAnonymousName = subComment.mentionName || subComment.userName || generateAnonymousName(subComment.userId);
+
 
   const handleDeleteClick = useCallback(async () => {
     if (isDeleting) return;
@@ -112,7 +115,7 @@ export const SubCommentItem: React.FC<SubCommentItemProps> = React.memo(({
         <Avatar className="h-6 w-6 mt-1 flex-shrink-0 cursor-pointer">
           <AvatarImage src={subComment.userAvatar} alt={displayAnonymousName} />
           <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
-            {getSharedInitials(displayAnonymousName)}
+            {getInitials(displayAnonymousName)}
           </AvatarFallback>
         </Avatar>
       </Link>
@@ -146,6 +149,11 @@ export const SubCommentItem: React.FC<SubCommentItemProps> = React.memo(({
                 )}
                 {(subComment.likeCount ?? 0) > 0 ? <span className="text-xs ml-0.5">({subComment.likeCount})</span> : ''}
               </Button>
+            )}
+            {user && (
+                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-muted-foreground/70 hover:text-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" onClick={() => onStartReply(subComment)} title="Reply to this comment">
+                    <CornerDownRight className="h-3 w-3" />
+                 </Button>
             )}
             {isOwnSubComment && (
               <AlertDialog>
@@ -183,10 +191,11 @@ export const SubCommentItem: React.FC<SubCommentItemProps> = React.memo(({
           </div>
         </div>
         <p className="text-sm text-muted-foreground break-words">
-          <TextWithMentions text={subComment.text} mentionedUserIds={subComment.mentionedUserIds || []} IS_UID_REGEX={IS_UID_REGEX_SUB_COMMENT} />
+           <TextWithMentions text={subComment.text} mentionedUserIds={subComment.mentionedUserIds || []} />
         </p>
       </div>
     </div>
   );
 });
 SubCommentItem.displayName = 'SubCommentItem';
+

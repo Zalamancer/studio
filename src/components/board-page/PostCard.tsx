@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from 'react';
@@ -7,10 +8,9 @@ import Image from 'next/image';
 import { Timestamp } from 'firebase/firestore';
 import { cn } from "@/lib/utils";
 import type { Post } from '@/types/post';
-import { TextWithMentions } from './TextWithMentions'; // Import from new location
+import { TextWithMentions } from './TextWithMentions';
 import { HandHelping, DollarSign, Star } from 'lucide-react';
 
-// Define IS_UID_REGEX_PAGE here or import from a shared location if it becomes widely used
 const IS_UID_REGEX_POST_CARD = /^[a-zA-Z0-9]{20,}$/;
 
 interface PostCardProps {
@@ -47,7 +47,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
               <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
             </Badge>
           )}
-          {post.requestType === 'help_request' && post.maxBudget != null && (
+          {post.requestType === 'help_request' && post.maxBudget != null && ( // Changed from paymentAmount
             <Badge variant="secondary" className="text-xs cursor-default">
               <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
             </Badge>
@@ -59,7 +59,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
           ))}
         </div>
         <h3 className="text-base font-semibold leading-snug text-card-foreground line-clamp-3">{post.question}</h3>
-        {post.ratingScore != null && (
+         {post.ratingScore != null && (
           <div className="flex items-center text-xs text-muted-foreground mt-1">
             <Star className={cn("h-3.5 w-3.5 mr-1", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
             <span>{post.ratingScore.toFixed(1)}/5</span>
@@ -77,15 +77,19 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
             />
           </div>
         )}
-        {post.requestType !== 'help_request' && post.description && (
-          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-            <TextWithMentions text={post.description} mentionedUserIds={post.mentionedUserIds || []} IS_UID_REGEX={IS_UID_REGEX_POST_CARD} />
-          </p>
-        )}
-        {post.requestType === 'help_request' && post.descriptionDetails && (
-          <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-            <TextWithMentions text={post.descriptionDetails} mentionedUserIds={post.mentionedUserIds || []} IS_UID_REGEX={IS_UID_REGEX_POST_CARD}/>
-          </p>
+        {/* Conditional rendering for descriptions */}
+        {post.requestType === 'help_request' ? (
+          post.descriptionDetails && (
+            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+              <TextWithMentions text={post.descriptionDetails} mentionedUserIds={post.mentionedUserIds || []} />
+            </p>
+          )
+        ) : (
+          post.description && (
+            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+              <TextWithMentions text={post.description} mentionedUserIds={post.mentionedUserIds || []} />
+            </p>
+          )
         )}
         <p className="mt-2 text-xs text-muted-foreground/80">
           Posted: {postDate}
@@ -95,3 +99,4 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
   );
 });
 PostCard.displayName = 'PostCard';
+

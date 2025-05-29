@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useMemo } from 'react';
@@ -5,22 +6,27 @@ import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { fetchUserProfileBasic } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName } from '@/lib/pseudonymUtils'; // Assuming getInitials is not needed here if we display full names or use avatar fallback
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
+
+// Define IS_UID_REGEX here or import from a shared location if it becomes widely used
+const IS_UID_REGEX_MENTIONS = /^[a-zA-Z0-9]{20,}$/;
 
 interface TextWithMentionsProps {
   text: string;
-  mentionedUserIds?: string[];
-  IS_UID_REGEX: RegExp; // Pass the regex as a prop
+  mentionedUserIds?: string[]; // Should be an array of actual UIDs
 }
 
-export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ text, mentionedUserIds = [], IS_UID_REGEX }) => {
-  const validMentionedUids = useMemo(() => mentionedUserIds.filter(id => id && IS_UID_REGEX.test(id)), [mentionedUserIds, IS_UID_REGEX]);
+export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ text, mentionedUserIds = [] }) => {
+  const validMentionedUids = useMemo(() => mentionedUserIds.filter(id => id && IS_UID_REGEX_MENTIONS.test(id)), [mentionedUserIds]);
 
   const { data: mentionProfilesMap = new Map<string, UserProfileBasic | null>(), isLoading: isLoadingMentionProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
-    queryKey: ['mentionProfiles', validMentionedUids.join(',')],
+    queryKey: ['mentionProfilesForText', validMentionedUids.join(',')],
     queryFn: async () => {
       const profiles = new Map<string, UserProfileBasic | null>();
-      if (validMentionedUids.length === 0) return profiles;
+      if (validMentionedUids.length === 0) {
+        console.log("%c[TextWithMentions] QueryFn: No validMentionedUids, returning empty map.", "color: teal;");
+        return profiles;
+      }
       console.log(`%c[TextWithMentions] QueryFn: Fetching profiles for UIDs:`, "color: teal;", validMentionedUids);
       await Promise.all(
         validMentionedUids.map(async (userId) => {
@@ -29,26 +35,29 @@ export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ t
             profiles.set(userId, profile);
           } catch (error) {
             console.warn(`%c[TextWithMentions] QueryFn: Error fetching profile for UID ${userId}:`, "color: orange;", error);
-            profiles.set(userId, null);
+            profiles.set(userId, null); // Store null if fetch fails to avoid re-fetching constantly
           }
         })
       );
+      console.log(`%c[TextWithMentions] QueryFn: Finished fetching. mentionProfilesMap size: ${profiles.size}.`, "color: teal;", profiles);
       return profiles;
     },
     enabled: validMentionedUids.length > 0,
-    staleTime: 5 * 60 * 1000,
+    staleTime: 5 * 60 * 1000, // 5 minutes
   });
 
   const renderableParts = useMemo(() => {
-    if (typeof text !== 'string' || text.trim() === '') return [<React.Fragment key="original-text">{text || ''}</React.Fragment>];
+    if (typeof text !== 'string' || text.trim() === '') {
+      return [<React.Fragment key="empty-text">{text || ''}</React.Fragment>];
+    }
 
     const mentionRegexGlobal = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,})/g;
     const parts: (string | JSX.Element)[] = [];
     let lastIndex = 0;
 
     for (const match of text.matchAll(mentionRegexGlobal)) {
-      const mentionWithAt = match[0];
-      const textualMention = match[1];
+      const mentionWithAt = match[0]; // e.g., "@BlueWhale123" or "@ActualUID"
+      const textualMention = match[1]; // e.g., "BlueWhale123" or "ActualUID"
       const startIndex = match.index!;
 
       if (startIndex > lastIndex) {
@@ -58,7 +67,7 @@ export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ t
       let profileToLink: UserProfileBasic | null | undefined = undefined;
       const textualMentionLower = textualMention.toLowerCase();
 
-      if (IS_UID_REGEX.test(textualMention) && mentionProfilesMap.has(textualMention)) {
+      if (IS_UID_REGEX_MENTIONS.test(textualMention) && mentionProfilesMap.has(textualMention)) {
         profileToLink = mentionProfilesMap.get(textualMention);
       } else if (mentionProfilesMap.size > 0) {
         for (const profile of mentionProfilesMap.values()) {
@@ -69,7 +78,7 @@ export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ t
         }
       }
 
-      if (profileToLink && profileToLink.userId && IS_UID_REGEX.test(profileToLink.userId)) {
+      if (profileToLink && profileToLink.userId && IS_UID_REGEX_MENTIONS.test(profileToLink.userId)) {
         parts.push(
           <Link
             key={`${profileToLink.userId}-${startIndex}`}
@@ -77,7 +86,7 @@ export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ t
             className="text-primary hover:underline font-medium cursor-pointer"
             onClick={(e) => e.stopPropagation()}
           >
-            {`@${profileToLink.mentionName || generateAnonymousName(profileToLink.userId)}`}
+            {`@${profileToLink.mentionName}`}
           </Link>
         );
       } else {
@@ -99,10 +108,13 @@ export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ t
       parts.push(text.substring(lastIndex));
     }
     return parts;
-  }, [text, mentionProfilesMap, IS_UID_REGEX]);
+  }, [text, mentionProfilesMap]);
+
 
   if (isLoadingMentionProfiles && validMentionedUids.length > 0) {
-    return <span className="text-muted-foreground/80 italic">Loading mentions in text...</span>;
+    // Optional: render the text as is while profiles are loading to avoid layout shifts
+    // or show a more subtle loading indicator if preferred.
+    return <>{text}</>; 
   }
 
   return <>{renderableParts.map((part, index) => <React.Fragment key={index}>{part}</React.Fragment>)}</>;
