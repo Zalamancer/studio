@@ -3,6 +3,7 @@
 // consider further splitting its internal sections (like Bidding, Comments, etc.)
 // into their own dedicated components within this 'board-page' sub-directory.
 // This file can then act as a bridge, importing and orchestrating these smaller components.
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -18,7 +19,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from '@/components/ui/label';
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Send, DollarSign, HandHelping, User, MessageSquare, X, Info, TooltipIcon, Trash2 } from 'lucide-react';
+import { Loader2, Send, DollarSign, HandHelping, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_COMPONENT } from '@/lib/utils';
@@ -38,7 +39,6 @@ import { Form, FormControl, FormField, FormItem, FormMessage } from "@/component
 
 import { PostDetailHeader } from './PostDetailHeader';
 import { PostDetailContentBody } from './PostDetailContentBody';
-// PostDetailBidding is now integrated into the footer
 import { PostDetailComments } from './PostDetailComments';
 
 interface PostDetailPanelProps {
@@ -55,7 +55,6 @@ const bidFormSchema = z.object({
 });
 type BidFormValues = z.infer<typeof bidFormSchema>;
 
-
 export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   post,
   currentUser,
@@ -68,7 +67,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const router = useRouter();
   const user = currentUser;
 
-  // Comment State & Logic
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [newCommentMentionQuery, setNewCommentMentionQuery] = useState('');
@@ -77,12 +75,10 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
 
-  // Bidding State (Inline)
   const [inlineBidAmount, setInlineBidAmount] = useState<string>("");
   const [inlineBidError, setInlineBidError] = useState<string | null>(null);
   const [isProcessingOffer, setIsProcessingOffer] = useState(false);
 
-  // Debounce for new comment mention query
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedNewCommentMentionQuery(newCommentMentionQuery);
@@ -242,7 +238,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   }, [showNewCommentSuggestions, isLoadingGeneralSuggestions, generalSuggestibleUsers, debouncedNewCommentMentionQuery]);
 
 
-  // Bidding Logic
   const { data: bids = [], isLoading: isLoadingBids } = useQuery<ClientBid[], Error>({
     queryKey: ['bids', post?.id],
     queryFn: () => post ? getBidsForPost(post.id) : Promise.resolve([]),
@@ -264,17 +259,19 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 
   const currentUserHasBid = useMemo(() => {
     if (!user || !bids || bids.length === 0) return false;
-    return bids.some(bid => bid.bidderId === user.uid);
+    return bids.some(bid => bid && bid.bidderId === user.uid);
   }, [user, bids]);
 
   const currentUserBid = useMemo(() => {
     if (!currentUserHasBid || !user) return null;
-    return bids.find(bid => bid.bidderId === user.uid);
+    return bids.find(bid => bid && bid.bidderId === user.uid);
   }, [currentUserHasBid, user, bids]);
 
   const minimumBidAmount = useMemo(() => {
     if (!bids || bids.length === 0) return null;
-    return Math.min(...bids.map(bid => bid.bidAmount));
+    const validBids = bids.filter(bid => bid && typeof bid.bidAmount === 'number');
+    if (validBids.length === 0) return null;
+    return Math.min(...validBids.map(bid => bid.bidAmount));
   }, [bids]);
 
 
@@ -327,7 +324,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       postId: post.id,
       bidderId: user.uid,
       bidAmount: parsedBidAmount,
-      bidMessage: `Bid placed via 'Offer Help': $${parsedBidAmount.toLocaleString()}`,
+      bidMessage: `Bid placed: $${parsedBidAmount.toLocaleString()}`,
     };
 
     try {
@@ -338,7 +335,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
         router.push(`/contracts?conversationId=${conversationId}&postId=${post.id}&initialBidAmount=${parsedBidAmount}`);
         setInlineBidAmount("");
         setInlineBidError(null);
-        onClose(); // Close the panel
+        onClose();
       } else {
         throw new Error("Failed to initiate conversation after bid.");
       }
@@ -356,8 +353,18 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     enabled: !!currentUser && !!post?.userId && currentUser.uid !== post.userId && !!post.userId && IS_UID_REGEX_COMPONENT.test(post.userId),
   });
 
+
   if (!post) {
-    return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
+    return (
+        <Card className="flex flex-col flex-1 overflow-hidden sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] border-border rounded-lg shadow-xl bg-card">
+            <CardHeader className="p-4 border-b flex-shrink-0 bg-card">
+                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
+            </CardHeader>
+            <CardContent className="flex-grow flex items-center justify-center">
+                <p className="text-muted-foreground">Loading post details...</p>
+            </CardContent>
+        </Card>
+    );
   }
 
   return (
@@ -371,78 +378,86 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
           deletePostMutationIsPending={deletePostMutationIsPending}
           connectionStatus={connectionStatus}
         />
+        {/* Scrollable Content Area */}
         <ScrollArea className="flex-grow bg-background">
-          <PostDetailContentBody post={post} />
-
-          {/* Bids Section - Only for Help Requests and if not owner */}
-          {post.requestType === 'help_request' && post.userId !== user?.uid && post.maxBudget != null && (
-            <div className="mt-6 border-t pt-4 px-4">
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="text-md font-semibold flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-green-600" /> Bids ({isLoadingBids ? '...' : bids.length})
-                  <span className="text-xs text-muted-foreground font-normal ml-1">
-                    (Minimum bid: {minimumBidAmount !== null ? `$${minimumBidAmount.toLocaleString()}` : (bids.length === 0 && !isLoadingBids ? "N/A" : "$0 (FREE)")})
-                  </span>
-                </h4>
-              </div>
-              {isLoadingBids && user ? (
-                <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading bids...</div>
-              ) : !user && post.requestType === 'help_request' ? (
-                 <p className="text-sm text-muted-foreground text-center py-4">Login to view or place bids.</p>
-              ) : bids.length === 0 && !isLoadingBids ? (
-                <p className="text-sm text-muted-foreground">No bids placed yet. Be the first!</p>
-              ) : (
-                <div className="space-y-3 max-h-40 pr-1 overflow-y-auto">
-                  {bids.map(bid => (
-                    <Card key={bid.id} className="p-3 bg-muted/30 shadow-sm">
-                      <div className="flex items-start gap-2.5">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={bid.bidderAvatar} alt={bid.bidderName || generateAnonymousName(bid.bidderId)} />
-                          <AvatarFallback className="text-xs">{getInitials(bid.bidderName || generateAnonymousName(bid.bidderId))}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex-grow min-w-0">
-                          <div className="flex justify-between items-center">
-                            <p className="text-xs font-medium text-foreground truncate">{bid.bidderName || generateAnonymousName(bid.bidderId)}</p>
-                            <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">{formatDistanceToNow(new Date(bid.timestamp), { addSuffix: true })}</p>
-                          </div>
-                          <p className="text-sm font-semibold text-primary">${bid.bidAmount.toLocaleString()}</p>
-                          {bid.bidMessage && <p className="text-xs text-muted-foreground mt-0.5 break-words">{bid.bidMessage}</p>}
-                        </div>
-                      </div>
-                    </Card>
-                  ))}
+            <PostDetailContentBody post={post} />
+            {/* Bids Section */}
+            {post.requestType === 'help_request' && post.userId !== user?.uid && post.maxBudget != null && (
+              <div className="mt-4 border-t pt-4 px-4">
+                <div className="flex justify-between items-center mb-2">
+                  <h4 className="text-md font-semibold flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-green-600" /> Bids ({isLoadingBids ? '...' : bids.length})
+                    <span className="text-xs text-muted-foreground font-normal ml-1">
+                       (Min. bid: {minimumBidAmount !== null ? `$${minimumBidAmount.toLocaleString()}` : 'N/A'})
+                    </span>
+                  </h4>
                 </div>
-              )}
-            </div>
-          )}
-          <PostDetailComments post={post} currentUser={currentUser} />
+                {isLoadingBids && user ? (
+                  <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading bids...</div>
+                ) : !user && post.requestType === 'help_request' ? (
+                   <p className="text-sm text-muted-foreground text-center py-4">Login to view or place bids.</p>
+                ) : bids.length === 0 && !isLoadingBids ? (
+                  <p className="text-sm text-muted-foreground">No bids placed yet.</p>
+                ) : (
+                  <div className="space-y-3 max-h-32 pr-1 overflow-y-auto">
+                    {bids.map(bid => (
+                      bid && bid.bidderId ? (
+                        <Card key={bid.id} className="p-3 bg-muted/30 shadow-sm">
+                          <div className="flex items-start gap-2.5">
+                            <Avatar className="h-8 w-8">
+                              <AvatarImage src={bid.bidderAvatar} alt={bid.bidderName || generateAnonymousName(bid.bidderId)} />
+                              <AvatarFallback className="text-xs">{getInitials(bid.bidderName || generateAnonymousName(bid.bidderId))}</AvatarFallback>
+                            </Avatar>
+                            <div className="flex-grow min-w-0">
+                              <div className="flex justify-between items-center">
+                                <p className="text-xs font-medium text-foreground truncate">{bid.bidderName || generateAnonymousName(bid.bidderId)}</p>
+                                {bid.timestamp && <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">{formatDistanceToNow(new Date(bid.timestamp), { addSuffix: true })}</p>}
+                              </div>
+                              <p className="text-sm font-semibold text-primary">${bid.bidAmount.toLocaleString()}</p>
+                              {bid.bidMessage && <p className="text-xs text-muted-foreground mt-0.5 break-words">{bid.bidMessage}</p>}
+                            </div>
+                          </div>
+                        </Card>
+                      ) : null
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            <PostDetailComments post={post} currentUser={currentUser} />
         </ScrollArea>
 
+        {/* Fixed Footer Area */}
         <CardFooter className="p-3 border-t bg-card flex-shrink-0 flex-col items-stretch gap-3">
+          {/* Bidding UI Row - only if applicable */}
           {user && post.requestType === 'help_request' && post.userId !== user.uid && post.maxBudget != null && (
-            <div className="space-y-2">
-              <div className="flex items-end gap-2">
-                <div className="flex-grow space-y-1">
-                  <Label htmlFor={`inlineBidAmount-${post.id}`} className="text-xs font-medium">
-                    Your Bid (0 - ${post.maxBudget.toLocaleString()})
-                  </Label>
-                  <div className="flex items-center gap-2">
-                     <Button variant="outline" size="sm" onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }} disabled={isProcessingOffer} className="text-xs h-9 px-2 py-1">Bid FREE</Button>
-                     <Input
-                        id={`inlineBidAmount-${post.id}`}
-                        type="number"
-                        placeholder="Custom amount"
-                        value={inlineBidAmount}
-                        onChange={handleInlineBidChange}
-                        className={cn("h-9 text-sm flex-grow bg-background", inlineBidError && "border-destructive ring-destructive focus-visible:ring-destructive")}
-                        disabled={isProcessingOffer}
-                        min="0"
-                        max={post.maxBudget}
-                        step="any"
-                      />
+            <div className="w-full">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2"> {/* Main flex container for this row */}
+                {/* Left side: Preset Bid and Custom Input */}
+                <div className="flex flex-grow items-end gap-2">
+                  <Button variant="outline" size="sm" onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }} disabled={isProcessingOffer || addBidMutation.isPending} className="text-xs h-9 px-2 py-1 whitespace-nowrap">
+                    Bid FREE
+                  </Button>
+                  <div className="flex-grow space-y-1">
+                    <Label htmlFor={`inlineBidAmount-${post.id}`} className="text-xs font-medium sr-only">
+                      Your Bid Amount
+                    </Label>
+                    <Input
+                      id={`inlineBidAmount-${post.id}`}
+                      type="number"
+                      placeholder={`0 - ${post.maxBudget.toLocaleString()}`}
+                      value={inlineBidAmount}
+                      onChange={handleInlineBidChange}
+                      className={cn("h-9 text-sm bg-background", inlineBidError && "border-destructive ring-destructive focus-visible:ring-destructive")}
+                      disabled={isProcessingOffer || addBidMutation.isPending}
+                      min="0"
+                      max={post.maxBudget}
+                      step="any"
+                    />
                   </div>
-                  {inlineBidError && (<p className="text-xs text-destructive mt-1 text-left">{inlineBidError}</p>)}
                 </div>
+
+                {/* Right side: Offer Help Button */}
                 <TooltipProvider>
                   <Tooltip delayDuration={100}>
                     <TooltipTrigger asChild>
@@ -450,11 +465,11 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                         variant="default"
                         size="sm"
                         onClick={handleOfferHelpAndBid}
-                        disabled={isProcessingOffer || !!inlineBidError || inlineBidAmount.trim() === "" || !user}
-                        className="bg-green-600 hover:bg-green-700 text-white h-9 px-3 self-end"
+                        disabled={isProcessingOffer || addBidMutation.isPending || !!inlineBidError || inlineBidAmount.trim() === "" || !user}
+                        className="bg-green-600 hover:bg-green-700 text-white h-9 px-3 whitespace-nowrap mt-2 sm:mt-0"
                       >
-                        {isProcessingOffer ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <HandHelping className="mr-1.5 h-4 w-4" />}
-                        Offer Help & Bid
+                        {isProcessingOffer || addBidMutation.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <HandHelping className="mr-1.5 h-4 w-4" />}
+                        Offer Help &amp; Bid
                       </Button>
                     </TooltipTrigger>
                     {(!!inlineBidError || inlineBidAmount.trim() === "" || !user) && (
@@ -465,9 +480,11 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                   </Tooltip>
                 </TooltipProvider>
               </div>
+              {inlineBidError && (<p className="text-xs text-destructive mt-1 text-left sm:ml-[calc(theme(spacing.10)_+_0.5rem)]">{/* Adjust margin to align with input area on small screens */}</p>)}
             </div>
           )}
 
+          {/* Comment Input Row */}
           {user && (
             <Popover
               open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && !['loading-main-comment', 'no-users-main-comment', 'no-match-main-comment'].includes(filteredNewCommentSuggestions[0]?.userId)}
@@ -512,7 +529,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
               >
                 {filteredNewCommentSuggestions.map(profile => {
                   const displayableName = profile.companyName || profile.mentionName;
-                  const showSecondaryNameLine = profile.companyName && profile.companyName.toLowerCase() !== profile.mentionName.toLowerCase();
+                  const showSecondaryNameLine = profile.companyName && profile.mentionName && profile.companyName.toLowerCase() !== profile.mentionName.toLowerCase();
 
                   return (
                     (profile.userId === 'loading-main-comment' || profile.userId === 'no-users-main-comment' || profile.userId === 'no-match-main-comment') ? (
@@ -531,10 +548,10 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                           <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
                         </Avatar>
                         <div className="flex flex-col items-start">
-                          {showSecondaryNameLine && (
-                            <span className="font-medium text-foreground">{displayableName}</span>
+                          {(profile.actualDisplayName || profile.companyName) && (profile.actualDisplayName || profile.companyName) !== profile.mentionName && (
+                             <span className="font-medium text-foreground">{profile.actualDisplayName || profile.companyName}</span>
                           )}
-                          <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
+                          <span className={cn("text-muted-foreground", !((profile.actualDisplayName || profile.companyName) && (profile.actualDisplayName || profile.companyName) !== profile.mentionName) && "font-medium text-foreground")}>
                             @{profile.mentionName}
                           </span>
                         </div>
