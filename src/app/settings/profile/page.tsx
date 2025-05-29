@@ -1,7 +1,8 @@
+
 // src/app/settings/profile/page.tsx
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -9,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { useAuth } from '@/contexts/AuthContext';
-import { Loader2, Upload, ImageDown, AtSign, Building, Briefcase, Info, User, DollarSign, CheckCircle } from 'lucide-react'; // Added CheckCircle
+import { Loader2, Upload, ImageDown, Building, Briefcase, Info, User, DollarSign, CheckCircle, Edit3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import imageCompression from 'browser-image-compression';
 import {
@@ -27,7 +28,7 @@ import { detailedSectorsData } from '@/components/layout/MainLayout';
 import { updateUserProfileDetails, fetchFullUserProfile, type UserProfileUpdateData } from '@/services/connectionService';
 import type { VisibilitySetting, UserProfileData } from '@/types/connection';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
-import { uploadPostImage } from '@/services/storageService'; // Assuming this service exists
+import { uploadPostImage } from '@/services/storageService';
 
 const MAX_FILE_SIZE_MB = 1;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -56,42 +57,37 @@ const ProfileSettingsPage = () => {
 
   // State for visibility settings
   const [descriptionVisibility, setDescriptionVisibility] = useState<VisibilitySetting>('everyone');
-  
+
   // State for displaying non-editable fields
   const [fetchedMentionName, setFetchedMentionName] = useState('');
   const [fetchedCompanyName, setFetchedCompanyName] = useState('');
-  const [fetchedActualDisplayName, setFetchedActualDisplayName] = useState('');
-
+  const [fetchedActualDisplayName, setFetchedActualDisplayName] = useState(''); // Still fetched for display
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [currentDbAvatarUrl, setCurrentDbAvatarUrl] = useState<string | null>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [originalTooLargeFile, setOriginalTooLargeFile] = useState<File | null>(null);
 
-  const [isFetchingProfile, setIsFetchingProfile] = useState(false);
+  const [isFetchingProfile, setIsFetchingProfile] = useState(false); // Initialize to false
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
 
   const currentYear = new Date().getFullYear();
+  const displayedNameForAvatar = fetchedCompanyName || fetchedActualDisplayName || fetchedMentionName || user?.email || 'U';
+
 
   useEffect(() => {
-    if (authLoading) {
-      console.log("[ProfileSettingsPage] useEffect: Auth is loading, waiting...");
-      return;
-    }
-
-    const fetchProfile = async () => {
-      if (!user) {
+    const fetchProfileData = async () => {
+      if (!user) { // Should already be guarded by authLoading, but defensive check
         setIsFetchingProfile(false);
         return;
       }
       setIsFetchingProfile(true);
-      console.log("[ProfileSettingsPage] useEffect: Fetching profile for user:", user.uid);
+      console.log("[ProfileSettingsPage] fetchProfileData: Fetching profile for user:", user.uid);
       try {
-        // Removed artificial delay
         const fullProfileData = await fetchFullUserProfile(user.uid);
-        console.log("[ProfileSettingsPage] useEffect: Raw fullProfileData from service:", fullProfileData);
+        console.log("[ProfileSettingsPage] fetchProfileData: Raw fullProfileData from service:", fullProfileData);
 
         if (fullProfileData) {
           setIndustry(fullProfileData.industry || '');
@@ -99,10 +95,11 @@ const ProfileSettingsPage = () => {
           setDescriptionVisibility(fullProfileData.descriptionVisibility || 'everyone');
           setEstablished(fullProfileData.established || '');
           setIncomeRange(fullProfileData.incomeRange || 'Prefer not to say');
-          
+
           setFetchedCompanyName(fullProfileData.companyName || '');
-          setFetchedActualDisplayName(fullProfileData.actualDisplayName || '');
+          setFetchedActualDisplayName(fullProfileData.actualDisplayName || ''); // For display if companyName is missing
           setFetchedMentionName(fullProfileData.mentionName || generateAnonymousName(user.uid));
+
 
           const avatarToDisplay = fullProfileData.avatarUrl || null;
           setPreviewUrl(avatarToDisplay);
@@ -111,7 +108,6 @@ const ProfileSettingsPage = () => {
         } else {
           console.warn("[ProfileSettingsPage] No full profile document found, setting defaults.");
           setFetchedMentionName(generateAnonymousName(user.uid));
-          // Set other fields to defaults if necessary
           setIndustry('');
           setDescription('');
           setDescriptionVisibility('everyone');
@@ -123,21 +119,25 @@ const ProfileSettingsPage = () => {
           setFetchedActualDisplayName('');
         }
       } catch (error) {
-        console.error("[ProfileSettingsPage] useEffect: Error fetching profile:", error);
+        console.error("[ProfileSettingsPage] fetchProfileData: Error fetching profile:", error);
         toast({ variant: "destructive", title: "Error Fetching Profile", description: "Could not load your profile data." });
-        setFetchedMentionName(generateAnonymousName(user?.uid || "")); // Use user.uid if available
+        setFetchedMentionName(generateAnonymousName(user?.uid || ""));
       } finally {
         setIsFetchingProfile(false);
-        console.log("[ProfileSettingsPage] useEffect: Finished fetching profile attempt, isFetchingProfile set to false.");
+        console.log("[ProfileSettingsPage] fetchProfileData: Finished fetching profile attempt.");
       }
     };
 
-    if (user && !isFetchingProfile) { // Fetch only if user exists and not already fetching
-      console.log("[ProfileSettingsPage] useEffect: Auth not loading, user present. Fetching profile because isFetchingProfile is false.");
-      fetchProfile();
-    } else if (!user && !authLoading) { // Auth loaded, but no user
+    if (authLoading) {
+      console.log("[ProfileSettingsPage] useEffect: Auth is loading, waiting...");
+      return; // Don't do anything if auth is still loading
+    }
+
+    if (user && !isFetchingProfile) { // Only fetch if user exists and not already fetching
+      console.log("[ProfileSettingsPage] useEffect: Auth loaded, user present. Calling fetchProfileData.");
+      fetchProfileData();
+    } else if (!user) { // Auth loaded, but no user
       console.log("[ProfileSettingsPage] useEffect: Auth loaded, no user. Clearing form.");
-      // Clear form fields
       setIndustry('');
       setDescription('');
       setDescriptionVisibility('everyone');
@@ -148,9 +148,12 @@ const ProfileSettingsPage = () => {
       setFetchedCompanyName('');
       setFetchedActualDisplayName('');
       setFetchedMentionName('');
-      setIsFetchingProfile(false);
+      setIsFetchingProfile(false); // Ensure fetching is false if no user
     }
-  }, [user, authLoading]); // Removed toast from dependencies
+  // Removed isFetchingProfile from dependency array to prevent potential loops
+  // toast was removed as it's generally stable and doesn't need to trigger refetch
+  }, [user, authLoading]);
+
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -201,7 +204,7 @@ const ProfileSettingsPage = () => {
     };
 
   const handleAvatarChangeClick = () => fileInputRef.current?.click();
-  
+
   const handleEstablishedYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const yearValue = e.target.value.replace(/[^0-9]/g, '').slice(0, 4);
     setEstablished(yearValue);
@@ -215,7 +218,7 @@ const ProfileSettingsPage = () => {
     } else if (yearValue.length > 0 && yearValue.length < 4) {
       setEstablishedError("Year must be 4 digits.");
     } else {
-      setEstablishedError(null); 
+      setEstablishedError(null);
     }
   };
 
@@ -238,39 +241,39 @@ const ProfileSettingsPage = () => {
     }
 
     setIsSubmitting(true);
-    let newAvatarUrlForFirestore: string | null | undefined = undefined; 
+    let newAvatarUrlForFirestore: string | null | undefined = undefined;
 
     try {
-        if (selectedFile) { 
+        if (selectedFile) {
             console.log("[ProfileSettingsPage] handleSubmit: Uploading new avatar...");
-            newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid); // Assuming uploadPostImage is now available
+            newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid);
             console.log("[ProfileSettingsPage] handleSubmit: New avatar URL:", newAvatarUrlForFirestore);
-        } else if (previewUrl === null && currentDbAvatarUrl !== null) { 
+        } else if (previewUrl === null && currentDbAvatarUrl !== null) {
             console.log("[ProfileSettingsPage] handleSubmit: Avatar explicitly removed by user.");
-            newAvatarUrlForFirestore = null; // Signal to remove the avatar
+            newAvatarUrlForFirestore = null;
         }
-        
+
         const profileDataToUpdate: UserProfileUpdateData = {
             industry: industry || null,
             description: description || null,
             descriptionVisibility: descriptionVisibility,
             established: established || null,
             incomeRange: incomeRange === "Prefer not to say" ? null : incomeRange,
-            // No longer sending actualDisplayName, companyName, or their visibility settings
+            // No actualDisplayName or companyName or their visibilities here
         };
 
-        if (newAvatarUrlForFirestore !== undefined) { // Only include avatarUrl if it changed or was explicitly removed
+        if (newAvatarUrlForFirestore !== undefined) {
             profileDataToUpdate.avatarUrl = newAvatarUrlForFirestore;
         }
-        
+
         console.log("[ProfileSettingsPage] handleSubmit: Data to update in Firestore:", profileDataToUpdate);
         await updateUserProfileDetails(user.uid, profileDataToUpdate);
 
         if (newAvatarUrlForFirestore !== undefined) {
-            setCurrentDbAvatarUrl(newAvatarUrlForFirestore); 
+            setCurrentDbAvatarUrl(newAvatarUrlForFirestore);
             setPreviewUrl(newAvatarUrlForFirestore);
         }
-        setSelectedFile(null); 
+        setSelectedFile(null);
         setOriginalTooLargeFile(null);
 
         toast({ title: "Profile Updated", description: "Your profile information has been saved." });
@@ -287,8 +290,7 @@ const ProfileSettingsPage = () => {
     }
   };
 
-  const nameForAvatar = fetchedCompanyName || fetchedActualDisplayName || fetchedMentionName || user?.email || 'U';
-  
+
   if (authLoading) {
     return (
       <Card>
@@ -299,7 +301,7 @@ const ProfileSettingsPage = () => {
       </Card>
     );
   }
-   
+
   if (isFetchingProfile) {
     return (
       <Card>
@@ -320,10 +322,10 @@ const ProfileSettingsPage = () => {
     );
   }
 
-  // Helper to render visibility select
+
   const renderVisibilitySelect = (
-    id: string, 
-    value: VisibilitySetting, 
+    id: string,
+    value: VisibilitySetting,
     onChange: (value: VisibilitySetting) => void,
     label: string
   ) => (
@@ -341,7 +343,7 @@ const ProfileSettingsPage = () => {
         </Select>
     </div>
   );
-  
+
   return (
     <Card className="shadow-md border-border">
       <CardHeader>
@@ -351,16 +353,15 @@ const ProfileSettingsPage = () => {
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-8">
 
-          {/* Identifiers Section (Read-Only) */}
           <div className="space-y-4 p-4 border rounded-md bg-muted/20">
-            <Label className="text-base font-medium text-foreground">Your Identifiers</Label>
+            <Label className="text-base font-medium text-foreground">Your Identifiers (Read-Only)</Label>
             <div className="space-y-3">
               <div className="space-y-1">
                 <Label htmlFor="mentionNameDisplay" className="text-sm font-medium flex items-center text-foreground/90">
                   <AtSign className="mr-2 h-4 w-4 text-primary" /> Mention Name (@)
                 </Label>
-                <Input id="mentionNameDisplay" value={fetchedMentionName ? `@${fetchedMentionName}` : "Generating..."} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                <p className="text-xs text-muted-foreground">Your unique anonymous identifier for mentions. Auto-generated and cannot be changed.</p>
+                <Input id="mentionNameDisplay" value={fetchedMentionName ? `@${fetchedMentionName}` : "Loading..."} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
+                <p className="text-xs text-muted-foreground">Your unique anonymous identifier. Auto-generated.</p>
               </div>
 
               {fetchedCompanyName && (
@@ -369,7 +370,7 @@ const ProfileSettingsPage = () => {
                     <Building className="mr-2 h-4 w-4 text-primary" /> Company Name
                   </Label>
                   <Input id="companyNameDisplay" value={fetchedCompanyName} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                   <p className="text-xs text-muted-foreground">Set during sign-up (for email/password accounts). Not editable here.</p>
+                   <p className="text-xs text-muted-foreground">Set during sign-up (for email/password accounts).</p>
                 </div>
               )}
               {fetchedActualDisplayName && fetchedActualDisplayName !== fetchedCompanyName && (
@@ -378,20 +379,19 @@ const ProfileSettingsPage = () => {
                        <User className="mr-2 h-4 w-4 text-primary" /> Display Name
                     </Label>
                     <Input id="actualDisplayNameDisplay" value={fetchedActualDisplayName} disabled className="bg-background/50 cursor-not-allowed text-sm"/>
-                    <p className="text-xs text-muted-foreground">Typically from your Google profile, or a previously set display name. Not editable here.</p>
+                    <p className="text-xs text-muted-foreground">Typically from your Google profile, or a previously set name.</p>
                  </div>
               )}
             </div>
           </div>
-          
-          {/* Avatar Section */}
+
           <div className="space-y-3 p-4 border rounded-md bg-muted/20">
             <Label className="text-base font-medium">Company Logo / Avatar</Label>
             <div className="flex items-center gap-4">
               <Avatar className="h-20 w-20 border">
-                <AvatarImage src={previewUrl ?? undefined} alt={nameForAvatar} />
+                <AvatarImage src={previewUrl ?? undefined} alt={displayedNameForAvatar} />
                 <AvatarFallback className="bg-muted text-muted-foreground text-xl">
-                  {getInitials(nameForAvatar)}
+                  {getInitials(displayedNameForAvatar)}
                 </AvatarFallback>
               </Avatar>
               <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/png, image/jpeg, image/gif, image/webp" style={{ display: 'none' }} disabled={isSubmitting || isCompressing} />
@@ -406,10 +406,10 @@ const ProfileSettingsPage = () => {
                 )}
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">Upload a JPG, PNG, GIF, or WebP. Max size {MAX_FILE_SIZE_MB}MB. Your avatar is always visible if set.</p>
+            <p className="text-xs text-muted-foreground">Upload a JPG, PNG, GIF, or WebP. Max size {MAX_FILE_SIZE_MB}MB. Avatar is always visible if set.</p>
           </div>
 
-          {/* Industry Section */}
+
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
             <Label htmlFor="industry" className="text-base font-medium flex items-center">
               <Briefcase className="mr-2 h-4 w-4 text-primary" /> Industry
@@ -419,7 +419,7 @@ const ProfileSettingsPage = () => {
                 <SelectValue placeholder="Select your industry" />
               </SelectTrigger>
               <SelectContent>
-                {detailedSectorsData.map((sector) => ( // Using detailedSectorsData for consistency
+                {detailedSectorsData.map((sector) => (
                   <SelectItem key={sector.code} value={sector.name} className="text-sm">{sector.name}</SelectItem>
                 ))}
                 <SelectItem value="Other" className="text-sm">Other</SelectItem>
@@ -428,12 +428,12 @@ const ProfileSettingsPage = () => {
             <p className="text-xs text-muted-foreground pt-1">Your industry is always visible if set.</p>
           </div>
 
-          {/* Established Year Section */}
+
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
             <Label htmlFor="established" className="text-base font-medium">Year Established</Label>
             <Input
               id="established"
-              type="text" 
+              type="text"
               placeholder="e.g., 2010"
               value={established}
               onChange={handleEstablishedYearChange}
@@ -444,8 +444,8 @@ const ProfileSettingsPage = () => {
             {establishedError && <p className="text-xs text-destructive pt-1">{establishedError}</p>}
             <p className="text-xs text-muted-foreground pt-1">Enter the 4-digit year. Must be between 1613 and {currentYear}. Always visible if set.</p>
           </div>
-          
-          {/* Income Range Section */}
+
+
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
             <Label htmlFor="incomeRange" className="text-base font-medium flex items-center">
               <DollarSign className="mr-2 h-4 w-4 text-primary" /> Annual Income Range (Optional)
@@ -463,7 +463,7 @@ const ProfileSettingsPage = () => {
              <p className="text-xs text-muted-foreground pt-1">This information is always private and not displayed on your public profile.</p>
           </div>
 
-          {/* Description Section */}
+
           <div className="space-y-1 p-4 border rounded-md bg-muted/20">
             <Label htmlFor="description" className="text-base font-medium">About Your Business</Label>
             <Textarea id="description" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Tell others a bit about your company..." rows={4} disabled={isSubmitting} className="resize-y text-sm" />
@@ -500,16 +500,5 @@ const ProfileSettingsPage = () => {
 };
 
 export default ProfileSettingsPage;
-```
 
-**Reasoning for the Changes:**
-1.  **Removed `toast` from `useEffect` Dependency Array**: The `toast` function provided by `useToast` is generally stable and doesn't need to be a dependency for an effect that fetches data based on `user` and `authLoading`.
-2.  **Removed Artificial Delay**: The `await new Promise(resolve => setTimeout(resolve, 100));` was removed from the `fetchProfile` function. This was likely for simulating network latency but isn't needed for the actual functionality and contributes to the delay.
-3.  **Clarified Fetch Condition**: The condition `if (user && !isFetchingProfile)` inside the `useEffect` ensures that `fetchProfile` is called only when there's a user and a fetch isn't already in progress. The `setIsFetchingProfile(true)` at the start of `fetchProfile` and `setIsFetchingProfile(false)` in its `finally` block manage this guard.
-
-If the settings page still feels slow to open *after* these changes, the delay is more likely due to:
-*   The inherent time taken by `onAuthStateChanged` in `AuthProvider` to resolve the initial user state.
-*   The cumulative rendering time of the `MainLayout`, `SettingsLayout`, `SettingsSidebar`, and the form itself.
-*   The actual Firestore read (`fetchFullUserProfile`), though usually fast for a single document, still involves a network request.
-
-These changes focus on optimizing the data fetching trigger on the `ProfileSettingsPage`.
+    
