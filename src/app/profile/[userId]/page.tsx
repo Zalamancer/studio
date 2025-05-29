@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building, CalendarDays, CheckCircle, Loader2, AlertTriangle, Star, MessageSquare, Edit3, Trash2, Briefcase, Info, AtSign, User } from 'lucide-react';
+import { Building, CalendarDays, CheckCircle, Loader2, AlertTriangle, Star, MessageSquare, Edit3, Trash2, Briefcase, Info, AtSign, DollarSign } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
@@ -72,6 +72,12 @@ const BusinessProfilePage = () => {
     return IS_UID_REGEX_PROFILE_PAGE.test(profileUserId);
   }, [profileUserId]);
 
+  useEffect(() => {
+    if (profileUserIdFromParams && !IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams)) {
+      console.warn(`[BusinessProfilePage] Detected invalid profileUserIdFromParams: '${profileUserIdFromParams}'`);
+    }
+  }, [profileUserIdFromParams]);
+
 
   const { data: viewedUserProfileData, isLoading: isLoadingProfile, error: profileError } = useQuery<UserProfileData | null, Error>({
     queryKey: ['fullUserProfile', profileUserId],
@@ -87,6 +93,13 @@ const BusinessProfilePage = () => {
   });
 
   const connectionStatusQueryEnabled = !!currentUser?.uid && !!profileUserId && IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) && currentUser.uid !== profileUserId;
+  console.log(`%c[BusinessProfilePage] Connection Status Query:
+    - currentUser.uid: ${currentUser?.uid || 'NULL'}
+    - profileUserId: ${profileUserId || 'NULL'}
+    - IS_UID_REGEX_PROFILE_PAGE.test(profileUserId): ${profileUserId ? IS_UID_REGEX_PROFILE_PAGE.test(profileUserId) : 'N/A'}
+    - currentUser.uid !== profileUserId: ${currentUser && profileUserId ? currentUser.uid !== profileUserId : 'N/A'}
+    - FINAL enabled flag for connectionStatus query: ${connectionStatusQueryEnabled}`, "color: cyan;");
+
 
   const { data: connectionStatus, isLoading: isLoadingStatus, error: statusError } = useQuery<ConnectionStatus | null, Error>({
     queryKey: ['connectionStatus', currentUser?.uid, profileUserId],
@@ -101,7 +114,7 @@ const BusinessProfilePage = () => {
     enabled: connectionStatusQueryEnabled,
   });
 
-  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid;
+  const reviewsQueryEnabled = !!profileUserId && isProfileIdActuallyValidUid && !!currentUser; // Added currentUser check
   const { data: reviewsReceived = [], isLoading: isLoadingReviews, error: reviewsError } = useQuery<ClientReview[], Error>({
     queryKey: ['reviews', profileUserId, 'received'],
     queryFn: () => {
@@ -137,33 +150,24 @@ const BusinessProfilePage = () => {
   const weightedAverageRatingReceived = useMemo(() => {
     console.log(`%c[BusinessProfilePage] Calculating weightedAverageRatingReceived. Found ${reviewsReceived.length} reviews.`, "color: darkorange; font-weight: bold;");
     if (!reviewsReceived || reviewsReceived.length === 0) return 0;
-
     let totalWeightedRating = 0;
     let totalWeight = 0;
-
     reviewsReceived.forEach((review, index) => {
-      let weight = 1.0; // Neutral weight for "normal" reviewers or if historical is between 2.5 and 3.99
-
-      if (review.reviewerHistoricalAvgRating === null) { // No history for reviewer at time of this review
-        weight = 0.9; // Slightly less weight for new reviewers' opinions
+      let weight = 1.0;
+      if (review.reviewerHistoricalAvgRating === null) {
+        weight = 0.9; 
       } else if (typeof review.reviewerHistoricalAvgRating === 'number') {
-        if (review.reviewerHistoricalAvgRating < 2.5) {
-          weight = 0.6; // Historically harsh reviewer, less weight
-        } else if (review.reviewerHistoricalAvgRating >= 4.0) {
-          weight = 1.1; // Historically lenient reviewer, slightly more weight
-        }
-        // If 2.5 <= reviewerHistoricalAvgRating < 4.0, weight remains 1.0 (neutral)
+        if (review.reviewerHistoricalAvgRating < 2.5) weight = 0.6;
+        else if (review.reviewerHistoricalAvgRating >= 4.0) weight = 1.1;
       }
       console.log(`%c  Review ${index + 1}: Rating=${review.rating}, ReviewerHistAvg=${review.reviewerHistoricalAvgRating}, AssignedWeight=${weight.toFixed(1)}`, "color: darkorange;");
       totalWeightedRating += review.rating * weight;
       totalWeight += weight;
     });
-
     if (totalWeight === 0) {
       console.log(`%c  TotalWeight is 0, returning 0.`, "color: darkorange;");
       return 0;
     }
-
     const average = totalWeightedRating / totalWeight;
     console.log(`%c  Final: TotalWeightedRating=${totalWeightedRating.toFixed(2)}, TotalWeight=${totalWeight.toFixed(2)}, WeightedAverage=${average.toFixed(2)}`, "color: darkorange; font-weight: bold;");
     return average;
@@ -181,8 +185,7 @@ const BusinessProfilePage = () => {
   const addOrUpdateReviewMutation = useMutation({
     mutationFn: async (data: { rating: number; comment: string }) => {
       if (!currentUser || !profileUserId || !isProfileIdActuallyValidUid) throw new Error("User, profile ID missing, or invalid profile ID.");
-
-      const reviewerProfile = await fetchFullUserProfile(currentUser.uid); // Fetch full profile to get mentionName
+      const reviewerProfile = await fetchFullUserProfile(currentUser.uid);
 
       if (editingReview) {
         const updateData: UpdateReviewData = { rating: data.rating, comment: data.comment };
@@ -193,10 +196,9 @@ const BusinessProfilePage = () => {
           targetUserId: profileUserId,
           reviewerId: currentUser.uid,
           reviewerName: reviewerProfile?.mentionName || generateAnonymousName(currentUser.uid),
-          reviewerAvatar: reviewerProfile?.avatarUrl || null,
+          reviewerAvatar: reviewerProfile?.avatarUrl || undefined,
           rating: data.rating,
           comment: data.comment,
-          // reviewerHistoricalAvgRating is calculated and added by the addReview service
         };
         await addReview(newReviewData);
         return "Review submitted successfully!";
@@ -237,7 +239,7 @@ const BusinessProfilePage = () => {
     deleteReviewMutation.mutate(reviewId);
   };
 
-  if (profileUserIdFromParams && !isProfileIdActuallyValidUid) {
+  if (profileUserIdFromParams && !IS_UID_REGEX_PROFILE_PAGE.test(profileUserIdFromParams)) {
     return (
       <div className="container mx-auto p-4 md:p-8 max-w-4xl text-center">
         <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -253,8 +255,8 @@ const BusinessProfilePage = () => {
 
   if (authLoading || (isLoadingProfile && !viewedUserProfileData && isProfileIdActuallyValidUid)) {
      return (
-      <div className="w-full">
-         <Card className="overflow-hidden shadow-lg rounded-lg border-border container mx-auto max-w-4xl">
+      <div className="w-full container mx-auto p-4 md:p-8 max-w-4xl">
+         <Card className="overflow-hidden shadow-lg rounded-lg border-border">
            <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
              <div className="flex flex-col md:flex-row items-start md:items-center gap-4 animate-pulse">
                <Skeleton className="h-20 w-20 rounded-full bg-muted"></Skeleton>
@@ -306,17 +308,11 @@ const BusinessProfilePage = () => {
 
   const isOwnProfile = currentUser?.uid === viewedUserProfileData.uid;
   const generatedNameForProfile = generateAnonymousName(viewedUserProfileData.uid);
+  
   const headerDisplayNameForTitle = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
   const headerDisplayNameForAvatar = viewedUserProfileData.companyName || viewedUserProfileData.mentionName || generatedNameForProfile;
-
-  const displayCompanyNameForAboutHeading = headerDisplayNameForTitle;
-
-  let nameForConnectionButton: string;
-  if (viewedUserProfileData.companyName) {
-    nameForConnectionButton = viewedUserProfileData.companyName;
-  } else {
-    nameForConnectionButton = headerDisplayNameForAvatar;
-  }
+  const displayCompanyNameForAboutHeading = viewedUserProfileData.companyName || headerDisplayNameForTitle;
+  const nameForConnectionButton = viewedUserProfileData.companyName || headerDisplayNameForAvatar;
 
   const canViewDescription = isOwnProfile ||
     !viewedUserProfileData.descriptionVisibility ||
@@ -327,11 +323,11 @@ const BusinessProfilePage = () => {
 
   const headerAvatarUrl = viewedUserProfileData.avatarUrl || undefined;
   const displayEstablished = viewedUserProfileData.established || "Year not set";
-  const displayIndustry = viewedUserProfileData.industry || "Not specified";
+  const headerIndustry = viewedUserProfileData.industry || "Not specified";
 
   return (
     <TooltipProvider>
-      <div className="container mx-auto p-4 md:p-8 max-w-4xl">
+      <div className="w-full container mx-auto p-4 md:p-8 max-w-4xl">
         <Card className="overflow-hidden shadow-lg rounded-lg border-border">
           <CardHeader className="bg-gradient-to-r from-primary/10 to-secondary/10 p-6 border-b">
             <div className="flex flex-col md:flex-row items-start md:items-center gap-4">
@@ -351,14 +347,14 @@ const BusinessProfilePage = () => {
                           <AtSign className="h-4 w-4" /> {viewedUserProfileData.mentionName}
                        </span>
                   )}
-                  {displayIndustry !== "Not specified" && (
+                  {headerIndustry !== "Not specified" && (
                       <span className="text-muted-foreground flex items-center gap-1">
-                          <Briefcase className="h-4 w-4" /> {displayIndustry}
+                          <Briefcase className="h-4 w-4" /> {headerIndustry}
                       </span>
                   )}
                   {displayEstablished !== "Year not set" && (
                     <span className="text-muted-foreground flex items-center gap-1">
-                      <CalendarDays className="h-4 w-4" /> Established: {displayEstablished}
+                      <CalendarDays className="h-4 w-4" /> Est: {displayEstablished}
                     </span>
                   )}
                  {viewedUserProfileData.verified && (
@@ -374,33 +370,31 @@ const BusinessProfilePage = () => {
                   </div>
               </div>
               <div className="flex flex-col items-center md:items-end gap-2 ml-auto mt-4 md:mt-0 w-full md:w-auto">
-                   {(ratingReceivedCount > 0 || isOwnProfile) && (
-                       <div className="text-center md:text-right mb-1">
-                          <div className="flex items-center gap-1.5">
-                            <p className="text-sm text-muted-foreground">Weighted Avg. Rating</p>
-                            <Tooltip>
-                              <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground">
-                                  <Info className="h-3.5 w-3.5" />
-                                </Button>
-                              </TooltipTrigger>
-                              <TooltipContent className="max-w-xs text-xs p-2">
-                                This is a weighted average score, considering the typical rating behavior of reviewers to provide a more balanced perspective.
-                              </TooltipContent>
-                            </Tooltip>
-                          </div>
-                          <div className="flex items-center gap-1 justify-center md:justify-end">
-                              <StarDisplay rating={weightedAverageRatingReceived} size="h-5 w-5" />
-                              <span className="text-lg font-semibold text-primary ml-1">
-                                  {weightedAverageRatingReceived.toFixed(1)}
-                              </span>
-                              <span className="text-xs text-muted-foreground ml-0.5">({ratingReceivedCount} ratings)</span>
-                          </div>
-                       </div>
-                    )}
-                    {(ratingGivenCount > 0 || isOwnProfile) && (
+                  <div className="text-center md:text-right mb-1">
+                      <div className="flex items-center gap-1.5">
+                        <p className="text-sm text-muted-foreground">Weighted Avg. Rating</p>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <Button variant="ghost" size="icon" className="h-4 w-4 p-0 text-muted-foreground hover:text-foreground">
+                              <Info className="h-3.5 w-3.5" />
+                            </Button>
+                          </TooltipTrigger>
+                          <TooltipContent className="max-w-xs text-xs p-2">
+                            This is a weighted average score, considering the typical rating behavior of reviewers.
+                          </TooltipContent>
+                        </Tooltip>
+                      </div>
+                      <div className="flex items-center gap-1 justify-center md:justify-end">
+                          <StarDisplay rating={weightedAverageRatingReceived} size="h-5 w-5" />
+                          <span className="text-lg font-semibold text-primary ml-1">
+                              {weightedAverageRatingReceived.toFixed(1)}
+                          </span>
+                          <span className="text-xs text-muted-foreground ml-0.5">({ratingReceivedCount} ratings)</span>
+                      </div>
+                  </div>
+                   {(ratingGivenCount > 0 || isOwnProfile) && (
                        <div className="text-center md:text-right">
-                          <p className="text-sm text-muted-foreground">Avg. Rating Given to Others</p>
+                          <p className="text-sm text-muted-foreground">Avg. Rating Given</p>
                           <div className="flex items-center gap-1 justify-center md:justify-end">
                               <StarDisplay rating={averageRatingGivenByThisProfile} size="h-4 w-4" />
                               <span className="text-md font-semibold text-primary/80 ml-1">
@@ -436,6 +430,21 @@ const BusinessProfilePage = () => {
                  {displayDescription}
                </p>
             </div>
+            
+            {isOwnProfile && viewedUserProfileData.incomeRange && viewedUserProfileData.incomeRange !== "Prefer not to say" && (
+              <>
+                <Separator />
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2 flex items-center gap-2">
+                    <DollarSign className="h-5 w-5 text-primary" /> Income Information (Private)
+                  </h3>
+                  <p className="text-sm text-muted-foreground">
+                    <strong>Annual Income Range:</strong> {viewedUserProfileData.incomeRange}
+                  </p>
+                </div>
+              </>
+            )}
+
 
             {currentUser && !isOwnProfile && isProfileIdActuallyValidUid && (
               <>

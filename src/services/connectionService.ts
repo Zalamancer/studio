@@ -7,19 +7,19 @@ import {
   getDocs,
   setDoc,
   doc,
-  updateDoc as firestoreUpdateDoc, // Renamed to avoid conflict with auth's updateProfile
-  Timestamp,
+  updateDoc as firestoreUpdateDoc,
   serverTimestamp,
   orderBy,
   limit,
   getDoc,
   deleteDoc,
   type QueryConstraint,
+  Timestamp,
 } from 'firebase/firestore';
 import {
-  updateProfile, // For Firebase Auth user profile
+  updateProfile,
 } from 'firebase/auth';
-import type { ConnectionStatus, Connection, ConnectionRequest, UserProfileBasic, UserProfileData } from '@/types/connection';
+import type { ConnectionStatus, Connection, ConnectionRequest, UserProfileBasic, UserProfileData, UserProfileUpdateData, InitializeUserProfileArgs } from '@/types/connection';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import { createNotification } from './notificationService';
 
@@ -37,15 +37,6 @@ const getConnectionDocId = (userId1: string, userId2: string): string => {
   return [id1, id2].sort().join('_');
 };
 
-export interface InitializeUserProfileArgs {
-  uid: string;
-  email?: string | null;
-  googleDisplayName?: string | null; // Name specifically from Google
-  companyName?: string | null;    // Name from email sign-up form
-  industry?: string | null;       // Industry from email sign-up form
-  googlePhotoURL?: string | null;   // Photo URL from Google
-}
-
 export const initializeUserProfile = async (userData: InitializeUserProfileArgs): Promise<void> => {
   const clientAuthUser = auth.currentUser;
   console.log(`%c[connectionService] initializeUserProfile: Called. Client auth UID: ${clientAuthUser?.uid || 'NULL'}. Incoming userData:`, "color: orange", userData);
@@ -62,7 +53,7 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
     console.log(`%c[connectionService] initializeUserProfile: Checking for existing document for UID ${userData.uid}...`, "color: orange");
     const docSnap = await getDoc(userDocRef);
 
-    let dataPayload: Partial<UserProfileData> = { uid: userData.uid };
+    const dataPayload: Partial<UserProfileData> = { uid: userData.uid };
     let operationType: 'CREATE' | 'UPDATE' = 'CREATE';
 
     let finalAuthProfileDisplayName: string;
@@ -72,63 +63,67 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
       console.log(`%c[connectionService] initializeUserProfile: CREATING NEW PROFILE for UID ${userData.uid}.`, "color: green; font-weight: bold;");
       operationType = 'CREATE';
       dataPayload.createdAt = serverTimestamp();
-      dataPayload.mentionName = generatedMentionName;
+      dataPayload.mentionName = generatedMentionName; // Always generate and store for new profiles
       dataPayload.email = userData.email || null;
       dataPayload.companyName = userData.companyName || null;
-      dataPayload.actualDisplayName = userData.googleDisplayName || null;
+      // actualDisplayName is removed based on previous request
       dataPayload.industry = userData.industry || null;
-      dataPayload.avatarUrl = null; // New users start with no avatar
+      dataPayload.avatarUrl = null; // New users start with no avatar (initials will be used)
       dataPayload.descriptionVisibility = 'everyone';
-      dataPayload.established = null; // New field
+      dataPayload.established = null;
 
-      finalAuthProfileDisplayName = userData.googleDisplayName || userData.companyName || generatedMentionName;
-      finalAuthProfilePhotoURL = null; // No avatar on initial creation
+      // Derive the display name for Firebase Auth profile
+      finalAuthProfileDisplayName = userData.companyName || generatedMentionName; // Prioritize companyName, then generated
+      finalAuthProfilePhotoURL = null; // No avatar on initial creation for Firebase Auth profile
+
     } else {
       operationType = 'UPDATE';
       const existingData = docSnap.data() as UserProfileData;
       console.log(`%c[connectionService] initializeUserProfile: UPDATING EXISTING PROFILE for UID ${userData.uid}. Existing data:`, "color: blue; font-weight: bold;", existingData);
 
-      dataPayload.mentionName = existingData.mentionName || generatedMentionName;
+      dataPayload.mentionName = existingData.mentionName || generatedMentionName; // Ensure mentionName exists
       dataPayload.companyName = userData.companyName !== undefined ? (userData.companyName || null) : existingData.companyName;
-      dataPayload.actualDisplayName = userData.googleDisplayName !== undefined ? (userData.googleDisplayName || null) : existingData.actualDisplayName;
+      // actualDisplayName is removed
       dataPayload.industry = userData.industry !== undefined ? (userData.industry || null) : existingData.industry;
-      
+
+      // Handle avatar updates only on subsequent Google sign-ins if a new photoURL is provided
       if (userData.googlePhotoURL && userData.googlePhotoURL !== existingData.avatarUrl) {
         finalAuthProfilePhotoURL = userData.googlePhotoURL;
+        dataPayload.avatarUrl = finalAuthProfilePhotoURL;
       } else {
         finalAuthProfilePhotoURL = existingData.avatarUrl || null;
+        dataPayload.avatarUrl = finalAuthProfilePhotoURL; // Maintain existing or null
       }
-      dataPayload.avatarUrl = finalAuthProfilePhotoURL; // Use existing or updated Google photo for subsequent logins
-      
+
       dataPayload.descriptionVisibility = existingData.descriptionVisibility || 'everyone';
       dataPayload.description = existingData.description || null;
       dataPayload.tags = existingData.tags || [];
-      dataPayload.location = existingData.location || null;
-      dataPayload.established = existingData.established || null; // Preserve or initialize established
-      dataPayload.contactEmail = existingData.contactEmail || null;
-      dataPayload.contactPhone = existingData.contactPhone || null;
+      // location, contactEmail, contactPhone removed based on previous request
+      dataPayload.established = existingData.established || null;
       dataPayload.verified = existingData.verified || false;
+      dataPayload.isBotAccount = existingData.isBotAccount || false;
       dataPayload.incomeRange = existingData.incomeRange || null;
 
-
-      finalAuthProfileDisplayName = dataPayload.actualDisplayName || dataPayload.companyName || dataPayload.mentionName || generatedMentionName;
+      // Derive the display name for Firebase Auth profile
+      finalAuthProfileDisplayName = userData.googleDisplayName || dataPayload.companyName || dataPayload.mentionName || generatedMentionName;
     }
 
     dataPayload.lastLoginAt = serverTimestamp();
     dataPayload.updatedAt = serverTimestamp();
 
-    const dataToWrite = { ...dataPayload };
+    const dataToWrite: any = { ...dataPayload };
     Object.keys(dataToWrite).forEach(keyStr => {
       const key = keyStr as keyof UserProfileData;
       if (dataToWrite[key] === undefined) {
         delete dataToWrite[key];
       }
     });
-    
+
     console.log(`%c[connectionService] initializeUserProfile: Data to ${operationType} to Firestore for UID ${userData.uid}:`, "color: #1E90FF; font-weight:bold;", dataToWrite);
     await setDoc(userDocRef, dataToWrite, { merge: operationType === 'UPDATE' });
     console.log(`%c[connectionService] initializeUserProfile: User profile ${operationType}D successfully in Firestore for UID ${userData.uid}.`, "color: green; font-weight:bold;");
 
+    // Synchronize Firebase Auth profile (displayName and photoURL)
     if (clientAuthUser && clientAuthUser.uid === userData.uid) {
       const authProfileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
       const currentAuthDisplayName = clientAuthUser.displayName;
@@ -137,10 +132,10 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
       if (currentAuthDisplayName !== finalAuthProfileDisplayName) {
         authProfileUpdates.displayName = finalAuthProfileDisplayName;
       }
-      // For new sign-ups (Google or email), ensure photoURL on Auth object is also null to match avatarUrl
+      // Ensure photoURL on Auth object is null for new users (to match avatarUrl: null)
       if (operationType === 'CREATE' && currentAuthPhotoURL !== null) {
         authProfileUpdates.photoURL = null;
-      } else if (operationType === 'UPDATE' && currentAuthPhotoURL !== finalAuthProfilePhotoURL) {
+      } else if (currentAuthPhotoURL !== finalAuthProfilePhotoURL) { // For updates
         authProfileUpdates.photoURL = finalAuthProfilePhotoURL;
       }
 
@@ -167,8 +162,8 @@ export const fetchUserProfileBasic = async (userIdParam: string): Promise<UserPr
   console.log(`%c[connectionService] fetchUserProfileBasic: Fetching for targetUserId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: teal;");
 
   if (!userId || !IS_UID_REGEX_SERVICE.test(userId)) {
-    console.warn(`%c[connectionService] fetchUserProfileBasic: Invalid or empty userId: '${userId}'. Returning null.`, "color: orange;");
-    return null;
+    console.warn(`%c[connectionService] fetchUserProfileBasic: Invalid or empty userId: '${userId}'. Returning minimal fallback.`, "color: orange;");
+    return { userId: userId || "unknown", displayName: generateAnonymousName(userId || "unknown"), mentionName: generateAnonymousName(userId || "unknown") };
   }
 
   try {
@@ -177,33 +172,39 @@ export const fetchUserProfileBasic = async (userIdParam: string): Promise<UserPr
 
     if (userSnap.exists()) {
       const userData = userSnap.data() as UserProfileData;
-      const mentionName = userData.mentionName || generateAnonymousName(userId); // Fallback if mentionName is somehow missing
-      const primaryDisplayName = userData.actualDisplayName || userData.companyName || mentionName;
+      const mentionName = userData.mentionName || generateAnonymousName(userId);
+      const displayName = userData.companyName || mentionName; // Prioritize companyName, then mentionName
 
       const profile: UserProfileBasic = {
         userId: userId,
-        displayName: primaryDisplayName,
+        displayName: displayName,
         mentionName: mentionName,
         avatarUrl: userData.avatarUrl || undefined,
-        actualDisplayName: userData.actualDisplayName || undefined,
         companyName: userData.companyName || undefined,
+        // actualDisplayName removed based on previous request
       };
       console.log(`%c[connectionService] fetchUserProfileBasic: Profile FOUND for '${userId}':`, "color: green;", profile);
       return profile;
     }
     console.warn(`%c[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${userId}'. Generating anonymous fallback.`, "color: orange;");
     const anonMentionName = generateAnonymousName(userId);
-    return { userId: userId, displayName: anonMentionName, mentionName: anonMentionName, avatarUrl: undefined, actualDisplayName: undefined, companyName: undefined };
+    return { userId: userId, displayName: anonMentionName, mentionName: anonMentionName, avatarUrl: undefined, companyName: undefined };
   } catch (error: any) {
     const errorCatchAuthUid = auth.currentUser?.uid;
     console.error(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: red;", error);
     if (error.code === 'permission-denied') {
-      console.error(`%c  PERMISSION DENIED specifically for reading 'users/${userId}'. Client auth state at error catch: '${errorCatchAuthUid || 'NULL'}'`, "color: red; font-weight: bold;");
+      console.warn(`%c  PERMISSION DENIED for reading 'users/${userId}'. Client auth state: '${errorCatchAuthUid || 'NULL'}'. Returning minimal fallback.`, "color: orange; font-weight: bold;");
+      // Return a minimal profile instead of throwing, so TextWithMentions can still render the mentionName
+      const anonMentionNameOnError = generateAnonymousName(userId);
+      return { userId: userId, displayName: anonMentionNameOnError, mentionName: anonMentionNameOnError, avatarUrl: undefined, companyName: undefined };
     }
-    const anonMentionName = generateAnonymousName(userId); // Fallback on error
-    return { userId: userId, displayName: anonMentionName, mentionName: anonMentionName, avatarUrl: undefined, actualDisplayName: undefined, companyName: undefined };
+    // For other errors, still return a fallback to prevent breaking UI relying on this function
+    console.error(`%c[connectionService] fetchUserProfileBasic: Non-permission error for '${userId}'. Returning minimal fallback.`, "color: red;");
+    const anonMentionNameOnError = generateAnonymousName(userId);
+    return { userId: userId, displayName: anonMentionNameOnError, mentionName: anonMentionNameOnError, avatarUrl: undefined, companyName: undefined };
   }
 };
+
 
 export const fetchFullUserProfile = async (userIdParam: string): Promise<UserProfileData | null> => {
   const trimmedUserId = String(userIdParam || "").trim();
@@ -222,27 +223,28 @@ export const fetchFullUserProfile = async (userIdParam: string): Promise<UserPro
     if (userSnap.exists()) {
       const userData = userSnap.data() as UserProfileData;
       const finalMentionName = userData.mentionName || generateAnonymousName(trimmedUserId);
+      // actualDisplayName and related visibilities are removed
 
       const fullProfile: UserProfileData = {
         uid: trimmedUserId,
         email: userData.email || null,
         companyName: userData.companyName || null,
         mentionName: finalMentionName,
-        actualDisplayName: userData.actualDisplayName || null,
-        industry: userData.industry || null,
         avatarUrl: userData.avatarUrl || null,
+        industry: userData.industry || null,
         description: userData.description || null,
         descriptionVisibility: userData.descriptionVisibility || 'everyone',
         tags: userData.tags || [],
-        location: userData.location || null,
-        established: userData.established || null, // Include established
-        contactEmail: userData.contactEmail || null,
-        contactPhone: userData.contactPhone || null,
+        // location: userData.location || null, // Removed as per request
+        established: userData.established || null,
+        // contactEmail: userData.contactEmail || null, // Removed as per request
+        // contactPhone: userData.contactPhone || null, // Removed as per request
         verified: userData.verified || false,
+        isBotAccount: userData.isBotAccount || false,
+        incomeRange: userData.incomeRange || null,
         createdAt: userData.createdAt,
         lastLoginAt: userData.lastLoginAt,
         updatedAt: userData.updatedAt,
-        incomeRange: userData.incomeRange || null,
       };
       console.log(`%c[connectionService] fetchFullUserProfile: Full profile FOUND for '${trimmedUserId}'.`, "color: green;");
       return fullProfile;
@@ -259,18 +261,6 @@ export const fetchFullUserProfile = async (userIdParam: string): Promise<UserPro
   }
 };
 
-export type UserProfileUpdateData = Partial<Pick<UserProfileData,
-  'industry' |
-  'description' |
-  'descriptionVisibility' |
-  'avatarUrl' |
-  'established' | // Added established
-  'incomeRange'
-  // Removed fields that are no longer editable via profile settings form:
-  // 'actualDisplayName', 'companyName', 
-  // 'actualDisplayNameVisibility', 'companyNameVisibility', 
-  // 'avatarVisibility', 'industryVisibility'
->>;
 
 export const updateUserProfileDetails = async (
   userId: string,
@@ -291,44 +281,43 @@ export const updateUserProfileDetails = async (
   console.log(`%c[connectionService] updateUserProfileDetails: Attempting to update profile for UID ${trimmedUserId} with data:`, "color: purple", dataToUpdate);
 
   const sanitizedData: { [key: string]: any } = {};
-  // Define fields allowed for update from settings page
   const allowedUpdateFields: (keyof UserProfileUpdateData)[] = [
-      'industry', 'description', 'descriptionVisibility', 'avatarUrl', 'established', 'incomeRange'
+    'industry', 'description', 'avatarUrl', 'descriptionVisibility', 'established', 'incomeRange'
+    // 'companyName' and 'actualDisplayName' and their visibilities are removed
   ];
 
   allowedUpdateFields.forEach(key => {
     const value = dataToUpdate[key];
     if (value !== undefined) {
-      sanitizedData[key] = value; 
+      sanitizedData[key] = value;
     }
   });
 
   if (Object.keys(sanitizedData).length === 0) {
-     console.log(`%c[connectionService] updateUserProfileDetails: No actual data to update for UID ${trimmedUserId}. Skipping Firestore write.`, "color: orange");
-     return;
+    console.log(`%c[connectionService] updateUserProfileDetails: No actual data to update for UID ${trimmedUserId}. Skipping Firestore write.`, "color: orange");
+    return;
   }
 
   sanitizedData.updatedAt = serverTimestamp();
 
   try {
-    await firestoreUpdateDoc(userDocRef, sanitizedData); // Use aliased firestoreUpdateDoc
+    await firestoreUpdateDoc(userDocRef, sanitizedData);
     console.log(`%c[connectionService] User profile details UPDATED successfully in Firestore for UID ${trimmedUserId}.`, "color: green;");
 
-    // Update Firebase Auth profile (displayName and photoURL)
     if (clientAuthUser) {
       const authProfileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
       const existingAuthDisplayName = clientAuthUser.displayName;
       const existingAuthPhotoURL = clientAuthUser.photoURL;
 
-      // Determine new auth display name based on Firestore data (after update)
-      const updatedFirestoreProfile = await fetchFullUserProfile(trimmedUserId); // Fetch fresh data
-      const newAuthDisplayName = updatedFirestoreProfile?.actualDisplayName || updatedFirestoreProfile?.companyName || updatedFirestoreProfile?.mentionName || existingAuthDisplayName;
-      
+      const updatedFirestoreProfile = await getDoc(userDocRef); // Fetch fresh data
+      const firestoreData = updatedFirestoreProfile.data() as UserProfileData | undefined;
+
+      const newAuthDisplayName = firestoreData?.companyName || firestoreData?.mentionName || existingAuthDisplayName;
+
       if (existingAuthDisplayName !== newAuthDisplayName) {
         authProfileUpdates.displayName = newAuthDisplayName;
       }
 
-      // Update photoURL if avatarUrl was part of the update
       if (dataToUpdate.avatarUrl !== undefined && existingAuthPhotoURL !== (dataToUpdate.avatarUrl || null)) {
         authProfileUpdates.photoURL = dataToUpdate.avatarUrl || null;
       }
@@ -339,7 +328,6 @@ export const updateUserProfileDetails = async (
         console.log(`%c[connectionService] updateUserProfileDetails: auth.currentUser profile updated successfully.`, "color: #FF8C00;");
       }
     }
-
   } catch (error: any) {
     console.error(`%c[connectionService] updateUserProfileDetails: Firestore Error updating profile for UID ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
@@ -348,19 +336,19 @@ export const updateUserProfileDetails = async (
     if (error.message && error.message.includes("Unsupported field value: undefined")) {
       console.error("[connectionService] updateUserProfileDetails: Firestore received an undefined value. Data sent:", sanitizedData);
     }
-    throw new Error(`Failed to update profile details: ${error.message}`);
+    throw error;
   }
 };
 
-// Other connection functions (sendConnectionRequest, acceptConnectionRequest, etc.) remain below
 
 export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?: number): Promise<UserProfileBasic[]> => {
   const trimmedPrefix = searchPrefix?.trim().toLowerCase();
-  // Fetch more if no prefix to allow better initial suggestion list
-  const effectiveLimit = !trimmedPrefix ? (limitCountArg || 25) : (limitCountArg || 10); 
-  const fieldToQueryAndOrder = 'mentionName'; // Always use mentionName for querying/suggesting
+  const effectiveLimit = !trimmedPrefix ? (limitCountArg || 25) : (limitCountArg || 10);
+  const fieldToQueryAndOrder = 'mentionName';
 
   console.log(`%c[connectionService] getSuggestibleUsers called. Prefix: '${trimmedPrefix}', Query Field: '${fieldToQueryAndOrder}', Effective Limit: ${effectiveLimit}`, "color: #BA55D3");
+  console.log(`%c  [connectionService] Auth state for query: auth.currentUser?.uid = ${auth.currentUser?.uid || 'NULL'}`, "color: #BA55D3;");
+
 
   try {
     const constraints: QueryConstraint[] = [];
@@ -368,11 +356,11 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
     if (trimmedPrefix) {
       console.log(`%c[connectionService] getSuggestibleUsers: Applying prefix search for '${trimmedPrefix}' on ${fieldToQueryAndOrder}.`, "color: #BA55D3");
       constraints.push(where(fieldToQueryAndOrder, '>=', trimmedPrefix));
-      constraints.push(where(fieldToQueryAndOrder, '<=', trimmedPrefix + '\uf8ff')); // Standard prefix search
-      constraints.push(orderBy(fieldToQueryAndOrder)); // Order by the same field
+      constraints.push(where(fieldToQueryAndOrder, '<=', trimmedPrefix + '\uf8ff'));
+      constraints.push(orderBy(fieldToQueryAndOrder));
     } else {
       console.log(`%c[connectionService] getSuggestibleUsers: No prefix, fetching general list ordered by ${fieldToQueryAndOrder}.`, "color: #BA55D3");
-      constraints.push(orderBy(fieldToQueryAndOrder)); // Order by mentionName for general list
+      constraints.push(orderBy(fieldToQueryAndOrder));
     }
     constraints.push(limit(effectiveLimit));
 
@@ -383,20 +371,21 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
 
     const users: UserProfileBasic[] = querySnapshot.docs.map(docSnap => {
       const data = docSnap.data() as UserProfileData;
-      const mentionName = data.mentionName || generateAnonymousName(docSnap.id); // Fallback for older docs
-      const primaryDisplayName = data.actualDisplayName || data.companyName || mentionName; // Fallback for general display
+      const mentionName = data.mentionName || generateAnonymousName(docSnap.id);
+      const displayName = data.companyName || mentionName; // Prioritize companyName, then mentionName
 
       const profile: UserProfileBasic = {
         userId: docSnap.id,
-        displayName: primaryDisplayName,
-        mentionName: mentionName, // This is the ColorAnimalNumber
+        displayName: displayName,
+        mentionName: mentionName,
         avatarUrl: data.avatarUrl || undefined,
-        actualDisplayName: data.actualDisplayName || undefined,
         companyName: data.companyName || undefined,
+        // actualDisplayName is removed
       };
+      console.log(`    [SuggestibleUsers] Mapped user: ${profile.userId}, Display: ${profile.displayName}, Mention: @${profile.mentionName}`);
       return profile;
     });
-    console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users. Example:`, "color: green;", users.slice(0,1));
+    console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users.`, "color: green;");
     return users;
   } catch (error: any) {
     console.error('%c[connectionService] Error fetching suggestible users:', "color: red;", error);
@@ -413,6 +402,7 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
 };
 
 
+// --- Connection Logic ---
 export const sendConnectionRequest = async (requesterIdParam: string, recipientIdParam: string): Promise<void> => {
   const requesterId = String(requesterIdParam || "").trim();
   const recipientId = String(recipientIdParam || "").trim();
@@ -457,7 +447,7 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
 
   const newConnectionData = {
     userIds: sortedUserIds,
-    status: 'pending',
+    status: 'pending' as ConnectionStatus,
     requesterId: requesterId,
     requestedAt: serverTimestamp(),
   };
@@ -466,6 +456,7 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
   console.log(`  1. request.auth != null:                            ${!!clientAuthUid}`);
   console.log(`  2. request.resource.data.requesterId == request.auth.uid: ${newConnectionData.requesterId === clientAuthUid} (Data: '${newConnectionData.requesterId}', Auth: '${clientAuthUid}')`);
   console.log(`  3. request.resource.data.userIds.hasAll([request.auth.uid]): ${clientAuthUid ? newConnectionData.userIds.includes(clientAuthUid) : false} (Data: [${newConnectionData.userIds.join(', ')}], Auth: '${clientAuthUid}')`);
+
 
   try {
     const connectionDocSnap = await getDoc(connectionDocRef);
@@ -577,6 +568,7 @@ export const removeConnection = async (connectionId: string, userId: string): Pr
   }
 };
 
+
 export const getConnectionStatus = async (userId1Param: string, userId2Param: string): Promise<ConnectionStatus | null> => {
   const userId1 = String(userId1Param || "").trim();
   const userId2 = String(userId2Param || "").trim();
@@ -603,25 +595,28 @@ export const getConnectionStatus = async (userId1Param: string, userId2Param: st
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
 
   try {
+    console.log(`%c  [getConnectionStatus] Attempting to getDoc for mutuals/${connectionId}. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: #FF00FF;");
     const docSnap = await getDoc(connectionDocRef);
     if (!docSnap.exists()) {
+      console.log(`%c  [getConnectionStatus] Document mutuals/${connectionId} does not exist. Status: not_connected`, "color: #FF00FF;");
       return 'not_connected';
     }
     const data = docSnap.data();
     if (!data || !data.status || !data.requesterId || !data.userIds) {
-      console.warn(`[connectionService] Connection document ${connectionId} is malformed or missing key fields.`);
+      console.warn(`%c  [getConnectionStatus] Document mutuals/${connectionId} is malformed or missing key fields. Status: not_connected`, "color: orange;");
       return 'not_connected';
     }
     if (data.status === 'connected') return 'connected';
     if (data.status === 'pending') return data.requesterId === userId1 ? 'pending_sent' : 'pending_received';
-    if (data.status === 'blocked') return 'blocked'; // Assuming 'blocked' is a possible status
+    if (data.status === 'blocked') return 'blocked';
+    console.log(`%c  [getConnectionStatus] Document mutuals/${connectionId} found with status: ${data.status}. Requester: ${data.requesterId}`, "color: #FF00FF;");
     return 'not_connected';
   } catch (error: any) {
     console.error(`[connectionService] Error fetching connection status between ${userId1} and ${userId2} (ID: ${connectionId}):`, error);
     if (error.code === 'permission-denied') {
-       console.error(`  PERMISSION_DENIED for reading mutuals/${connectionId}. Client auth UID: '${currentClientAuthUid || 'NULL'}'. Rule expects 'userIds' in doc to contain this UID if doc exists, or (resource == null) for non-existent docs.`);
+       console.error(`  PERMISSION_DENIED for reading mutuals/${connectionId}. Client auth UID: '${currentClientAuthUid || 'NULL'}'. Rule expects 'userIds' in doc to contain this UID if doc exists.`);
     }
-    return null; // Return null on error to distinguish from 'not_connected'
+    return null;
   }
 };
 
@@ -649,7 +644,8 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
         requests.push({
           connectionId: docSnap.id,
           requesterId: data.requesterId,
-          requesterDisplayName: requesterProfile?.mentionName || generateAnonymousName(data.requesterId), // Prioritize mentionName
+          // For display, use the 'displayName' from UserProfileBasic, which could be companyName or mentionName
+          requesterDisplayName: requesterProfile?.displayName || generateAnonymousName(data.requesterId),
           requesterAvatarUrl: requesterProfile?.avatarUrl,
           requestedAt: (data.requestedAt as Timestamp)?.toMillis() || Date.now(),
         });
@@ -696,7 +692,8 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
         connections.push({
           connectionId: docSnap.id,
           otherUserId: otherUserId,
-          otherUserDisplayName: otherUserProfile?.mentionName || generateAnonymousName(otherUserId), // Prioritize mentionName
+          // For display, use 'displayName' from UserProfileBasic
+          otherUserDisplayName: otherUserProfile?.displayName || generateAnonymousName(otherUserId),
           otherUserAvatarUrl: otherUserProfile?.avatarUrl,
           connectedAt: (data.connectedAt as Timestamp)?.toMillis() || Date.now(),
           status: 'connected',
