@@ -1267,22 +1267,33 @@ const BoardPageContent = () => {
   ), [isLoadingPosts, selectedTags, openPostCallback, selectedPost?.id]);
 
   const handleNewCommentMentionInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setNewComment(value);
-        const cursorPosition = e.target.selectionStart || 0;
-        const textBeforeCursor = value.substring(0, cursorPosition);
-        const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-        if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
-            const currentQuery = textBeforeCursor.substring(lastAtIndex + 1);
-             if (!/\s/.test(currentQuery)) {
-                setNewCommentMentionQuery(currentQuery);
-                setShowNewCommentSuggestions(true);
-                return;
-            }
-        }
+    const value = e.target.value;
+    setNewComment(value);
+    const cursorPosition = e.target.selectionStart || 0;
+    const textBeforeCursor = value.substring(0, cursorPosition);
+    const lastAtIndex = textBeforeCursor.lastIndexOf('@');
+
+    // Only close suggestions if we're not in a valid @ mention context
+    if (lastAtIndex === -1 || !(lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
         setNewCommentMentionQuery('');
         setShowNewCommentSuggestions(false);
-  },[setNewComment, setNewCommentMentionQuery, setShowNewCommentSuggestions]);
+        return;
+    }
+
+    // We're in a valid @ mention context
+    const currentQuery = textBeforeCursor.substring(lastAtIndex + 1);
+    
+    // Only close suggestions if there's a space in the current query
+    if (/\s/.test(currentQuery)) {
+        setNewCommentMentionQuery('');
+        setShowNewCommentSuggestions(false);
+        return;
+    }
+
+    // Update the query and show suggestions
+    setNewCommentMentionQuery(currentQuery);
+    setShowNewCommentSuggestions(true);
+}, [setNewComment, setNewCommentMentionQuery, setShowNewCommentSuggestions]);
 
   const handleSelectNewCommentSuggestion = useCallback((profile: UserProfileBasic) => {
         if (!newCommentInputRef.current || !profile.mentionName) return;
