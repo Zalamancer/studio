@@ -2,18 +2,18 @@
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
 export interface Post {
-  id: string; // Firestore uses string IDs for documents
-  userId: string; // ID of the user who created the post
+  id: string;
+  userId: string;
   tags: string[];
   question: string;
-  requestType: 'post' | 'help_request'; // Now non-optional
+  requestType: 'post' | 'help_request';
 
-  // Tabbed description fields for all post types
-  descriptionDetails: string | null; // Primary description, mandatory via form schema
+  // Unified description fields
+  descriptionDetails: string; // Main description, formerly "Problem Details"
   descriptionTried?: string | null;
   descriptionOutcome?: string | null;
 
-  // Fields more specific to 'help_request', optional for 'post'
+  // Fields specific to 'help_request'
   maxBudget?: number | null;
   deadline?: Date | null; // Stored as Date on client, Timestamp in Firestore
 
@@ -33,13 +33,12 @@ export interface Post {
 
 // Type for data being added
 export type NewPostData = Omit<Post, 'id' | 'createdAt' | 'deadline'> & {
-  createdAt?: FieldValue; // Allow serverTimestamp
-  deadline?: Date | Timestamp | null; // Allow Date from client, convert to Timestamp in service, or null
+  createdAt?: FieldValue;
+  deadline?: Date | Timestamp | null;
 };
 
 
 // --- Bid System ---
-// (Bid types remain unchanged from previous definitions)
 export interface Bid {
   id: string;
   postId: string;
@@ -58,6 +57,8 @@ export interface ClientBid extends Omit<Bid, 'timestamp'> {
 }
 
 // --- Sector, SubSector, Industry Types ---
+// These types are also defined in MainLayout.tsx for the sector data source.
+// Consider a shared types file if used more broadly.
 export interface Industry {
   name: string;
   code: string;

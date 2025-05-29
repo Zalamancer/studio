@@ -1,10 +1,9 @@
-
 // src/components/board-page/PostDetailContentBody.tsx
 "use client";
 
 import React from 'react';
 import Image from 'next/image';
-import { CardContent } from "@/components/ui/card";
+import { CardContent } from "@/components/ui/card"; // Ensure CardContent is imported if used standalone
 import { Badge } from "@/components/ui/badge";
 import {
   Carousel,
@@ -15,8 +14,9 @@ import {
 } from "@/components/ui/carousel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Post } from '@/types/post';
-import { TextWithMentions } from './TextWithMentions'; // Assuming TextWithMentions is now a separate component
-import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils'; // Assuming this is centralized
+import { TextWithMentions } from './TextWithMentions';
+import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
+import { cn } from '@/lib/utils';
 
 interface PostDetailContentBodyProps {
   post: Post;
@@ -24,7 +24,7 @@ interface PostDetailContentBodyProps {
 
 export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React.memo(({ post }) => {
   return (
-    <CardContent className="p-4 space-y-4">
+    <div className="p-4 space-y-4"> {/* Replaced CardContent with div and padding */}
       {post.imageUrls && post.imageUrls.length > 0 && (
         <div className="mb-4 rounded-lg overflow-hidden shadow-md">
           <Carousel className="w-full">
@@ -49,45 +49,53 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
         </div>
       )}
 
-      {post.requestType === 'help_request' ? (
-        <div className="mt-4">
-          <Tabs defaultValue="details" className="w-full">
-            <TabsList className="grid w-full grid-cols-3 bg-transparent p-0 border-b-2 border-border rounded-none h-auto">
-              <TabsTrigger value="details" className="text-xs px-3 py-2.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none data-[state=active]:bg-primary/5 hover:bg-muted/50 focus-visible:ring-0 focus-visible:ring-offset-0">Problem Details</TabsTrigger>
-              <TabsTrigger value="tried" disabled={!post.descriptionTried} className="text-xs px-3 py-2.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none data-[state=active]:bg-primary/5 hover:bg-muted/50 focus-visible:ring-0 focus-visible:ring-offset-0">What I've Tried</TabsTrigger>
-              <TabsTrigger value="outcome" disabled={!post.descriptionOutcome} className="text-xs px-3 py-2.5 data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none data-[state=active]:bg-primary/5 hover:bg-muted/50 focus-visible:ring-0 focus-visible:ring-offset-0">Expected Outcome</TabsTrigger>
-            </TabsList>
-            <TabsContent value="details" className="mt-0 border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background min-h-[100px]">
-              {post.descriptionDetails ? (
-                <p className="text-muted-foreground whitespace-pre-wrap">
-                  <TextWithMentions text={post.descriptionDetails} mentionedUserIds={post.mentionedUserIds || []} IS_UID_REGEX_PAGE={IS_VALID_FIREBASE_UID_REGEX} />
-                </p>
-              ) : (
-                <p className="text-muted-foreground italic">No details provided.</p>
-              )}
+      {/* Always use tabbed display for descriptions */}
+      <div className="mt-4">
+        <Tabs defaultValue="details" className="w-full">
+          <TabsList className="inline-flex h-auto items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
+            <TabsTrigger
+              value="details"
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
+            >
+              Details
+            </TabsTrigger>
+            <TabsTrigger
+              value="tried"
+              disabled={!post.descriptionTried}
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
+            >
+              What Was Tried
+            </TabsTrigger>
+            <TabsTrigger
+              value="outcome"
+              disabled={!post.descriptionOutcome}
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
+            >
+              Expected Outcome
+            </TabsTrigger>
+          </TabsList>
+          <TabsContent value="details" className="mt-2 rounded-md border p-3 bg-background min-h-[100px]">
+            {post.descriptionDetails ? (
+              <p className="text-muted-foreground whitespace-pre-wrap">
+                <TextWithMentions text={post.descriptionDetails} mentionedUserIds={post.mentionedUserIds || []} />
+              </p>
+            ) : (
+              <p className="text-muted-foreground italic">No details provided.</p>
+            )}
+          </TabsContent>
+          {post.descriptionTried && (
+            <TabsContent value="tried" className="mt-2 rounded-md border p-3 bg-background min-h-[100px]">
+              <p className="text-muted-foreground whitespace-pre-wrap">{post.descriptionTried}</p>
             </TabsContent>
-            {post.descriptionTried && (
-              <TabsContent value="tried" className="mt-0 border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background min-h-[100px]">
-                <p className="text-muted-foreground whitespace-pre-wrap">{post.descriptionTried}</p>
-              </TabsContent>
-            )}
-            {post.descriptionOutcome && (
-              <TabsContent value="outcome" className="mt-0 border border-border border-t-0 rounded-b-md p-3 shadow-inner bg-background min-h-[100px]">
-                <p className="text-muted-foreground whitespace-pre-wrap">{post.descriptionOutcome}</p>
-              </TabsContent>
-            )}
-          </Tabs>
-        </div>
-      ) : (
-        post.description && (
-          <div>
-            <strong className="text-foreground">Details:</strong>
-            <p className="text-muted-foreground mt-1 whitespace-pre-wrap">
-              <TextWithMentions text={post.description} mentionedUserIds={post.mentionedUserIds || []} IS_UID_REGEX_PAGE={IS_VALID_FIREBASE_UID_REGEX} />
-            </p>
-          </div>
-        )
-      )}
+          )}
+          {post.descriptionOutcome && (
+            <TabsContent value="outcome" className="mt-2 rounded-md border p-3 bg-background min-h-[100px]">
+              <p className="text-muted-foreground whitespace-pre-wrap">{post.descriptionOutcome}</p>
+            </TabsContent>
+          )}
+        </Tabs>
+      </div>
+
 
       <div className="grid grid-cols-1 gap-y-2 mt-4 border-t pt-4">
         <div> <strong className="block text-foreground">Sector:</strong> <span className="text-muted-foreground">{post.sector || 'N/A'}</span> </div>
@@ -100,7 +108,7 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
         <div> <strong className="block text-foreground">Business Type:</strong> <span className="text-muted-foreground">{post.businessType || 'N/A'}</span> </div>
         <div className="flex items-center gap-2"> <strong className="text-foreground">Safety Indicator:</strong> <span className={post.safetyIndicator === 'High' ? "text-green-500" : post.safetyIndicator === 'Medium' ? "text-yellow-500" : "text-red-500"}>{post.safetyIndicator || 'N/A'}</span> </div>
       </div>
-    </CardContent>
+    </div>
   );
 });
 

@@ -12,7 +12,7 @@ import {
   deleteDoc,
   doc,
   where,
-  FieldValue,
+  type FieldValue, // Keep FieldValue for NewPostData
 } from 'firebase/firestore';
 import type { Post, NewPostData } from '@/types/post';
 
@@ -20,6 +20,8 @@ const postsCollectionRef = collection(db, 'posts');
 
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
+    // All posts will now have descriptionDetails, descriptionTried, and descriptionOutcome
+    // The old single 'description' field is no longer used from the form.
     const dataForFirestore: { [key: string]: any } = {
       userId: postData.userId,
       question: postData.question,
@@ -33,28 +35,22 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       ratingScore: postData.ratingScore || 0,
       imageUrls: Array.isArray(postData.imageUrls) ? postData.imageUrls : [],
       mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
-      requestType: postData.requestType, // This is now always coming from the form
+      requestType: postData.requestType,
       createdAt: serverTimestamp(),
       commentCount: 0,
 
-      // Always include the tabbed description fields
-      descriptionDetails: postData.descriptionDetails || "", // Ensure empty string if not provided but was expected
+      descriptionDetails: postData.descriptionDetails || "", // Ensure it's at least an empty string
       descriptionTried: postData.descriptionTried || null,
       descriptionOutcome: postData.descriptionOutcome || null,
+
+      // Fields specific to 'help_request'
+      maxBudget: postData.requestType === 'help_request' ? (postData.maxBudget === undefined ? null : postData.maxBudget) : null,
+      deadline: postData.requestType === 'help_request'
+        ? (postData.deadline instanceof Date ? Timestamp.fromDate(postData.deadline) : (postData.deadline || null))
+        : null,
     };
 
-    // Fields specific to 'help_request'
-    if (postData.requestType === 'help_request') {
-      dataForFirestore.maxBudget = postData.maxBudget === undefined ? null : postData.maxBudget;
-      dataForFirestore.deadline = postData.deadline instanceof Date
-        ? Timestamp.fromDate(postData.deadline)
-        : (postData.deadline || null); // Ensure it's null if undefined
-    } else {
-      dataForFirestore.maxBudget = null;
-      dataForFirestore.deadline = null;
-    }
-
-    // Clean undefined before sending to Firestore
+    // Clean undefined before sending to Firestore (though above logic should handle most)
     Object.keys(dataForFirestore).forEach(key => {
       if (dataForFirestore[key] === undefined) {
         dataForFirestore[key] = null;
@@ -97,9 +93,11 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             tags: data.tags || [],
             question: data.question || "",
             requestType: data.requestType || 'post',
-            descriptionDetails: data.descriptionDetails || null, // Main description
+            
+            descriptionDetails: data.descriptionDetails || "", // Expect this for all
             descriptionTried: data.descriptionTried || null,
             descriptionOutcome: data.descriptionOutcome || null,
+            
             maxBudget: data.maxBudget === undefined ? null : data.maxBudget,
             deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined,
             sector: data.sector || "",
@@ -125,7 +123,9 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
     console.error('[postService] Error fetching posts from Firestore:', error);
     console.error("Firestore Error Code:", error.code);
     console.error("Firestore Error Message:", error.message);
-    throw error;
+    // Return empty array or throw error based on how you want to handle fetch failures
+    return [];
+    // throw error; // Or re-throw if you want the component to handle it
   }
 };
 
@@ -172,9 +172,11 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         tags: data.tags || [],
         question: data.question || "",
         requestType: data.requestType || 'post',
-        descriptionDetails: data.descriptionDetails || null, // Main description
+
+        descriptionDetails: data.descriptionDetails || "",
         descriptionTried: data.descriptionTried || null,
         descriptionOutcome: data.descriptionOutcome || null,
+
         maxBudget: data.maxBudget === undefined ? null : data.maxBudget,
         deadline: data.deadline instanceof Timestamp ? data.deadline.toDate() : undefined,
         sector: data.sector || "",

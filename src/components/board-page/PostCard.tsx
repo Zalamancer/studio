@@ -9,7 +9,7 @@ import { Timestamp } from 'firebase/firestore';
 import { cn } from "@/lib/utils";
 import type { Post } from '@/types/post';
 import { TextWithMentions } from './TextWithMentions';
-import { HandHelping, DollarSign, Star, MessageSquare } from 'lucide-react'; // Added MessageSquare
+import { HandHelping, DollarSign, Star, MessageSquare } from 'lucide-react';
 
 interface PostCardProps {
   post: Post;
@@ -26,7 +26,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
     ? new Date(post.createdAt).toLocaleDateString()
     : 'Date unavailable';
 
-  const descriptionToShow = post.requestType === 'help_request' ? post.descriptionDetails : post.descriptionDetails; // Use descriptionDetails for both for consistency
+  const descriptionToDisplay = post.descriptionDetails || ""; // Always use descriptionDetails
 
   return (
     <Card
@@ -47,7 +47,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
               <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
             </Badge>
           )}
-          {post.requestType === 'help_request' && post.maxBudget != null && (
+          {post.requestType === 'help_request' && post.maxBudget != null && ( // Check for not null or undefined
             <Badge variant="secondary" className="text-xs cursor-default">
               <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
             </Badge>
@@ -73,15 +73,15 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
             />
           </div>
         )}
-        {descriptionToShow && (
+        {descriptionToDisplay && (
           <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-            <TextWithMentions text={descriptionToShow} mentionedUserIds={post.mentionedUserIds || []} />
+            <TextWithMentions text={descriptionToDisplay} mentionedUserIds={post.mentionedUserIds || []} />
           </p>
         )}
         <div className="flex items-center justify-between text-xs text-muted-foreground/80">
           <span>Posted: {postDate}</span>
           <div className="flex items-center gap-2">
-            {post.ratingScore != null && (
+            {post.ratingScore != null && ( // Check for not null or undefined
               <div className="flex items-center">
                 <Star className={cn("h-3.5 w-3.5 mr-0.5", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
                 <span>{post.ratingScore.toFixed(1)}</span>
