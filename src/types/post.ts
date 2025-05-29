@@ -6,33 +6,35 @@ export interface Post {
   userId: string; // ID of the user who created the post
   tags: string[];
   question: string;
-  description?: string; // For 'post' type
+  requestType: 'post' | 'help_request'; // Now non-optional, will default in form
 
-  // For 'help_request' type
-  descriptionDetails?: string;
-  descriptionTried?: string;
-  descriptionOutcome?: string;
+  // For requestType 'post'
+  description?: string | null;
 
+  // For requestType 'help_request'
+  descriptionDetails?: string | null; // This will be mandatory if requestType is 'help_request'
+  descriptionTried?: string | null;
+  descriptionOutcome?: string | null;
+  maxBudget?: number | null;       // Optional for help_request
+  deadline?: Date | null;          // Optional for help_request, Stored as Date on client
+
+  // Common fields
   sector: string;
-  subSector?: string;
-  industry?: string;
-  businessType: string;
-  safetyIndicator: 'High' | 'Medium' | 'Low';
+  subSector?: string | null;
+  industry?: string | null;
+  businessType: string; // Consider making this optional or providing defaults
+  safetyIndicator: 'High' | 'Medium' | 'Low'; // Consider defaults
   ratingScore: number;
   createdAt: Timestamp;
-  naicsCode?: string;
+  naicsCode?: string | null;
   imageUrls?: string[];
   mentionedUserIds?: string[];
-  requestType?: 'post' | 'help_request';
-  maxBudget?: number; // Renamed from paymentAmount
-  deadline?: Date; // For help_request deadline, stored as Date on client, converted to Timestamp for Firestore
 }
 
 // Type for data being added
 export type NewPostData = Omit<Post, 'id' | 'createdAt' | 'deadline'> & {
-    createdAt?: Timestamp; // Allow serverTimestamp
-    deadline?: Date | Timestamp | null; // Allow Date from client, convert to Timestamp in service, or null
-    // All other fields are optional for NewPostData if they are optional in Post, or will be set by service
+  createdAt?: Timestamp; // Allow serverTimestamp
+  deadline?: Date | Timestamp | null; // Allow Date from client, convert to Timestamp in service, or null
 };
 
 
@@ -46,7 +48,6 @@ export interface Bid {
   bidAmount: number;
   bidMessage?: string; // Optional message accompanying the bid
   timestamp: Timestamp; // Firestore Timestamp when bid was placed
-  // status: 'pending' | 'accepted' | 'rejected'; // Status of the bid - for future use
 }
 
 export type NewBidData = Omit<Bid, 'id' | 'timestamp' | 'bidderName' | 'bidderAvatar'>;
@@ -59,11 +60,13 @@ export interface ClientBid extends Omit<Bid, 'timestamp'> {
 export interface Industry {
   name: string;
   code: string;
+  description?: string;
 }
 
 export interface SubSector {
   name: string;
   code: string;
+  description?: string;
   industries: Industry[];
 }
 

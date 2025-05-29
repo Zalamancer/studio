@@ -1,25 +1,11 @@
 // src/components/layout/MainLayout.tsx
 "use client";
 
-import React,
-{
-  useState,
-  useEffect,
-  useCallback
-} from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
-import {
-  usePathname,
-  useRouter
-} from 'next/navigation';
-import {
-  Button
-} from '@/components/ui/button';
-import {
-  Avatar,
-  AvatarFallback,
-  AvatarImage
-} from "@/components/ui/avatar";
+import { usePathname, useRouter } from 'next/navigation';
+import { Button } from '@/components/ui/button';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +13,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogTrigger,
-  DialogClose
+  DialogClose,
 } from "@/components/ui/dialog";
 import {
   DropdownMenu,
@@ -37,31 +23,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, UserCircle, CreditCard, Settings, User, Bell, Factory, Handshake, HandHelping } from "lucide-react"; // Added HandHelping
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, Settings, User, Bell, Factory, Handshake, HelpCircle } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-import type {
-  CreatePostFormData,
-  SectorWithSubSectors as CreatePostSectorType,
-  SubSector as CreatePostSubSectorType,
-  Industry as CreatePostIndustryType
-} from '@/components/CreatePostForm';
-import type {
-  RequestHelpFormData
-} from '@/components/RequestHelpForm';
-import type {
-  NewPostData,
-  SectorWithSubSectors as PostSectorType,
-  SubSector as PostSubSectorType,
-  Industry as PostIndustryType
-} from '@/types/post';
-import {
-  addPostToFirestore
-} from '@/services/postService';
-import {
-  uploadPostImage
-} from '@/services/storageService';
+import type { CreatePostFormData, CreatePostFormProps, SectorWithSubSectors as CreatePostSectorType, SubSector as CreatePostSubSectorType, Industry as CreatePostIndustryType } from '@/components/CreatePostForm';
+// RequestHelpForm and RequestHelpFormData are no longer needed as we consolidate
+import type { NewPostData, SectorWithSubSectors as PostSectorType, SubSector as PostSubSectorType, Industry as PostIndustryType } from '@/types/post';
+import { addPostToFirestore, getPostsFromFirestore } from '@/services/postService';
+import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { getReviewsForProfile } from '@/services/reviewService';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
@@ -71,10 +41,8 @@ import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
 
-
 // Re-exporting the types locally if they are used by forms imported here
 export type { SectorWithSubSectors, SubSector, Industry } from '@/types/post';
-
 
 export const detailedSectorsData: PostSectorType[] = [
   {
@@ -155,9 +123,9 @@ export const detailedSectorsData: PostSectorType[] = [
     description: "Extracting naturally occurring mineral solids, liquids, and gases.",
     subSectors: [
       { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "2111" }] },
-      { name: "Coal Mining", code: "212", industries: [{ name: "Coal Mining", code: "2121" }] }, // Simplified, actual is 2121
-      { name: "Metal Ore Mining", code: "212", industries: [{ name: "Iron Ore Mining", code: "21221" }, { name: "Gold and Silver Ore Mining", code: "21222" }] }, // Grouped under 212 for simplicity
-      { name: "Nonmetallic Mineral Mining and Quarrying", code: "212", industries: [{ name: "Stone Mining and Quarrying", code: "21231" }] }, // Grouped
+      { name: "Coal Mining", code: "212", industries: [{ name: "Coal Mining", code: "2121" }] },
+      { name: "Metal Ore Mining", code: "212", industries: [{ name: "Iron Ore Mining", code: "21221" }, { name: "Gold and Silver Ore Mining", code: "21222" }] },
+      { name: "Nonmetallic Mineral Mining and Quarrying", code: "212", industries: [{ name: "Stone Mining and Quarrying", code: "21231" }] },
       { name: "Support Activities for Mining", code: "213", industries: [{ name: "Support Activities for Oil and Gas Operations", code: "213111" }] },
     ],
   },
@@ -353,16 +321,8 @@ export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
-const DynamicCreatePostForm = dynamic(() =>
+const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-  {
-    loading: () => <div className="p-4 text-center"><p className="text-sm text-muted-foreground">Loading form...</p></div>,
-    ssr: false
-  }
-);
-
-const DynamicRequestHelpForm = dynamic(() =>
-  import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm), // Corrected to use CreatePostForm for duplication
   {
     loading: () => <div className="p-4 text-center"><p className="text-sm text-muted-foreground">Loading form...</p></div>,
     ssr: false
@@ -399,7 +359,7 @@ export default function MainLayout({
   const queryClient = useQueryClient();
 
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  const [isRequestHelpDialogOpen, setIsRequestHelpDialogOpen] = useState(false);
+  // State and handlers for the "Request Help" dialog are removed
 
   useEffect(() => {
     const setVisualViewportHeight = () => {
@@ -424,14 +384,14 @@ export default function MainLayout({
   useEffect(() => {
     if (!authLoading && !user) {
         if (isCreatePostOpen) setIsCreatePostOpen(false);
-        if (isRequestHelpDialogOpen) setIsRequestHelpDialogOpen(false);
     }
-  }, [user, authLoading, isCreatePostOpen, isRequestHelpDialogOpen]);
+  }, [user, authLoading, isCreatePostOpen]);
 
   const addPostMutation = useMutation({
-    mutationFn: async (newPostDataWithImage: NewPostData & { imageFile?: File | null | undefined; mentionedUserIds?: string[] }) => {
+    mutationFn: async (formData: CreatePostFormData) => {
       if (!user) throw new Error("User not authenticated to create post.");
       console.log('%c[MainLayout] addPostMutation: Initiated by user:', "color: magenta;", user.uid);
+      console.log('%c[MainLayout] addPostMutation: Form Data received:', "color: magenta;", formData);
 
       let currentRatingScore = 0;
       try {
@@ -447,15 +407,13 @@ export default function MainLayout({
         }
       } catch (ratingError: any) {
         console.error("[MainLayout] addPostMutation: Error fetching reviews for rating score:", ratingError.message, ratingError);
-        // Don't throw, proceed with ratingScore = 0
       }
       console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score before post: ${currentRatingScore}`, "color: magenta;");
 
-
       let uploadedImageUrls: string[] = [];
-      if (newPostDataWithImage.imageFile) {
+      if (formData.imageFile) {
         try {
-          const singleUploadedUrl = await uploadPostImage(newPostDataWithImage.imageFile, user.uid);
+          const singleUploadedUrl = await uploadPostImage(formData.imageFile, user.uid);
           if (singleUploadedUrl) uploadedImageUrls.push(singleUploadedUrl);
         } catch (uploadError) {
           console.error("[MainLayout] Image upload failed in mutationFn:", uploadError);
@@ -463,15 +421,30 @@ export default function MainLayout({
         }
       }
 
-      const { imageFile, ...postDataForFirestoreBase } = newPostDataWithImage;
-      const mentionedUserIds = Array.isArray(postDataForFirestoreBase.mentionedUserIds) ? postDataForFirestoreBase.mentionedUserIds : [];
+      const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
+      const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
+      const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
 
       const postDataForFirestore: NewPostData = {
-        ...postDataForFirestoreBase,
-        imageUrls: uploadedImageUrls.length > 0 ? uploadedImageUrls : [],
-        mentionedUserIds: mentionedUserIds,
+        userId: user.uid,
+        question: formData.question,
+        tags: formData.tags || [],
+        sector: mainSectorDetails?.name || formData.sector,
+        subSector: subSectorDetails?.name || formData.subSector || null,
+        industry: industryDetails?.name || formData.industry || null,
+        naicsCode: formData.industry || formData.subSector || formData.sector || null,
+        businessType: "Startup", // Default or consider adding to form
+        safetyIndicator: "Medium", // Default or consider adding to form
         ratingScore: currentRatingScore,
-        requestType: postDataForFirestoreBase.requestType || 'post', // Ensure requestType is set
+        imageUrls: uploadedImageUrls,
+        mentionedUserIds: formData.mentionedUserIds || [],
+        requestType: formData.requestType, // This comes from the form
+        description: formData.requestType === 'post' ? formData.description : null,
+        descriptionDetails: formData.requestType === 'help_request' ? formData.descriptionDetails : null,
+        descriptionTried: formData.requestType === 'help_request' ? formData.descriptionTried : null,
+        descriptionOutcome: formData.requestType === 'help_request' ? formData.descriptionOutcome : null,
+        maxBudget: formData.requestType === 'help_request' && formData.maxBudget ? parseFloat(formData.maxBudget) : null,
+        deadline: formData.requestType === 'help_request' ? formData.deadline : null,
       };
       console.log(`%c[MainLayout] addPostMutation: Post data PREPARED. RatingScore: ${currentRatingScore}. RequestType: ${postDataForFirestore.requestType}. Data:`, "color: #FF00FF;", postDataForFirestore);
       return addPostToFirestore(postDataForFirestore);
@@ -480,10 +453,11 @@ export default function MainLayout({
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage']});
-      toast({ title: "Post Created", description: "Your post has been added." });
-      setIsCreatePostOpen(false);
+      toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
+      setIsCreatePostOpen(false); // Close the unified dialog
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
+        const descriptionSource = variables.requestType === 'help_request' ? variables.descriptionDetails : variables.description;
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
           if (mentionedUid !== user.uid) {
             try {
@@ -493,7 +467,7 @@ export default function MainLayout({
                 senderId: user.uid,
                 postId: newlyCreatedPostId,
                 postQuestion: variables.question,
-                textSnippet: variables.description ? variables.description.substring(0, 100) : "",
+                textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "",
               });
                console.log(`%c[MainLayout] Mention notification CREATED for ${mentionedUid} for post ${newlyCreatedPostId}`, "color: green;");
             } catch (notifyError) {
@@ -505,189 +479,30 @@ export default function MainLayout({
     },
     onError: (error: Error) => {
       console.error("[MainLayout] addPostMutation onError:", error);
-      toast({ variant: "destructive", title: "Post Failed", description: `Could not create post: ${error.message}.` });
+      toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit: ${error.message}.` });
     },
   });
 
-
-  const handleAddPost = useCallback(
+  const handleCreatePostSubmit = useCallback(
     async (formData: CreatePostFormData) => {
       if (!user) {
         toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
         return;
       }
-      console.log("[MainLayout] handleAddPost (for regular post) formData RECEIVED:", JSON.stringify(formData, null, 2));
-
-      const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
-      const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
-      const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
-
-      const newPostDataForService: NewPostData & { imageFile?: File | null; mentionedUserIds: string[] } = {
-        question: formData.question,
-        description: formData.description, // This is for regular posts
-        descriptionDetails: undefined, // Not used for regular posts
-        descriptionTried: undefined,
-        descriptionOutcome: undefined,
-        tags: formData.tags || [],
-        sector: mainSectorDetails?.name || formData.sector,
-        subSector: subSectorDetails?.name || formData.subSector || null,
-        industry: industryDetails?.name || formData.industry || null,
-        naicsCode: formData.industry || formData.subSector || formData.sector,
-        userId: user.uid,
-        businessType: "Startup",
-        safetyIndicator: "Medium",
-        ratingScore: 0, // Will be calculated in mutationFn
-        imageFile: formData.imageFile,
-        imageUrls: [],
-        mentionedUserIds: formData.mentionedUserIds || [],
-        requestType: 'post', // Explicitly set for regular posts
-        maxBudget: undefined, // Not used for regular posts
-        deadline: undefined,
-      };
-      console.log("[MainLayout] handleAddPost newPostDataForService PREPARED:", JSON.stringify(newPostDataForService, null, 2));
-      addPostMutation.mutate(newPostDataForService);
+      console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
+      addPostMutation.mutate(formData);
     },
-    [user, toast, addPostMutation, queryClient]
+    [user, toast, addPostMutation, queryClient] // queryClient might not be needed here if mutation handles invalidation
   );
-
-  const addHelpRequestMutation = useMutation({
-    mutationFn: async (newHelpRequestDataWithImage: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] }) => {
-      if (!user) throw new Error("User not authenticated to create help request.");
-      console.log('%c[MainLayout] addHelpRequestMutation: Initiated by user:', "color: #FFA500;", user.uid);
-
-      let currentRatingScore = 0;
-      try {
-        console.log(`%c[MainLayout] addHelpRequestMutation: Fetching reviews for user ${user.uid} to calculate rating score.`, "color: #FF8C00;");
-        const reviews = await getReviewsForProfile(user.uid);
-        console.log(`%c[MainLayout] addHelpRequestMutation: Fetched ${reviews.length} reviews for user ${user.uid}.`, "color: #FF8C00;");
-        if (reviews && reviews.length > 0) {
-          const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
-          currentRatingScore = totalRating / reviews.length;
-           console.log(`%c[MainLayout] addHelpRequestMutation: Calculated totalRating: ${totalRating}, currentRatingScore: ${currentRatingScore}`, "color: #FF8C00;");
-        } else {
-          console.log(`%c[MainLayout] addHelpRequestMutation: No reviews found for user ${user.uid}. Rating score remains 0.`, "color: #FF8C00;");
-        }
-      } catch (ratingError: any) {
-         console.error("[MainLayout] addHelpRequestMutation: Error fetching reviews for rating score:", ratingError.message, ratingError);
-      }
-      console.log(`%c[MainLayout] addHelpRequestMutation: User ${user.uid} rating score before request: ${currentRatingScore}`, "color: #FFA500;");
-
-      let uploadedImageUrls: string[] = [];
-      if (newHelpRequestDataWithImage.imageFile) {
-        try {
-          const singleUploadedUrl = await uploadPostImage(newHelpRequestDataWithImage.imageFile, user.uid);
-          if (singleUploadedUrl) uploadedImageUrls.push(singleUploadedUrl);
-        } catch (uploadError) {
-          console.error("[MainLayout] Help request image upload failed:", uploadError);
-          throw uploadError;
-        }
-      }
-
-      const { imageFile, ...postDataForFirestoreBase } = newHelpRequestDataWithImage;
-      const mentionedUserIds = Array.isArray(postDataForFirestoreBase.mentionedUserIds) ? postDataForFirestoreBase.mentionedUserIds : [];
-
-      const postDataForFirestore: NewPostData = {
-        ...postDataForFirestoreBase,
-        imageUrls: uploadedImageUrls.length > 0 ? uploadedImageUrls : [],
-        mentionedUserIds: mentionedUserIds,
-        ratingScore: currentRatingScore,
-        requestType: 'help_request',
-        // maxBudget and deadline are already part of postDataForFirestoreBase if present
-      };
-      console.log(`%c[MainLayout] addHelpRequestMutation: Post data PREPARED. RatingScore: ${currentRatingScore}. RequestType: ${postDataForFirestore.requestType}. Data:`, "color: #FF8C00;", postDataForFirestore);
-      return addPostToFirestore(postDataForFirestore);
-    },
-    onSuccess: (newlyCreatedPostId, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      queryClient.invalidateQueries({ queryKey: ['userPosts'] });
-      queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage']});
-      toast({ title: "Help Request Submitted", description: "Your request has been posted." });
-      setIsRequestHelpDialogOpen(false);
-
-      if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) {
-            try {
-              await createNotification({
-                userId: mentionedUid,
-                type: 'mention',
-                senderId: user.uid,
-                postId: newlyCreatedPostId,
-                postQuestion: variables.question,
-                textSnippet: variables.descriptionDetails ? variables.descriptionDetails.substring(0, 100) : (variables.description ? variables.description.substring(0, 100) : ""),
-              });
-              console.log(`%c[MainLayout] Mention notification CREATED for ${mentionedUid} for help request ${newlyCreatedPostId}`, "color: green;");
-            } catch (notifyError) {
-              console.error(`[MainLayout] Failed to create mention notification for help request ${newlyCreatedPostId}:`, notifyError);
-            }
-          }
-        });
-      }
-    },
-    onError: (error: Error) => {
-      console.error("[MainLayout] addHelpRequestMutation onError:", error);
-      toast({ variant: "destructive", title: "Help Request Failed", description: `Could not submit request: ${error.message}.` });
-    },
-  });
-
- const handleRequestHelpSubmit = useCallback(
-    async (formData: CreatePostFormData) => { // Using CreatePostFormData as the form is duplicated
-      if (!user) {
-        toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
-        return;
-      }
-      console.log("[MainLayout] handleRequestHelpSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
-
-      const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
-      const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
-      const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
-
-      const newHelpRequestData: NewPostData & { imageFile?: File | null; mentionedUserIds?: string[] } = {
-        question: formData.question,
-        // For "help_request", we use the fields from CreatePostFormData as if they were the specific help request fields
-        // This aligns with the "duplicate Create Post" requirement.
-        descriptionDetails: formData.description, // Use the single description field for problem details
-        descriptionTried: undefined,    // Not collected by CreatePostForm
-        descriptionOutcome: undefined,  // Not collected by CreatePostForm
-        description: undefined, // Explicitly undefined for help_request type if using detailed fields
-        tags: formData.tags || [],
-        sector: mainSectorDetails?.name || formData.sector,
-        subSector: subSectorDetails?.name || formData.subSector || null,
-        industry: industryDetails?.name || formData.industry || null,
-        naicsCode: formData.industry || formData.subSector || formData.sector,
-        userId: user.uid,
-        businessType: "Project",
-        safetyIndicator: "Medium",
-        ratingScore: 0, // Will be calculated in mutationFn
-        imageFile: formData.imageFile,
-        imageUrls: [],
-        mentionedUserIds: formData.mentionedUserIds || [],
-        requestType: 'help_request', // CRUCIAL: Set the request type
-        maxBudget: undefined, // Not collected by CreatePostForm
-        deadline: undefined,   // Not collected by CreatePostForm
-      };
-      console.log("[MainLayout] handleRequestHelpSubmit newHelpRequestData PREPARED:", JSON.stringify(newHelpRequestData, null, 2));
-      addHelpRequestMutation.mutate(newHelpRequestData);
-    },
-    [user, toast, addHelpRequestMutation, queryClient]
-  );
-
 
   const handleLogout = async () => {
     try {
       await signOut();
-      toast({
-        title: "Logged Out",
-        description: "You have been successfully logged out.",
-      });
+      toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/login');
     } catch (error) {
       console.error("Logout Error:", error);
-      toast({
-        variant: "destructive",
-        title: "Logout Failed",
-        description: "An error occurred during logout. Please try again.",
-      });
+      toast({ variant: "destructive", title: "Logout Failed", description: "An error occurred. Please try again." });
     }
   };
 
@@ -696,9 +511,9 @@ export default function MainLayout({
     isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
   );
 
-
   return (
     <div className={rootLayoutClasses}>
+      {!pathname.startsWith('/contracts') || !isMobile ? (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
             <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
               <div className="mr-4 hidden md:flex">
@@ -728,7 +543,6 @@ export default function MainLayout({
                 {authLoading ? (
                   <div className="flex items-center space-x-2">
                     <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
-                    <div className="h-8 w-24 rounded-md bg-muted animate-pulse"></div>
                     <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
                   </div>
                 ) : user ? (
@@ -742,47 +556,20 @@ export default function MainLayout({
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
                       <DialogHeader className="p-6 pb-4 border-b">
-                        <DialogTitle>Create a New Post</DialogTitle>
+                        <DialogTitle>Create New Post / Request Help</DialogTitle>
                         <DialogDescription>
-                          Share your question or need with the community. Keep it anonymous.
+                          Share your question or need with the community. Select the type of post you want to create.
                         </DialogDescription>
                       </DialogHeader>
                       <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
                         {isCreatePostOpen && user && (
                           <DynamicCreatePostForm
-                            onSubmit={handleAddPost}
+                            onSubmit={handleCreatePostSubmit}
                             availableTags={availableTags}
                             detailedSectorsData={detailedSectorsData}
                             isSubmitting={addPostMutation.isPending}
                             currentUserId={user.uid}
-                          />
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-
-                  <Dialog open={isRequestHelpDialogOpen} onOpenChange={setIsRequestHelpDialogOpen}>
-                    <DialogTrigger asChild>
-                       <Button variant="secondary" size="sm" className="bg-amber-500 hover:bg-amber-600/90 text-white dark:bg-amber-600 dark:hover:bg-amber-700/90">
-                        <HandHelping className="mr-2 h-4 w-4" />
-                        Request Help
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                      <DialogHeader className="p-6 pb-4 border-b">
-                        <DialogTitle>Request Assistance</DialogTitle>
-                        <DialogDescription>
-                          Describe the help you need. This will be posted to the board.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                        {isRequestHelpDialogOpen && user && (
-                          <DynamicRequestHelpForm // Using duplicated CreatePostForm for "Request Help"
-                            onSubmit={handleRequestHelpSubmit}
-                            availableTags={availableTags}
-                            detailedSectorsData={detailedSectorsData}
-                            isSubmitting={addHelpRequestMutation.isPending}
-                            currentUserId={user.uid}
+                            onDialogClose={() => setIsCreatePostOpen(false)}
                           />
                         )}
                       </div>
@@ -804,62 +591,41 @@ export default function MainLayout({
                         <DropdownMenuLabel className="font-normal">
                           <div className="flex flex-col space-y-1">
                             <p className="text-sm font-medium leading-none">{user.displayName || generateAnonymousName(user.uid)}</p>
-                            {user.email && (
-                               <p className="text-xs leading-none text-muted-foreground">
-                                 {user.email}
-                               </p>
-                            )}
+                            {user.email && (<p className="text-xs leading-none text-muted-foreground">{user.email}</p>)}
                           </div>
                         </DropdownMenuLabel>
                         <DropdownMenuSeparator />
                         <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
-                          <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer">
-                            <User className="mr-2 h-4 w-4" />
-                            <span>Profile</span>
-                          </Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
-                          <Link href="/subscription" className="w-full cursor-pointer">
-                            <CreditCard className="mr-2 h-4 w-4" />
-                            <span>Subscription</span>
-                          </Link>
+                          <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Profile</span></Link>
                         </DropdownMenuItem>
                         <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
-                          <Link href="/settings/profile" className="w-full cursor-pointer">
-                            <Settings className="mr-2 h-4 w-4" />
-                            <span>Settings</span>
-                          </Link>
+                          <Link href="/settings/profile" className="w-full cursor-pointer"><Settings className="mr-2 h-4 w-4" /><span>Settings</span></Link>
                         </DropdownMenuItem>
                         <DynamicThemeToggle />
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleLogout} className="cursor-pointer">
-                          <LogOut className="mr-2 h-4 w-4" />
-                          <span>Log out</span>
-                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleLogout} className="cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </>
                 ) : (
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" asChild>
-                      <Link href="/login">Login</Link>
-                    </Button>
-                    <Button variant="default" size="sm" asChild>
-                      <Link href="/signup">Sign Up</Link>
-                    </Button>
+                    <Button variant="outline" size="sm" asChild><Link href="/login">Login</Link></Button>
+                    <Button variant="default" size="sm" asChild><Link href="/signup">Sign Up</Link></Button>
                   </div>
                 )}
               </div>
             </div>
           </header>
+        ) : null}
 
         <main className={cn(
           "flex-1 flex flex-col",
-          "pb-14 md:pb-0" // Consistent padding for mobile bottom nav
+          isMobile && pathname.startsWith('/contracts') ? "h-full" : "pb-16 md:pb-0"
         )}>
           {children}
         </main>
 
+        {(!pathname.startsWith('/contracts') || !isMobile) && (
           <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14 md:hidden">
             <div className="container mx-auto flex justify-around items-center h-full">
               {navItems.map((item) => (
@@ -877,6 +643,7 @@ export default function MainLayout({
               ))}
             </div>
           </nav>
+        )}
     </div>
   );
 }
