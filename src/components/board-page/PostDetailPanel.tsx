@@ -1,3 +1,4 @@
+
 // src/components/board-page/PostDetailPanel.tsx
 // Tip: This component is getting large. Consider extracting Bidding and Comments sections
 // into their own child components in the future if more functionality is added to them.
@@ -13,34 +14,22 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+import { Label } from '@/components/ui/label'; // Added Label import
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Send, DollarSign, HandHelping, User, X, CalendarDays, Star, MessageSquare, Info } from 'lucide-react';
+import { Loader2, Send, DollarSign, HandHelping, User, X, Trash2, CalendarDays, Star, MessageSquare, Info, AtSign, Briefcase, FileText } from 'lucide-react'; // Added more icons
 import { cn } from '@/lib/utils';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { extractMentionedUids } from '@/lib/mentionUtils';
-import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService';
-import type { NewCommentData, ClientComment, ClientSubComment } from '@/types/comment';
+import { addCommentToPost, getCommentsForPost } from '@/services/commentService';
+import type { NewCommentData, ClientComment } from '@/types/comment';
 import { fetchUserProfileBasic, getSuggestibleUsers, getConnectionStatus } from '@/services/connectionService';
 import type { UserProfileBasic, ConnectionStatus } from '@/types/connection';
 import { addBidToPost, getBidsForPost } from '@/services/bidService';
 import type { ClientBid, NewBidData } from '@/types/bid';
 import { findOrCreateConversation } from '@/services/messagingService';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Badge } from "@/components/ui/badge";
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
-import Image from 'next/image';
-import { Timestamp } from 'firebase/firestore';
-import { formatDistanceToNow } from 'date-fns';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,12 +41,16 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ZodError, z } from 'zod';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage, useForm } from "@/components/ui/form"; // Import useForm
+import { Textarea } from '@/components/ui/textarea';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"; // Import Tabs components
+
 import { PostDetailHeader } from './PostDetailHeader';
 import { PostDetailContentBody } from './PostDetailContentBody';
 import { PostDetailBidding } from './PostDetailBidding';
 import { PostDetailComments } from './PostDetailComments';
-
 
 interface PostDetailPanelProps {
   post: Post;
@@ -77,7 +70,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const router = useRouter();
   const user = currentUser;
 
-  // --- State and Logic for New Comment Input ---
   const [newComment, setNewComment] = useState('');
   const [newCommentMentionQuery, setNewCommentMentionQuery] = useState('');
   const [debouncedNewCommentMentionQuery, setDebouncedNewCommentMentionQuery] = useState('');
@@ -86,8 +78,25 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
 
+  // Moved from BoardPageContent - For bids
+  const { data: bids = [], isLoading: isLoadingBids } = useQuery<ClientBid[]>({
+    queryKey: ['bids', post?.id],
+    queryFn: () => (post && user) ? getBidsForPost(post.id) : Promise.resolve([]),
+    enabled: !!post?.id && !!user && post.requestType === 'help_request',
+  });
 
-  // Fetch comments for the post
+  const addBidMutation = useMutation({
+    mutationFn: addBidToPost,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['bids', post?.id] });
+      toast({ title: "Bid Placed Successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Bid Failed", description: error.message });
+    },
+  });
+
+  // Moved from BoardPageContent - For comments
   const { data: comments = [], isLoading: isLoadingComments, refetch: refetchComments } = useQuery<ClientComment[]>({
     queryKey: ['comments', post?.id],
     queryFn: () => (post && user) ? getCommentsForPost(post.id) : Promise.resolve([]),
@@ -107,28 +116,26 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     enabled: !!post && !!user && showNewCommentSuggestions,
     staleTime: 1000 * 60 * 5,
   });
-  
+
   const newCommentMentionProfilesMap = useMemo(() => {
     const map = new Map<string, UserProfileBasic>();
     if (generalSuggestibleUsers) {
       generalSuggestibleUsers.forEach(profile => {
         if (user && profile.userId !== user.uid) {
-           map.set(profile.userId, profile);
+          map.set(profile.userId, profile);
         }
       });
     }
-    // Add post author and existing commenters if not already in the general list
     if (post?.userId && user && post.userId !== user.uid && !map.has(post.userId)) {
-        map.set(post.userId, { userId: post.userId, mentionName: generateAnonymousName(post.userId), displayName: generateAnonymousName(post.userId) });
+      map.set(post.userId, { userId: post.userId, mentionName: generateAnonymousName(post.userId), displayName: generateAnonymousName(post.userId) });
     }
     comments.forEach(comment => {
-        if (comment.userId && user && comment.userId !== user.uid && !map.has(comment.userId)) {
-            map.set(comment.userId, { userId: comment.userId, mentionName: comment.userName || generateAnonymousName(comment.userId), displayName: comment.userName || generateAnonymousName(comment.userId), avatarUrl: comment.userAvatar });
-        }
+      if (comment.userId && user && comment.userId !== user.uid && !map.has(comment.userId)) {
+        map.set(comment.userId, { userId: comment.userId, mentionName: comment.mentionName || generateAnonymousName(comment.userId), displayName: comment.userName || generateAnonymousName(comment.userId), avatarUrl: comment.userAvatar });
+      }
     });
     return map;
-  }, [generalSuggestibleUsers, user?.uid, post?.userId, comments]);
-
+  }, [generalSuggestibleUsers, user, post?.userId, comments]);
 
   const addCommentMutation = useMutation({
     mutationFn: (commentDataWithPostId: NewCommentData & { postId: string }) => {
@@ -141,7 +148,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       setShowNewCommentSuggestions(false);
       toast({ title: "Comment Added" });
       if (post) queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
-      if (post) queryClient.invalidateQueries({ queryKey: ['posts'] }); 
+      if (post) queryClient.invalidateQueries({ queryKey: ['posts'] });
     },
     onError: (error: Error) => {
       toast({ variant: "destructive", title: "Comment Failed", description: `Could not add comment: ${error.message}.` });
@@ -163,7 +170,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       postId: post.id,
       userId: user.uid,
       text: newComment.trim(),
-      mentionName: generateAnonymousName(user.uid), // Use the new field
+      mentionName: generateAnonymousName(user.uid),
       mentionedUserIds: finalMentionedUids,
       likeCount: 0,
       likedBy: [],
@@ -178,7 +185,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
       const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
-      if (!/\s/.test(potentialQuery) && !/\\n/.test(potentialQuery)) {
+      if (!/\s/.test(potentialQuery) && !/\n/.test(potentialQuery)) {
         activeQuery = potentialQuery;
       }
     }
@@ -230,63 +237,79 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showNewCommentSuggestions]);
-  
+
   const filteredNewCommentSuggestions = useMemo(() => {
     if (!showNewCommentSuggestions) return [];
     if (isLoadingGeneralSuggestions && debouncedNewCommentMentionQuery) return [{ userId: 'loading-main-comment', mentionName: 'loading...', displayName: 'Loading users...' } as UserProfileBasic];
-    
+
     let profilesSource = Array.from(newCommentMentionProfilesMap.values());
 
     if (debouncedNewCommentMentionQuery.trim() === '') {
-        // For empty query, show users already involved (post author, existing commenters) first if any, then general
-        const threadParticipantIds = new Set<string>();
-        if (post?.userId && user && post.userId !== user.uid) threadParticipantIds.add(post.userId);
-        comments.forEach(c => { if (user && c.userId !== user.uid) threadParticipantIds.add(c.userId); });
-
-        const threadProfiles = Array.from(threadParticipantIds).map(id => newCommentMentionProfilesMap.get(id)).filter(Boolean) as UserProfileBasic[];
-        const generalProfiles = profilesSource.filter(p => !threadParticipantIds.has(p.userId));
-        profilesSource = [...threadProfiles, ...generalProfiles];
+      const threadParticipantIds = new Set<string>();
+      if (post?.userId && user && post.userId !== user.uid) threadParticipantIds.add(post.userId);
+      comments.forEach(c => { if (user && c.userId !== user.uid) threadParticipantIds.add(c.userId); });
+      const threadProfiles = Array.from(threadParticipantIds).map(id => newCommentMentionProfilesMap.get(id)).filter(Boolean) as UserProfileBasic[];
+      const generalProfilesForEmptyQuery = profilesSource.filter(p => !threadParticipantIds.has(p.userId));
+      profilesSource = [...threadProfiles, ...generalProfilesForEmptyQuery].slice(0, 5);
     } else {
       const queryLower = debouncedNewCommentMentionQuery.toLowerCase();
-      profilesSource = profilesSource.filter(p => 
+      profilesSource = profilesSource.filter(p =>
         p.mentionName.toLowerCase().includes(queryLower) ||
-        (p.displayName && p.displayName.toLowerCase().includes(queryLower)) || // Use derived displayName
-        (p.companyName && p.companyName.toLowerCase().includes(queryLower))
-      );
+        (p.companyName && p.companyName.toLowerCase().includes(queryLower)) ||
+        (p.actualDisplayName && p.actualDisplayName.toLowerCase().includes(queryLower))
+      ).slice(0, 10);
     }
     if (profilesSource.length === 0 && debouncedNewCommentMentionQuery.trim() !== '') return [{ userId: 'no-match-main-comment', mentionName: 'no-match', displayName: `No users matching "@${debouncedNewCommentMentionQuery}"` } as UserProfileBasic];
-    if (profilesSource.length === 0) return [{ userId: 'no-users-main-comment', mentionName: 'no-users', displayName: 'No users to suggest here.' } as UserProfileBasic];
-    return profilesSource.slice(0, 10);
+    if (profilesSource.length === 0) return [{ userId: 'no-users-main-comment', mentionName: 'no-users', displayName: 'No users to suggest.' } as UserProfileBasic];
+    return profilesSource;
   }, [showNewCommentSuggestions, isLoadingGeneralSuggestions, newCommentMentionProfilesMap, debouncedNewCommentMentionQuery, post?.userId, comments, user]);
 
-  const { data: connectionStatus } = useQuery<ConnectionStatus | null>({
-    queryKey: ['connectionStatus', user?.uid, post?.userId],
-    queryFn: () => (user && post?.userId) ? getConnectionStatus(user.uid, post.userId) : Promise.resolve(null),
-    enabled: !!user && !!post?.userId && user.uid !== post.userId,
-  });
+  // Delete Post Mutation (passed from parent)
+  const [deletePostMutationIsPending, setDeletePostMutationIsPending] = useState(false); // Example, should use actual mutation's pending state
+
+  const handleDeletePostClick = () => {
+    if (post && post.id) {
+      // This is just a placeholder for how the parent's delete mutation would be called
+      // The actual deletePostMutation.isPending would come from the parent if that mutation lives there
+      // For now, we'll simulate:
+      setDeletePostMutationIsPending(true);
+      onDelete(post.id);
+      // Parent would handle reset of its pending state
+    }
+  };
   
+  const { data: connectionStatus } = useQuery<ConnectionStatus | null>({
+    queryKey: ['connectionStatus', currentUser?.uid, post?.userId],
+    queryFn: () => (currentUser && post?.userId) ? getConnectionStatus(currentUser.uid, post.userId) : Promise.resolve(null),
+    enabled: !!currentUser && !!post?.userId && currentUser.uid !== post.userId,
+  });
+
   if (!post) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
 
   return (
-    <Card className="flex flex-col flex-1 overflow-hidden bg-card border-border rounded-lg shadow-xl sticky top-20 max-h-[calc(100vh-6rem)]">
+    <Card className="flex flex-col flex-1 overflow-hidden bg-card border-border rounded-lg shadow-xl">
       <PostDetailHeader
         post={post}
         currentUser={user}
         onClose={onClose}
-        onDelete={() => onDelete(post.id)}
+        onDelete={handleDeletePostClick}
+        deletePostMutationIsPending={deletePostMutationIsPending} // Pass this down
         connectionStatus={connectionStatus}
       />
       <ScrollArea className="flex-grow bg-background">
         <div className="p-4">
           <PostDetailContentBody post={post} />
           {post.requestType === 'help_request' && post.userId !== user?.uid && post.maxBudget != null && (
-             <PostDetailBidding
-                post={post}
-                currentUser={user}
-                onClosePanel={onClose}
-             />
+            <PostDetailBidding
+              post={post}
+              currentUser={user}
+              onClosePanel={onClose} // Example prop
+              bids={bids}
+              isLoadingBids={isLoadingBids}
+              addBidMutation={addBidMutation} // Pass mutation
+            />
           )}
           <PostDetailComments
             post={post}
@@ -299,7 +322,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       </ScrollArea>
       <CardFooter className="p-3 border-t bg-card flex-shrink-0">
         {user ? (
-           <Popover
+          <Popover
             open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && !['loading-main-comment', 'no-users-main-comment', 'no-match-main-comment'].includes(filteredNewCommentSuggestions[0]?.userId)}
             onOpenChange={(open) => { setShowNewCommentSuggestions(open); if (!open) setNewCommentMentionQuery(''); }}
           >
@@ -331,9 +354,8 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
               onOpenAutoFocus={(e) => e.preventDefault()}
             >
               {filteredNewCommentSuggestions.map(profile => {
-                const displayableName = profile.displayName; // This is now actualDisplayName || companyName || mentionName
-                const showPrimaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
-                
+                 const displayableName = profile.actualDisplayName || profile.companyName || profile.mentionName;
+                 const showSecondaryNameLine = (profile.actualDisplayName || profile.companyName) && (profile.actualDisplayName || profile.companyName)!.toLowerCase() !== profile.mentionName.toLowerCase();
                 return (
                   (profile.userId === 'loading-main-comment' || profile.userId === 'no-users-main-comment' || profile.userId === 'no-match-main-comment') ? (
                     <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
@@ -348,15 +370,15 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                     >
                       <Avatar className="h-5 w-5 mr-2">
                         <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
-                        <AvatarFallback className="text-xs">{getSharedInitials(profile.mentionName)}</AvatarFallback>
+                        <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
                       </Avatar>
                       <div className="flex flex-col items-start">
-                        {showPrimaryNameLine && (
-                          <span className="font-medium text-foreground">{displayableName}</span>
-                        )}
-                        <span className={cn("text-muted-foreground", !showPrimaryNameLine && "font-medium text-foreground")}>
-                          @{profile.mentionName}
-                        </span>
+                         {showSecondaryNameLine && (
+                           <span className="font-medium text-foreground">{displayableName}</span>
+                         )}
+                         <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
+                           @{profile.mentionName}
+                         </span>
                       </div>
                     </Button>
                   )
@@ -366,7 +388,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
           </Popover>
         ) : (
           <p className="text-xs text-muted-foreground text-center w-full">
-            <a href="/login" className="text-primary hover:underline">Log in</a> to add comments or bids.
+            <Link href="/login" className="text-primary hover:underline">Log in</Link> to add comments or bids.
           </p>
         )}
       </CardFooter>
@@ -375,4 +397,4 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 });
 
 PostDetailPanel.displayName = "PostDetailPanel";
-export default PostDetailPanel;
+export { PostDetailPanel }; // Ensure named export
