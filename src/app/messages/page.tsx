@@ -29,15 +29,17 @@ const MessagesPage = () => {
     const initialConversationId = searchParams?.get('conversationId');
     
     const [activeTab, setActiveTab] = useState<string>(() => {
-        if (initialConversationId) return 'chats';
-        return 'chats';
+        if (isMobile && !initialConversationId) return 'list'; // For MessagingInterface internal mobile view state
+        return initialConversationId ? 'chats' : 'chats'; // Default to 'chats' tab for the page
     });
 
+    // Effect to switch to 'chats' tab if initialConversationId changes and a chat is opened
     useEffect(() => {
         if (initialConversationId && activeTab !== 'chats') {
             setActiveTab('chats');
         }
     }, [initialConversationId, activeTab]);
+
 
     const currentUserId = user?.uid;
 
@@ -84,7 +86,7 @@ const MessagesPage = () => {
     const handleManualRefetchAll = useCallback(() => {
       refetchRequests();
       refetchConnections();
-      queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] }); // Invalidate conversations too
+      queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
        toast({
           title: "Refreshing...",
           description: "Fetching latest messages and connection data.",
@@ -94,7 +96,7 @@ const MessagesPage = () => {
 
     if (authLoading) {
         return (
-            <div className="flex flex-col flex-grow items-center justify-center p-6">
+            <div className="flex flex-col flex-grow items-center justify-center p-6 h-full">
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="ml-2 text-muted-foreground mt-2">Loading user...</p>
             </div>
@@ -103,7 +105,7 @@ const MessagesPage = () => {
 
     if (!user) {
         return (
-            <div className="flex flex-col flex-grow items-center justify-center p-6 text-center">
+            <div className="flex flex-col flex-grow items-center justify-center p-6 text-center h-full">
                 <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
                 <p className="text-muted-foreground font-semibold">Please log in to view messages and connections.</p>
                 <Button onClick={() => router.push('/login')} className="mt-4">Log In</Button>
@@ -115,19 +117,27 @@ const MessagesPage = () => {
        requestsError?.message,
        connectionsError?.message,
     ].filter(Boolean).join('; ');
+    
+    const pageRootClasses = cn(
+        "flex flex-col flex-grow",
+        isMobile ? "p-0" : "md:container md:mx-auto md:p-6"
+    );
+
+    const messagingInterfaceWrapperClasses = cn(
+        "flex-grow flex flex-col overflow-hidden h-full", // Ensure h-full for the wrapper too
+        !isMobile && "border rounded-lg shadow-sm bg-card"
+    );
 
     return (
-        <div className={cn(
-            "flex flex-col flex-grow", 
-            isMobile ? "p-0" : "md:container md:mx-auto md:p-6"
-        )}>
-            <div className="hidden md:block mb-6"> {/* Hidden on mobile, shown on md and up */}
+        <div className={pageRootClasses}>
+            {/* Title and description section, hidden on mobile */}
+            <div className="mb-6 hidden md:block">
                 <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Messages & Connections</h1>
                 <p className="text-muted-foreground mt-1 max-w-2xl">
                     Manage your chats, connection requests, and established network.
                 </p>
             </div>
-            <div className={cn("flex justify-end", isMobile ? "p-2 border-b md:border-none" : "mb-4 md:mb-0")}>
+             <div className={cn("flex justify-end", isMobile ? "p-2 border-b md:border-none" : "mb-4 md:mb-0")}>
                 <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections}>
                     <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections ? 'animate-spin' : ''} mr-2`} />
                     Refresh
@@ -144,7 +154,7 @@ const MessagesPage = () => {
                </div>
             ) : null}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow h-full"> {/* Ensure Tabs itself can grow */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow h-full">
                 <TabsList className={cn("grid w-full mb-0", isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4")}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Chats</TabsTrigger>
                     <TabsTrigger value="requests" className="flex items-center gap-1.5">
@@ -158,14 +168,8 @@ const MessagesPage = () => {
                     <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Network</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chats" className={cn(
-                    "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    "flex-grow flex flex-col overflow-hidden" // Make TabsContent a flex container that grows
-                )}>
-                    <div className={cn(
-                        "flex-grow flex flex-col overflow-hidden h-full", // Ensure this wrapper also grows and handles overflow
-                        !isMobile && "border rounded-lg shadow-sm bg-card"
-                    )}>
+                <TabsContent value="chats" className="mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow">
+                    <div className={messagingInterfaceWrapperClasses}>
                         <MessagingInterface
                             currentUserId={user.uid}
                             initialConversationId={initialConversationId}
@@ -173,7 +177,7 @@ const MessagesPage = () => {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="requests" className={cn("flex-grow overflow-auto", isMobile ? "p-1" : "p-1 md:mt-2")}>
+                <TabsContent value="requests" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow overflow-auto", isMobile ? "p-1" : "p-1 md:mt-2")}>
                     <Card className={cn("shadow-none border-0 h-full", !isMobile && "md:border md:shadow-md")}>
                         <CardHeader className={cn("pt-4 pb-3", isMobile ? "px-3" : "px-6 md:pt-6")}>
                             <CardTitle className="flex items-center gap-2 text-lg">
@@ -202,7 +206,7 @@ const MessagesPage = () => {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="connections" className={cn("flex-grow overflow-auto", isMobile ? "p-1" : "p-1 md:mt-2")}>
+                <TabsContent value="connections" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow overflow-auto", isMobile ? "p-1" : "p-1 md:mt-2")}>
                    <Card className={cn("shadow-none border-0 h-full", !isMobile && "md:border md:shadow-md")}>
                         <CardHeader className={cn("pt-4 pb-3", isMobile ? "px-3" : "px-6 md:pt-6")}>
                             <CardTitle className="flex items-center gap-2 text-lg">

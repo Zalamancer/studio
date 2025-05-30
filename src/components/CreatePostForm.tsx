@@ -1,4 +1,3 @@
-
 // src/components/CreatePostForm.tsx
 "use client";
 
@@ -10,7 +9,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox"; // Import Checkbox
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Form,
   FormControl,
@@ -52,6 +51,7 @@ import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 
+// Tip: This component is getting large. Consider splitting tab content or complex fields (like @mentions) into sub-components.
 
 const MAX_FILE_SIZE_MB = 2;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
@@ -62,30 +62,36 @@ const postFormSchema = z.object({
     required_error: "You must select a post type.",
   }),
   question: z.string().min(10, "Question must be at least 10 characters.").max(200, "Question cannot exceed 200 characters."),
-  // Unified description fields, mandatory for all
-  descriptionDetails: z.string().min(10, { message: "Details are required (min 10 characters)." }),
+  
+  descriptionDetails: z.string().min(10, "Details are required (min 10 characters)."),
   descriptionTried: z.string().optional(),
   descriptionOutcome: z.string().optional(),
+
   tags: z.array(z.string()).min(1, "Please select at least one tag."),
   sector: z.string().min(1, "Please select a sector."),
   subSector: z.string().optional(),
   industry: z.string().optional(),
+  
   imageFile: z.instanceof(File).optional().nullable()
-    .refine((file) => !file || file.size <= MAX_FILE_SIZE_BYTES, {
-        message: "Max image size is " + (MAX_FILE_SIZE_BYTES / 1024 / 1024) + "MB.",
+    .refine(file => !file || file.size <= MAX_FILE_SIZE_BYTES, {
+        message: "Max image size is " + (MAX_FILE_SIZE_BYTES / 1024 / 1024) + "MB."
     })
     .refine(
-      (file) => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
+      file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
       { message: "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported." }
     ),
+  
   maxBudget: z.string().transform(val => val === '' ? undefined : val)
     .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
     .optional(),
   deadline: z.date().optional().nullable(),
+}).superRefine((data, ctx) => {
+  // No conditional validation needed for description fields anymore as tabs are always present
+  // MaxBudget and Deadline are only relevant if requestType is 'help_request',
+  // but their optionality is handled at the field level.
+  // If requestType is 'post', these fields will be undefined/null and handled by the service.
 });
 
-
-// This interface now includes all fields, making them optional based on requestType is handled by form logic
 export interface CreatePostFormData {
   requestType: 'post' | 'help_request';
   question: string;
@@ -97,7 +103,7 @@ export interface CreatePostFormData {
   subSector?: string | undefined;
   industry?: string | undefined;
   imageFile?: File | null | undefined;
-  mentionedUserIds?: string[]; // Will be populated based on @mentions in descriptionDetails
+  mentionedUserIds?: string[];
   maxBudget?: number | undefined;
   deadline?: Date | null | undefined;
 }
@@ -147,7 +153,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   const [originalTooLargeFile, setOriginalTooLargeFile] = useState<File | null>(null);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
   
-  // State for @mention in "Problem Details" tab
   const [problemDetailsValue, setProblemDetailsValue] = useState('');
   const [problemDetailsMentionQuery, setProblemDetailsMentionQuery] = useState('');
   const [debouncedProblemDetailsQuery, setDebouncedProblemDetailsQuery] = useState('');
@@ -159,7 +164,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   const requestType = form.watch("requestType");
   const [activeDescriptionTab, setActiveDescriptionTab] = useState("details");
 
-  // Reset form logic when dialog closes after successful submission
+
   const resetFormValues = useCallback(() => {
     form.reset({
       requestType: 'post',
@@ -175,7 +180,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       maxBudget: undefined,
       deadline: undefined,
     });
-    setProblemDetailsValue(''); // Reset local state for description
+    setProblemDetailsValue('');
     setImagePreviewUrl(null);
     setOriginalTooLargeFile(null);
     setShowCompressionDialog(false);
@@ -222,7 +227,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     }
   }, [selectedSubSectorCode, currentSubSectors, form]);
 
-  // Debounce for Problem Details mention query
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedProblemDetailsQuery(problemDetailsMentionQuery);
@@ -236,37 +240,45 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     enabled: showProblemDetailsSuggestions && !!currentUserId,
   });
 
-  const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
-    console.log("[CreatePostForm] evaluateMentionState - Text:", text, "Cursor:", cursorPosition);
+  const evaluateMentionState = useCallback((text: string, cursorPosition: number, setQuery: React.Dispatch<React.SetStateAction<string>>, setShow: React.Dispatch<React.SetStateAction<boolean>>) => {
     let activeQuery = null;
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
         const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
-        if (!/\s/.test(potentialQuery) && !/\\n/.test(potentialQuery)) { // Corrected regex
+        if (!/\s/.test(potentialQuery) && !/\r\n|\r|\n/.test(potentialQuery)) {
             activeQuery = potentialQuery;
         }
     }
-    setProblemDetailsMentionQuery(activeQuery !== null ? activeQuery : '');
-    setShowProblemDetailsSuggestions(activeQuery !== null);
-    console.log("[CreatePostForm] evaluateMentionState - Active Query:", activeQuery, "Show Suggestions:", activeQuery !== null);
-  }, [setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions]);
+    setQuery(activeQuery !== null ? activeQuery : '');
+    setShow(activeQuery !== null);
+  }, []);
 
   const handleProblemDetailsChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setProblemDetailsValue(value); 
-    evaluateMentionState(value, e.target.selectionStart || 0);
-  }, [evaluateMentionState, setProblemDetailsValue]);
+    if (problemDetailsTextareaRef.current) {
+        evaluateMentionState(value, problemDetailsTextareaRef.current.selectionStart || 0, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions);
+    }
+  }, [evaluateMentionState, setProblemDetailsValue, problemDetailsTextareaRef, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions]);
 
   const handleProblemDetailsFocus = useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
-    evaluateMentionState(e.target.value, e.target.selectionStart || 0);
-  }, [evaluateMentionState]);
+    if (problemDetailsTextareaRef.current) {
+        evaluateMentionState(e.target.value, problemDetailsTextareaRef.current.selectionStart || 0, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions);
+    }
+  }, [evaluateMentionState, problemDetailsTextareaRef, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions]);
   
-  const handleSelectProblemDetailsSuggestion = useCallback((profile: UserProfileBasic) => {
-    if (!problemDetailsTextareaRef.current || !profile.mentionName) return;
-    const currentValue = problemDetailsValue;
-    const cursorPosition = problemDetailsTextareaRef.current.selectionStart || 0;
+  const handleSelectSuggestion = useCallback((profile: UserProfileBasic, 
+    currentTextValue: string, 
+    setTextValue: React.Dispatch<React.SetStateAction<string>>,
+    inputRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>,
+    setMentionQueryFn: React.Dispatch<React.SetStateAction<string>>,
+    setShowSuggestionsFn: React.Dispatch<React.SetStateAction<boolean>>
+  ) => {
+    if (!inputRef.current || !profile.mentionName) return;
+    const currentValue = currentTextValue;
+    const cursorPosition = inputRef.current.selectionStart || 0;
     const textBeforeCursor = currentValue.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
 
@@ -276,18 +288,18 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         const mentionToInsert = profile.mentionName; 
         const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
         
-        setProblemDetailsValue(newText);
+        setTextValue(newText);
         setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId));
         
         const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
         setTimeout(() => {
-            problemDetailsTextareaRef.current?.focus();
-            problemDetailsTextareaRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+            inputRef.current?.focus();
+            inputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
         }, 0);
     }
-    setShowProblemDetailsSuggestions(false);
-    setProblemDetailsMentionQuery('');
-  }, [problemDetailsValue, setSelectedMentionedUserIds, setProblemDetailsValue, setShowProblemDetailsSuggestions, setProblemDetailsMentionQuery]);
+    setShowSuggestionsFn(false);
+    setMentionQueryFn('');
+  }, [setSelectedMentionedUserIds]); // Added setSelectedMentionedUserIds
   
   useEffect(() => {
     if (problemDetailsValue !== form.getValues('descriptionDetails')) {
@@ -319,13 +331,15 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     
     let source = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
 
-    if (debouncedProblemDetailsQuery.trim() !== '') {
+    if (debouncedProblemDetailsQuery.trim() === '') {
+      source = source.slice(0, 25);
+    } else {
       const queryLower = debouncedProblemDetailsQuery.toLowerCase();
       source = source.filter(p => 
         p.mentionName.toLowerCase().includes(queryLower) ||
         (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
         (p.companyName && p.companyName.toLowerCase().includes(queryLower))
-      );
+      ).slice(0, 10);
     }
 
     if (source.length === 0 && debouncedProblemDetailsQuery.trim() !== '') {
@@ -334,7 +348,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (source.length === 0) {
       return [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
     }
-    return source.slice(0, 10);
+    return source;
   }, [suggestibleUsers, isLoadingSuggestibleUsers, showProblemDetailsSuggestions, debouncedProblemDetailsQuery, currentUserId]);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -393,7 +407,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   };
 
   const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
-    console.log("[CreatePostForm] Values submitted:", JSON.stringify(values, null, 2));
     const finalMentionedUserIds = Array.from(selectedMentionedUserIds);
     
     const submitData: CreatePostFormData = {
@@ -413,6 +426,26 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     };
     onSubmit(submitData);
   };
+  
+  const localGetInitials = (name: string | undefined | null): string => {
+      if (!name || typeof name !== 'string' || name.trim() === '') return '?';
+      const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
+      const pseudonymRegex = /^[A-Z][a-z]+([A-Z][a-zA-Z]*)[0-9]{3,}$/;
+      const match = nameToProcess.match(pseudonymRegex);
+      if (match) {
+          const firstLetter = nameToProcess.charAt(0);
+          const animalPart = match[1];
+          const secondLetter = animalPart.charAt(0);
+          return (firstLetter + secondLetter).toUpperCase();
+      }
+      const words = nameToProcess.split(/\s+/).filter(Boolean);
+      if (words.length === 0) return '?';
+      if (words.length === 1) return words[0].substring(0, 1).toUpperCase();
+      const firstInitial = words[0].substring(0, 1);
+      const lastInitial = words[words.length - 1].substring(0, 1);
+      return (firstInitial + lastInitial).toUpperCase();
+  };
+
 
   return (
     <Form {...form}>
@@ -468,8 +501,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               )}
             />
             
-            <div className="flex-grow flex flex-col space-y-2">
-              <Label className="text-base font-semibold text-foreground">
+            <div className="flex-grow flex flex-col space-y-0"> {/* Reduced space-y-2 to space-y-0 */}
+              <Label className="text-base font-semibold text-foreground mb-2"> {/* Added mb-2 here */}
                 Details <span className="text-destructive">*</span>
               </Label>
               <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full flex-grow flex flex-col">
@@ -516,8 +549,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                               ['loading-desc', 'no-users-desc', 'no-match-desc'].includes(profile.userId) ? (
                                 <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
                               ) : (
-                                <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectProblemDetailsSuggestion(profile)}>
-                                  <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback></Avatar>
+                                <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectSuggestion(profile, problemDetailsValue, setProblemDetailsValue, problemDetailsTextareaRef, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions )}>
+                                  <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{localGetInitials(profile.mentionName)}</AvatarFallback></Avatar>
                                   <div className="flex flex-col items-start">
                                       {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
                                       <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
@@ -540,8 +573,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                         <Textarea
                           placeholder="Solutions or approaches you&apos;ve already attempted (optional)..."
                           className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
-                          value={field.value || ''}
-                          onChange={field.onChange}
+                          {...field}
+                          value={field.value || ''} // Ensure value is controlled
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -557,8 +590,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                         <Textarea
                           placeholder="Ideal result or solution you&apos;re looking for (optional)?"
                           className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
-                          value={field.value || ''}
-                          onChange={field.onChange}
+                          {...field}
+                           value={field.value || ''} // Ensure value is controlled
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -583,22 +616,22 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <FormLabel className="flex items-center gap-1"><CalendarIcon className="h-4 w-4 text-muted-foreground" />Deadline (Optional)</FormLabel>
                      <Popover>
                         <PopoverTrigger asChild>
-                            <Button
-                                variant={"outline"}
-                                className={cn(
-                                "w-full justify-start text-left font-normal",
-                                !field.value && "text-muted-foreground"
-                                )}
-                                disabled={isSubmitting}
-                                type="button"
-                            >
-                                <span className="flex items-center justify-between w-full">
-                                    <span>
-                                        {field.value && field.value instanceof Date ? format(field.value, "PPP") : "Pick a date"}
-                                    </span>
-                                    <CalendarDays className="h-4 w-4 opacity-50" />
+                           <Button
+                            variant={"outline"}
+                            className={cn(
+                              "w-full justify-start text-left font-normal",
+                              !field.value && "text-muted-foreground"
+                            )}
+                            disabled={isSubmitting}
+                            type="button"
+                          >
+                            <span className="flex items-center justify-between w-full">
+                                <span>
+                                    {field.value && field.value instanceof Date ? format(field.value, "PPP") : "Pick a date"}
                                 </span>
-                            </Button>
+                                <CalendarDays className="h-4 w-4 opacity-50" />
+                            </span>
+                          </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
                            <Calendar
@@ -648,7 +681,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <FormItem>
                 <FormLabel>Sub-sector (Optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting || currentSubSectors.length === 0}>
-                    <SelectTrigger><SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "Select sector first"} /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "No sub-sectors available"} /></SelectTrigger>
                     <SelectContent>{currentSubSectors.map(sub => (<SelectItem key={sub.code} value={sub.code}>{sub.name} ({sub.code})</SelectItem>))}</SelectContent>
                 </Select>
                 <FormDescription>Choose a specific sub-sector if applicable.</FormDescription>
@@ -659,7 +692,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <FormItem>
                 <FormLabel>Industry (Optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting || currentIndustries.length === 0}>
-                    <SelectTrigger><SelectValue placeholder={currentIndustries.length > 0 ? "Select an industry" : "Select sub-sector first"} /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={currentIndustries.length > 0 ? "Select an industry" : "No industries available"} /></SelectTrigger>
                     <SelectContent>{currentIndustries.map(ind => (<SelectItem key={ind.code} value={ind.code}>{ind.name} ({ind.code})</SelectItem>))}</SelectContent>
                 </Select>
                 <FormDescription>Choose a specific industry if applicable.</FormDescription>
@@ -676,17 +709,17 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   {availableTags.map(tag => (
                     <FormField key={tag} control={form.control} name="tags" render={({ field }) => (
                       <FormItem className="flex flex-row items-center space-x-2 space-y-0">
-                          <Checkbox
-                            checked={field.value?.includes(tag)}
-                            onCheckedChange={(checked: boolean | "indeterminate") => {
-                                if (checked === true) { // Explicitly check for boolean true
-                                    field.onChange([...(field.value || []), tag]);
-                                } else {
-                                    field.onChange((field.value || []).filter(v => v !== tag));
-                                }
-                            }}
-                            disabled={isSubmitting}
-                          />
+                          <FormControl>
+                            <Checkbox
+                              checked={field.value?.includes(tag)}
+                              onCheckedChange={(checked: boolean | "indeterminate") => {
+                                  return checked === true
+                                      ? field.onChange([...(field.value || []), tag])
+                                      : field.onChange((field.value || []).filter(v => v !== tag));
+                              }}
+                              disabled={isSubmitting}
+                            />
+                          </FormControl>
                         <FormLabel className="font-normal text-sm">{tag}</FormLabel>
                       </FormItem>
                     )} />
