@@ -3,7 +3,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { authAdmin as firebaseAuthAdmin } from '@/lib/firebase/auth-admin'; // Using Admin SDK for auth verification
-import { dbAdmin } from '@/lib/firebase/auth-admin'; // CORRECTED: Import dbAdmin directly
+import { dbAdmin as adminDb } from '@/lib/firebase/auth-admin'; // CORRECTED: Import dbAdmin and alias it as adminDb
 import { FieldValue } from 'firebase-admin/firestore';
 
 // Initialize Stripe with your secret key.
@@ -20,68 +20,71 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing paymentMethodId or userId' }, { status: 400 });
     }
 
-    // In a real app, you'd get the userId from an authenticated session.
-    // For this example, we're trusting the userId passed from the client.
-    // In production, VERIFY THE USER'S AUTHENTICATION (e.g., using Firebase Admin SDK with a token).
-    // For example, if you pass Firebase ID token in Authorization header:
+    // --- IMPORTANT: AUTHENTICATION & AUTHORIZATION ---
+    // In a real production app, you MUST verify that the 'userId' making this request
+    // is authorized to save a payment method for THEIR OWN account.
+    // Typically, the client would send a Firebase ID token in the Authorization header.
+    // Example:
     // const idToken = request.headers.get('Authorization')?.split('Bearer ')[1];
-    // if (!idToken || !firebaseAuthAdmin) { // Check if firebaseAuthAdmin is initialized
-    //   return NextResponse.json({ error: 'Unauthorized - Missing token or auth admin not initialized' }, { status: 401 });
+    // if (!idToken || !firebaseAuthAdmin) {
+    //   console.error('[API Stripe Save] Unauthorized: Missing ID token or Firebase Admin Auth not initialized.');
+    //   return NextResponse.json({ error: 'Unauthorized - Missing token or auth admin error' }, { status: 401 });
     // }
     // let decodedToken;
     // try {
     //   decodedToken = await firebaseAuthAdmin.verifyIdToken(idToken);
-    // } catch (authError) {
-    //   console.error('[API] Firebase Auth Error verifying ID token:', authError);
-    //   return NextResponse.json({ error: 'Invalid token' }, { status: 401 });
+    // } catch (authError: any) {
+    //   console.error('[API Stripe Save] Firebase Auth Error verifying ID token:', authError.message);
+    //   return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
     // }
-    // const currentUserId = decodedToken.uid;
-    // if (currentUserId !== userId) {
-    //    return NextResponse.json({ error: 'User ID mismatch' }, { status: 403 });
+    // // Ensure the UID from the token matches the userId in the request body
+    // if (decodedToken.uid !== userId) {
+    //   console.error(`[API Stripe Save] Forbidden: Token UID (${decodedToken.uid}) does not match request userId (${userId}).`);
+    //   return NextResponse.json({ error: 'Forbidden - User ID mismatch' }, { status: 403 });
     // }
+    // console.log(`[API Stripe Save] Request authorized for user: ${userId}`);
+    // --- END OF AUTHENTICATION & AUTHORIZATION EXAMPLE ---
 
 
-    if (!dbAdmin) { 
-        console.error('[API] Firestore Admin SDK (dbAdmin) is not initialized. Cannot access userPreferences.');
+    if (!adminDb) {
+        console.error('[API Stripe Save] Firestore Admin SDK (adminDb) is not initialized. Cannot access userPreferences.');
         return NextResponse.json({ error: 'Server configuration error - Firestore not available.' }, { status: 500 });
     }
-    
-    const userPreferencesRef = dbAdmin.collection('userPreferences').doc(userId); 
+
+    const userPreferencesRef = adminDb.collection('userPreferences').doc(userId);
     const userPrefDoc = await userPreferencesRef.get();
     let stripeCustomerId = userPrefDoc.exists ? userPrefDoc.data()?.stripeCustomerId : null;
 
-    // 1. Find or Create a Stripe Customer associated with your Firebase user
     if (!stripeCustomerId) {
       // You might want to include user's email or name when creating the customer
+      // Fetch email from Firebase Auth using admin.auth().getUser(userId) if needed
+      const userAuthRecord = firebaseAuthAdmin ? await firebaseAuthAdmin.getUser(userId) : null;
       const customer = await stripe.customers.create({
-        // email: firebaseUser.email, // Get from Firebase Auth user record if available via Admin SDK after token verification
-        // name: firebaseUser.displayName,
+        email: userAuthRecord?.email || undefined, // Use email from Auth if available
+        name: userAuthRecord?.displayName || undefined, // Use displayName from Auth if available
         metadata: {
           firebaseUID: userId,
         },
       });
       stripeCustomerId = customer.id;
-      // Save the stripeCustomerId to your user's profile in Firestore
       await userPreferencesRef.set({ stripeCustomerId, userId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      console.log(`[API Stripe Save] Created Stripe customer ${stripeCustomerId} for user ${userId}`);
+    } else {
+      console.log(`[API Stripe Save] Found existing Stripe customer ${stripeCustomerId} for user ${userId}`);
     }
 
-    // 2. Attach the PaymentMethod to the Customer
     const paymentMethod = await stripe.paymentMethods.attach(paymentMethodId, {
       customer: stripeCustomerId,
     });
 
-    // 3. (Optional) Set it as the default payment method for the customer's subscriptions/invoices
+    // Optional: Set as default payment method for subscriptions
     // await stripe.customers.update(stripeCustomerId, {
     //   invoice_settings: {
     //     default_payment_method: paymentMethod.id,
     //   },
     // });
 
-    // 4. Store non-sensitive payment method details in Firestore for display
-    // Ensure all paymentMethods have a default value, and ensure they are not null or undefined before updating.
     const existingPaymentMethods = userPrefDoc.exists && Array.isArray(userPrefDoc.data()?.paymentMethods) ? userPrefDoc.data()?.paymentMethods : [];
-    
-    // Set all existing methods to isDefault: false
     const updatedPaymentMethods = existingPaymentMethods.map(pm => ({ ...pm, isDefault: false }));
 
     const newSavedPaymentMethod = {
@@ -90,20 +93,16 @@ export async function POST(request: NextRequest) {
       last4: paymentMethod.card?.last4 || '0000',
       expMonth: paymentMethod.card?.exp_month || 0,
       expYear: paymentMethod.card?.exp_year || 0,
-      isDefault: true, // This new card becomes the default
+      isDefault: true,
     };
-
-    // Add the new payment method and ensure it's the only default
     updatedPaymentMethods.push(newSavedPaymentMethod);
 
-
     await userPreferencesRef.update({
-      paymentMethods: updatedPaymentMethods, // Save the full array with updated defaults
+      paymentMethods: updatedPaymentMethods,
       updatedAt: FieldValue.serverTimestamp(),
     });
 
-
-    console.log(`[API] Payment method ${paymentMethodId} attached to customer ${stripeCustomerId} for user ${userId}`);
+    console.log(`[API Stripe Save] Payment method ${paymentMethodId} attached to customer ${stripeCustomerId} for user ${userId} and saved to Firestore.`);
     return NextResponse.json({
       success: true,
       message: 'Payment method saved successfully!',
@@ -112,22 +111,19 @@ export async function POST(request: NextRequest) {
     });
 
   } catch (error: any) {
-    console.error('[API] Stripe Save Payment Method Error:', error);
-    // Don't expose detailed Stripe errors to the client in production unless safe (like card errors)
+    console.error('[API Stripe Save] General Error:', error);
     let errorMessage = 'Failed to save payment method.';
     let statusCode = 500;
 
     if (error instanceof Stripe.errors.StripeError) {
-        errorMessage = error.message; // Card errors are often safe to display
+        errorMessage = error.message;
         if (error.statusCode) {
             statusCode = error.statusCode;
         }
     } else if (error.message && error.message.includes('Firebase Admin SDK initialization error')) {
         errorMessage = 'Server configuration error. Please try again later.';
     }
-    // Log the full error for server-side debugging
-    // In a real production environment, you'd use a more sophisticated logging system.
-    console.error('Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+    console.error('Full error object passed to client:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
 
     return NextResponse.json({ error: errorMessage, stripeErrorCode: error.code }, { status: statusCode });
   }
