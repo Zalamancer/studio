@@ -12,7 +12,6 @@ import { formatDistanceToNow } from 'date-fns';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { findOrCreateConversation } from '@/services/messagingService';
-// Removed: import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -25,6 +24,12 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { getInitials } from '@/lib/pseudonymUtils'; // Import from shared utils
+
+interface ConnectionItemProps {
+  connection: Connection;
+  currentUserId: string;
+  onAction: () => void;
+}
 
 export const ConnectionItem: React.FC<ConnectionItemProps> = ({
   connection,
@@ -135,10 +140,3 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
     </div>
   );
 };
-```
-
-**Key Changes in `ConnectionItem.tsx`:**
-*   The `handleStartChat` function now calls `await findOrCreateConversation(currentUserId, connection.otherUserId, null);`. `null` is used for `postId` to indicate a general conversation not linked to a specific post.
-*   If successful, it redirects to `/messages?conversationId=${conversationId}`.
-
-This will ensure that clicking "Message" on a connection item directs the user to the correct messaging page with the appropriate conversation context.
