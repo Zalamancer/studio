@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell } from "lucide-react";
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -325,13 +325,13 @@ export type SectorWithSubSectors = typeof detailedSectorsData[0];
 export type SubSector = SectorWithSubSectors['subSectors'][0];
 export type Industry = SubSector['industries'][0];
 
-// Memoize the findIndustryByName function to avoid re-computation on every render
-export const findIndustryByName = React.useCallback((
+// Export as a regular function, not using React.useCallback at module level
+export const findIndustryByName = (
     industryName: string
   ): { industry: IndustryType; subSector: SubSectorType; sector: SectorWithSubSectorsType } | null => {
     for (const sector of detailedSectorsData) {
       for (const subSector of sector.subSectors) {
-        if (subSector.industries) { 
+        if (subSector.industries) {
           for (const industry of subSector.industries) {
             if (industry.name === industryName) {
               return { industry, subSector, sector };
@@ -340,16 +340,16 @@ export const findIndustryByName = React.useCallback((
         }
       }
     }
-    return null; 
-}, []);
+    return null;
+};
 
 
 // Dynamically import CreatePostForm and RequestHelpForm if they are large
 const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-  { 
+  {
     loading: () => <div className="p-4 text-center"><p className="text-sm text-muted-foreground">Loading form...</p></div>,
-    ssr: false 
+    ssr: false
   }
 );
 
@@ -389,7 +389,7 @@ export default function MainLayout({
       queryClient.prefetchQuery({
         queryKey: ['fullUserProfile', user.uid],
         queryFn: () => fetchFullUserProfile(user.uid),
-        staleTime: 1000 * 60 * 5, 
+        staleTime: 1000 * 60 * 5,
       });
     }
   }, [user, queryClient]);
@@ -460,7 +460,7 @@ export default function MainLayout({
         userId: user.uid,
         question: formData.question,
         requestType: formData.requestType,
-        
+
         descriptionDetails: formData.descriptionDetails,
         descriptionTried: formData.requestType === 'help_request' ? (formData.descriptionTried || null) : null,
         descriptionOutcome: formData.requestType === 'help_request' ? (formData.descriptionOutcome || null) : null,
@@ -473,7 +473,7 @@ export default function MainLayout({
         ratingScore: currentRatingScore,
         imageUrls: uploadedImageUrls,
         mentionedUserIds: formData.mentionedUserIds || [],
-        
+
         maxBudget: formData.requestType === 'help_request' ? (formData.maxBudget === undefined ? null : formData.maxBudget) : null,
         deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
         commentCount: 0,
@@ -481,7 +481,7 @@ export default function MainLayout({
       console.log(`%c[MainLayout] addPostMutation: Post data PREPARED for service. RatingScore: ${newPostData.ratingScore}. Data:`, "color: #FF00FF;", newPostData);
       return addPostToFirestore(newPostData);
     },
-    onSuccess: (newlyCreatedPostId, variables) => { 
+    onSuccess: (newlyCreatedPostId, variables) => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
@@ -522,7 +522,7 @@ export default function MainLayout({
       console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       addPostMutation.mutate(formData);
     },
-    [user, toast, addPostMutation, queryClient] 
+    [user, toast, addPostMutation, queryClient]
   );
 
   const handleLogout = async () => {
