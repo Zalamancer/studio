@@ -1,10 +1,10 @@
-
 // src/app/api/stripe/save-payment-method/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
-import { authAdmin as firebaseAuthAdmin } from '@/lib/firebase/auth-admin'; // Using Admin SDK for auth verification
-import { dbAdmin } from '@/lib/firebase/auth-admin'; // Correct import for dbAdmin
+import { authAdmin as firebaseAuthAdmin, dbAdmin } from '@/lib/firebase/auth-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+
+type PaymentMethod = Stripe.PaymentMethod;
 
 // Initialize Stripe with your secret key.
 // IMPORTANT: Store your secret key in .env.local and DO NOT expose it on the client.
@@ -86,7 +86,10 @@ export async function POST(request: NextRequest) {
 
     const existingPaymentMethods = userPrefDoc.exists && Array.isArray(userPrefDoc.data()?.paymentMethods) ? userPrefDoc.data()?.paymentMethods : [];
     
-    const updatedPaymentMethodsNonDefault = existingPaymentMethods.map(pm => ({ ...pm, isDefault: false }));
+    const updatedPaymentMethodsNonDefault = existingPaymentMethods.map((pm: PaymentMethod & { isDefault: boolean }) => ({
+      ...pm,
+      isDefault: false,
+    }))
 
     const newSavedPaymentMethod = {
       stripePaymentMethodId: paymentMethod.id,
