@@ -4,6 +4,8 @@ serviceAccountKey.json
 
 .env.local
 
+deleteAllUsers.ts
+
 # dependencies
 /node_modules
 /.pnp
