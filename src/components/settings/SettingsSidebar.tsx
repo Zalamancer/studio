@@ -1,7 +1,7 @@
 // src/components/settings/SettingsSidebar.tsx
 "use client";
 
-import React from 'react';
+import React, { useCallback } from 'react'; // Added useCallback
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { getUserPreferences } from '@/services/userPreferenceService'; // Import the service
 
 const settingsLinks = [
-  { name: 'Profile', href: '/settings/profile', icon: User, prefetchKey: 'fullUserProfile' }, // Keep prefetchKey for potential future use or consistency
+  { name: 'Profile', href: '/settings/profile', icon: User, prefetchKey: 'fullUserProfile' },
   { name: 'Verification', href: '/settings/verification', icon: ShieldCheck },
   { name: 'Account', href: '/settings/account', icon: Lock },
   { name: 'Notifications', href: '/settings/notifications', icon: Bell, prefetchKey: 'userPreferences' },
