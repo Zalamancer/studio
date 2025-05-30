@@ -101,16 +101,16 @@ const MessagesPage = () => {
     }, [refetchRequests, refetchConnections, queryClient, currentUserId, toast]);
 
     const {
-        data: conversations = [], // This line might not be needed if MessagingInterface handles its own conversation fetching
-        isLoading: isLoadingConversationsForTabCount, // Renamed to avoid conflict if MessagingInterface has its own
+        data: conversations = [], 
+        isLoading: isLoadingConversationsForTabCount, 
         error: conversationsErrorForTabCount,
         isError: isConversationsErrorTrueForTabCount,
       } = useQuery<ClientConversation[], Error>({
-      queryKey: ['conversationsForTabCount', currentUserId], // Unique key for this specific usage
+      queryKey: ['conversationsForTabCount', currentUserId], 
       queryFn: () => currentUserId ? getConversationsForUser(currentUserId) : Promise.resolve([]),
       enabled: !!currentUserId,
-      staleTime: 1000 * 60 * 5, // Longer stale time as it's just for count/tab list
-      refetchOnWindowFocus: false, // Less aggressive refetching
+      staleTime: 1000 * 60 * 5, 
+      refetchOnWindowFocus: false, 
       retry: 1,
     });
 
@@ -148,7 +148,7 @@ const MessagesPage = () => {
 
     return (
         <div className={cn(
-            "flex flex-col flex-grow h-full", // Parent needs to provide height
+            "flex flex-col flex-grow h-full", 
             isMobile ? "" : "md:container md:mx-auto md:py-6 md:px-4"
         )}>
              {!isMobile && (
@@ -170,9 +170,9 @@ const MessagesPage = () => {
                </div>
             )}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 h-full overflow-hidden">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 overflow-hidden"> {/* This <Tabs> will take up available height */}
                 <TabsList className={cn(
-                    "grid w-full flex-shrink-0", // flex-shrink-0 to prevent TabsList from shrinking
+                    "grid w-full flex-shrink-0", 
                     isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4"
                 )}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
@@ -190,11 +190,12 @@ const MessagesPage = () => {
                 <TabsContent
                     value="chats"
                     className={cn(
-                        "flex-1 flex flex-col overflow-hidden mt-0", // flex-1 for height, mt-0 to remove default margin
-                         isMobile ? "" : "md:p-4 md:pt-0"
+                        "mt-0 flex-1", // flex-1 to grow
+                         isMobile ? "" : "md:p-4 md:pt-0" // Keep padding for desktop
                     )}
                 >
-                    <div className="flex flex-col flex-1 h-full overflow-hidden"> {/* Ensure this inner div also fills height */}
+                    {/* Inner div now handles full height and layout for MessagingInterface */}
+                    <div className="h-full flex flex-col overflow-hidden rounded-md border bg-background">
                         <MessagingInterface
                             currentUserId={user.uid}
                             initialConversationId={initialConversationId}
@@ -206,13 +207,14 @@ const MessagesPage = () => {
                 <TabsContent
                     value="requests"
                     className={cn(
-                        "flex-1 flex flex-col overflow-hidden mt-0", // flex-1 for height, mt-0
+                        "mt-0 flex-1", // flex-1 to grow
                         isMobile ? "p-1" : "md:p-4 md:pt-0"
                     )}
                 >
-                  <div className="flex flex-col flex-1 h-full overflow-hidden">
+                   {/* Inner div now handles full height and layout for Card */}
+                  <div className="h-full flex flex-col overflow-hidden">
                         <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden h-full",
+                            "flex-1 flex flex-col overflow-hidden h-full", // Card itself fills the inner div
                             !isMobile && "md:border md:shadow-md"
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
@@ -222,7 +224,7 @@ const MessagesPage = () => {
                                 <CardDescription>Review businesses wanting to connect.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto", // flex-1 and overflow-auto for scrolling
+                                "pb-4 flex-1 overflow-auto", // CardContent scrolls
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingRequests ? (
@@ -249,13 +251,14 @@ const MessagesPage = () => {
                 <TabsContent
                     value="connections"
                     className={cn(
-                        "flex-1 flex flex-col overflow-hidden mt-0", // flex-1 for height, mt-0
+                        "mt-0 flex-1", // flex-1 to grow
                         isMobile ? "p-1" : "md:p-4 md:pt-0"
                     )}
                 >
-                   <div className="flex flex-col flex-1 h-full overflow-hidden">
+                  {/* Inner div now handles full height and layout for Card */}
+                   <div className="h-full flex flex-col overflow-hidden">
                        <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden h-full",
+                            "flex-1 flex flex-col overflow-hidden h-full", // Card itself fills the inner div
                             !isMobile && "md:border md:shadow-md"
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
@@ -265,7 +268,7 @@ const MessagesPage = () => {
                                 <CardDescription>Businesses you are connected with.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto", // flex-1 and overflow-auto for scrolling
+                                "pb-4 flex-1 overflow-auto", // CardContent scrolls
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingConnections ? (
@@ -294,3 +297,6 @@ const MessagesPage = () => {
 };
 
 export default MessagesPage;
+
+
+    
