@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw, ArrowLeft } from 'lucide-react';
+import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw, ArrowLeft, Eye } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,18 +29,14 @@ const MessagesPage = () => {
     const initialConversationId = searchParams?.get('conversationId');
     
     const [activeTab, setActiveTab] = useState<string>(() => {
-        // Set initial tab based on URL or default to 'chats'
-        if (isMobile && !initialConversationId) return 'list'; // On mobile, default to list if no specific chat
-        return initialConversationId ? 'chats' : 'chats'; // Default to chats, especially if a chat is pre-selected
+        if (initialConversationId) return 'chats';
+        return 'chats';
     });
 
     useEffect(() => {
         if (initialConversationId && activeTab !== 'chats') {
-            console.log("[MessagesPage] conversationId in URL, ensuring 'chats' tab is active.");
             setActiveTab('chats');
         }
-        // If on mobile and a conversationId appears, switch activeMobileView in MessagingInterface
-        // This is now handled internally by MessagingInterface based on initialConversationId
     }, [initialConversationId, activeTab]);
 
     const currentUserId = user?.uid;
@@ -58,7 +54,7 @@ const MessagesPage = () => {
             return getPendingRequests(currentUserId);
         },
         enabled: !!currentUserId,
-        staleTime: 1000 * 60 * 2,
+        staleTime: 1000 * 60 * 2, // 2 minutes
         retry: 1,
     });
 
@@ -75,7 +71,7 @@ const MessagesPage = () => {
             return getConnections(currentUserId);
         },
         enabled: !!currentUserId,
-        staleTime: 1000 * 60 * 5,
+        staleTime: 1000 * 60 * 5, // 5 minutes
         retry: 1,
     });
 
@@ -88,7 +84,7 @@ const MessagesPage = () => {
     const handleManualRefetchAll = useCallback(() => {
       refetchRequests();
       refetchConnections();
-      queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
+      queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] }); // Invalidate conversations too
        toast({
           title: "Refreshing...",
           description: "Fetching latest messages and connection data.",
@@ -122,10 +118,10 @@ const MessagesPage = () => {
 
     return (
         <div className={cn(
-            "flex flex-col flex-grow", // Takes available height from MainLayout's main tag
+            "flex flex-col flex-grow", 
             isMobile ? "p-0" : "md:container md:mx-auto md:p-6"
         )}>
-            <div className="hidden md:block mb-6">
+            <div className="hidden md:block mb-6"> {/* Hidden on mobile, shown on md and up */}
                 <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Messages & Connections</h1>
                 <p className="text-muted-foreground mt-1 max-w-2xl">
                     Manage your chats, connection requests, and established network.
@@ -148,7 +144,7 @@ const MessagesPage = () => {
                </div>
             ) : null}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow h-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow h-full"> {/* Ensure Tabs itself can grow */}
                 <TabsList className={cn("grid w-full mb-0", isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4")}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Chats</TabsTrigger>
                     <TabsTrigger value="requests" className="flex items-center gap-1.5">
@@ -162,9 +158,12 @@ const MessagesPage = () => {
                     <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Network</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chats" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow")}>
+                <TabsContent value="chats" className={cn(
+                    "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                    "flex-grow flex flex-col overflow-hidden" // Make TabsContent a flex container that grows
+                )}>
                     <div className={cn(
-                        "flex-grow flex flex-col overflow-hidden h-full", // This div will control the height
+                        "flex-grow flex flex-col overflow-hidden h-full", // Ensure this wrapper also grows and handles overflow
                         !isMobile && "border rounded-lg shadow-sm bg-card"
                     )}>
                         <MessagingInterface
