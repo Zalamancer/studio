@@ -1,3 +1,4 @@
+
 // src/app/messages/page.tsx
 "use client";
 
@@ -132,12 +133,14 @@ const MessagesPage = () => {
             "flex flex-col flex-grow h-full", 
             isMobile ? "p-0" : "md:p-0" 
         )}>
-            <div className={cn("flex justify-end items-center", isMobile ? "p-2 border-b md:border-none" : "mb-0 md:mb-0 md:p-4 md:pb-2")}>
-                <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections}>
-                    <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections ? 'animate-spin' : ''} mr-2`} />
-                    Refresh
-                </Button>
-            </div>
+            {!isMobile && (
+                <div className={cn("flex justify-end items-center mb-0 md:mb-0 md:p-4 md:pb-2")}>
+                    <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections}>
+                        <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections ? 'animate-spin' : ''} mr-2`} />
+                        Refresh
+                    </Button>
+                </div>
+            )}
 
             {isRequestsError || isConnectionsError ? (
                <div className={cn("my-2 mx-2 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive flex items-center gap-3", isMobile ? "" : "md:mx-4")}>
@@ -166,7 +169,7 @@ const MessagesPage = () => {
                     <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Network</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chats" className="mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow flex flex-col overflow-hidden">
+                <TabsContent value="chats" className="mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow">
                     <div className={cn(
                         "flex-grow flex flex-col overflow-hidden h-full",
                         !isMobile && "border rounded-lg shadow-sm bg-card md:m-4 md:mt-0"
@@ -179,62 +182,66 @@ const MessagesPage = () => {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="requests" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex flex-col flex-grow overflow-hidden", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
-                    <Card className={cn("shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full", !isMobile && "md:border md:shadow-md")}>
-                        <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
-                            <CardTitle className="flex items-center gap-2 text-lg">
-                                Connection Requests
-                            </CardTitle>
-                            <CardDescription>Review businesses wanting to connect.</CardDescription>
-                        </CardHeader>
-                        <CardContent className={cn("pb-4 flex-grow overflow-auto", isMobile ? "px-3" : "px-6 md:pb-6")}>
-                            {isLoadingRequests ? (
-                                <div className="flex items-center space-x-4 py-4"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading requests...</span></div>
-                            ) : pendingRequests.length === 0 ? (
-                                <p className="text-muted-foreground text-sm text-center py-4">No pending requests.</p>
-                            ) : (
-                                <div className="space-y-3">
-                                    {pendingRequests.map((request) => (
-                                        <ConnectionRequestItem
-                                            key={request.connectionId}
-                                            request={request}
-                                            currentUserId={currentUserId!}
-                                            onAction={handleConnectionStatusChange}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                <TabsContent value="requests" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
+                    <div className="flex flex-col flex-grow overflow-hidden h-full">
+                        <Card className={cn("shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full", !isMobile && "md:border md:shadow-md")}>
+                            <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
+                                <CardTitle className="flex items-center gap-2 text-lg">
+                                    Connection Requests
+                                </CardTitle>
+                                <CardDescription>Review businesses wanting to connect.</CardDescription>
+                            </CardHeader>
+                            <CardContent className={cn("pb-4 flex-grow overflow-auto", isMobile ? "px-3" : "px-6 md:pb-6")}>
+                                {isLoadingRequests ? (
+                                    <div className="flex items-center space-x-4 py-4"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading requests...</span></div>
+                                ) : pendingRequests.length === 0 ? (
+                                    <p className="text-muted-foreground text-sm text-center py-4">No pending requests.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {pendingRequests.map((request) => (
+                                            <ConnectionRequestItem
+                                                key={request.connectionId}
+                                                request={request}
+                                                currentUserId={currentUserId!}
+                                                onAction={handleConnectionStatusChange}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
 
-                <TabsContent value="connections" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex flex-col flex-grow overflow-hidden", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
-                   <Card className={cn("shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full", !isMobile && "md:border md:shadow-md")}>
-                        <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
-                            <CardTitle className="flex items-center gap-2 text-lg">
-                                Your Network
-                            </CardTitle>
-                            <CardDescription>Businesses you are connected with.</CardDescription>
-                        </CardHeader>
-                        <CardContent className={cn("pb-4 flex-grow overflow-auto", isMobile ? "px-3" : "px-6 md:pb-6")}>
-                            {isLoadingConnections ? (
-                                <div className="flex items-center space-x-4 py-4"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading connections...</span></div>
-                            ) : connections.length === 0 ? (
-                                <p className="text-muted-foreground text-sm text-center py-4">You haven't made any connections yet.</p>
-                            ) : (
-                                <div className="space-y-3">
-                                    {connections.map((connection) => (
-                                        <ConnectionItem
-                                            key={connection.connectionId}
-                                            connection={connection}
-                                            currentUserId={currentUserId!}
-                                            onAction={handleConnectionStatusChange}
-                                        />
-                                    ))}
-                                </div>
-                            )}
-                        </CardContent>
-                    </Card>
+                <TabsContent value="connections" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
+                   <div className="flex flex-col flex-grow overflow-hidden h-full">
+                       <Card className={cn("shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full", !isMobile && "md:border md:shadow-md")}>
+                            <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
+                                <CardTitle className="flex items-center gap-2 text-lg">
+                                    Your Network
+                                </CardTitle>
+                                <CardDescription>Businesses you are connected with.</CardDescription>
+                            </CardHeader>
+                            <CardContent className={cn("pb-4 flex-grow overflow-auto", isMobile ? "px-3" : "px-6 md:pb-6")}>
+                                {isLoadingConnections ? (
+                                    <div className="flex items-center space-x-4 py-4"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading connections...</span></div>
+                                ) : connections.length === 0 ? (
+                                    <p className="text-muted-foreground text-sm text-center py-4">You haven't made any connections yet.</p>
+                                ) : (
+                                    <div className="space-y-3">
+                                        {connections.map((connection) => (
+                                            <ConnectionItem
+                                                key={connection.connectionId}
+                                                connection={connection}
+                                                currentUserId={currentUserId!}
+                                                onAction={handleConnectionStatusChange}
+                                            />
+                                        ))}
+                                    </div>
+                                )}
+                            </CardContent>
+                        </Card>
+                    </div>
                 </TabsContent>
             </Tabs>
         </div>
