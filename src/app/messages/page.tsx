@@ -26,7 +26,6 @@ import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { ScrollArea } from "@/components/ui/scroll-area";
 
-// Re-added ConversationListItem
 interface ConversationListItemProps {
   conversation: ClientConversation;
   isSelected: boolean;
@@ -278,9 +277,9 @@ const MessagesPage = () => {
                </div>
             )}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow overflow-hidden h-full">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col overflow-hidden h-[85%]">
                 <TabsList className={cn(
-                    "grid w-full flex-shrink-0",
+                    "grid w-full flex-shrink-0", // Added flex-shrink-0
                     isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4"
                 )}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
@@ -298,14 +297,11 @@ const MessagesPage = () => {
                 <TabsContent
                     value="chats"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                         isMobile ? "flex-1" : "flex-1 md:p-4 md:pt-0" // Ensure flex-1 for growth
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1", // Added flex-1
+                         isMobile ? "" : "md:p-4 md:pt-0" 
                     )}
                 >
-                    <div className={cn(
-                        "flex flex-col flex-grow overflow-hidden h-full",
-                        !isMobile && "border rounded-lg shadow-sm bg-card"
-                    )}>
+                    <div className="flex flex-col flex-grow overflow-hidden h-full">
                         <MessagingInterface
                             currentUserId={user.uid}
                             initialConversationId={initialConversationId}
@@ -317,8 +313,8 @@ const MessagesPage = () => {
                 <TabsContent
                     value="requests"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        isMobile ? "p-1 flex-1" : "md:p-4 md:pt-0 flex-1" // Ensure flex-1 for growth
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1", // Added flex-1
+                        isMobile ? "p-1" : "md:p-4 md:pt-0"
                     )}
                 >
                   <div className="flex flex-col flex-grow overflow-hidden h-full">
@@ -360,8 +356,8 @@ const MessagesPage = () => {
                 <TabsContent
                     value="connections"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        isMobile ? "p-1 flex-1" : "md:p-4 md:pt-0 flex-1" // Ensure flex-1 for growth
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1", // Added flex-1
+                        isMobile ? "p-1" : "md:p-4 md:pt-0" 
                     )}
                 >
                    <div className="flex flex-col flex-grow overflow-hidden h-full">
@@ -405,6 +401,3 @@ const MessagesPage = () => {
 };
 
 export default MessagesPage;
-
-
-    
