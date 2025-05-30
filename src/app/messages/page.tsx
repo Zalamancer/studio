@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw, ArrowLeft, Eye } from 'lucide-react';
+import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,100 +18,8 @@ import type { ConnectionRequest, Connection } from '@/types/connection';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getConversationsForUser, getPostDetails, getUserDetails } from '@/services/messagingService';
-import type { ClientConversation, SerializableMessage } from '@/types/messaging';
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Skeleton } from "@/components/ui/skeleton";
-import Link from 'next/link';
-import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { ScrollArea } from "@/components/ui/scroll-area";
-
-interface ConversationListItemProps {
-  conversation: ClientConversation;
-  isSelected: boolean;
-  currentUserId: string;
-  onSelect: (conversationId: string) => void;
-  postQuestion?: string | null;
-  highlight?: boolean;
-}
-
-const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
-  conversation,
-  isSelected,
-  currentUserId,
-  onSelect,
-  postQuestion,
-  highlight,
-}) => {
-    const otherParticipantId = conversation.participants.find(p => p !== currentUserId);
-
-    const { data: otherParticipantDetails, isLoading: isLoadingDetails } = useQuery({
-        queryKey: ['userDetails', otherParticipantId, 'messagingInterfaceList'],
-        queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : Promise.resolve(null),
-        enabled: !!otherParticipantId,
-        staleTime: Infinity,
-    });
-
-    const participantName = isLoadingDetails
-        ? 'Loading...'
-        : otherParticipantDetails?.name || generateAnonymousName(otherParticipantId || 'unknown_user');
-    const initials = getInitials(participantName);
-
-    const formattedTime = conversation.lastMessageTimestamp
-        ? new Date(conversation.lastMessageTimestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-        : '';
-
-  return (
-    <div className={cn("relative group", highlight ? "ring-2 ring-primary ring-offset-2 rounded-lg" : "")}>
-      <button
-        onClick={() => onSelect(conversation.id)}
-        className={cn(
-          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-center gap-3",
-          isSelected ? "bg-muted" : ""
-        )}
-        aria-current={isSelected ? "page" : undefined}
-      >
-         <Avatar className="h-9 w-9 flex-shrink-0">
-          <AvatarImage src={otherParticipantDetails?.avatar} alt={participantName} />
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs">{initials}</AvatarFallback>
-         </Avatar>
-        <div className="flex-grow overflow-hidden min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">{participantName}</p>
-          {postQuestion && (
-              <p className="text-xs text-primary truncate font-medium mt-0.5">
-                  Re: {postQuestion}
-              </p>
-          )}
-          <p className={cn("text-xs text-muted-foreground truncate mt-0.5", isSelected && conversation.lastMessage ? "font-semibold" : "")}>
-              {conversation.lastMessage || 'No messages yet'}
-          </p>
-        </div>
-        {formattedTime && (
-          <span className="text-xs text-muted-foreground self-start pt-1 flex-shrink-0">
-            {formattedTime}
-          </span>
-        )}
-      </button>
-       {conversation.postId && conversation.postId !== 'general_connection' && (
-           <Link href={`/?postId=${conversation.postId}`}
-                 className={cn(
-                     "absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity",
-                     "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-                     "p-1 rounded-md",
-                     "focus:opacity-100 focus:outline-none focus:ring-1 focus:ring-ring",
-                     "hidden md:flex"
-                 )}
-                 title="View Post Details"
-                 aria-label="View Post Details"
-            >
-               <Eye className="h-3.5 w-3.5" />
-           </Link>
-        )}
-    </div>
-  );
-});
-ConversationListItem.displayName = 'ConversationListItem';
-
+import { getConversationsForUser } from '@/services/messagingService';
+import type { ClientConversation } from '@/types/messaging';
 
 const MessagesPage = () => {
     const { user, loading: authLoading } = useAuth();
@@ -193,36 +101,18 @@ const MessagesPage = () => {
     }, [refetchRequests, refetchConnections, queryClient, currentUserId, toast]);
 
     const {
-        data: conversations = [],
-        isLoading: isLoadingConversations,
-        error: conversationsError,
-        isError: isConversationsErrorTrue,
+        data: conversations = [], // This line might not be needed if MessagingInterface handles its own conversation fetching
+        isLoading: isLoadingConversationsForTabCount, // Renamed to avoid conflict if MessagingInterface has its own
+        error: conversationsErrorForTabCount,
+        isError: isConversationsErrorTrueForTabCount,
       } = useQuery<ClientConversation[], Error>({
-      queryKey: ['conversations', currentUserId],
+      queryKey: ['conversationsForTabCount', currentUserId], // Unique key for this specific usage
       queryFn: () => currentUserId ? getConversationsForUser(currentUserId) : Promise.resolve([]),
       enabled: !!currentUserId,
-      staleTime: 1000 * 60 * 1,
-      refetchOnWindowFocus: true,
+      staleTime: 1000 * 60 * 5, // Longer stale time as it's just for count/tab list
+      refetchOnWindowFocus: false, // Less aggressive refetching
       retry: 1,
     });
-
-     const postDetailsQueries = useQuery({
-       queryKey: ['postDetails', conversations.map(c => c.postId).filter(Boolean)],
-       queryFn: async () => {
-         const postIds = conversations.map(c => c.postId).filter((id): id is string => !!id && id !== 'general_connection');
-         const detailsMap = new Map<string, { question: string } | null>();
-         if (postIds.length === 0) return detailsMap;
-         await Promise.all(postIds.map(async (postId) => {
-           const details = await getPostDetails(postId);
-           detailsMap.set(postId, details);
-         }));
-         return detailsMap;
-       },
-       enabled: conversations.length > 0 && conversations.some(c => c.postId && c.postId !== 'general_connection'),
-       staleTime: 1000 * 60 * 10,
-     });
-
-     const postDetailsMap = postDetailsQueries.data;
 
 
     if (authLoading) {
@@ -253,24 +143,24 @@ const MessagesPage = () => {
     const combinedErrorMessage = [
        requestsError?.message,
        connectionsError?.message,
-       conversationsError?.message,
+       conversationsErrorForTabCount?.message,
     ].filter(Boolean).join('; ');
 
     return (
         <div className={cn(
-            "flex flex-col flex-grow h-full",
-            isMobile ? "" : "md:container md:mx-auto md:py-6 md:px-4" 
+            "flex flex-col flex-grow h-full", // Parent needs to provide height
+            isMobile ? "" : "md:container md:mx-auto md:py-6 md:px-4"
         )}>
              {!isMobile && (
                  <div className={cn("flex justify-end items-center flex-shrink-0", isMobile ? "p-2" : "p-4 pb-2")}>
-                     <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections || isLoadingConversations}>
-                         <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections || isLoadingConversations ? 'animate-spin' : ''} mr-2`} />
+                     <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections || isLoadingConversationsForTabCount}>
+                         <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections || isLoadingConversationsForTabCount ? 'animate-spin' : ''} mr-2`} />
                          Refresh
                      </Button>
                  </div>
              )}
 
-            {(isRequestsError || isConnectionsError || isConversationsErrorTrue) && combinedErrorMessage && (
+            {(isRequestsError || isConnectionsError || isConversationsErrorTrueForTabCount) && combinedErrorMessage && (
                <div className={cn("my-2 mx-2 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive flex items-center gap-3 flex-shrink-0", isMobile ? "" : "md:mx-4")}>
                    <AlertTriangle className="h-5 w-5" />
                    <div>
@@ -280,9 +170,9 @@ const MessagesPage = () => {
                </div>
             )}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 overflow-hidden">
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-1 h-full overflow-hidden">
                 <TabsList className={cn(
-                    "grid w-full flex-shrink-0",
+                    "grid w-full flex-shrink-0", // flex-shrink-0 to prevent TabsList from shrinking
                     isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4"
                 )}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
@@ -300,12 +190,11 @@ const MessagesPage = () => {
                 <TabsContent
                     value="chats"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        "flex-1 flex flex-col overflow-hidden", 
-                         isMobile ? "" : "md:p-4 md:pt-0" 
+                        "flex-1 flex flex-col overflow-hidden mt-0", // flex-1 for height, mt-0 to remove default margin
+                         isMobile ? "" : "md:p-4 md:pt-0"
                     )}
                 >
-                    <div className="flex flex-col flex-1 h-full overflow-hidden">
+                    <div className="flex flex-col flex-1 h-full overflow-hidden"> {/* Ensure this inner div also fills height */}
                         <MessagingInterface
                             currentUserId={user.uid}
                             initialConversationId={initialConversationId}
@@ -317,8 +206,7 @@ const MessagesPage = () => {
                 <TabsContent
                     value="requests"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        "flex-1 flex flex-col overflow-hidden",
+                        "flex-1 flex flex-col overflow-hidden mt-0", // flex-1 for height, mt-0
                         isMobile ? "p-1" : "md:p-4 md:pt-0"
                     )}
                 >
@@ -334,7 +222,7 @@ const MessagesPage = () => {
                                 <CardDescription>Review businesses wanting to connect.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto",
+                                "pb-4 flex-1 overflow-auto", // flex-1 and overflow-auto for scrolling
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingRequests ? (
@@ -361,9 +249,8 @@ const MessagesPage = () => {
                 <TabsContent
                     value="connections"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        "flex-1 flex flex-col overflow-hidden",
-                        isMobile ? "p-1" : "md:p-4 md:pt-0" 
+                        "flex-1 flex flex-col overflow-hidden mt-0", // flex-1 for height, mt-0
+                        isMobile ? "p-1" : "md:p-4 md:pt-0"
                     )}
                 >
                    <div className="flex flex-col flex-1 h-full overflow-hidden">
@@ -378,7 +265,7 @@ const MessagesPage = () => {
                                 <CardDescription>Businesses you are connected with.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto",
+                                "pb-4 flex-1 overflow-auto", // flex-1 and overflow-auto for scrolling
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingConnections ? (
@@ -407,5 +294,3 @@ const MessagesPage = () => {
 };
 
 export default MessagesPage;
-
-    
