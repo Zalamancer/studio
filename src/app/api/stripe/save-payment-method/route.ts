@@ -2,8 +2,8 @@
 // src/app/api/stripe/save-payment-method/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
-import { authAdmin as firebaseAuthAdmin } from '@/lib/firebase/auth-admin'; // Using Admin SDK for auth verification, aliased to avoid conflict
-import { dbAdmin } from '@/lib/firebase/auth-admin'; // Using Admin SDK for Firestore
+import { authAdmin as firebaseAuthAdmin } from '@/lib/firebase/auth-admin'; // Using Admin SDK for auth verification
+import { dbAdmin } from '@/lib/firebase/auth-admin'; // Corrected: Import dbAdmin directly
 import { FieldValue } from 'firebase-admin/firestore';
 
 // Initialize Stripe with your secret key.
@@ -41,12 +41,12 @@ export async function POST(request: NextRequest) {
     // }
 
 
-    if (!dbAdmin) {
+    if (!dbAdmin) { // Use dbAdmin
         console.error('[API] Firestore Admin SDK (dbAdmin) is not initialized. Cannot access userPreferences.');
         return NextResponse.json({ error: 'Server configuration error - Firestore not available.' }, { status: 500 });
     }
     
-    const userPreferencesRef = dbAdmin.collection('userPreferences').doc(userId);
+    const userPreferencesRef = dbAdmin.collection('userPreferences').doc(userId); // Use dbAdmin
     const userPrefDoc = await userPreferencesRef.get();
     let stripeCustomerId = userPrefDoc.exists ? userPrefDoc.data()?.stripeCustomerId : null;
 
@@ -89,7 +89,7 @@ export async function POST(request: NextRequest) {
 
     // Ensure paymentMethods array exists and update it
     await userPreferencesRef.update({
-      paymentMethods: FieldValue.arrayUnion(newSavedPaymentMethod), // Add to array
+      paymentMethods: FieldValue.arrayUnion(newSavedPaymentMethod),
       updatedAt: FieldValue.serverTimestamp(),
     });
 
