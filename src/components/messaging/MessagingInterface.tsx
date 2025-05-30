@@ -124,7 +124,6 @@ interface MessageBubbleProps {
 
 const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, currentUserId, onStartReply }) => {
   const isOwnMessage = !message.isBotMessage && message.senderId === currentUserId;
-  // console.log(`[MessageBubble] PROPS RECEIVED: messageId=${message.id}, text="${message.text.substring(0,20)}...", isBotMessage=${message.isBotMessage}, senderId=${message.senderId}, currentUserId=${currentUserId}, calculatedIsOwnMessage=${isOwnMessage}`);
 
   const timestamp = message.timestamp
     ? new Date(message.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -136,8 +135,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, curre
   );
 
   if (message.isBotMessage) {
-    // console.log(`[MessageBubble] RENDERING BOT MESSAGE: ${message.id}`);
-    // Use default styling for bot messages, same as other user's messages
     bubbleClasses = cn("rounded-lg px-3 py-2 max-w-[75%] break-words shadow-sm relative", "bg-muted text-foreground");
   }
 
@@ -215,7 +212,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
   useEffect(() => {
     if (initialMessageText && selectedConversationId && newMessage === '') {
-      // console.log(`[MessagingInterface] initialMessageText effect: Setting newMessage to "${initialMessageText}" for conv ${selectedConversationId}`);
       setNewMessage(initialMessageText);
       setTimeout(() => messageInputRef.current?.focus(), 0);
     }
@@ -238,7 +234,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
   useEffect(() => {
       if (isConversationsError && conversationsError) {
-          // console.error("[MessagingInterface] Error fetching conversations:", conversationsError);
            toast({
                variant: "destructive",
                title: "Error Loading Conversations",
@@ -280,14 +275,10 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     const unsubscribe = getMessagesForConversation(
       selectedConversationId,
       (newMessagesFromListener) => {
-        // console.log(`%c[MessagingInterface] onUpdate FROM SERVICE called for conv ${selectedConversationId}. New messages count: ${newMessagesFromListener.length}`, "color: green; font-weight: bold;");
-        // const botMessagesInUpdate = newMessagesFromListener.filter(m => m.isBotMessage);
-        // console.log(`%c  [MessagingInterface] Bot messages in this onUpdate: ${botMessagesInUpdate.length}`, "color: green; font-weight: bold;", botMessagesInUpdate);
         setMessages(newMessagesFromListener);
         setIsLoadingMessagesState(false);
       },
       (error) => {
-        // console.error(`%c[MessagingInterface] Error fetching real-time messages for ${selectedConversationId}:`, "color: red;", error);
         setMessagesErrorState(error);
         setIsLoadingMessagesState(false);
         toast({
@@ -338,20 +329,15 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             if (isMobile && activeMobileView !== 'chat') {
               setActiveMobileView('chat');
             }
-        } else {
-             // console.warn(`[MessagingInterface] initialConversationId '${initialConversationId}' not found in loaded conversations.`);
         }
-    }  else if (!initialConversationId && conversations.length > 0 && !selectedConversationId && !isMobile) {
-       // Auto-select first conversation on desktop if none is selected and no initialConversationId
-       // setSelectedConversationId(conversations[0].id);
     }
   }, [initialConversationId, conversations, isMobile, activeMobileView, selectedConversationId]);
 
 
    const handleConversationSelect = useCallback((conversationId: string) => {
     setSelectedConversationId(conversationId);
-    setNewMessage(''); // Clear message input when switching conversations
-    setReplyingTo(null); // Clear replyingTo state
+    setNewMessage(''); 
+    setReplyingTo(null);
     if (isMobile) {
       setActiveMobileView('chat');
     }
@@ -397,29 +383,29 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const handleStartReply = useCallback((message: SerializableMessage) => {
     setReplyingTo(message);
     setTimeout(() => messageInputRef.current?.focus(), 0);
-  }, [messageInputRef]); // messageInputRef is stable
+  }, [messageInputRef]);
 
   const handleCancelReply = useCallback(() => {
     setReplyingTo(null);
   }, []);
 
   return (
-    <div className="flex flex-1 h-full"> {/* Added flex-1 to make MessagingInterface take available height */}
+    <div className="flex flex-1 h-full overflow-hidden">
       {/* Conversation List Panel */}
       <div
         className={cn(
           "flex flex-col border-r bg-background min-w-0", 
           isMobile
             ? activeMobileView === 'list' ? "w-full flex" : "hidden"
-            : "md:w-2/5 lg:w-1/3 flex" // Adjusted width for desktop, making it a bit wider
+            : "md:w-2/5 lg:w-1/3 flex"
         )}
       >
-        <div className={cn("border-b", isMobile ? "p-3" : "p-4")}>
+        <div className={cn("border-b flex-shrink-0", isMobile ? "p-3" : "p-4")}>
           <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
               <MessageSquare className="h-5 w-5" /> All Messages
           </h2>
         </div>
-        <ScrollArea className={cn("flex-grow", isMobile ? "bg-background" : "bg-card")}>
+        <ScrollArea className={cn("flex-1 overflow-y-auto", isMobile ? "bg-background" : "bg-card")}>
           <div className={cn(isMobile ? "p-1" : "p-2", "space-y-1")}>
             {isLoadingConversations ? (
               Array.from({ length: 5 }).map((_, i) => (
@@ -464,15 +450,15 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       {/* Message Display Panel */}
       <div
         className={cn(
-          "flex flex-col flex-1", // Added flex-1 here for the message display panel to take remaining width
+          "flex flex-1 flex-col overflow-hidden",
           isMobile
             ? activeMobileView === 'chat' ? "w-full flex" : "hidden"
-            : "md:flex" // No specific width, flex-1 handles it
+            : "md:flex"
         )}
       >
         {selectedConversationId ? (
           <>
-            <div className={cn("border-b flex items-center gap-3 bg-muted/50", isMobile ? "p-3" : "p-4")}>
+            <div className={cn("border-b flex items-center gap-3 bg-muted/50 flex-shrink-0", isMobile ? "p-3" : "p-4")}>
                {isMobile && activeMobileView === 'chat' && (
                  <Button variant="ghost" size="icon" className="mr-1" onClick={() => setActiveMobileView('list')}>
                    <ArrowLeft className="h-5 w-5" />
@@ -513,7 +499,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 )}
             </div>
 
-            <ScrollArea className="flex-grow bg-background">
+            <ScrollArea className="flex-1 overflow-y-auto bg-background">
               <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
                 {isLoadingMessagesState ? (
                      <div className="flex justify-center items-center h-full">
@@ -527,7 +513,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                      </p>
                  ) : (
                    messages.map((msg) => {
-                     // console.log(`[MessagingInterface] Rendering message: ID=${msg.id}, Sender=${msg.senderId}, IsBot=${msg.isBotMessage}, Text="${msg.text.substring(0,20)}..."`);
                      return (
                        <MessageBubble
                          key={msg.id}
@@ -542,7 +527,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
               </div>
             </ScrollArea>
 
-            <div className={cn("border-t bg-muted/50", isMobile ? "p-2" : "p-4")}>
+            <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2" : "p-4")}>
               {replyingTo && (
                 <div className="mb-2 p-2 bg-secondary/50 rounded-md text-xs text-secondary-foreground relative">
                   <div className="flex justify-between items-start">
@@ -582,7 +567,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             </div>
           </>
         ) : (
-          <div className="flex-grow flex flex-col items-center justify-center text-center p-4 bg-background">
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
              {isConversationsError ? (
                   <>
                      <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
@@ -610,3 +595,4 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   );
 };
 
+    
