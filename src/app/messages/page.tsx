@@ -27,10 +27,10 @@ const MessagesPage = () => {
     const isMobile = useIsMobile();
     
     const initialConversationId = searchParams?.get('conversationId');
-    const initialMessageText = searchParams?.get('initialMessageText'); // For pre-filling message from bid
+    const initialMessageText = searchParams?.get('initialMessageText');
     
     const [activeTab, setActiveTab] = useState<string>(() => {
-        if (initialConversationId && isMobile) return 'chats';
+        if (initialConversationId) return 'chats';
         return 'chats'; 
     });
 
@@ -129,10 +129,10 @@ const MessagesPage = () => {
     
     return (
         <div className={cn(
-            "flex flex-col flex-grow h-full", // Ensure this takes full height from MainLayout's <main>
-            isMobile ? "p-0" : "md:p-0" // No padding on desktop for the Tabs to fill edge-to-edge if desired
+            "flex flex-col flex-grow h-full", 
+            isMobile ? "p-0" : "md:p-0" 
         )}>
-            <div className={cn("flex justify-end items-center", isMobile ? "p-2 border-b md:border-none" : "mb-2 md:mb-0 md:p-4 md:pb-2")}> {/* Added padding for desktop refresh button */}
+            <div className={cn("flex justify-end items-center", isMobile ? "p-2 border-b md:border-none" : "mb-0 md:mb-0 md:p-4 md:pb-2")}>
                 <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections}>
                     <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections ? 'animate-spin' : ''} mr-2`} />
                     Refresh
@@ -149,9 +149,9 @@ const MessagesPage = () => {
                </div>
             ) : null}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow overflow-hidden h-full"> {/* Added h-full */}
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow overflow-hidden h-full">
                 <TabsList className={cn(
-                    "grid w-full flex-shrink-0", // Added flex-shrink-0
+                    "grid w-full flex-shrink-0", 
                     isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4"
                 )}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
@@ -169,7 +169,7 @@ const MessagesPage = () => {
                 <TabsContent value="chats" className="mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow flex flex-col overflow-hidden">
                     <div className={cn(
                         "flex-grow flex flex-col overflow-hidden h-full",
-                        !isMobile && "border rounded-lg shadow-sm bg-card md:m-4 md:mt-0" // Add margin for desktop card view
+                        !isMobile && "border rounded-lg shadow-sm bg-card md:m-4 md:mt-0"
                     )}>
                         <MessagingInterface
                             currentUserId={user.uid}
@@ -179,15 +179,15 @@ const MessagesPage = () => {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="requests" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow overflow-auto", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
-                    <Card className={cn("shadow-none border-0 h-full", !isMobile && "md:border md:shadow-md")}>
-                        <CardHeader className={cn("pt-4 pb-3", isMobile ? "px-3" : "px-6 md:pt-6")}>
+                <TabsContent value="requests" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex flex-col flex-grow overflow-hidden", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
+                    <Card className={cn("shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full", !isMobile && "md:border md:shadow-md")}>
+                        <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
                             <CardTitle className="flex items-center gap-2 text-lg">
                                 Connection Requests
                             </CardTitle>
                             <CardDescription>Review businesses wanting to connect.</CardDescription>
                         </CardHeader>
-                        <CardContent className={cn("pb-4", isMobile ? "px-3" : "px-6 md:pb-6")}>
+                        <CardContent className={cn("pb-4 flex-grow overflow-auto", isMobile ? "px-3" : "px-6 md:pb-6")}>
                             {isLoadingRequests ? (
                                 <div className="flex items-center space-x-4 py-4"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading requests...</span></div>
                             ) : pendingRequests.length === 0 ? (
@@ -208,15 +208,15 @@ const MessagesPage = () => {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="connections" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow overflow-auto", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
-                   <Card className={cn("shadow-none border-0 h-full", !isMobile && "md:border md:shadow-md")}>
-                        <CardHeader className={cn("pt-4 pb-3", isMobile ? "px-3" : "px-6 md:pt-6")}>
+                <TabsContent value="connections" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex flex-col flex-grow overflow-hidden", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
+                   <Card className={cn("shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full", !isMobile && "md:border md:shadow-md")}>
+                        <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
                             <CardTitle className="flex items-center gap-2 text-lg">
                                 Your Network
                             </CardTitle>
                             <CardDescription>Businesses you are connected with.</CardDescription>
                         </CardHeader>
-                        <CardContent className={cn("pb-4", isMobile ? "px-3" : "px-6 md:pb-6")}>
+                        <CardContent className={cn("pb-4 flex-grow overflow-auto", isMobile ? "px-3" : "px-6 md:pb-6")}>
                             {isLoadingConnections ? (
                                 <div className="flex items-center space-x-4 py-4"><Loader2 className="h-5 w-5 animate-spin" /><span className="text-muted-foreground">Loading connections...</span></div>
                             ) : connections.length === 0 ? (
@@ -242,3 +242,5 @@ const MessagesPage = () => {
 };
 
 export default MessagesPage;
+
+    
