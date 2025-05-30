@@ -1,47 +1,70 @@
-
 // src/lib/firebase/auth-admin.ts
 // This file is for server-side (Admin SDK) Firebase operations.
 import * as admin from 'firebase-admin';
+import fs from 'fs';
+import path from 'path';
 
-// Path to your service account key JSON file, relative to this file's location
-// Assuming serviceAccountKey.json is at the project root
-// and this file (auth-admin.ts) is at src/lib/firebase/auth-admin.ts
-const SERVICE_ACCOUNT_KEY_PATH = '../../../serviceAccountKey.json';
+const SERVICE_ACCOUNT_KEY_FILENAME = 'serviceAccountKey.json';
+let authAdmin: admin.auth.Auth | null = null;
+let dbAdmin: admin.firestore.Firestore | null = null;
 
 if (!admin.apps.length) {
-  console.log("[auth-admin.ts] Attempting to initialize Firebase Admin SDK using local service account key...");
+  console.log("[auth-admin.ts] Attempting to initialize Firebase Admin SDK...");
   try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const serviceAccount = require(SERVICE_ACCOUNT_KEY_PATH);
-    admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount),
-    });
-    console.log("%c[auth-admin.ts] Firebase Admin SDK initialized successfully using local serviceAccountKey.json.", "color: green; font-weight: bold;");
+    // Construct the absolute path to the service account key file
+    // process.cwd() usually points to the project root in Next.js
+    const keyPath = path.resolve(process.cwd(), SERVICE_ACCOUNT_KEY_FILENAME);
+    console.log(`[auth-admin.ts] Looking for service account key at: ${keyPath}`);
+
+    if (fs.existsSync(keyPath)) {
+      console.log(`[auth-admin.ts] Found service account key file: ${keyPath}`);
+      const serviceAccountJSON = fs.readFileSync(keyPath, 'utf8');
+      const serviceAccount = JSON.parse(serviceAccountJSON);
+
+      console.log("[auth-admin.ts] Service account JSON parsed. Initializing app with cert...");
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+      authAdmin = admin.auth();
+      dbAdmin = admin.firestore();
+      console.log("%c[auth-admin.ts] Firebase Admin SDK initialized successfully using local serviceAccountKey.json via fs.readFileSync.", "color: green; font-weight: bold;");
+    } else {
+      console.error(`%c[auth-admin.ts] CRITICAL ERROR: Service account key file NOT FOUND at: ${keyPath}. Firebase Admin SDK cannot be initialized.`, "color: red; font-weight: bold;");
+      console.error(`[auth-admin.ts] Please ensure '${SERVICE_ACCOUNT_KEY_FILENAME}' is in the project root directory.`);
+    }
   } catch (error: any) {
-    console.error('%c[auth-admin.ts] Firebase Admin SDK initialization error using local key:', "color: red; font-weight: bold;", error.message);
+    console.error('%c[auth-admin.ts] Firebase Admin SDK initialization error (using fs.readFileSync):', "color: red; font-weight: bold;", error.message);
     console.error("[auth-admin.ts] Stack trace for initialization error:", error.stack);
-    console.error(`[auth-admin.ts] Ensure 'serviceAccountKey.json' exists at the project root and the path '${SERVICE_ACCOUNT_KEY_PATH}' is correct relative to 'src/lib/firebase/auth-admin.ts'. Also, ensure the key file is added to .gitignore.`);
+    if (error.message.includes("ENOENT")) {
+        console.error(`[auth-admin.ts] This likely means the file '${SERVICE_ACCOUNT_KEY_FILENAME}' was not found at the project root.`);
+    } else if (error.message.includes("SyntaxError")) {
+        console.error(`[auth-admin.ts] This likely means the content of '${SERVICE_ACCOUNT_KEY_FILENAME}' is not valid JSON.`);
+    } else if (error.message.includes("Failed to parse private key") || error.message.includes("Invalid PEM")) {
+        console.error(`[auth-admin.ts] The private_key within your service account JSON seems to be malformed or corrupted.`);
+    }
   }
 } else {
-    console.log("[auth-admin.ts] Firebase Admin SDK already initialized.");
+  console.log("[auth-admin.ts] Firebase Admin SDK already initialized. Re-assigning authAdmin and dbAdmin.");
+  // Ensure authAdmin and dbAdmin are assigned even if already initialized
+  if (admin.apps[0]) {
+    authAdmin = admin.apps[0]!.auth();
+    dbAdmin = admin.apps[0]!.firestore();
+  }
 }
 
-export const authAdmin = admin.apps.length ? admin.auth() : null;
-export const dbAdmin = admin.apps.length ? admin.firestore() : null;
-
-// Logging initialization status for clarity
-if (process.env.NODE_ENV !== 'production') { // Only log extensively in dev
-    if (admin.apps.length === 0) {
-        console.error("[auth-admin.ts] CRITICAL: Firebase Admin SDK has NO initialized apps after attempt. This means initialization failed earlier or was skipped.");
-    }
-    if (!authAdmin) {
-        console.error("[auth-admin.ts] CRITICAL: authAdmin (Firebase Admin Auth) is NULL after initialization attempt. API routes requiring admin auth will fail.");
-    } else {
-        console.log("[auth-admin.ts] authAdmin (Firebase Admin Auth) is INITIALIZED.");
-    }
-    if (!dbAdmin) {
-        console.error("[auth-admin.ts] CRITICAL: dbAdmin (Firebase Admin Firestore) is NULL after initialization attempt. API routes requiring admin Firestore access will fail.");
-    } else {
-        console.log("[auth-admin.ts] dbAdmin (Firebase Admin Firestore) is INITIALIZED.");
-    }
+// Final check and logging for status
+if (admin.apps.length === 0) {
+    console.error("[auth-admin.ts] CRITICAL: Firebase Admin SDK has NO initialized apps after attempt. Initialization failed.");
 }
+if (!authAdmin) {
+    console.error("[auth-admin.ts] CRITICAL: authAdmin (Firebase Admin Auth) is NULL. API routes requiring admin auth will fail.");
+} else if (admin.apps.length > 0) {
+    console.log("[auth-admin.ts] authAdmin (Firebase Admin Auth) is INITIALIZED and available.");
+}
+if (!dbAdmin) {
+    console.error("[auth-admin.ts] CRITICAL: dbAdmin (Firebase Admin Firestore) is NULL. API routes requiring admin Firestore access will fail.");
+} else if (admin.apps.length > 0) {
+    console.log("[auth-admin.ts] dbAdmin (Firebase Admin Firestore) is INITIALIZED and available.");
+}
+
+export { authAdmin, dbAdmin };
