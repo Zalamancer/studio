@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, CreditCard, Loader2, Trash2 } from 'lucide-react';
+import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -24,19 +24,26 @@ import {
   useElements,
 } from '@stripe/react-stripe-js';
 import { cn } from '@/lib/utils';
-import { getUserPreferences, updateUserPreferences } from '@/services/userPreferenceService'; // Assuming this service handles updates
+import { getUserPreferences, updateUserPreferences } from '@/services/userPreferenceService';
 import type { SavedPaymentMethod, UserPreference } from '@/types/userPreferences';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 
-const stripePromise = loadStripe(process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || '');
+const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
+let stripePromise: ReturnType<typeof loadStripe> | null = null;
+
+if (stripePublishableKey) {
+  stripePromise = loadStripe(stripePublishableKey);
+} else {
+  console.error("Stripe publishable key is not set. Payment functionality will be disabled.");
+}
 
 const cardElementOptions = {
   style: {
     base: {
       fontSize: '16px',
-      color: 'hsl(var(--foreground))', // Use theme variable
+      color: 'hsl(var(--foreground))',
       '::placeholder': {
-        color: 'hsl(var(--muted-foreground))', // Use theme variable
+        color: 'hsl(var(--muted-foreground))',
       },
       iconColor: 'hsl(var(--primary))',
     },
@@ -46,7 +53,7 @@ const cardElementOptions = {
     },
   },
   classes: {
-    base: 'stripe-element-base', // Custom class for further global styling if needed
+    base: 'stripe-element-base',
     focus: 'stripe-element-focus',
     invalid: 'stripe-element-invalid',
   }
@@ -82,8 +89,7 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
       type: 'card',
       card: cardNumberElement,
       billing_details: {
-        // name: user.displayName || undefined, // Optional: prefill user's name
-        email: user.email || undefined, // Optional: prefill user's email
+        email: user.email || undefined,
       },
     });
 
@@ -106,12 +112,19 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
         const result = await response.json();
 
         if (!response.ok) {
-          throw new Error(result.error || 'Failed to save payment method to backend.');
+          // Try to get more specific error from backend if possible
+          const errorText = response.headers.get('content-type')?.includes('application/json')
+            ? result.error
+            : await response.text(); // Fallback to text if not JSON
+          throw new Error(errorText || 'Failed to save payment method to backend.');
         }
 
+
         toast({ title: "Success", description: "Payment method saved successfully!" });
-        onPaymentMethodSaved(); // Callback to refetch preferences or update UI
-        // Optionally clear card fields: elements.getElement(CardNumberElement)?.clear(); etc.
+        elements.getElement(CardNumberElement)?.clear();
+        elements.getElement(CardExpiryElement)?.clear();
+        elements.getElement(CardCvcElement)?.clear();
+        onPaymentMethodSaved();
       } catch (backendError: any) {
         console.error("Backend error saving PaymentMethod:", backendError);
         setError(backendError.message || "Could not save payment method to your account.");
@@ -168,31 +181,17 @@ const PaymentMethodSettingsPage = () => {
     enabled: !!user,
   });
 
-  // TODO: Implement remove and set default mutations
-  // const removePaymentMethodMutation = useMutation(...)
-  // const setDefaultPaymentMethodMutation = useMutation(...)
-
   const handlePaymentMethodSaved = () => {
     setShowAddForm(false);
     queryClient.invalidateQueries({ queryKey: ['userPreferences', user?.uid] });
   };
 
   const handleRemovePaymentMethod = async (paymentMethodId: string) => {
-    // Placeholder for actual removal logic
     toast({ title: "Placeholder", description: `Would remove payment method ${paymentMethodId}` });
-    // In a real app, call a backend API to remove the payment method from Stripe
-    // and then update userPreferences in Firestore.
-    // e.g., await removeStripePaymentMethod(userId, paymentMethodId);
-    // queryClient.invalidateQueries({ queryKey: ['userPreferences', user?.uid] });
   };
 
   const handleSetDefault = async (paymentMethodId: string) => {
-    // Placeholder
     toast({ title: "Placeholder", description: `Would set ${paymentMethodId} as default` });
-    // In a real app, call a backend API to set this as default in Stripe
-    // and update userPreferences in Firestore.
-    // e.g., await setDefaultStripePaymentMethod(userId, paymentMethodId);
-    // queryClient.invalidateQueries({ queryKey: ['userPreferences', user?.uid] });
   };
 
   if (authLoading || (isLoadingPreferences && user)) {
@@ -211,6 +210,26 @@ const PaymentMethodSettingsPage = () => {
       <Card className="shadow-md border-border">
         <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
         <CardContent><p>Please log in to manage payment methods.</p></CardContent>
+      </Card>
+    );
+  }
+
+  if (!stripePublishableKey || !stripePromise) {
+    return (
+      <Card className="shadow-md border-border">
+        <CardHeader>
+          <CardTitle>Payment Settings Unavailable</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex flex-col items-center justify-center text-center p-6 bg-destructive/10 border border-destructive/30 rounded-lg">
+            <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
+            <p className="font-semibold text-destructive-foreground">Stripe configuration is missing.</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              The Stripe publishable key is not set in the application environment.
+              Please contact support or ensure your `.env.local` file is correctly configured.
+            </p>
+          </div>
+        </CardContent>
       </Card>
     );
   }
@@ -285,23 +304,19 @@ const PaymentMethodSettingsPage = () => {
           </p>
         </CardContent>
       </Card>
-      {/* Basic Stripe element styling (can be moved to globals.css or a specific CSS module) */}
       <style jsx global>{`
         .stripe-element-container {
-          // Add any specific container styling if needed
+          /* Add any specific container styling if needed */
         }
         .StripeElement {
-          // Base styles for Stripe Elements
           background-color: transparent;
           padding: 10px 12px;
-          border-radius: var(--radius); // Use theme radius
-          // border: 1px solid hsl(var(--input)); // Use theme input border
+          border-radius: var(--radius);
           box-shadow: none;
           transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
         }
         .StripeElement--focus {
-          // box-shadow: 0 0 0 0.2rem hsl(var(--ring) / 0.25);
-          // border-color: hsl(var(--ring));
+          /* ShadCN focus styles are usually applied by Tailwind focus-visible:ring classes on parent */
         }
         .StripeElement--invalid {
           border-color: hsl(var(--destructive));
@@ -312,3 +327,4 @@ const PaymentMethodSettingsPage = () => {
 };
 
 export default PaymentMethodSettingsPage;
+
