@@ -12,7 +12,7 @@ import {
   deleteDoc,
   doc,
   where,
-  type FieldValue, // Keep FieldValue for NewPostData
+  type FieldValue,
 } from 'firebase/firestore';
 import type { Post, NewPostData } from '@/types/post';
 
@@ -20,8 +20,6 @@ const postsCollectionRef = collection(db, 'posts');
 
 export const addPostToFirestore = async (postData: NewPostData): Promise<string> => {
   try {
-    // All posts will now have descriptionDetails, descriptionTried, and descriptionOutcome
-    // The old single 'description' field is no longer used from the form.
     const dataForFirestore: { [key: string]: any } = {
       userId: postData.userId,
       question: postData.question,
@@ -30,32 +28,27 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       subSector: postData.subSector || null,
       industry: postData.industry || null,
       naicsCode: postData.naicsCode || null,
-      businessType: postData.businessType || "Startup",
-      safetyIndicator: postData.safetyIndicator || "Medium",
       ratingScore: postData.ratingScore || 0,
       imageUrls: Array.isArray(postData.imageUrls) ? postData.imageUrls : [],
       mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
-      requestType: postData.requestType,
+      requestType: postData.requestType || 'post', // Default to 'post'
       createdAt: serverTimestamp(),
       commentCount: 0,
 
-      descriptionDetails: postData.descriptionDetails || "", // Ensure it's at least an empty string
+      descriptionDetails: postData.descriptionDetails || "", // Always save this
       descriptionTried: postData.descriptionTried || null,
       descriptionOutcome: postData.descriptionOutcome || null,
 
-      // Fields specific to 'help_request'
       maxBudget: postData.requestType === 'help_request' ? (postData.maxBudget === undefined ? null : postData.maxBudget) : null,
       deadline: postData.requestType === 'help_request'
         ? (postData.deadline instanceof Date ? Timestamp.fromDate(postData.deadline) : (postData.deadline || null))
         : null,
     };
 
-    // Clean undefined before sending to Firestore (though above logic should handle most)
-    Object.keys(dataForFirestore).forEach(key => {
-      if (dataForFirestore[key] === undefined) {
-        dataForFirestore[key] = null;
-      }
-    });
+    // Fields to remove (they are no longer part of NewPostData based on previous instructions)
+    // delete dataForFirestore.businessType;
+    // delete dataForFirestore.safetyIndicator;
+
 
     console.log("[postService] addPostToFirestore: Data being sent to Firestore:", JSON.stringify(dataForFirestore, null, 2));
 
@@ -64,8 +57,6 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
     return docRef.id;
   } catch (error: any) {
     console.error('[postService] Error adding post to Firestore:', error);
-    console.error("Firestore Error Code:", error.code);
-    console.error("Firestore Error Message:", error.message);
     if (error.code === 'permission-denied') {
         console.error("Firestore permission denied. Check your security rules.");
         throw new Error('Permission denied. You might need to adjust Firestore security rules.');
@@ -94,7 +85,7 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             question: data.question || "",
             requestType: data.requestType || 'post',
             
-            descriptionDetails: data.descriptionDetails || "", // Expect this for all
+            descriptionDetails: data.descriptionDetails || "",
             descriptionTried: data.descriptionTried || null,
             descriptionOutcome: data.descriptionOutcome || null,
             
@@ -103,8 +94,6 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             sector: data.sector || "",
             subSector: data.subSector || null,
             industry: data.industry || null,
-            businessType: data.businessType || "",
-            safetyIndicator: data.safetyIndicator || "Medium",
             ratingScore: data.ratingScore || 0,
             createdAt: createdAt,
             naicsCode: data.naicsCode || null,
@@ -121,11 +110,8 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
         return [];
     }
     console.error('[postService] Error fetching posts from Firestore:', error);
-    console.error("Firestore Error Code:", error.code);
-    console.error("Firestore Error Message:", error.message);
     // Return empty array or throw error based on how you want to handle fetch failures
     return [];
-    // throw error; // Or re-throw if you want the component to handle it
   }
 };
 
@@ -136,8 +122,6 @@ export const deletePostFromFirestore = async (postId: string): Promise<void> => 
         console.log(`Post with ID ${postId} deleted successfully.`);
     } catch (error: any) {
         console.error(`Error deleting post with ID ${postId}:`, error);
-        console.error("Firestore Error Code:", error.code);
-        console.error("Firestore Error Message:", error.message);
         if (error.code === 'permission-denied') {
             console.error("Firestore permission denied for deleting. Check your security rules.");
             throw new Error('Permission denied. You might need to adjust Firestore security rules to allow deletion.');
@@ -182,8 +166,6 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         sector: data.sector || "",
         subSector: data.subSector || null,
         industry: data.industry || null,
-        businessType: data.businessType || "",
-        safetyIndicator: data.safetyIndicator || "Medium",
         ratingScore: data.ratingScore || 0,
         createdAt: createdAt,
         naicsCode: data.naicsCode || null,

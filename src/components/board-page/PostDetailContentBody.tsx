@@ -3,7 +3,7 @@
 
 import React from 'react';
 import Image from 'next/image';
-import { CardContent } from "@/components/ui/card"; // Ensure CardContent is imported if used standalone
+import { CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import {
   Carousel,
@@ -16,9 +16,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Post } from '@/types/post';
 import { TextWithMentions } from './TextWithMentions'; // Assuming this is in the same directory or correct path
 import { cn } from '@/lib/utils';
-
-// Tip: If this component becomes too complex, consider breaking down
-// the image carousel or the tabbed description into their own sub-components.
 
 interface PostDetailContentBodyProps {
   post: Post;
@@ -53,24 +50,24 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
 
       <div className="mt-4">
         <Tabs defaultValue="details" className="w-full">
-          <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
+          <TabsList className="inline-flex h-auto items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
             <TabsTrigger
               value="details"
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
             >
               Details
             </TabsTrigger>
             <TabsTrigger
               value="tried"
               disabled={!post.descriptionTried}
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
             >
               What Was Tried
             </TabsTrigger>
             <TabsTrigger
               value="outcome"
               disabled={!post.descriptionOutcome}
-              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
+              className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-xs sm:text-sm font-medium ring-offset-background transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1"
             >
               Expected Outcome
             </TabsTrigger>
@@ -128,6 +125,7 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
         </div>
       </div>
 
+      {/* Business Type and Safety Indicator removed from display
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4 text-sm">
         <div>
           <strong className="block text-foreground">Business Type:</strong>
@@ -145,6 +143,7 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
           </span>
         </div>
       </div>
+      */}
     </div>
   );
 });

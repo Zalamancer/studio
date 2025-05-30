@@ -6,10 +6,10 @@ export interface Post {
   userId: string;
   tags: string[];
   question: string;
-  requestType: 'post' | 'help_request';
+  requestType: 'post' | 'help_request'; // Now mandatory
 
-  // Unified description fields
-  descriptionDetails: string; // Main description, formerly "Problem Details"
+  // Unified description fields, 'descriptionDetails' is the primary one
+  descriptionDetails: string;
   descriptionTried?: string | null;
   descriptionOutcome?: string | null;
 
@@ -21,9 +21,9 @@ export interface Post {
   sector: string;
   subSector?: string | null;
   industry?: string | null;
-  businessType: string;
-  safetyIndicator: 'High' | 'Medium' | 'Low';
-  ratingScore: number;
+  // businessType: string; // REMOVED
+  // safetyIndicator: 'High' | 'Medium' | 'Low'; // REMOVED
+  ratingScore: number; // Average rating of the business that created the post, at time of posting
   createdAt: Timestamp;
   naicsCode?: string | null;
   imageUrls?: string[];
