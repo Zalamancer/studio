@@ -3,25 +3,24 @@
 // consider further splitting its internal sections (like Bidding, Comments, etc.)
 // into their own dedicated components within this 'board-page' sub-directory.
 // This file can then act as a bridge, importing and orchestrating these smaller components.
-
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Post } from '@/types/post';
 import type { User as FirebaseUser } from 'firebase/auth';
-import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useToast } from '@/hooks/use-toast';
 import { Button } from '@/components/ui/button';
 import { Input } from "@/components/ui/input";
-import { Label } from '@/components/ui/label';
+import { Label } from "@/components/ui/label";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Send, DollarSign, HandHelping, User } from 'lucide-react';
+import { Loader2, Send, DollarSign, HandHelping, User, X, Trash2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
+import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_COMPONENT } from '@/lib/utils';
 import { extractMentionedUids } from '@/lib/mentionUtils';
 import { addCommentToPost, getCommentsForPost } from '@/services/commentService';
@@ -32,14 +31,13 @@ import { addBidToPost, getBidsForPost } from '@/services/bidService';
 import type { ClientBid, NewBidData } from '@/types/bid';
 import { findOrCreateConversation } from '@/services/messagingService';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { useForm } from "react-hook-form";
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 import { PostDetailHeader } from './PostDetailHeader';
 import { PostDetailContentBody } from './PostDetailContentBody';
+// PostDetailBidding was integrated
 import { PostDetailComments } from './PostDetailComments';
+// PostDetailActions was integrated into Header and Footer
 
 interface PostDetailPanelProps {
   post: Post;
@@ -48,12 +46,6 @@ interface PostDetailPanelProps {
   onDelete: (postId: string) => void;
   deletePostMutationIsPending: boolean;
 }
-
-const bidFormSchema = z.object({
-  bidAmount: z.coerce.number().min(0, "Bid amount must be zero or positive.").optional(),
-  bidMessage: z.string().max(300, "Message too long (max 300 characters).").optional(),
-});
-type BidFormValues = z.infer<typeof bidFormSchema>;
 
 export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   post,
@@ -67,6 +59,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const router = useRouter();
   const user = currentUser;
 
+  // State for New Comment Input
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
   const [newCommentMentionQuery, setNewCommentMentionQuery] = useState('');
@@ -75,10 +68,32 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
 
+  // State for Inline Bidding
   const [inlineBidAmount, setInlineBidAmount] = useState<string>("");
   const [inlineBidError, setInlineBidError] = useState<string | null>(null);
   const [isProcessingOffer, setIsProcessingOffer] = useState(false);
 
+
+  // --- Data Fetching ---
+  const { data: comments = [], isLoading: isLoadingComments } = useQuery<ClientComment[]>({
+    queryKey: ['comments', post?.id],
+    queryFn: () => (post?.id && user) ? getCommentsForPost(post.id) : Promise.resolve([]),
+    enabled: !!post?.id && !!user,
+  });
+
+  const { data: bids = [], isLoading: isLoadingBids } = useQuery<ClientBid[], Error>({
+    queryKey: ['bids', post?.id],
+    queryFn: () => (post?.id ? getBidsForPost(post.id) : Promise.resolve([])),
+    enabled: !!post && post.requestType === 'help_request' && !!user,
+  });
+
+  const { data: connectionStatus } = useQuery<ConnectionStatus | null>({
+    queryKey: ['connectionStatus', user?.uid, post?.userId],
+    queryFn: () => (user && post?.userId && IS_UID_REGEX_COMPONENT.test(post.userId)) ? getConnectionStatus(user.uid, post.userId) : Promise.resolve(null),
+    enabled: !!user && !!post?.userId && user.uid !== post.userId && !!post.userId && IS_UID_REGEX_COMPONENT.test(post.userId),
+  });
+
+  // --- @Mention Suggestions for New Comment Input ---
   useEffect(() => {
     const handler = setTimeout(() => {
       setDebouncedNewCommentMentionQuery(newCommentMentionQuery);
@@ -92,65 +107,23 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     enabled: !!post && !!user && showNewCommentSuggestions,
     staleTime: 1000 * 60 * 5,
   });
-
+  
   const newCommentMentionProfilesMap = useMemo(() => {
     const map = new Map<string, UserProfileBasic>();
     if (generalSuggestibleUsers) {
       generalSuggestibleUsers.forEach(profile => {
-        if (profile.userId !== user?.uid) {
-          map.set(profile.userId, profile);
+        if (profile.userId !== currentUser?.uid) {
+           map.set(profile.userId, profile);
         }
       });
     }
     return map;
-  }, [generalSuggestibleUsers, user?.uid]);
-
-  const addCommentMutation = useMutation({
-    mutationFn: (commentDataWithPostId: NewCommentData & { postId: string }) => {
-      const { postId: pId, ...restData } = commentDataWithPostId;
-      return addCommentToPost(pId, restData);
-    },
-    onSuccess: () => {
-      setNewComment('');
-      setNewCommentMentionQuery('');
-      setShowNewCommentSuggestions(false);
-      toast({ title: "Comment Added" });
-      if (post) {
-        queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
-        queryClient.invalidateQueries({ queryKey: ['posts'] });
-      }
-    },
-    onError: (error: Error) => {
-      toast({ variant: "destructive", title: "Comment Failed", description: `Could not add comment: ${error.message}.` });
-    },
-    onSettled: () => setIsSubmittingComment(false),
-  });
-
-  const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !post || !newComment.trim() || isSubmittingComment) return;
-    setIsSubmittingComment(true);
-
-    const profilesToSearch = Array.from(newCommentMentionProfilesMap.values());
-    const finalMentionedUids = extractMentionedUids(newComment.trim(), profilesToSearch, user.uid);
-
-    const commentData: NewCommentData & { postId: string } = {
-      postId: post.id,
-      userId: user.uid,
-      text: newComment.trim(),
-      mentionName: generateAnonymousName(user.uid),
-      mentionedUserIds: finalMentionedUids,
-      likeCount: 0,
-      likedBy: [],
-    };
-    addCommentMutation.mutate(commentData);
-  }, [user, post, newComment, isSubmittingComment, newCommentMentionProfilesMap, addCommentMutation, queryClient, toast]);
+  }, [generalSuggestibleUsers, currentUser?.uid]);
 
   const evaluateNewCommentMentionState = useCallback((text: string, cursorPosition: number) => {
     let activeQuery = null;
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
       const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
       if (!/\s/.test(potentialQuery) && !/\r\n|\r|\n/.test(potentialQuery)) {
@@ -181,7 +154,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     const cursorPosition = newCommentInputRef.current.selectionStart || 0;
     const textBeforeCursor = currentValue.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-
     if (lastAtIndex > -1) {
       const textBeforeMention = currentValue.substring(0, lastAtIndex);
       const textAfterCursor = currentValue.substring(cursorPosition);
@@ -214,43 +186,77 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [showNewCommentSuggestions, newCommentSuggestionsPopoverRef, newCommentInputRef]);
-
+  }, [showNewCommentSuggestions]);
+  
   const filteredNewCommentSuggestions = useMemo(() => {
     if (!showNewCommentSuggestions) return [];
-    if (isLoadingGeneralSuggestions && debouncedNewCommentMentionQuery) {
-      return [{ userId: 'loading-main-comment', mentionName: 'loading-main-comment', displayName: 'Loading users...' } as UserProfileBasic];
+    if (isLoadingGeneralSuggestions) return [{ userId: 'loading-main-comment', mentionName: 'loading-main-comment', displayName: 'Loading users...' } as UserProfileBasic];
+    
+    let source = generalSuggestibleUsers || []; // Use fetched users
+    // Server-side filtering on mentionName happens in getSuggestibleUsers if debouncedNewCommentMentionQuery is present
+    // Client-side filtering is only needed if no prefix was sent to server OR for further refinement
+
+    if (debouncedNewCommentMentionQuery.trim() !== "" && source.length > 0) {
+        // If a query prefix was sent to server, server results are already filtered.
+        // If no prefix was sent, or for additional client-side refinement:
+        const queryLower = debouncedNewCommentMentionQuery.toLowerCase();
+        source = source.filter(p => 
+            p.mentionName.toLowerCase().includes(queryLower) ||
+            (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
+            (p.companyName && p.companyName.toLowerCase().includes(queryLower))
+        );
     }
 
-    let profilesSource = generalSuggestibleUsers || [];
-    if (debouncedNewCommentMentionQuery.trim() === '') {
-      // No query, show initial broader list
-    } else {
-      const queryLower = debouncedNewCommentMentionQuery.toLowerCase();
-      profilesSource = profilesSource.filter(p =>
-        p.mentionName.toLowerCase().includes(queryLower) ||
-        (p.displayName && p.displayName.toLowerCase().includes(queryLower))
-      );
-    }
-    if (profilesSource.length === 0 && debouncedNewCommentMentionQuery.trim() !== '') return [{ userId: 'no-match-main-comment', mentionName: 'no-match-main-comment', displayName: `No users matching "@${debouncedNewCommentMentionQuery}"` } as UserProfileBasic];
-    if (profilesSource.length === 0) return [{ userId: 'no-users-main-comment', mentionName: 'no-users-main-comment', displayName: 'No users to suggest.' } as UserProfileBasic];
-    return profilesSource.slice(0, 10);
+    if (source.length === 0 && debouncedNewCommentMentionQuery.trim() !== '') return [{ userId: 'no-match-main-comment', mentionName: 'no-match-main-comment', displayName: `No users matching "@${debouncedNewCommentMentionQuery}"` } as UserProfileBasic];
+    if (source.length === 0) return [{ userId: 'no-users-main-comment', mentionName: 'no-users-main-comment', displayName: 'No users to suggest.' } as UserProfileBasic];
+    return source.slice(0, 10);
   }, [showNewCommentSuggestions, isLoadingGeneralSuggestions, generalSuggestibleUsers, debouncedNewCommentMentionQuery]);
 
 
-  const { data: bids = [], isLoading: isLoadingBids } = useQuery<ClientBid[], Error>({
-    queryKey: ['bids', post?.id],
-    queryFn: () => post ? getBidsForPost(post.id) : Promise.resolve([]),
-    enabled: !!post && post.requestType === 'help_request' && !!user,
+  const addCommentMutation = useMutation({
+    mutationFn: (commentDataWithPostId: NewCommentData & { postId: string }) => {
+      const { postId: pId, ...restData } = commentDataWithPostId;
+      return addCommentToPost(pId, restData);
+    },
+    onSuccess: () => {
+      setNewComment('');
+      setNewCommentMentionQuery('');
+      setShowNewCommentSuggestions(false);
+      toast({ title: "Comment Added" });
+      if (post) {
+        queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
+      }
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Comment Failed", description: `Could not add comment: ${error.message}.` });
+    },
+    onSettled: () => setIsSubmittingComment(false),
   });
 
+  const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !post || !newComment.trim() || addCommentMutation.isPending) return;
+    setIsSubmittingComment(true);
+    const finalMentionedUids = extractMentionedUids(newComment.trim(), generalSuggestibleUsers || [], user.uid);
+    const commentData: NewCommentData & { postId: string } = {
+      postId: post.id,
+      userId: user.uid,
+      text: newComment.trim(),
+      mentionName: generateAnonymousName(user.uid),
+      mentionedUserIds: finalMentionedUids,
+      likeCount: 0,
+      likedBy: [],
+    };
+    addCommentMutation.mutate(commentData);
+  }, [user, post, newComment, addCommentMutation, generalSuggestibleUsers, queryClient, toast]);
+
+  // --- Bidding Logic ---
   const addBidMutation = useMutation({
     mutationFn: addBidToPost,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['bids', variables.postId] });
       toast({ title: "Bid Placed Successfully" });
-      setInlineBidAmount("");
-      setInlineBidError(null);
     },
     onError: (error: Error) => {
       toast({ variant: "destructive", title: "Bid Failed", description: error.message });
@@ -266,14 +272,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     if (!currentUserHasBid || !user) return null;
     return bids.find(bid => bid && bid.bidderId === user.uid);
   }, [currentUserHasBid, user, bids]);
-
-  const minimumBidAmount = useMemo(() => {
-    if (!bids || bids.length === 0) return null;
-    const validBids = bids.filter(bid => bid && typeof bid.bidAmount === 'number');
-    if (validBids.length === 0) return null;
-    return Math.min(...validBids.map(bid => bid.bidAmount));
-  }, [bids]);
-
 
   const handleInlineBidChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value;
@@ -294,15 +292,14 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     } else {
       setInlineBidError(null);
     }
-  }, [post?.maxBudget, setInlineBidAmount, setInlineBidError]);
+  }, [post, setInlineBidAmount, setInlineBidError]);
 
   const handleOfferHelpAndBid = useCallback(async () => {
-    if (!user || !post || addBidMutation.isPending || post.userId === user.uid || post.maxBudget == null) {
-      toast({ variant: "destructive", title: "Action Not Allowed", description: "Cannot place bid or offer help at the moment." });
+    if (!user || !post || addBidMutation.isPending || isProcessingOffer || post.userId === user.uid || post.maxBudget == null) {
+      toast({ variant: "destructive", title: "Action Not Allowed", description: "Cannot place bid or offer help." });
       return;
     }
     setIsProcessingOffer(true);
-
     let parsedBidAmount: number;
     if (inlineBidAmount.trim() === "") {
       toast({ variant: "destructive", title: "Bid Required", description: "Please enter a bid amount or click 'Bid FREE'." });
@@ -335,7 +332,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
         router.push(`/contracts?conversationId=${conversationId}&postId=${post.id}&initialBidAmount=${parsedBidAmount}`);
         setInlineBidAmount("");
         setInlineBidError(null);
-        onClose();
+        if(onClose) onClose();
       } else {
         throw new Error("Failed to initiate conversation after bid.");
       }
@@ -344,227 +341,208 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     } finally {
       setIsProcessingOffer(false);
     }
-  }, [user, post, inlineBidAmount, addBidMutation, router, toast, queryClient, onClose, setInlineBidError, setInlineBidAmount]);
-
-
-  const { data: connectionStatus } = useQuery<ConnectionStatus | null>({
-    queryKey: ['connectionStatus', currentUser?.uid, post?.userId],
-    queryFn: () => (currentUser && post?.userId && IS_UID_REGEX_COMPONENT.test(post.userId)) ? getConnectionStatus(currentUser.uid, post.userId) : Promise.resolve(null),
-    enabled: !!currentUser && !!post?.userId && currentUser.uid !== post.userId && !!post.userId && IS_UID_REGEX_COMPONENT.test(post.userId),
-  });
-
+  }, [user, post, inlineBidAmount, addBidMutation, router, toast, queryClient, onClose, isProcessingOffer, setInlineBidAmount, setInlineBidError, setIsProcessingOffer]);
+  
+  const minimumBidAmount = useMemo(() => {
+    if (!bids || bids.length === 0) return null;
+    return Math.min(...bids.map(bid => bid.bidAmount));
+  }, [bids]);
 
   if (!post) {
-    return (
-        <Card className="flex flex-col flex-1 overflow-hidden sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] border-border rounded-lg shadow-xl bg-card">
-            <CardHeader className="p-4 border-b flex-shrink-0 bg-card">
-                <Loader2 className="h-8 w-8 animate-spin text-primary mx-auto" />
-            </CardHeader>
-            <CardContent className="flex-grow flex items-center justify-center">
-                <p className="text-muted-foreground">Loading post details...</p>
-            </CardContent>
-        </Card>
-    );
+    return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
+  const halfPrice = post.maxBudget ? Math.floor(post.maxBudget / 2) : 0;
+
 
   return (
-    <TooltipProvider>
-      <Card className="flex flex-col flex-1 overflow-hidden sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] border-border rounded-lg shadow-xl bg-card">
-        <PostDetailHeader
-          post={post}
-          currentUser={currentUser}
-          onClose={onClose}
-          onDelete={() => onDelete(post.id)}
-          deletePostMutationIsPending={deletePostMutationIsPending}
-          connectionStatus={connectionStatus}
-        />
-        {/* Scrollable Content Area */}
-        <ScrollArea className="flex-grow bg-background">
-            <PostDetailContentBody post={post} />
-            {/* Bids Section */}
-            {post.requestType === 'help_request' && post.userId !== user?.uid && post.maxBudget != null && (
-              <div className="mt-4 border-t pt-4 px-4">
-                <div className="flex justify-between items-center mb-2">
-                  <h4 className="text-md font-semibold flex items-center gap-2">
-                    <DollarSign className="h-5 w-5 text-green-600" /> Bids ({isLoadingBids ? '...' : bids.length})
-                    <span className="text-xs text-muted-foreground font-normal ml-1">
-                       (Min. bid: {minimumBidAmount !== null ? `$${minimumBidAmount.toLocaleString()}` : 'N/A'})
-                    </span>
-                  </h4>
-                </div>
-                {isLoadingBids && user ? (
-                  <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading bids...</div>
-                ) : !user && post.requestType === 'help_request' ? (
-                   <p className="text-sm text-muted-foreground text-center py-4">Login to view or place bids.</p>
-                ) : bids.length === 0 && !isLoadingBids ? (
-                  <p className="text-sm text-muted-foreground">No bids placed yet.</p>
-                ) : (
-                  <div className="space-y-3 max-h-32 pr-1 overflow-y-auto">
-                    {bids.map(bid => (
-                      bid && bid.bidderId ? (
-                        <Card key={bid.id} className="p-3 bg-muted/30 shadow-sm">
-                          <div className="flex items-start gap-2.5">
-                            <Avatar className="h-8 w-8">
-                              <AvatarImage src={bid.bidderAvatar} alt={bid.bidderName || generateAnonymousName(bid.bidderId)} />
-                              <AvatarFallback className="text-xs">{getInitials(bid.bidderName || generateAnonymousName(bid.bidderId))}</AvatarFallback>
-                            </Avatar>
-                            <div className="flex-grow min-w-0">
-                              <div className="flex justify-between items-center">
-                                <p className="text-xs font-medium text-foreground truncate">{bid.bidderName || generateAnonymousName(bid.bidderId)}</p>
-                                {bid.timestamp && <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">{formatDistanceToNow(new Date(bid.timestamp), { addSuffix: true })}</p>}
-                              </div>
-                              <p className="text-sm font-semibold text-primary">${bid.bidAmount.toLocaleString()}</p>
-                              {bid.bidMessage && <p className="text-xs text-muted-foreground mt-0.5 break-words">{bid.bidMessage}</p>}
-                            </div>
-                          </div>
-                        </Card>
-                      ) : null
-                    ))}
-                  </div>
-                )}
+    <Card className="flex flex-col flex-1 overflow-hidden bg-card border-border rounded-lg shadow-xl md:sticky md:top-20 md:h-[calc(100vh-6.5rem)] md:max-h-[calc(100vh-6.5rem)]">
+      <PostDetailHeader
+        post={post}
+        currentUser={user}
+        onClose={onClose}
+        onDelete={() => onDelete(post.id)}
+        deletePostMutationIsPending={deletePostMutationIsPending}
+        connectionStatus={connectionStatus}
+      />
+      <ScrollArea className="flex-grow bg-background">
+        <PostDetailContentBody post={post} />
+        
+        {/* Bidding Section Display (not the form) */}
+        {post.requestType === 'help_request' && post.maxBudget != null && (
+            <div className="mt-6 border-t pt-4 px-4">
+              <div className="flex justify-between items-center mb-2">
+                <h4 className="text-md font-semibold flex items-center gap-2">
+                  <DollarSign className="h-5 w-5 text-green-600" /> Bids ({user && !isLoadingBids ? bids.length : '...'})
+                  <span className="text-xs text-muted-foreground font-normal ml-1">
+                     (Min. bid: {minimumBidAmount !== null ? `$${minimumBidAmount.toLocaleString()}` : 'N/A'})
+                  </span>
+                </h4>
               </div>
-            )}
-            <PostDetailComments post={post} currentUser={currentUser} />
-        </ScrollArea>
-
-        {/* Fixed Footer Area */}
-        <CardFooter className="p-3 border-t bg-card flex-shrink-0 flex-col items-stretch gap-3">
-          {/* Bidding UI Row - only if applicable */}
-          {user && post.requestType === 'help_request' && post.userId !== user.uid && post.maxBudget != null && (
-            <div className="w-full">
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-2"> {/* Main flex container for this row */}
-                {/* Left side: Preset Bid and Custom Input */}
-                <div className="flex flex-grow items-end gap-2">
-                  <Button variant="outline" size="sm" onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }} disabled={isProcessingOffer || addBidMutation.isPending} className="text-xs h-9 px-2 py-1 whitespace-nowrap">
-                    Bid FREE
-                  </Button>
-                  <div className="flex-grow space-y-1">
-                    <Label htmlFor={`inlineBidAmount-${post.id}`} className="text-xs font-medium sr-only">
-                      Your Bid Amount
-                    </Label>
-                    <Input
-                      id={`inlineBidAmount-${post.id}`}
-                      type="number"
-                      placeholder={`0 - ${post.maxBudget.toLocaleString()}`}
-                      value={inlineBidAmount}
-                      onChange={handleInlineBidChange}
-                      className={cn("h-9 text-sm bg-background", inlineBidError && "border-destructive ring-destructive focus-visible:ring-destructive")}
-                      disabled={isProcessingOffer || addBidMutation.isPending}
-                      min="0"
-                      max={post.maxBudget}
-                      step="any"
-                    />
-                  </div>
+              {isLoadingBids && user ? (
+                <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading bids...</div>
+              ) : !user ? (
+                <p className="text-sm text-muted-foreground text-center py-4">Login to view bids.</p>
+              ) : bids.length === 0 && !isLoadingBids ? (
+                <p className="text-sm text-muted-foreground">No bids placed yet.</p>
+              ) : (
+                <div className="space-y-3 max-h-48 overflow-y-auto pr-2"> {/* Added max-h and overflow for bid list */}
+                  {bids.map(bid => (
+                    bid && bid.bidderId ? (
+                      <Card key={bid.id} className="p-3 bg-muted/30 shadow-sm">
+                        <div className="flex items-start gap-2.5">
+                          <Avatar className="h-8 w-8">
+                            <AvatarImage src={bid.bidderAvatar} alt={bid.bidderName || generateAnonymousName(bid.bidderId)} />
+                            <AvatarFallback className="text-xs">{getInitials(bid.bidderName || generateAnonymousName(bid.bidderId))}</AvatarFallback>
+                          </Avatar>
+                          <div className="flex-grow min-w-0">
+                            <div className="flex justify-between items-center">
+                              <p className="text-xs font-medium text-foreground truncate">{bid.bidderName || generateAnonymousName(bid.bidderId)}</p>
+                              <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
+                                {bid.timestamp ? new Date(bid.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'}) : 'just now'}
+                              </p>
+                            </div>
+                            <p className="text-sm font-semibold text-primary">${bid.bidAmount.toLocaleString()}</p>
+                            {bid.bidMessage && <p className="text-xs text-muted-foreground mt-0.5 break-words">{bid.bidMessage}</p>}
+                          </div>
+                        </div>
+                      </Card>
+                    ) : null
+                  ))}
                 </div>
+              )}
+            </div>
+          )}
+        <PostDetailComments post={post} currentUser={user} />
+      </ScrollArea>
 
-                {/* Right side: Offer Help Button */}
+      {/* Footer: Comment Input and Bidding Actions */}
+      <CardFooter className="p-3 border-t bg-card flex-shrink-0 flex-col items-stretch gap-3">
+         {/* Bidding UI for Help Requests, moved to footer */}
+        {user && post.requestType === 'help_request' && post.userId !== user.uid && post.maxBudget != null && (
+          <div className="w-full pt-1 mb-2 space-y-2">
+            <Label htmlFor="inlineBidAmount" className="text-xs font-medium">
+                Your Bid (Max: ${post.maxBudget.toLocaleString()})
+            </Label>
+            <div className="flex flex-col sm:flex-row items-stretch gap-2">
+                 <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button variant="outline" size="sm" className="h-9 px-3 text-xs" onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }} disabled={isProcessingOffer || addBidMutation.isPending || currentUserHasBid}>Bid FREE</Button>
+                </div>
+                <Input
+                    id="inlineBidAmount"
+                    type="number"
+                    placeholder={currentUserHasBid ? `Your bid: $${currentUserBid?.bidAmount.toLocaleString()}` : `Custom amount (0 - ${post.maxBudget.toLocaleString()})`}
+                    value={currentUserHasBid ? String(currentUserBid?.bidAmount ?? "") : inlineBidAmount}
+                    onChange={handleInlineBidChange}
+                    className={cn("h-9 text-sm bg-background flex-grow", inlineBidError && !currentUserHasBid && "border-destructive ring-destructive focus-visible:ring-destructive")}
+                    disabled={isProcessingOffer || addBidMutation.isPending || currentUserHasBid}
+                    min="0"
+                    max={post.maxBudget}
+                    step="any"
+                />
                 <TooltipProvider>
-                  <Tooltip delayDuration={100}>
+                <Tooltip delayDuration={100}>
                     <TooltipTrigger asChild>
-                      <Button
+                    <Button
                         variant="default"
                         size="sm"
                         onClick={handleOfferHelpAndBid}
-                        disabled={isProcessingOffer || addBidMutation.isPending || !!inlineBidError || inlineBidAmount.trim() === "" || !user}
-                        className="bg-green-600 hover:bg-green-700 text-white h-9 px-3 whitespace-nowrap mt-2 sm:mt-0"
-                      >
+                        disabled={isProcessingOffer || addBidMutation.isPending || !!inlineBidError || (inlineBidAmount.trim() === "" && !currentUserHasBid) || !user || (currentUserHasBid && !currentUserBid)}
+                        className="bg-green-600 hover:bg-green-700 text-white h-9 px-3 whitespace-nowrap"
+                    >
                         {isProcessingOffer || addBidMutation.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <HandHelping className="mr-1.5 h-4 w-4" />}
-                        Offer Help &amp; Bid
-                      </Button>
+                        {currentUserHasBid ? "Message Post Owner" : "Offer Help & Submit Bid"}
+                    </Button>
                     </TooltipTrigger>
-                    {(!!inlineBidError || inlineBidAmount.trim() === "" || !user) && (
-                      <TooltipContent side="top" className="bg-destructive text-destructive-foreground text-xs p-1.5">
-                        <p>{!user ? "Log in to offer help" : inlineBidError || "Please enter a valid bid amount."}</p>
-                      </TooltipContent>
+                    {(!!inlineBidError || (inlineBidAmount.trim() === "" && !currentUserHasBid) || !user || (currentUserHasBid && !currentUserBid)) && (
+                    <TooltipContent side="top" className="bg-destructive text-destructive-foreground text-xs p-1.5 max-w-[200px]">
+                        <p>{!user ? "Log in to offer help." : currentUserHasBid ? "You've already bid. Click to message owner." : inlineBidError || "Enter a valid bid amount."}</p>
+                    </TooltipContent>
                     )}
-                  </Tooltip>
+                </Tooltip>
                 </TooltipProvider>
-              </div>
-              {inlineBidError && (<p className="text-xs text-destructive mt-1 text-left sm:ml-[calc(theme(spacing.10)_+_0.5rem)]">{/* Adjust margin to align with input area on small screens */}</p>)}
             </div>
-          )}
+            {inlineBidError && !currentUserHasBid && (<p className="text-xs text-destructive mt-1 text-left">{inlineBidError}</p>)}
+            {currentUserHasBid && currentUserBid && (
+                 <p className="text-xs text-muted-foreground text-center mt-1">
+                     You bid: <span className="font-semibold text-primary">${currentUserBid.bidAmount.toLocaleString()}</span>.
+                     {currentUserBid.bidMessage && ` "${currentUserBid.bidMessage}"`}
+                 </p>
+             )}
+          </div>
+        )}
 
-          {/* Comment Input Row */}
-          {user && (
-            <Popover
-              open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && !['loading-main-comment', 'no-users-main-comment', 'no-match-main-comment'].includes(filteredNewCommentSuggestions[0]?.userId)}
-              onOpenChange={(open) => { setShowNewCommentSuggestions(open); if (!open) setNewCommentMentionQuery(''); }}
+        {/* New Comment Input */}
+        {user && (
+          <Popover
+            open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && !['loading-main-comment', 'no-users-main-comment', 'no-match-main-comment'].includes(filteredNewCommentSuggestions[0]?.userId)}
+            onOpenChange={(open) => { setShowNewCommentSuggestions(open); if (!open) setNewCommentMentionQuery(''); }}
+          >
+            <PopoverTrigger asChild>
+              <form onSubmit={handleCommentSubmit} className="flex items-center gap-2 w-full">
+                <Input
+                  ref={newCommentInputRef}
+                  type="text"
+                  placeholder="Add a comment... (@mention someone)"
+                  value={newComment}
+                  onChange={handleNewCommentInputChange}
+                  onFocus={handleNewCommentInputFocus}
+                  onKeyDownCapture={(e) => { if (showNewCommentSuggestions && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape')) { if (e.key !== 'Escape') e.preventDefault(); } }}
+                  onBlurCapture={() => setTimeout(() => { if (newCommentSuggestionsPopoverRef.current && !newCommentSuggestionsPopoverRef.current.contains(document.activeElement as Node) && newCommentInputRef.current !== document.activeElement) { setShowNewCommentSuggestions(false); } }, 150)}
+                  disabled={!user || isSubmittingComment}
+                  className="flex-grow bg-background h-9 text-sm"
+                  aria-label="New comment input"
+                  autoComplete="off"
+                />
+                <Button type="submit" size="icon" variant="ghost" className="h-9 w-9 flex-shrink-0" disabled={!newComment.trim() || !user || isSubmittingComment}>
+                  {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 text-primary" />}
+                  <span className="sr-only">Send Comment</span>
+                </Button>
+              </form>
+            </PopoverTrigger>
+            <PopoverContent
+              ref={newCommentSuggestionsPopoverRef}
+              className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
+              side="top"
+              align="start"
+              onOpenAutoFocus={(e) => e.preventDefault()}
             >
-              <PopoverTrigger asChild>
-                <form onSubmit={handleCommentSubmit} className="flex items-center gap-2 w-full pt-2">
-                  <Input
-                    ref={newCommentInputRef}
-                    type="text"
-                    placeholder="Add a comment... (@mention someone)"
-                    value={newComment}
-                    onChange={handleNewCommentInputChange}
-                    onFocus={handleNewCommentInputFocus}
-                    onKeyDownCapture={(e) => {
-                      if (showNewCommentSuggestions && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape')) {
-                        if (e.key !== 'Escape') e.preventDefault();
-                      }
-                    }}
-                    onBlurCapture={() => setTimeout(() => {
-                      if (newCommentSuggestionsPopoverRef.current && !newCommentSuggestionsPopoverRef.current.contains(document.activeElement as Node) && newCommentInputRef.current !== document.activeElement) {
-                        if (showNewCommentSuggestions) setShowNewCommentSuggestions(false);
-                      }
-                    }, 150)}
-                    disabled={!user || isSubmittingComment}
-                    className="flex-grow bg-background h-9 text-sm"
-                    aria-label="New comment input"
-                    autoComplete="off"
-                  />
-                  <Button type="submit" size="icon" variant="ghost" className="h-9 w-9 flex-shrink-0" disabled={!newComment.trim() || !user || isSubmittingComment}>
-                    {isSubmittingComment ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4 text-primary" />}
-                    <span className="sr-only">Send Comment</span>
-                  </Button>
-                </form>
-              </PopoverTrigger>
-              <PopoverContent
-                ref={newCommentSuggestionsPopoverRef}
-                className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto"
-                side="top"
-                align="start"
-                onOpenAutoFocus={(e) => e.preventDefault()}
-              >
-                {filteredNewCommentSuggestions.map(profile => {
-                  const displayableName = profile.companyName || profile.mentionName;
-                  const showSecondaryNameLine = profile.companyName && profile.mentionName && profile.companyName.toLowerCase() !== profile.mentionName.toLowerCase();
+              {filteredNewCommentSuggestions.map(profile => {
+                const displayableName = profile.companyName || profile.displayName || profile.mentionName; // Fallback to mentionName for primary display
+                const showSecondaryNameLine = (profile.companyName || profile.displayName) && (profile.companyName || profile.displayName)?.toLowerCase() !== profile.mentionName.toLowerCase();
 
-                  return (
-                    (profile.userId === 'loading-main-comment' || profile.userId === 'no-users-main-comment' || profile.userId === 'no-match-main-comment') ? (
-                      <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
-                    ) : (
-                      <Button
-                        key={profile.userId}
-                        variant="ghost"
-                        size="sm"
-                        className="w-full justify-start h-auto px-2 py-1 text-xs"
-                        onMouseDown={(e) => e.preventDefault()}
-                        onClick={() => handleSelectNewCommentSuggestion(profile)}
-                      >
-                        <Avatar className="h-5 w-5 mr-2">
-                          <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
-                          <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
-                        </Avatar>
-                        <div className="flex flex-col items-start">
-                          {(profile.actualDisplayName || profile.companyName) && (profile.actualDisplayName || profile.companyName) !== profile.mentionName && (
-                             <span className="font-medium text-foreground">{profile.actualDisplayName || profile.companyName}</span>
-                          )}
-                          <span className={cn("text-muted-foreground", !((profile.actualDisplayName || profile.companyName) && (profile.actualDisplayName || profile.companyName) !== profile.mentionName) && "font-medium text-foreground")}>
-                            @{profile.mentionName}
-                          </span>
-                        </div>
-                      </Button>
-                    )
-                  );
-                })}
-              </PopoverContent>
-            </Popover>
-          )}
-        </CardFooter>
-      </Card>
-    </TooltipProvider>
+                return (
+                  (profile.userId === 'loading-main-comment' || profile.userId === 'no-users-main-comment' || profile.userId === 'no-match-main-comment') ? (
+                    <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
+                  ) : (
+                    <Button
+                      key={profile.userId}
+                      variant="ghost"
+                      size="sm"
+                      className="w-full justify-start h-auto px-2 py-1 text-xs"
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => handleSelectNewCommentSuggestion(profile)}
+                    >
+                      <Avatar className="h-5 w-5 mr-2">
+                        <AvatarImage src={profile.avatarUrl} alt={profile.mentionName} />
+                        <AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback>
+                      </Avatar>
+                      <div className="flex flex-col items-start">
+                        {showSecondaryNameLine && (
+                          <span className="font-medium text-foreground">{displayableName}</span>
+                        )}
+                        <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>
+                          @{profile.mentionName}
+                        </span>
+                      </div>
+                    </Button>
+                  )
+                );
+              })}
+            </PopoverContent>
+          </Popover>
+        )}
+      </CardFooter>
+    </Card>
   );
 });
 
