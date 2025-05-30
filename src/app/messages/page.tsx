@@ -5,7 +5,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw, ArrowLeft, Eye } from 'lucide-react'; // Added Eye
+import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw, ArrowLeft, Eye } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -18,15 +18,15 @@ import type { ConnectionRequest, Connection } from '@/types/connection';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from "@/hooks/use-mobile";
-import { getConversationsForUser, getPostDetails, getUserDetails } from '@/services/messagingService'; 
-import type { ClientConversation, SerializableMessage } from '@/types/messaging'; 
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"; 
-import { Skeleton } from "@/components/ui/skeleton"; 
-import Link from 'next/link'; 
-import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils'; 
-import { ScrollArea } from "@/components/ui/scroll-area"; 
+import { getConversationsForUser, getPostDetails, getUserDetails } from '@/services/messagingService';
+import type { ClientConversation, SerializableMessage } from '@/types/messaging';
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Skeleton } from "@/components/ui/skeleton";
+import Link from 'next/link';
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-// Re-added ConversationListItem as it was removed in a previous incorrect thought process
+// Re-added ConversationListItem
 interface ConversationListItemProps {
   conversation: ClientConversation;
   isSelected: boolean;
@@ -121,12 +121,13 @@ const MessagesPage = () => {
     const searchParams = useSearchParams();
     const router = useRouter();
     const isMobile = useIsMobile();
-    
+
     const initialConversationId = searchParams?.get('conversationId');
-    
+    const initialMessageText = searchParams?.get('initialMessageText');
+
     const [activeTab, setActiveTab] = useState<string>(() => {
         if (initialConversationId) return 'chats';
-        return 'chats'; 
+        return 'chats';
     });
 
     useEffect(() => {
@@ -150,7 +151,7 @@ const MessagesPage = () => {
             return getPendingRequests(currentUserId);
         },
         enabled: !!currentUserId,
-        staleTime: 1000 * 60 * 2, 
+        staleTime: 1000 * 60 * 2,
         retry: 1,
     });
 
@@ -178,7 +179,7 @@ const MessagesPage = () => {
             queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
         }
     }, [refetchRequests, refetchConnections, queryClient, currentUserId]);
-    
+
     const handleManualRefetchAll = useCallback(() => {
       refetchRequests();
       refetchConnections();
@@ -196,7 +197,7 @@ const MessagesPage = () => {
         data: conversations = [],
         isLoading: isLoadingConversations,
         error: conversationsError,
-        isError: isConversationsErrorTrue, 
+        isError: isConversationsErrorTrue,
       } = useQuery<ClientConversation[], Error>({
       queryKey: ['conversations', currentUserId],
       queryFn: () => currentUserId ? getConversationsForUser(currentUserId) : Promise.resolve([]),
@@ -205,7 +206,7 @@ const MessagesPage = () => {
       refetchOnWindowFocus: true,
       retry: 1,
     });
-  
+
      const postDetailsQueries = useQuery({
        queryKey: ['postDetails', conversations.map(c => c.postId).filter(Boolean)],
        queryFn: async () => {
@@ -221,7 +222,7 @@ const MessagesPage = () => {
        enabled: conversations.length > 0 && conversations.some(c => c.postId && c.postId !== 'general_connection'),
        staleTime: 1000 * 60 * 10,
      });
-  
+
      const postDetailsMap = postDetailsQueries.data;
 
 
@@ -253,14 +254,11 @@ const MessagesPage = () => {
     const combinedErrorMessage = [
        requestsError?.message,
        connectionsError?.message,
-       conversationsError?.message, 
+       conversationsError?.message,
     ].filter(Boolean).join('; ');
-    
+
     return (
-        <div className={cn(
-            "flex flex-col flex-grow h-full", 
-            isMobile ? "p-0" : "md:p-0"
-        )}>
+        <div className="flex flex-col flex-grow h-full">
              {!isMobile && (
                  <div className={cn("flex justify-end items-center", isMobile ? "p-2" : "p-4 pb-2")}>
                      <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections || isLoadingConversations}>
@@ -282,7 +280,7 @@ const MessagesPage = () => {
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow overflow-hidden h-full">
                 <TabsList className={cn(
-                    "grid w-full flex-shrink-0", 
+                    "grid w-full flex-shrink-0",
                     isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4"
                 )}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
@@ -297,29 +295,35 @@ const MessagesPage = () => {
                     <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Network</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chats" className={cn(
-                    "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    "flex-1 flex flex-col overflow-hidden" 
-                )}>
+                <TabsContent
+                    value="chats"
+                    className={cn(
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                         isMobile ? "flex-1" : "flex-1 md:p-4 md:pt-0" // Ensure flex-1 for growth
+                    )}
+                >
                     <div className={cn(
-                        "flex flex-col overflow-hidden h-full", 
-                        !isMobile && "border rounded-lg shadow-sm bg-card md:m-4 md:mt-0"
+                        "flex flex-col flex-grow overflow-hidden h-full",
+                        !isMobile && "border rounded-lg shadow-sm bg-card"
                     )}>
                         <MessagingInterface
                             currentUserId={user.uid}
                             initialConversationId={initialConversationId}
+                            initialMessageText={initialMessageText}
                         />
                     </div>
                 </TabsContent>
 
-                <TabsContent value="requests" className={cn(
-                    "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    isMobile ? "p-1" : "md:p-4 md:pt-0",
-                    "flex-1 flex flex-col overflow-hidden" 
-                )}>
-                  <div className="flex flex-col flex-grow overflow-hidden h-full"> 
+                <TabsContent
+                    value="requests"
+                    className={cn(
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        isMobile ? "p-1 flex-1" : "md:p-4 md:pt-0 flex-1" // Ensure flex-1 for growth
+                    )}
+                >
+                  <div className="flex flex-col flex-grow overflow-hidden h-full">
                         <Card className={cn(
-                            "shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full", 
+                            "shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full",
                             !isMobile && "md:border md:shadow-md"
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
@@ -329,7 +333,7 @@ const MessagesPage = () => {
                                 <CardDescription>Review businesses wanting to connect.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-grow overflow-auto", 
+                                "pb-4 flex-grow overflow-auto",
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingRequests ? (
@@ -353,14 +357,16 @@ const MessagesPage = () => {
                     </div>
                 </TabsContent>
 
-                <TabsContent value="connections" className={cn(
-                    "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                    isMobile ? "p-1" : "md:p-4 md:pt-0",
-                    "flex-1 flex flex-col overflow-hidden" 
-                )}>
-                   <div className="flex flex-col flex-grow overflow-hidden h-full"> 
+                <TabsContent
+                    value="connections"
+                    className={cn(
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        isMobile ? "p-1 flex-1" : "md:p-4 md:pt-0 flex-1" // Ensure flex-1 for growth
+                    )}
+                >
+                   <div className="flex flex-col flex-grow overflow-hidden h-full">
                        <Card className={cn(
-                            "shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full", 
+                            "shadow-none border-0 flex flex-col flex-grow overflow-hidden h-full",
                             !isMobile && "md:border md:shadow-md"
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
@@ -370,7 +376,7 @@ const MessagesPage = () => {
                                 <CardDescription>Businesses you are connected with.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-grow overflow-auto", 
+                                "pb-4 flex-grow overflow-auto",
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingConnections ? (
@@ -400,8 +406,5 @@ const MessagesPage = () => {
 
 export default MessagesPage;
 
-    
-
-    
 
     
