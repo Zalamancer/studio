@@ -24,22 +24,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
-
-interface ConnectionItemProps {
-  connection: Connection;
-  currentUserId: string;
-  onAction: () => void;
-}
-
-const getInitials = (displayNameOrUid: string | undefined | null): string => {
-    if (!displayNameOrUid) return '?';
-    if (displayNameOrUid.startsWith('@')) { // Handle "@UID" format
-        return displayNameOrUid.length > 1 ? displayNameOrUid.charAt(1).toUpperCase() : '?';
-    }
-    const names = displayNameOrUid.split(' ');
-    if (names.length === 1) return names[0].substring(0, 1).toUpperCase();
-    return (names[0].substring(0, 1) + names[names.length - 1].substring(0, 1)).toUpperCase();
-};
+import { getInitials } from '@/lib/pseudonymUtils'; // Import from shared utils
 
 export const ConnectionItem: React.FC<ConnectionItemProps> = ({
   connection,
@@ -50,7 +35,7 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
   const router = useRouter();
   const [isLoadingRemove, setIsLoadingRemove] = useState(false);
   const [isLoadingChat, setIsLoadingChat] = useState(false);
-  const displayName = connection.otherUserDisplayName || `@${connection.otherUserId}`;
+  const displayName = connection.otherUserDisplayName;
 
 
   const handleRemove = async () => {
@@ -70,11 +55,13 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
   const handleStartChat = async () => {
     setIsLoadingChat(true);
     try {
-      const conversationId = await findOrCreateConversation(currentUserId, connection.otherUserId, 'general_connection');
+      // Use null for postId to indicate a general chat not tied to a specific post
+      const conversationId = await findOrCreateConversation(currentUserId, connection.otherUserId, null);
        if (conversationId) {
-           router.push(`/contracts?conversationId=${conversationId}`);
+           // Navigate to the new /messages page with the conversationId
+           router.push(`/messages?conversationId=${conversationId}`);
        } else {
-           throw new Error("Failed to get conversation ID.");
+           throw new Error("Failed to get or create conversation ID.");
        }
     } catch (error: any) {
         console.error("Error starting chat:", error);
@@ -148,3 +135,10 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
     </div>
   );
 };
+```
+
+**Key Changes in `ConnectionItem.tsx`:**
+*   The `handleStartChat` function now calls `await findOrCreateConversation(currentUserId, connection.otherUserId, null);`. `null` is used for `postId` to indicate a general conversation not linked to a specific post.
+*   If successful, it redirects to `/messages?conversationId=${conversationId}`.
+
+This will ensure that clicking "Message" on a connection item directs the user to the correct messaging page with the appropriate conversation context.
