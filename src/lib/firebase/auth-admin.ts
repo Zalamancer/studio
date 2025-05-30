@@ -7,21 +7,35 @@ if (!admin.apps.length) {
   console.log("[auth-admin.ts] Attempting to initialize Firebase Admin SDK...");
   try {
     if (process.env.GOOGLE_APPLICATION_CREDENTIALS) {
+      // If GOOGLE_APPLICATION_CREDENTIALS is set, initializeApp() will use it automatically.
       admin.initializeApp();
       console.log("%c[auth-admin.ts] Firebase Admin SDK initialized successfully using GOOGLE_APPLICATION_CREDENTIALS environment variable.", "color: green; font-weight: bold;");
     } else {
+      console.warn(
+        `%c[auth-admin.ts] GOOGLE_APPLICATION_CREDENTIALS environment variable is NOT SET. Firebase Admin SDK relies on this for default initialization in many environments. Please set it to the path of your service account key JSON file.`, "color: orange; font-weight: bold;"
+      );
+      // Commenting out the explicit credential fallback to strictly test GOOGLE_APPLICATION_CREDENTIALS
+      /*
       console.log("[auth-admin.ts] GOOGLE_APPLICATION_CREDENTIALS not set. Attempting to initialize Firebase Admin SDK with explicit credentials from other environment variables (FIREBASE_PROJECT_ID, etc.).");
       const projectId = process.env.FIREBASE_PROJECT_ID;
       const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
-      // Ensure newlines in the private key are correctly formatted for .env
       const privateKeyFromEnv = process.env.FIREBASE_PRIVATE_KEY;
+      
+      console.log("[auth-admin.ts] Raw FIREBASE_PRIVATE_KEY from .env.local (first 100 chars):", privateKeyFromEnv ? privateKeyFromEnv.substring(0,100) + "..." : "NOT SET");
       const privateKey = privateKeyFromEnv?.replace(/\\n/g, '\n');
+      let finalProcessedPrivateKey = privateKey;
+      if (finalProcessedPrivateKey && !finalProcessedPrivateKey.endsWith('\n')) {
+          console.log("[auth-admin.ts] Adding missing newline to end of processed private key.");
+          finalProcessedPrivateKey += '\n';
+      }
+      console.log("[auth-admin.ts] Processed FIREBASE_PRIVATE_KEY after replace (first 100 chars):", finalProcessedPrivateKey ? finalProcessedPrivateKey.substring(0,100) + "..." : "NOT SET or EMPTY after processing");
+
 
       let missingVars = [];
       if (!projectId) missingVars.push("FIREBASE_PROJECT_ID");
       if (!clientEmail) missingVars.push("FIREBASE_CLIENT_EMAIL");
-      if (!privateKeyFromEnv) missingVars.push("FIREBASE_PRIVATE_KEY (from env)"); // Check original from env
-      if (!privateKey) missingVars.push("FIREBASE_PRIVATE_KEY (processed)"); // Check after replace
+      if (!privateKeyFromEnv) missingVars.push("FIREBASE_PRIVATE_KEY (from env)");
+      if (!finalProcessedPrivateKey) missingVars.push("FIREBASE_PRIVATE_KEY (processed, likely empty or whitespace)");
 
       if (missingVars.length > 0) {
         console.warn(
@@ -31,24 +45,28 @@ if (!admin.apps.length) {
         console.log("[auth-admin.ts] Explicit credentials being used (project, email, private key snippet):", {
             projectId,
             clientEmail,
-            privateKeySnippet: privateKey?.substring(0, 50) + "..." + privateKey?.substring(privateKey.length - 50),
+            privateKeySnippet: finalProcessedPrivateKey ? finalProcessedPrivateKey.substring(0, 50) + "..." + finalProcessedPrivateKey.substring(finalProcessedPrivateKey.length - 50) : "NOT AVAILABLE",
         });
-        // --- DETAILED LOG FOR PRIVATE KEY ---
-        console.log("%c[auth-admin.ts] DEBUG: Full processed private key being passed to admin.credential.cert():", "color: blue; font-weight: bold;");
-        console.log("```"); // Start of key block
-        console.log(privateKey); // Print the full key
-        console.log("```"); // End of key block
-        // --- END OF DETAILED LOG ---
-
+        console.log("[auth-admin.ts] DEBUG: Full processed private key being passed to admin.credential.cert():");
+        console.log("```");
+        console.log(finalProcessedPrivateKey);
+        console.log("```");
         admin.initializeApp({
           credential: admin.credential.cert({
             projectId: projectId,
             clientEmail: clientEmail,
-            privateKey: privateKey, // Use the processed key
+            privateKey: finalProcessedPrivateKey,
           }),
         });
         console.log("%c[auth-admin.ts] Firebase Admin SDK initialized successfully with explicit credentials from environment variables.", "color: green; font-weight: bold;");
       }
+      */
+      // If GOOGLE_APPLICATION_CREDENTIALS is not set, and we've commented out the fallback,
+      // initializeApp() called without args later will fail if run in an environment without default credentials.
+      // For local dev without GOOGLE_APPLICATION_CREDENTIALS, you might need to uncomment the explicit block
+      // OR ensure your terminal session running `npm run dev` HAS GOOGLE_APPLICATION_CREDENTIALS set.
+      // Throwing an error here to make it clear if neither method is available.
+      throw new Error("Firebase Admin SDK could not be initialized. GOOGLE_APPLICATION_CREDENTIALS not set, and explicit credential fallback is commented out.");
     }
   } catch (error: any) {
     console.error('%c[auth-admin.ts] Firebase Admin SDK initialization error:', "color: red; font-weight: bold;", error.message);
@@ -58,12 +76,16 @@ if (!admin.apps.length) {
     console.log("[auth-admin.ts] Firebase Admin SDK already initialized.");
 }
 
-console.log("[auth-admin.ts] Ensure your service account credentials (either via GOOGLE_APPLICATION_CREDENTIALS or individual FIREBASE_... variables) are correctly configured and accessible in your server environment.");
+// console.log("[auth-admin.ts] Ensure your service account credentials (either via GOOGLE_APPLICATION_CREDENTIALS or individual FIREBASE_... variables) are correctly configured and accessible in your server environment.");
 
 export const authAdmin = admin.apps.length ? admin.auth() : null;
 export const dbAdmin = admin.apps.length ? admin.firestore() : null;
 
-if (process.env.NODE_ENV !== 'production') {
+// Logging initialization status for clarity
+if (process.env.NODE_ENV !== 'production') { // Only log extensively in dev
+    if (admin.apps.length === 0) {
+        console.error("[auth-admin.ts] CRITICAL: Firebase Admin SDK has NO initialized apps. This means initialization failed earlier.");
+    }
     if (!authAdmin) {
         console.error("[auth-admin.ts] CRITICAL: authAdmin (Firebase Admin Auth) is NULL after initialization attempt. API routes requiring admin auth will fail.");
     } else {
@@ -75,4 +97,3 @@ if (process.env.NODE_ENV !== 'production') {
         console.log("[auth-admin.ts] dbAdmin (Firebase Admin Firestore) is INITIALIZED.");
     }
 }
-    
