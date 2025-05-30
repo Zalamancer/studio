@@ -3,7 +3,7 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { authAdmin as firebaseAuthAdmin } from '@/lib/firebase/auth-admin'; // Using Admin SDK for auth verification
-import { dbAdmin } from '@/lib/firebase/auth-admin'; // Corrected: Import dbAdmin directly
+import { dbAdmin } from '@/lib/firebase/auth-admin'; // CORRECTED: Import dbAdmin directly
 import { FieldValue } from 'firebase-admin/firestore';
 
 // Initialize Stripe with your secret key.
@@ -41,12 +41,12 @@ export async function POST(request: NextRequest) {
     // }
 
 
-    if (!dbAdmin) { // Use dbAdmin
+    if (!dbAdmin) { 
         console.error('[API] Firestore Admin SDK (dbAdmin) is not initialized. Cannot access userPreferences.');
         return NextResponse.json({ error: 'Server configuration error - Firestore not available.' }, { status: 500 });
     }
     
-    const userPreferencesRef = dbAdmin.collection('userPreferences').doc(userId); // Use dbAdmin
+    const userPreferencesRef = dbAdmin.collection('userPreferences').doc(userId); 
     const userPrefDoc = await userPreferencesRef.get();
     let stripeCustomerId = userPrefDoc.exists ? userPrefDoc.data()?.stripeCustomerId : null;
 
@@ -78,18 +78,27 @@ export async function POST(request: NextRequest) {
     // });
 
     // 4. Store non-sensitive payment method details in Firestore for display
+    // Ensure all paymentMethods have a default value, and ensure they are not null or undefined before updating.
+    const existingPaymentMethods = userPrefDoc.exists && Array.isArray(userPrefDoc.data()?.paymentMethods) ? userPrefDoc.data()?.paymentMethods : [];
+    
+    // Set all existing methods to isDefault: false
+    const updatedPaymentMethods = existingPaymentMethods.map(pm => ({ ...pm, isDefault: false }));
+
     const newSavedPaymentMethod = {
       stripePaymentMethodId: paymentMethod.id,
       brand: paymentMethod.card?.brand || 'Unknown',
       last4: paymentMethod.card?.last4 || '0000',
       expMonth: paymentMethod.card?.exp_month || 0,
       expYear: paymentMethod.card?.exp_year || 0,
-      isDefault: true, // Or logic to determine if this is the default
+      isDefault: true, // This new card becomes the default
     };
 
-    // Ensure paymentMethods array exists and update it
+    // Add the new payment method and ensure it's the only default
+    updatedPaymentMethods.push(newSavedPaymentMethod);
+
+
     await userPreferencesRef.update({
-      paymentMethods: FieldValue.arrayUnion(newSavedPaymentMethod),
+      paymentMethods: updatedPaymentMethods, // Save the full array with updated defaults
       updatedAt: FieldValue.serverTimestamp(),
     });
 
