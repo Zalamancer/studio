@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
+import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -34,7 +34,7 @@ let stripePromise: ReturnType<typeof loadStripe> | null = null;
 if (stripePublishableKey) {
   stripePromise = loadStripe(stripePublishableKey);
 } else {
-  console.error("Stripe publishable key is not set. Payment functionality will be disabled.");
+  console.error("Stripe publishable key is not set in environment variables (NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY). Payment functionality will be disabled.");
 }
 
 const cardElementOptions = {
@@ -62,7 +62,7 @@ const cardElementOptions = {
 const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPaymentMethodSaved }) => {
   const stripe = useStripe();
   const elements = useElements();
-  const { user } = useAuth();
+  const { user } = useAuth(); // Get current Firebase user
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -72,9 +72,16 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
     setIsProcessing(true);
     setError(null);
 
-    if (!stripe || !elements || !user) {
-      setError("Stripe.js has not loaded yet, or user is not authenticated.");
+    if (!stripe || !elements) {
+      setError("Stripe.js has not loaded yet.");
       setIsProcessing(false);
+      return;
+    }
+
+    if (!user) {
+      setError("User not authenticated. Please log in.");
+      setIsProcessing(false);
+      toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to save a payment method."});
       return;
     }
 
@@ -89,13 +96,13 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
       type: 'card',
       card: cardNumberElement,
       billing_details: {
-        email: user.email || undefined,
+        email: user.email || undefined, // Pass user's email if available
       },
     });
 
     if (stripeError) {
       console.error("Stripe error creating PaymentMethod:", stripeError);
-      setError(stripeError.message || "An unexpected error occurred.");
+      setError(stripeError.message || "An unexpected error occurred with Stripe.");
       setIsProcessing(false);
       return;
     }
@@ -103,24 +110,24 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
     if (paymentMethod) {
       console.log("Client: PaymentMethod created:", paymentMethod);
       try {
+        const idToken = await user.getIdToken(); // Get Firebase ID token
         const response = await fetch('/api/stripe/save-payment-method', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${idToken}`, // Send token in Authorization header
+          },
           body: JSON.stringify({ paymentMethodId: paymentMethod.id, userId: user.uid }),
         });
 
         const result = await response.json();
 
         if (!response.ok) {
-          // Try to get more specific error from backend if possible
-          const errorText = response.headers.get('content-type')?.includes('application/json')
-            ? result.error
-            : await response.text(); // Fallback to text if not JSON
-          throw new Error(errorText || 'Failed to save payment method to backend.');
+          const errorText = result.error || `Failed to save payment method. Server responded with status ${response.status}.`;
+          throw new Error(errorText);
         }
 
-
-        toast({ title: "Success", description: "Payment method saved successfully!" });
+        toast({ title: "Success", description: result.message || "Payment method saved successfully!" });
         elements.getElement(CardNumberElement)?.clear();
         elements.getElement(CardExpiryElement)?.clear();
         elements.getElement(CardCvcElement)?.clear();
@@ -187,11 +194,23 @@ const PaymentMethodSettingsPage = () => {
   };
 
   const handleRemovePaymentMethod = async (paymentMethodId: string) => {
+    // Placeholder: Implement backend call to detach PaymentMethod from Stripe Customer
+    // and remove from userPreferences in Firestore
     toast({ title: "Placeholder", description: `Would remove payment method ${paymentMethodId}` });
+     console.log(`Request to remove payment method: ${paymentMethodId}`);
+    // Example:
+    // await detachPaymentMethodApiCall(userId, paymentMethodId);
+    // queryClient.invalidateQueries(['userPreferences', user?.uid]);
   };
 
   const handleSetDefault = async (paymentMethodId: string) => {
+    // Placeholder: Implement backend call to set this PaymentMethod as default on Stripe Customer
+    // and update userPreferences in Firestore
     toast({ title: "Placeholder", description: `Would set ${paymentMethodId} as default` });
+    console.log(`Request to set default payment method: ${paymentMethodId}`);
+    // Example:
+    // await setDefaultPaymentMethodApiCall(userId, paymentMethodId);
+    // queryClient.invalidateQueries(['userPreferences', user?.uid]);
   };
 
   if (authLoading || (isLoadingPreferences && user)) {
@@ -226,7 +245,8 @@ const PaymentMethodSettingsPage = () => {
             <p className="font-semibold text-destructive-foreground">Stripe configuration is missing.</p>
             <p className="text-sm text-muted-foreground mt-1">
               The Stripe publishable key is not set in the application environment.
-              Please contact support or ensure your `.env.local` file is correctly configured.
+              Please contact support or ensure your `.env.local` file is correctly configured
+              with `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
             </p>
           </div>
         </CardContent>
@@ -269,7 +289,7 @@ const PaymentMethodSettingsPage = () => {
                       </Button>
                     )}
                     <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => handleRemovePaymentMethod(method.stripePaymentMethodId)}>
-                      Remove
+                      <Trash2 className="h-3 w-3 sm:mr-1"/> <span className="hidden sm:inline">Remove</span>
                     </Button>
                   </div>
                 </Card>
@@ -327,4 +347,3 @@ const PaymentMethodSettingsPage = () => {
 };
 
 export default PaymentMethodSettingsPage;
-
