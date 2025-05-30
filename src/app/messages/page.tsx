@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw, ArrowLeft, Eye } from 'lucide-react';
+import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -29,17 +29,15 @@ const MessagesPage = () => {
     const initialConversationId = searchParams?.get('conversationId');
     
     const [activeTab, setActiveTab] = useState<string>(() => {
-        if (isMobile && !initialConversationId) return 'list'; // For MessagingInterface internal mobile view state
-        return initialConversationId ? 'chats' : 'chats'; // Default to 'chats' tab for the page
+        if (initialConversationId && isMobile) return 'chats';
+        return 'chats'; // Default to 'chats' tab
     });
 
-    // Effect to switch to 'chats' tab if initialConversationId changes and a chat is opened
     useEffect(() => {
         if (initialConversationId && activeTab !== 'chats') {
             setActiveTab('chats');
         }
     }, [initialConversationId, activeTab]);
-
 
     const currentUserId = user?.uid;
 
@@ -56,7 +54,7 @@ const MessagesPage = () => {
             return getPendingRequests(currentUserId);
         },
         enabled: !!currentUserId,
-        staleTime: 1000 * 60 * 2, // 2 minutes
+        staleTime: 1000 * 60 * 2, 
         retry: 1,
     });
 
@@ -73,20 +71,24 @@ const MessagesPage = () => {
             return getConnections(currentUserId);
         },
         enabled: !!currentUserId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: 1000 * 60 * 5,
         retry: 1,
     });
 
     const handleConnectionStatusChange = useCallback(() => {
         refetchRequests();
         refetchConnections();
-        queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
+        if (currentUserId) {
+            queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
+        }
     }, [refetchRequests, refetchConnections, queryClient, currentUserId]);
     
     const handleManualRefetchAll = useCallback(() => {
       refetchRequests();
       refetchConnections();
-      queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
+      if (currentUserId) {
+          queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
+      }
        toast({
           title: "Refreshing...",
           description: "Fetching latest messages and connection data.",
@@ -119,25 +121,14 @@ const MessagesPage = () => {
     ].filter(Boolean).join('; ');
     
     const pageRootClasses = cn(
-        "flex flex-col flex-grow",
+        "flex flex-col flex-grow", // Ensures the page takes up available vertical space
         isMobile ? "p-0" : "md:container md:mx-auto md:p-6"
-    );
-
-    const messagingInterfaceWrapperClasses = cn(
-        "flex-grow flex flex-col overflow-hidden h-full", // Ensure h-full for the wrapper too
-        !isMobile && "border rounded-lg shadow-sm bg-card"
     );
 
     return (
         <div className={pageRootClasses}>
-            {/* Title and description section, hidden on mobile */}
-            <div className="mb-6 hidden md:block">
-                <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Messages & Connections</h1>
-                <p className="text-muted-foreground mt-1 max-w-2xl">
-                    Manage your chats, connection requests, and established network.
-                </p>
-            </div>
-             <div className={cn("flex justify-end", isMobile ? "p-2 border-b md:border-none" : "mb-4 md:mb-0")}>
+            {/* Title and description section REMOVED */}
+            <div className={cn("flex justify-end", isMobile ? "p-2 border-b md:border-none" : "mb-4 md:mb-0")}>
                 <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections}>
                     <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections ? 'animate-spin' : ''} mr-2`} />
                     Refresh
@@ -156,7 +147,7 @@ const MessagesPage = () => {
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow h-full">
                 <TabsList className={cn("grid w-full mb-0", isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4")}>
-                    <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Chats</TabsTrigger>
+                    <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
                     <TabsTrigger value="requests" className="flex items-center gap-1.5">
                         <UserPlus className="h-4 w-4"/>Requests
                         {pendingRequests.length > 0 && (
@@ -168,8 +159,11 @@ const MessagesPage = () => {
                     <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Network</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chats" className="mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow">
-                    <div className={messagingInterfaceWrapperClasses}>
+                <TabsContent value="chats" className="mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow flex flex-col overflow-hidden">
+                    <div className={cn(
+                        "flex-grow flex flex-col overflow-hidden h-full", // Ensure this wrapper takes full height
+                        !isMobile && "border rounded-lg shadow-sm bg-card"
+                    )}>
                         <MessagingInterface
                             currentUserId={user.uid}
                             initialConversationId={initialConversationId}
