@@ -10,6 +10,7 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Checkbox } from "@/components/ui/checkbox"; // Added Checkbox import
 import {
   Form,
   FormControl,
@@ -17,14 +18,14 @@ import {
   FormItem,
   FormMessage,
   FormLabel,
-  // FormDescription, // No longer used here
+  FormDescription,
 } from "@/components/ui/form";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
 import {
     Loader2, Upload, XCircle, ImageDown, FileText, HandHelping, DollarSign, CalendarDays,
-    AtSign, Briefcase, Info, Sparkles, User, Lightbulb, HelpingHand, FileQuestion, Brain, Target, Type, MessageCircle, AlignLeft, CalendarIcon
+    AtSign, Briefcase, Info, Sparkles, User, Lightbulb, HelpingHand, FileQuestion, Brain, Target, Type, MessageCircle, AlignLeft, CalendarIcon, Handshake
 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -46,33 +47,27 @@ import { cn } from '@/lib/utils';
 import { useQuery } from '@tanstack/react-query';
 import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import { Calendar } from "@/components/ui/calendar";
 import { format } from 'date-fns';
-
 
 const MAX_FILE_SIZE_MB = 2;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 
-// Define the Zod schema for form validation
 const postFormSchema = z.object({
   requestType: z.enum(['post', 'help_request'], {
     required_error: "You must select a post type.",
   }),
   question: z.string().min(10, "Question must be at least 10 characters.").max(200, "Question cannot exceed 200 characters."),
-  
-  // Tabbed descriptions - common for both post types
   descriptionDetails: z.string().min(10, { message: "Problem details must be at least 10 characters." }),
   descriptionTried: z.string().optional(),
   descriptionOutcome: z.string().optional(),
-  
   tags: z.array(z.string()).min(1, "Please select at least one tag."),
   sector: z.string().min(1, "Please select a sector."),
   subSector: z.string().optional(),
   industry: z.string().optional(),
-  
   imageFile: z.instanceof(File).optional().nullable()
     .refine(file => !file || file.size <= MAX_FILE_SIZE_BYTES, {
       message: "Max image size is " + (MAX_FILE_SIZE_BYTES / 1024 / 1024) + "MB."
@@ -81,26 +76,26 @@ const postFormSchema = z.object({
       file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
       { message: "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported." }
     ),
-  
-  // Fields specific to 'help_request'
   maxBudget: z.string().transform(val => val === '' ? undefined : val)
     .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
     .optional(),
   deadline: z.date().optional().nullable(),
-})
-.superRefine((data, ctx) => {
-  if (data.requestType === 'help_request') {
-    // Additional validations for help_request can go here if needed beyond schema types
-    // e.g., if maxBudget is provided, ensure it's > 0 (already handled by .nonnegative)
-  }
 });
 
-
-export type CreatePostFormData = Omit<z.infer<typeof postFormSchema>, 'imageFile' | 'maxBudget' | 'deadline'> & {
-  imageFile?: File | null;
+export type CreatePostFormData = {
+  requestType: 'post' | 'help_request';
+  question: string;
+  descriptionDetails: string;
+  descriptionTried?: string | undefined;
+  descriptionOutcome?: string | undefined;
+  tags: string[];
+  sector: string;
+  subSector?: string | undefined;
+  industry?: string | undefined;
+  imageFile?: File | null | undefined;
   mentionedUserIds?: string[];
-  maxBudget?: number | null;
-  deadline?: Date | null;
+  maxBudget?: number | undefined;
+  deadline?: Date | null | undefined;
 };
 
 export interface CreatePostFormProps {
@@ -111,6 +106,27 @@ export interface CreatePostFormProps {
   currentUserId: string | null;
   onDialogClose?: () => void;
 }
+
+// Local getInitials function
+const getInitials = (name: string | undefined | null): string => {
+  if (!name || typeof name !== 'string' || name.trim() === '') return '?';
+  const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
+  const pseudonymRegex = /^[A-Z][a-z]+([A-Z][a-zA-Z]*)[0-9]{3,}$/;
+  const match = nameToProcess.match(pseudonymRegex);
+  if (match) {
+      const firstLetter = nameToProcess.charAt(0);
+      const animalPart = match[1];
+      const secondLetter = animalPart.charAt(0);
+      return (firstLetter + secondLetter).toUpperCase();
+  }
+  const words = nameToProcess.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return '?';
+  if (words.length === 1) return words[0].substring(0, 1).toUpperCase();
+  const firstInitial = words[0].substring(0, 1);
+  const lastInitial = words[words.length - 1].substring(0, 1);
+  return (firstInitial + lastInitial).toUpperCase();
+};
+
 
 export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   onSubmit,
@@ -150,14 +166,15 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   
   const [activeDescriptionTab, setActiveDescriptionTab] = useState("details");
 
-  // State for @mention in "Problem Details" tab (common for all post types)
-  const [problemDetailsInputValue, setProblemDetailsInputValue] = useState('');
+  // State for @mention in "Problem Details" tab
+  const [problemDetailsInputValue, setProblemDetailsInputValue] = useState(''); // Controlled value for Textarea
   const [problemDetailsMentionQuery, setProblemDetailsMentionQuery] = useState('');
   const [debouncedProblemDetailsQuery, setDebouncedProblemDetailsQuery] = useState('');
   const [showProblemDetailsSuggestions, setShowProblemDetailsSuggestions] = useState(false);
   const problemDetailsTextareaRef = useRef<HTMLTextAreaElement>(null);
   const problemDetailsSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [selectedMentionedUserIds, setSelectedMentionedUserIds] = useState<Set<string>>(new Set());
+
 
   const requestType = form.watch("requestType");
 
@@ -176,7 +193,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       maxBudget: undefined,
       deadline: undefined,
     });
-    setProblemDetailsInputValue('');
+    setProblemDetailsInputValue(''); // Reset local state for description
     setImagePreviewUrl(null);
     setOriginalTooLargeFile(null);
     setShowCompressionDialog(false);
@@ -192,11 +209,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (form.formState.isSubmitSuccessful && onDialogClose) {
       const timer = setTimeout(() => {
         resetForm();
-        if (onDialogClose) onDialogClose(); 
+        onDialogClose(); 
       }, 100); 
       return () => clearTimeout(timer);
     }
   }, [form.formState.isSubmitSuccessful, onDialogClose, resetForm]);
+
 
   const selectedSectorCode = form.watch("sector");
   useEffect(() => {
@@ -230,41 +248,38 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     }, 300);
     return () => clearTimeout(handler);
   }, [problemDetailsMentionQuery]);
-
+  
   const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
     queryKey: ['suggestibleUsersForCreatePost', debouncedProblemDetailsQuery, currentUserId],
     queryFn: () => getSuggestibleUsers(debouncedProblemDetailsQuery, debouncedProblemDetailsQuery ? 10 : 25),
     enabled: showProblemDetailsSuggestions && !!currentUserId,
   });
 
-  const evaluateMentionState = useCallback((text: string, cursorPosition: number, querySetter: React.Dispatch<React.SetStateAction<string>>, suggestionsSetter: React.Dispatch<React.SetStateAction<boolean>>) => {
+  const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
     const textBeforeCursor = text.substring(0, cursorPosition);
     const lastAtIndex = textBeforeCursor.lastIndexOf('@');
-    let activeQueryFound = false;
 
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
         const currentQuery = textBeforeCursor.substring(lastAtIndex + 1);
-        if (!/\s/.test(currentQuery) && !/\n/.test(currentQuery) && !/\r/.test(currentQuery)) { 
-            querySetter(currentQuery);
-            suggestionsSetter(true);
-            activeQueryFound = true;
+        if (!/\s/.test(currentQuery) && !/\r\n|\r|\n/.test(currentQuery)) { // Check for spaces AND newlines
+            setProblemDetailsMentionQuery(currentQuery);
+            setShowProblemDetailsSuggestions(true);
+            return;
         }
     }
-    if (!activeQueryFound) {
-        querySetter('');
-        suggestionsSetter(false);
-    }
-  }, []);
+    setProblemDetailsMentionQuery('');
+    setShowProblemDetailsSuggestions(false);
+  }, [setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions]);
 
   const handleProblemDetailsChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
     setProblemDetailsInputValue(value); // Update local state for the textarea
-    evaluateMentionState(value, e.target.selectionStart || 0, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions);
-  }, [evaluateMentionState, setProblemDetailsInputValue, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions]);
+    evaluateMentionState(value, e.target.selectionStart || 0);
+  }, [evaluateMentionState, setProblemDetailsInputValue]);
 
   const handleProblemDetailsFocus = useCallback((e: React.FocusEvent<HTMLTextAreaElement>) => {
-    evaluateMentionState(e.target.value, e.target.selectionStart || 0, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions);
-  }, [evaluateMentionState, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions]);
+    evaluateMentionState(e.target.value, e.target.selectionStart || 0);
+  }, [evaluateMentionState]);
   
   const handleSelectProblemDetailsSuggestion = useCallback((profile: UserProfileBasic) => {
     if (!problemDetailsTextareaRef.current || !profile.mentionName) return;
@@ -276,7 +291,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (lastAtIndex > -1) {
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
-        const mentionToInsert = profile.mentionName;
+        const mentionToInsert = profile.mentionName; // Use the "ColorAnimalNumber" for insertion
         const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
         
         setProblemDetailsInputValue(newText);
@@ -320,15 +335,17 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (!showProblemDetailsSuggestions) return [];
     if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
     
-    let source = suggestibleUsers;
+    let source = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
+
     if (debouncedProblemDetailsQuery.trim() !== '') {
       const queryLower = debouncedProblemDetailsQuery.toLowerCase();
-      source = suggestibleUsers.filter(p => 
+      source = source.filter(p => 
         p.mentionName.toLowerCase().includes(queryLower) ||
-        (p.displayName && p.displayName.toLowerCase().includes(queryLower))
+        (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
+        (p.companyName && p.companyName.toLowerCase().includes(queryLower))
       );
     }
-    
+
     if (source.length === 0 && debouncedProblemDetailsQuery.trim() !== '') {
       return [{ userId: 'no-match-desc', displayName: `No users matching "@${debouncedProblemDetailsQuery}"`, mentionName: 'no-match-desc' } as UserProfileBasic];
     }
@@ -336,7 +353,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       return [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
     }
     return source.slice(0, 10);
-  }, [suggestibleUsers, isLoadingSuggestibleUsers, showProblemDetailsSuggestions, debouncedProblemDetailsQuery]);
+  }, [suggestibleUsers, isLoadingSuggestibleUsers, showProblemDetailsSuggestions, debouncedProblemDetailsQuery, currentUserId]);
 
   const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -401,16 +418,16 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       requestType: values.requestType,
       question: values.question,
       descriptionDetails: values.descriptionDetails,
-      descriptionTried: values.descriptionTried || null,
-      descriptionOutcome: values.descriptionOutcome || null,
+      descriptionTried: values.descriptionTried || undefined,
+      descriptionOutcome: values.descriptionOutcome || undefined,
       tags: values.tags || [],
       sector: values.sector,
-      subSector: values.subSector || null,
-      industry: values.industry || null,
-      imageFile: values.imageFile,
+      subSector: values.subSector || undefined,
+      industry: values.industry || undefined,
+      imageFile: values.imageFile || undefined,
       mentionedUserIds: finalMentionedUserIds,
-      maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? Number(values.maxBudget) : null,
-      deadline: values.requestType === 'help_request' && values.deadline ? values.deadline : null,
+      maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? Number(values.maxBudget) : undefined,
+      deadline: values.requestType === 'help_request' && values.deadline ? values.deadline : undefined,
     };
     onSubmit(submitData);
   };
@@ -444,11 +461,11 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                         variant={field.value === 'help_request' ? 'default' : 'outline'}
                         onClick={() => { field.onChange('help_request'); setActiveDescriptionTab('details'); }}
                         className={cn("flex-1 py-2.5 text-sm rounded-md shadow-sm transition-all duration-150 ease-in-out group",
-                           field.value === 'help_request' ? "ring-2 ring-primary ring-offset-2" : "hover:bg-muted/70"
+                           field.value === 'help_request' ? "ring-2 ring-amber-500 ring-offset-2" : "hover:bg-muted/70" // Distinct color for help_request
                         )}
                         disabled={isSubmitting}
                      >
-                        <HandHelping className={cn("mr-2 h-4 w-4", field.value === 'help_request' ? "text-primary-foreground" : "text-muted-foreground group-hover:text-foreground")}/> Request Help
+                        <HandHelping className={cn("mr-2 h-4 w-4", field.value === 'help_request' ? "text-amber-foreground" : "text-muted-foreground group-hover:text-foreground")}/> Request Help
                      </Button>
                   </div>
                   <FormMessage />
@@ -463,7 +480,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 <FormItem>
                   <FormLabel>Question / Need <span className="text-destructive">*</span></FormLabel>
                   <FormControl><Input placeholder="e.g., Seeking expertise in B2B marketing automation" {...field} disabled={isSubmitting} /></FormControl>
-                  <p className="text-sm text-muted-foreground">Keep it concise and clear (max 200 characters).</p>
+                  <FormDescription>Keep it concise and clear (max 200 characters).</FormDescription>
                   <FormMessage />
                 </FormItem>
               )}
@@ -501,7 +518,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                               placeholder="Describe the specific problem, idea, or need... (@mention users)"
                               className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
                               ref={problemDetailsTextareaRef}
-                              value={problemDetailsInputValue} // Controlled by local state
+                              value={problemDetailsInputValue}
                               onChange={handleProblemDetailsChange}
                               onFocus={handleProblemDetailsFocus}
                               onKeyDown={(e) => { if (showProblemDetailsSuggestions && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape')) { if (e.key !== 'Escape') e.preventDefault(); } }}
@@ -512,11 +529,11 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                         </PopoverTrigger>
                         <PopoverContent ref={problemDetailsSuggestionsPopoverRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
                           {filteredDescriptionSuggestions.map(profile => {
-                            const displayableName = profile.actualDisplayName || profile.companyName;
+                            const displayableName = profile.companyName || profile.displayName || profile.mentionName;
                             const showSecondaryNameLine = displayableName && profile.mentionName && displayableName.toLowerCase() !== profile.mentionName.toLowerCase();
                             return (
                               ['loading-desc', 'no-users-desc', 'no-match-desc'].includes(profile.userId) ? (
-                                <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.mentionName}</div>
+                                <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
                               ) : (
                                 <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectProblemDetailsSuggestion(profile)}>
                                   <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{getInitials(profile.mentionName)}</AvatarFallback></Avatar>
@@ -625,7 +642,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   {imagePreviewUrl && (<Button type="button" variant="ghost" size="sm" onClick={handleRemoveImage} disabled={isSubmitting || isCompressing}><XCircle className="mr-2 h-4 w-4 text-destructive" /> Remove</Button>)}
                 </div>
                 {imagePreviewUrl && (<div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto"><Image src={imagePreviewUrl} alt="Preview" fill style={{objectFit:"contain"}} className="rounded-md" data-ai-hint="user upload"/></div>)}
-                <p className="text-sm text-muted-foreground">Max {MAX_FILE_SIZE_MB}MB. JPG, PNG, GIF, WebP accepted.</p>
+                <FormDescription>Max {MAX_FILE_SIZE_MB}MB. JPG, PNG, GIF, WebP accepted.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
@@ -640,7 +657,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <SelectTrigger><SelectValue placeholder="Select a main sector" /></SelectTrigger>
                     <SelectContent>{detailedSectorsData.map(sector => (<SelectItem key={sector.code} value={sector.code}>{sector.name} ({sector.code})</SelectItem>))}</SelectContent>
                 </Select>
-                <p className="text-sm text-muted-foreground">Choose the primary sector for your post.</p>
+                <FormDescription>Choose the primary sector for your post.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
@@ -651,7 +668,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <SelectTrigger><SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "Select sector first"} /></SelectTrigger>
                     <SelectContent>{currentSubSectors.map(sub => (<SelectItem key={sub.code} value={sub.code}>{sub.name} ({sub.code})</SelectItem>))}</SelectContent>
                 </Select>
-                <p className="text-sm text-muted-foreground">Choose a specific sub-sector if applicable.</p>
+                <FormDescription>Choose a specific sub-sector if applicable.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
@@ -662,7 +679,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <SelectTrigger><SelectValue placeholder={currentIndustries.length > 0 ? "Select an industry" : "Select sub-sector first"} /></SelectTrigger>
                     <SelectContent>{currentIndustries.map(ind => (<SelectItem key={ind.code} value={ind.code}>{ind.name} ({ind.code})</SelectItem>))}</SelectContent>
                 </Select>
-                <p className="text-sm text-muted-foreground">Choose a specific industry if applicable.</p>
+                <FormDescription>Choose a specific industry if applicable.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
@@ -670,7 +687,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <FormItem>
                 <div className="mb-2">
                     <FormLabel className="text-base font-semibold text-foreground">Tags <span className="text-destructive">*</span></FormLabel>
-                    <p className="text-sm text-muted-foreground">Select relevant tags (select at least one).</p>
+                    <FormDescription>Select relevant tags (select at least one).</FormDescription>
                 </div>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 pt-2">
                   {availableTags.map(tag => (
@@ -679,7 +696,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                         <FormControl>
                             <Checkbox
                             checked={field.value?.includes(tag)}
-                            onCheckedChange={checked => checked ? field.onChange([...(field.value || []), tag]) : field.onChange((field.value || []).filter(v => v !== tag))}
+                            onCheckedChange={(checked: boolean | "indeterminate") => {
+                                if (checked) {
+                                    field.onChange([...(field.value || []), tag]);
+                                } else {
+                                    field.onChange((field.value || []).filter(v => v !== tag));
+                                }
+                            }}
                             disabled={isSubmitting}
                             />
                         </FormControl>
@@ -719,3 +742,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     </Form>
   );
 };
+```
+
+I've added `Checkbox` to the imports from `@/components/ui/checkbox`. This should resolve the "Checkbox is not defined" error.
