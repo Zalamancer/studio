@@ -1,3 +1,4 @@
+
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -23,22 +24,19 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, Settings, User, Bell, Handshake, CreditCard } from "lucide-react"; // Added CreditCard
+import { Home, Compass, Network, Settings, User, Bell, Handshake, CreditCard, PlusCircle, LogOut, Factory } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import type {
   CreatePostFormData,
   CreatePostFormProps,
-  SectorWithSubSectors as CreatePostSectorType,
-  SubSector as CreatePostSubSectorType,
-  Industry as CreatePostIndustryType
 } from '@/components/CreatePostForm';
 import type {
   NewPostData,
-  SectorWithSubSectors as PostSectorType,
-  SubSector as PostSubSectorType,
-  Industry as PostIndustryType
+  SectorWithSubSectors,
+  SubSector,
+  Industry
 } from '@/types/post';
 import { addPostToFirestore } from '@/services/postService';
 import { uploadPostImage } from '@/services/storageService';
@@ -50,13 +48,7 @@ import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
 import { getReviewsForProfile } from '@/services/reviewService';
-
-// Re-exporting the types locally if they are used by forms imported here
-// Or ideally, have a central types definition for sectors if used in multiple places.
-export interface Industry extends PostIndustryType {}
-export interface SubSector extends PostSubSectorType {}
-export interface SectorWithSubSectors extends PostSectorType {}
-
+import { fetchFullUserProfile } from '@/services/connectionService';
 
 export const detailedSectorsData: SectorWithSubSectors[] = [
   {
@@ -136,10 +128,10 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21",
     description: "Extracting naturally occurring mineral solids, liquids, and gases.",
     subSectors: [
-      { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "211111" }] }, // Example code
-      { name: "Coal Mining", code: "2121", industries: [{ name: "Coal Mining", code: "212111" }] },
-      { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold and Silver Ore Mining", code: "212220" }] },
-      { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Stone Mining and Quarrying", code: "212311" }] },
+      { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "2111" }] },
+      { name: "Coal Mining", code: "2121", industries: [{ name: "Coal Mining", code: "2121" }] },
+      { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "21221" }, { name: "Gold and Silver Ore Mining", code: "21222" }] },
+      { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Stone Mining and Quarrying", code: "21231" }] },
       { name: "Support Activities for Mining", code: "213", industries: [{ name: "Support Activities for Oil and Gas Operations", code: "213111" }] },
     ],
   },
@@ -147,7 +139,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     name: "Utilities", code: "22",
     description: "Providing utility services like electric power, natural gas, water, and sewage.",
     subSectors: [
-      { name: "Electric Power Generation, Transmission and Distribution", code: "2211", industries: [{ name: "Electric Power Generation", code: "221110" }, { name: "Electric Power Transmission, Control, and Distribution", code: "221120" }] },
+      { name: "Electric Power Generation, Transmission and Distribution", code: "2211", industries: [{ name: "Electric Power Generation", code: "22111" }, { name: "Electric Power Transmission, Control, and Distribution", code: "22112" }] },
       { name: "Natural Gas Distribution", code: "2212", industries: [{ name: "Natural Gas Distribution", code: "221210" }] },
       { name: "Water, Sewage and Other Systems", code: "2213", industries: [{ name: "Water Supply and Irrigation Systems", code: "221310" }, { name: "Sewage Treatment Facilities", code: "221320" }] },
     ],
@@ -156,16 +148,16 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     name: "Construction", code: "23",
     description: "Construction of buildings and engineering projects.",
     subSectors: [
-      { name: "Construction of Buildings", code: "236", industries: [{ name: "Residential Building Construction", code: "236100" }, { name: "Nonresidential Building Construction", code: "236200" }] },
-      { name: "Heavy and Civil Engineering Construction", code: "237", industries: [{ name: "Utility System Construction", code: "237100" }, { name: "Highway, Street, and Bridge Construction", code: "237300" }] },
-      { name: "Specialty Trade Contractors", code: "238", industries: [{ name: "Foundation, Structure, and Building Exterior Contractors", code: "238100" }, { name: "Building Equipment Contractors", code: "238200" }] },
+      { name: "Construction of Buildings", code: "236", industries: [{ name: "Residential Building Construction", code: "2361" }, { name: "Nonresidential Building Construction", code: "2362" }] },
+      { name: "Heavy and Civil Engineering Construction", code: "237", industries: [{ name: "Utility System Construction", code: "2371" }, { name: "Highway, Street, and Bridge Construction", code: "2373" }] },
+      { name: "Specialty Trade Contractors", code: "238", industries: [{ name: "Foundation, Structure, and Building Exterior Contractors", code: "2381" }, { name: "Building Equipment Contractors", code: "2382" }] },
     ],
   },
   {
     name: "Manufacturing", code: "31-33",
     description: "Mechanical, physical, or chemical transformation of materials into new products.",
     subSectors: [
-      { name: "Food Manufacturing", code: "311", industries: [ { name: "Animal Food Manufacturing", code: "3111" }, { name: "Grain and Oilseed Milling", code: "3112" }, { name: "Sugar and Confectionery Product Manufacturing", code: "3113" }, { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "3114"}, { name: "Dairy Product Manufacturing", code: "3115"}, { name: "Animal Slaughtering and Processing", code: "3116"}, { name: "Seafood Product Preparation and Packaging", code: "3117"}, { name: "Bakeries and Tortilla Manufacturing", code: "3118"}, { name: "Other Food Manufacturing", code: "3119"} ] },
+      { name: "Food Manufacturing", code: "311", industries: [ { name: "Animal Food Manufacturing", code: "3111" }, { name: "Grain and Oilseed Milling", code: "3112" }, { name: "Sugar and Confectionery Product Manufacturing", code: "3113" },  { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "3114"}, { name: "Dairy Product Manufacturing", code: "3115"}, { name: "Animal Slaughtering and Processing", code: "3116"}, { name: "Seafood Product Preparation and Packaging", code: "3117"}, { name: "Bakeries and Tortilla Manufacturing", code: "3118"}, { name: "Other Food Manufacturing", code: "3119"} ] },
       { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [ { name: "Beverage Manufacturing", code: "3121" }, { name: "Tobacco Manufacturing", code: "3122" } ] },
       { name: "Textile Mills", code: "313", industries: [ { name: "Fiber, Yarn, and Thread Mills", code: "3131" }, { name: "Fabric Mills", code: "3132" }, { name: "Textile and Fabric Finishing and Fabric Coating Mills", code: "3133"} ] },
       { name: "Textile Product Mills", code: "314", industries: [ { name: "Textile Furnishings Mills", code: "3141" }, { name: "Other Textile Product Mills", code: "3149" } ] },
@@ -175,13 +167,13 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Paper Manufacturing", code: "322", industries: [ { name: "Pulp, Paper, and Paperboard Mills", code: "3221" }, { name: "Converted Paper Product Manufacturing", code: "3222" } ] },
       { name: "Printing and Related Support Activities", code: "323", industries: [ { name: "Printing and Related Support Activities", code: "3231" } ] },
       { name: "Petroleum and Coal Products Manufacturing", code: "324", industries: [ { name: "Petroleum Refineries", code: "324110" }, { name: "Asphalt Paving, Roofing, and Saturated Materials Manufacturing", code: "32412"}, { name: "Other Petroleum and Coal Products Manufacturing", code: "32419"} ] },
-      { name: "Chemical Manufacturing", code: "325", industries: [ { name: "Basic Chemical Manufacturing", code: "3251" }, { name: "Resin, Synthetic Rubber, and Artificial and Synthetic Fibers and Filaments Manufacturing", code: "3252"}, { name: "Pesticide, Fertilizer, and Other Agricultural Chemical Manufacturing", code: "3253"}, { name: "Pharmaceutical and Medicine Manufacturing", code: "3254" }, { name: "Paint, Coating, and Adhesive Manufacturing", code: "3255"}, { name: "Soap, Cleaning Compound, and Toilet Preparation Manufacturing", code: "3256"}, { name: "Other Chemical Product and Preparation Manufacturing", code: "3259"} ] },
+      { name: "Chemical Manufacturing", code: "325", industries: [ { name: "Basic Chemical Manufacturing", code: "3251" }, { name: "Resin, Synthetic Rubber, and Artificial and Synthetic Fibers and Filaments Manufacturing", code: "3252"}, { name: "Pesticide, Fertilizer, and Other Agricultural Chemical Manufacturing", code: "3253"}, { name: "Pharmaceutical and Medicine Manufacturing", code: "325412" }, { name: "Paint, Coating, and Adhesive Manufacturing", code: "3255"}, { name: "Soap, Cleaning Compound, and Toilet Preparation Manufacturing", code: "3256"}, { name: "Other Chemical Product and Preparation Manufacturing", code: "3259"} ] },
       { name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [ { name: "Plastics Product Manufacturing", code: "3261" }, { name: "Rubber Product Manufacturing", code: "3262" } ] },
       { name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [ { name: "Clay Product and Refractory Manufacturing", code: "3271" }, { name: "Glass and Glass Product Manufacturing", code: "3272" }, { name: "Cement and Concrete Product Manufacturing", code: "3273"}, { name: "Lime and Gypsum Product Manufacturing", code: "3274"}, { name: "Other Nonmetallic Mineral Product Manufacturing", code: "3279"} ] },
-      { name: "Primary Metal Manufacturing", code: "331", industries: [ { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "3311" }, { name: "Steel Product Manufacturing from Purchased Steel", code: "3312"}, { name: "Alumina and Aluminum Production and Processing", code: "3313" }, { name: "Nonferrous Metal (except Aluminum) Production and Processing", code: "3314"}, { name: "Foundries", code: "3315"} ] },
+      { name: "Primary Metal Manufacturing", code: "331", industries: [ { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "331110" }, { name: "Steel Product Manufacturing from Purchased Steel", code: "3312"}, { name: "Alumina and Aluminum Production and Processing", code: "3313" }, { name: "Nonferrous Metal (except Aluminum) Production and Processing", code: "3314"}, { name: "Foundries", code: "3315"} ] },
       { name: "Fabricated Metal Product Manufacturing", code: "332", industries: [ { name: "Forging and Stamping", code: "3321" }, { name: "Cutlery and Handtool Manufacturing", code: "3322" }, { name: "Architectural and Structural Metals Manufacturing", code: "3323" }, { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "3324"}, { name: "Hardware Manufacturing", code: "3325"}, { name: "Spring and Wire Product Manufacturing", code: "3326"}, { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "3327"}, { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "3328"}, { name: "Other Fabricated Metal Product Manufacturing", code: "3329"} ] },
-      { name: "Machinery Manufacturing", code: "333", industries: [ { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" }, { name: "Industrial Machinery Manufacturing", code: "3332" }, { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333"}, { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334"}, { name: "Metalworking Machinery Manufacturing", code: "3335"}, { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336"}, { name: "Other General Purpose Machinery Manufacturing", code: "3339"} ] },
-      { name: "Computer and Electronic Product Manufacturing", code: "334", industries: [ { name: "Computer and Peripheral Equipment Manufacturing", code: "3341" }, { name: "Communications Equipment Manufacturing", code: "3342"}, { name: "Audio and Video Equipment Manufacturing", code: "3343"}, { name: "Semiconductor and Other Electronic Component Manufacturing", code: "3344" }, { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "3345"}, { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "3346"} ] },
+      { name: "Machinery Manufacturing", code: "333", industries: [ { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" }, { name: "Industrial Machinery Manufacturing", code: "33324" },  { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333"}, { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334"}, { name: "Metalworking Machinery Manufacturing", code: "3335"}, { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336"}, { name: "Other General Purpose Machinery Manufacturing", code: "3339"} ] },
+      { name: "Computer and Electronic Product Manufacturing", code: "334", industries: [ { name: "Computer and Peripheral Equipment Manufacturing", code: "3341" }, { name: "Communications Equipment Manufacturing", code: "3342"}, { name: "Audio and Video Equipment Manufacturing", code: "3343"}, { name: "Semiconductor and Other Electronic Component Manufacturing", code: "334413" }, { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "3345"}, { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "3346"} ] },
       { name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [ { name: "Electric Lighting Equipment Manufacturing", code: "3351" }, { name: "Household Appliance Manufacturing", code: "3352" }, { name: "Electrical Equipment Manufacturing", code: "3353"}, { name: "Other Electrical Equipment and Component Manufacturing", code: "3359"} ] },
       { name: "Transportation Equipment Manufacturing", code: "336", industries: [ { name: "Motor Vehicle Manufacturing", code: "3361" }, { name: "Motor Vehicle Body and Trailer Manufacturing", code: "3362"}, { name: "Motor Vehicle Parts Manufacturing", code: "3363"}, { name: "Aerospace Product and Parts Manufacturing", code: "3364" }, { name: "Railroad Rolling Stock Manufacturing", code: "3365"}, { name: "Ship and Boat Building", code: "3366"}, { name: "Other Transportation Equipment Manufacturing", code: "3369"} ] },
       { name: "Furniture and Related Product Manufacturing", code: "337", industries: [ { name: "Household and Institutional Furniture and Kitchen Cabinet Manufacturing", code: "3371" }, { name: "Office Furniture (including Fixtures) Manufacturing", code: "3372"}, { name: "Other Furniture Related Product Manufacturing", code: "3379"} ] },
@@ -204,7 +196,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Furniture, Home Furnishings, Electronics, and Appliance Retailers", code: "449", industries: [{ name: "Furniture Retailers", code: "449110" }, { name: "Electronics and Appliance Retailers", code: "449210" }] },
       { name: "Building Material and Garden Equipment and Supplies Dealers", code: "444", industries: [{ name: "Building Material and Supplies Dealers", code: "4441" }] },
       { name: "Food and Beverage Retailers", code: "445", industries: [{ name: "Grocery and Convenience Retailers", code: "4451" }] },
-      { name: "General Merchandise Retailers", code: "455", industries: [{ name: "Department Stores", code: "455211" }] }, // Updated from 452 to 455
+      { name: "General Merchandise Retailers", code: "455", industries: [{ name: "Department Stores", code: "455211" }] },
     ],
   },
   {
@@ -222,8 +214,8 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     name: "Information", code: "51",
     description: "Producing and distributing information and cultural products.",
     subSectors: [
-      { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper, Periodical, Book, and Directory Publishers", code: "5131" }, { name: "Software Publishers", code: "5132" }] }, // Updated NAICS 2022 codes
-      { name: "Telecommunications", code: "517", industries: [{ name: "Wired and Wireless Telecommunications (except Satellite)", code: "5171" }, { name: "Satellite Telecommunications", code: "5174" }] }, // Updated
+      { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper, Periodical, Book, and Directory Publishers", code: "5131" }, { name: "Software Publishers", code: "5132" }] },
+      { name: "Telecommunications", code: "517", industries: [{ name: "Wired and Wireless Telecommunications (except Satellite)", code: "5171" }, { name: "Satellite Telecommunications", code: "5174" }] },
       { name: "Data Processing, Hosting, and Related Services", code: "518", industries: [{ name: "Data Processing, Hosting, and Related Services", code: "5182" }] },
     ],
   },
@@ -232,7 +224,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     description: "Financial transactions and facilitating financial transactions.",
     subSectors: [
       { name: "Depository Credit Intermediation", code: "5221", industries: [{ name: "Commercial Banking", code: "522110" }, { name: "Credit Unions", code: "522130" }] },
-      { name: "Securities, Commodity Contracts, and Other Financial Investments and Related Activities", code: "523", industries: [{ name: "Investment Banking and Securities Dealing", code: "5231" }] }, // Updated
+      { name: "Securities, Commodity Contracts, and Other Financial Investments and Related Activities", code: "523", industries: [{ name: "Investment Banking and Securities Dealing", code: "5231" }] },
       { name: "Insurance Carriers and Related Activities", code: "524", industries: [{ name: "Direct Life Insurance Carriers", code: "524113" }, { name: "Insurance Agencies and Brokerages", code: "524210" }] },
     ],
   },
@@ -323,7 +315,6 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
   },
 ];
 
-
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
@@ -336,13 +327,6 @@ const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
     ssr: false
   }
 );
-
-// Remove DynamicRequestHelpForm as it's merged
-// const DynamicRequestHelpForm = dynamic<CreatePostFormProps>(() =>
-//   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-//   { loading: () => <p>Loading form...</p>, ssr: false }
-// );
-
 
 const DynamicNotificationDropdown = dynamic(() =>
   import('@/components/notifications/NotificationDropdown').then((mod) => mod.NotificationDropdown),
@@ -371,46 +355,39 @@ export default function MainLayout({
   const router = useRouter();
   const pathname = usePathname();
   const isMobile = useIsMobile();
-  const queryClient = useQueryClient();
+  const queryClient = useQueryClient(); // Get query client instance
 
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  // Remove state related to RequestHelpDialog
-  // const [isRequestHelpDialogOpen, setIsRequestHelpDialogOpen] = useState(false);
-
 
   useEffect(() => {
-    const setVisualViewportHeight = () => {
-      if (typeof window !== 'undefined') {
-        const vh = window.innerHeight * 0.01;
-        document.documentElement.style.setProperty('--vh-dynamic', `${vh}px`);
-      }
-    };
     if (isMobile) {
+      const setVisualViewportHeight = () => {
+        if (typeof window !== 'undefined') {
+          const vh = window.innerHeight * 0.01;
+          document.documentElement.style.setProperty('--vh-dynamic', `${vh}px`);
+        }
+      };
       setVisualViewportHeight();
       window.addEventListener('resize', setVisualViewportHeight);
       window.addEventListener('orientationchange', setVisualViewportHeight);
-    }
-    return () => {
-      if (isMobile) {
+      return () => {
         window.removeEventListener('resize', setVisualViewportHeight);
         window.removeEventListener('orientationchange', setVisualViewportHeight);
-      }
-    };
+      };
+    }
   }, [isMobile]);
 
   useEffect(() => {
-    if (!authLoading && !user) {
-        if (isCreatePostOpen) setIsCreatePostOpen(false);
-        // if (isRequestHelpDialogOpen) setIsRequestHelpDialogOpen(false); // Remove this
+    if (!authLoading && !user && isCreatePostOpen) {
+      setIsCreatePostOpen(false);
     }
-  }, [user, authLoading, isCreatePostOpen]); // Removed isRequestHelpDialogOpen
+  }, [user, authLoading, isCreatePostOpen]);
 
 
   const addPostMutation = useMutation({
     mutationFn: async (formData: CreatePostFormData) => {
       if (!user) throw new Error("User not authenticated to create post.");
-      console.log(`%c[MainLayout] addPostMutation: Initiated for ${formData.requestType} by user:`, "color: magenta;", user.uid);
-      console.log(`%c[MainLayout] addPostMutation: Form Data received:`, "color: magenta;", JSON.stringify(formData, null, 2));
+      console.log(`%c[MainLayout] addPostMutation: Initiated for type '${formData.requestType}' by user: ${user.uid}`, "color: magenta;");
 
       let currentRatingScore = 0;
       try {
@@ -422,23 +399,25 @@ export default function MainLayout({
           currentRatingScore = totalRating / reviews.length;
           console.log(`%c[MainLayout] addPostMutation: Calculated totalRating: ${totalRating}, currentRatingScore: ${currentRatingScore.toFixed(1)}`, "color: #FF00FF;");
         } else {
-          console.log(`%c[MainLayout] addPostMutation: No reviews found for user ${user.uid}. Rating score remains 0.`, "color: #FF00FF;");
+           console.log(`%c[MainLayout] addPostMutation: No reviews found for user ${user.uid}. Rating score set to 0.`, "color: #FF00FF;");
         }
       } catch (ratingError: any) {
         console.error("[MainLayout] addPostMutation: Error fetching reviews for rating score:", ratingError.message, ratingError);
+         console.log(`%c[MainLayout] addPostMutation: Error fetching reviews. Rating score set to 0.`, "color: #FF00FF;");
       }
-      console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score before post: ${currentRatingScore}`, "color: magenta;");
+       console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score before post: ${currentRatingScore.toFixed(1)}`, "color: magenta; font-weight: bold;");
+
 
       let uploadedImageUrls: string[] = [];
-      if (formData.imageFile) {
+      if (formData.imageFile && user) {
         try {
           console.log("[MainLayout] addPostMutation: Uploading image...");
           const singleUploadedUrl = await uploadPostImage(formData.imageFile, user.uid);
           if (singleUploadedUrl) uploadedImageUrls.push(singleUploadedUrl);
           console.log("[MainLayout] addPostMutation: Image uploaded, URL:", singleUploadedUrl);
-        } catch (uploadError) {
+        } catch (uploadError: any) {
           console.error("[MainLayout] Image upload failed in mutationFn:", uploadError);
-          throw uploadError;
+          throw new Error(`Image upload failed: ${uploadError.message}`);
         }
       }
 
@@ -449,8 +428,8 @@ export default function MainLayout({
       const postDataForService: NewPostData = {
         userId: user.uid,
         question: formData.question,
-        requestType: formData.requestType, // This comes from the form
-        descriptionDetails: formData.descriptionDetails, // Always pass this
+        requestType: formData.requestType,
+        descriptionDetails: formData.descriptionDetails,
         descriptionTried: formData.descriptionTried || null,
         descriptionOutcome: formData.descriptionOutcome || null,
         tags: formData.tags || [],
@@ -458,7 +437,7 @@ export default function MainLayout({
         subSector: subSectorDetails?.name || formData.subSector || null,
         industry: industryDetails?.name || formData.industry || null,
         naicsCode: formData.industry || formData.subSector || formData.sector || null,
-        businessType: "Startup",
+        businessType: "Startup", // Or derive from user profile if available
         safetyIndicator: "Medium",
         ratingScore: parseFloat(currentRatingScore.toFixed(1)),
         imageUrls: uploadedImageUrls,
@@ -467,20 +446,20 @@ export default function MainLayout({
         deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
         commentCount: 0,
       };
-      console.log(`%c[MainLayout] addPostMutation: Post data PREPARED for ${formData.requestType}. RatingScore: ${postDataForService.ratingScore}. Data:`, "color: #FF00FF;", postDataForService);
+      console.log(`%c[MainLayout] addPostMutation: Post data PREPARED. RatingScore: ${postDataForService.ratingScore}. Data:`, "color: #FF00FF;", postDataForService);
       return addPostToFirestore(postDataForService);
     },
     onSuccess: (newlyCreatedPostId, variables) => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
-      queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage']});
+      queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
       toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
-      setIsCreatePostOpen(false); // Close the unified dialog
+      setIsCreatePostOpen(false);
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        const descriptionSource = variables.descriptionDetails; // Always use descriptionDetails as source
+        const descriptionSource = variables.descriptionDetails;
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) {
+          if (mentionedUid !== user.uid) { // Don't notify self for mentions in own post
             try {
               await createNotification({
                 userId: mentionedUid,
@@ -490,7 +469,7 @@ export default function MainLayout({
                 postQuestion: variables.question,
                 textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "",
               });
-               console.log(`%c[MainLayout] Mention notification CREATED for ${mentionedUid} for post ${newlyCreatedPostId}`, "color: green;");
+              console.log(`%c[MainLayout] Mention notification CREATED for ${mentionedUid} for post ${newlyCreatedPostId}`, "color: green;");
             } catch (notifyError) {
               console.error(`[MainLayout] Failed to create mention notification for post ${newlyCreatedPostId}:`, notifyError);
             }
@@ -501,13 +480,11 @@ export default function MainLayout({
     onError: (error: Error, variables) => {
       console.error("[MainLayout] addPostMutation onError:", error);
       toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.` });
-      // setIsCreatePostOpen(false); // Keep dialog open on error
     },
   });
 
-
   const handleCreatePostSubmit = useCallback(
-    async (formData: CreatePostFormData) => {
+    (formData: CreatePostFormData) => {
       if (!user) {
         toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
         return;
@@ -515,9 +492,8 @@ export default function MainLayout({
       console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       addPostMutation.mutate(formData);
     },
-    [user, toast, addPostMutation, queryClient] // Added queryClient if it's used inside or for dependencies
+    [user, toast, addPostMutation] // addPostMutation is stable
   );
-
 
   const handleLogout = async () => {
     try {
@@ -530,10 +506,16 @@ export default function MainLayout({
     }
   };
 
-  const rootLayoutClasses = cn(
-    "flex flex-col bg-background",
-    isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
-  );
+  const handlePrefetchSettings = useCallback(() => {
+    if (user?.uid) {
+      queryClient.prefetchQuery({
+        queryKey: ['fullUserProfile', user.uid],
+        queryFn: () => fetchFullUserProfile(user.uid),
+        staleTime: 1000 * 60 * 5, // Consider data fresh for 5 mins after prefetch
+      });
+      console.log('[MainLayout] Prefetching settings page data for user:', user.uid);
+    }
+  }, [user, queryClient]);
 
   const navItems = [
     { title: "Board", href: "/", icon: Home },
@@ -542,149 +524,160 @@ export default function MainLayout({
     { title: "Contracts", href: "/contracts", icon: FileText },
   ];
 
+  const rootLayoutClasses = cn(
+    "flex flex-col bg-background",
+    isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
+  );
 
   return (
     <div className={rootLayoutClasses}>
-        <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-            <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
-              <div className="mr-4 hidden md:flex">
-                <Link href="/" className="mr-6 flex items-center space-x-2">
-                  <Handshake className="h-6 w-6 text-primary" />
-                  <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
-                    AnonyCollab
-                  </span>
-                </Link>
-                <nav className="flex items-center gap-4 text-sm lg:gap-6">
-                  {navItems.map((item) => (
-                    <Link
-                      key={item.title}
-                      href={item.href}
-                      className={cn(
-                        "transition-colors hover:text-foreground/80 flex items-center",
-                        pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
-                      )}
-                    >
-                      <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
-                      {item.title}
-                    </Link>
-                  ))}
-                </nav>
-              </div>
-              <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
-                {authLoading ? (
-                  <div className="flex items-center space-x-2">
-                    <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
-                    <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
-                  </div>
-                ) : user ? (
-                  <>
-                    <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
-                        setIsCreatePostOpen(open);
-                        if (!open && addPostMutation.isSuccess) { // Only reset if successfully submitted
-                           // Form reset is handled internally by CreatePostForm via onDialogClose now
-                        }
-                    }}>
-                    <DialogTrigger asChild>
-                        <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Create Post
-                      </Button>
-                    </DialogTrigger>
-                    {/* Remove the separate "Request Help" DialogTrigger and Dialog */}
-                    <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                      <DialogHeader className="p-6 pb-4 border-b">
-                        <DialogTitle>Create New Submission</DialogTitle>
-                        <DialogDescription>
-                          Share your idea, question, or request help from the community.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                        {isCreatePostOpen && user && (
-                          <DynamicCreatePostForm
-                            onSubmit={handleCreatePostSubmit}
-                            availableTags={availableTags}
-                            detailedSectorsData={detailedSectorsData}
-                            isSubmitting={addPostMutation.isPending}
-                            currentUserId={user.uid}
-                            onDialogClose={() => setIsCreatePostOpen(false)} // Pass close handler
-                          />
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-                    {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email)} />
-                            <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                              {getInitials(user.displayName || user.email)}
-                            </AvatarFallback>
-                          </Avatar>
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-56">
-                        <DropdownMenuLabel className="font-normal">
-                          <div className="flex flex-col space-y-1">
-                            <p className="text-sm font-medium leading-none">{user.displayName || generateAnonymousName(user.uid)}</p>
-                            {user.email && (<p className="text-xs leading-none text-muted-foreground">{user.email}</p>)}
-                          </div>
-                        </DropdownMenuLabel>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
-                          <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Profile</span></Link>
-                        </DropdownMenuItem>
-                        <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}>
-                          <Link href="/settings/profile" className="w-full cursor-pointer"><Settings className="mr-2 h-4 w-4" /><span>Settings</span></Link>
-                        </DropdownMenuItem>
-                         <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
-                          <Link href="/subscription" className="w-full cursor-pointer"><CreditCard className="mr-2 h-4 w-4"/><span>Subscription</span></Link>
-                        </DropdownMenuItem>
-                        <DynamicThemeToggle />
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleLogout} className="cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" asChild><Link href="/login">Login</Link></Button>
-                    <Button variant="default" size="sm" asChild><Link href="/signup">Sign Up</Link></Button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </header>
-
-        <main className={cn(
-          "flex-1 flex flex-col",
-           isMobile ? "h-full" : "", // Ensure main takes full height if chrome is hidden for mobile contracts
-           !isMobile && "pb-0", // No bottom padding on desktop
-           isMobile && (pathname === '/contracts' ? "pb-0" : "pb-14") // Conditional padding for mobile
-        )}>
-          {children}
-        </main>
-
-        {!(isMobile && pathname === '/contracts') && (
-          <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14 md:hidden">
-            <div className="container mx-auto flex justify-around items-center h-full">
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+          <div className="mr-4 hidden md:flex">
+            <Link href="/" className="mr-6 flex items-center space-x-2">
+              <Factory className="h-6 w-6 text-primary" />
+              <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
+                AnonyCollab
+              </span>
+            </Link>
+            <nav className="flex items-center gap-4 text-sm lg:gap-6">
               {navItems.map((item) => (
                 <Link
-                  key={`mobile-${item.title}`}
+                  key={item.title}
                   href={item.href}
                   className={cn(
-                    "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
-                    pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
+                    "transition-colors hover:text-foreground/80 flex items-center",
+                    pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
                   )}
                 >
-                  <item.icon className="h-5 w-5 mb-0.5" />
-                  <span>{item.title}</span>
+                  <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
+                  {item.title}
                 </Link>
               ))}
-            </div>
-          </nav>
-        )}
+            </nav>
+          </div>
+          <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+            {authLoading ? (
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
+                <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
+              </div>
+            ) : user ? (
+              <>
+                <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
+                    setIsCreatePostOpen(open);
+                    if (!open && addPostMutation.isSuccess) {
+                       // Form reset is handled internally by CreatePostForm via onDialogClose now
+                    }
+                }}>
+                  <DialogTrigger asChild>
+                    <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Create Post
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                    <DialogHeader className="p-6 pb-4 border-b">
+                      <DialogTitle>Create New Submission</DialogTitle>
+                      <DialogDescription>
+                        Share your idea, question, or request help from the community.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                      {isCreatePostOpen && user && (
+                        <DynamicCreatePostForm
+                          onSubmit={handleCreatePostSubmit}
+                          availableTags={availableTags}
+                          detailedSectorsData={detailedSectorsData}
+                          isSubmitting={addPostMutation.isPending}
+                          currentUserId={user.uid}
+                          onDialogClose={() => setIsCreatePostOpen(false)}
+                        />
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+                {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email)} />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                          {getInitials(user.displayName || user.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">{user.displayName || generateAnonymousName(user.uid)}</p>
+                        {user.email && (<p className="text-xs leading-none text-muted-foreground">{user.email}</p>)}
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                      <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Profile</span></Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      asChild
+                      className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}
+                      onMouseEnter={handlePrefetchSettings} // Prefetch on hover
+                    >
+                      <Link href="/settings/profile" className="w-full cursor-pointer"><Settings className="mr-2 h-4 w-4" /><span>Settings</span></Link>
+                    </DropdownMenuItem>
+                     <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                      <Link href="/subscription" className="w-full cursor-pointer"><CreditCard className="mr-2 h-4 w-4"/><span>Subscription</span></Link>
+                    </DropdownMenuItem>
+                    <DynamicThemeToggle />
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild><Link href="/login">Login</Link></Button>
+                <Button variant="default" size="sm" asChild><Link href="/signup">Sign Up</Link></Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
+      <main className={cn(
+          "flex-1 flex flex-col",
+           isMobile ? "pb-14" : "pb-0" // Keep padding for mobile nav, none for desktop
+        )}>
+        {children}
+      </main>
+      {!isMobile && ( // Desktop footer
+        <footer className="py-4 border-t mt-auto">
+          <div className="container mx-auto text-center text-sm text-muted-foreground">
+            © {new Date().getFullYear()} AnonyCollab. All rights reserved.
+          </div>
+        </footer>
+      )}
+      {isMobile && ( // Mobile bottom navigation
+        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
+          <div className="container mx-auto flex justify-around items-center h-full">
+            {navItems.map((item) => (
+              <Link
+                key={`mobile-${item.title}`}
+                href={item.href}
+                className={cn(
+                  "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
+                  pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
+                )}
+              >
+                <item.icon className="h-5 w-5 mb-0.5" />
+                <span>{item.title}</span>
+              </Link>
+            ))}
+          </div>
+        </nav>
+      )}
     </div>
   );
 }
+```
