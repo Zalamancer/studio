@@ -4,7 +4,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw } from 'lucide-react';
+import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw, ArrowLeft } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -27,23 +27,24 @@ const MessagesPage = () => {
     const isMobile = useIsMobile();
     
     const initialConversationId = searchParams?.get('conversationId');
-    const currentUserId = user?.uid;
-
-    // State for managing active tab
+    
     const [activeTab, setActiveTab] = useState<string>(() => {
-        return initialConversationId ? 'chats' : 'chats'; // Default to 'chats', especially if a chat is pre-selected
+        // Set initial tab based on URL or default to 'chats'
+        if (isMobile && !initialConversationId) return 'list'; // On mobile, default to list if no specific chat
+        return initialConversationId ? 'chats' : 'chats'; // Default to chats, especially if a chat is pre-selected
     });
 
-    // Effect to switch to 'chats' tab if a conversationId appears in the URL
     useEffect(() => {
         if (initialConversationId && activeTab !== 'chats') {
             console.log("[MessagesPage] conversationId in URL, ensuring 'chats' tab is active.");
             setActiveTab('chats');
         }
+        // If on mobile and a conversationId appears, switch activeMobileView in MessagingInterface
+        // This is now handled internally by MessagingInterface based on initialConversationId
     }, [initialConversationId, activeTab]);
 
+    const currentUserId = user?.uid;
 
-    // --- Fetch Pending Requests ---
     const {
         data: pendingRequests = [],
         isLoading: isLoadingRequests,
@@ -54,23 +55,13 @@ const MessagesPage = () => {
         queryKey: ['pendingRequests', currentUserId],
         queryFn: async () => {
             if (!currentUserId) return [];
-            try {
-                return await getPendingRequests(currentUserId);
-            } catch (err: any) {
-                toast({
-                    variant: "destructive",
-                    title: "Error Loading Requests",
-                    description: err.message || "Could not load pending requests.",
-                });
-                throw err;
-            }
+            return getPendingRequests(currentUserId);
         },
         enabled: !!currentUserId,
-        staleTime: 1000 * 60 * 2, // 2 minutes
+        staleTime: 1000 * 60 * 2,
         retry: 1,
     });
 
-    // --- Fetch Connections (Mutuals) ---
     const {
         data: connections = [],
         isLoading: isLoadingConnections,
@@ -81,19 +72,10 @@ const MessagesPage = () => {
         queryKey: ['connections', currentUserId],
         queryFn: async () => {
             if (!currentUserId) return [];
-            try {
-                return await getConnections(currentUserId);
-            } catch (err: any) {
-                toast({
-                    variant: "destructive",
-                    title: "Error Loading Connections",
-                    description: err.message || "Could not load connections.",
-                });
-                throw err;
-            }
+            return getConnections(currentUserId);
         },
         enabled: !!currentUserId,
-        staleTime: 1000 * 60 * 5, // 5 minutes
+        staleTime: 1000 * 60 * 5,
         retry: 1,
     });
 
@@ -113,7 +95,6 @@ const MessagesPage = () => {
           duration: 2000,
       });
     }, [refetchRequests, refetchConnections, queryClient, currentUserId, toast]);
-
 
     if (authLoading) {
         return (
@@ -141,23 +122,21 @@ const MessagesPage = () => {
 
     return (
         <div className={cn(
-            "flex flex-col flex-grow",
+            "flex flex-col flex-grow", // Takes available height from MainLayout's main tag
             isMobile ? "p-0" : "md:container md:mx-auto md:p-6"
         )}>
-            {/* Title and description section, hidden on mobile */}
-            <div className={cn("mb-6", isMobile ? "hidden" : "block")}>
+            <div className="hidden md:block mb-6">
                 <h1 className="text-2xl md:text-3xl font-semibold text-foreground">Messages & Connections</h1>
                 <p className="text-muted-foreground mt-1 max-w-2xl">
                     Manage your chats, connection requests, and established network.
                 </p>
             </div>
-            <div className="flex justify-end mb-4 md:mb-0">
+            <div className={cn("flex justify-end", isMobile ? "p-2 border-b md:border-none" : "mb-4 md:mb-0")}>
                 <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections}>
                     <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections ? 'animate-spin' : ''} mr-2`} />
-                    Refresh All
+                    Refresh
                 </Button>
             </div>
-
 
             {isRequestsError || isConnectionsError ? (
                <div className={cn("my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive flex items-center gap-3", isMobile ? "mx-2" : "")}>
@@ -170,7 +149,7 @@ const MessagesPage = () => {
             ) : null}
 
             <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow h-full">
-                <TabsList className={cn("grid w-full grid-cols-3 mb-0 md:mb-4", isMobile ? "mx-0 rounded-none border-b" : "mx-auto max-w-md")}>
+                <TabsList className={cn("grid w-full mb-0", isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4")}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Chats</TabsTrigger>
                     <TabsTrigger value="requests" className="flex items-center gap-1.5">
                         <UserPlus className="h-4 w-4"/>Requests
@@ -180,23 +159,28 @@ const MessagesPage = () => {
                             </span>
                         )}
                     </TabsTrigger>
-                    <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Connections</TabsTrigger>
+                    <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Network</TabsTrigger>
                 </TabsList>
 
-                <TabsContent value="chats" className={cn("flex-grow flex flex-col overflow-hidden", !isMobile && "border rounded-lg shadow-sm bg-card")}>
-                    <MessagingInterface
-                        currentUserId={user.uid}
-                        initialConversationId={initialConversationId}
-                    />
+                <TabsContent value="chats" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow")}>
+                    <div className={cn(
+                        "flex-grow flex flex-col overflow-hidden h-full", // This div will control the height
+                        !isMobile && "border rounded-lg shadow-sm bg-card"
+                    )}>
+                        <MessagingInterface
+                            currentUserId={user.uid}
+                            initialConversationId={initialConversationId}
+                        />
+                    </div>
                 </TabsContent>
 
-                <TabsContent value="requests" className={cn("flex-grow overflow-auto", isMobile ? "p-1" : "p-1 mt-2")}>
-                    <Card className={cn("shadow-none border-0", !isMobile && "md:border md:shadow-md")}>
+                <TabsContent value="requests" className={cn("flex-grow overflow-auto", isMobile ? "p-1" : "p-1 md:mt-2")}>
+                    <Card className={cn("shadow-none border-0 h-full", !isMobile && "md:border md:shadow-md")}>
                         <CardHeader className={cn("pt-4 pb-3", isMobile ? "px-3" : "px-6 md:pt-6")}>
                             <CardTitle className="flex items-center gap-2 text-lg">
-                                Pending Connection Requests
+                                Connection Requests
                             </CardTitle>
-                            <CardDescription>Review requests from businesses wanting to connect.</CardDescription>
+                            <CardDescription>Review businesses wanting to connect.</CardDescription>
                         </CardHeader>
                         <CardContent className={cn("pb-4", isMobile ? "px-3" : "px-6 md:pb-6")}>
                             {isLoadingRequests ? (
@@ -204,7 +188,7 @@ const MessagesPage = () => {
                             ) : pendingRequests.length === 0 ? (
                                 <p className="text-muted-foreground text-sm text-center py-4">No pending requests.</p>
                             ) : (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {pendingRequests.map((request) => (
                                         <ConnectionRequestItem
                                             key={request.connectionId}
@@ -219,13 +203,13 @@ const MessagesPage = () => {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="connections" className={cn("flex-grow overflow-auto", isMobile ? "p-1" : "p-1 mt-2")}>
-                   <Card className={cn("shadow-none border-0", !isMobile && "md:border md:shadow-md")}>
+                <TabsContent value="connections" className={cn("flex-grow overflow-auto", isMobile ? "p-1" : "p-1 md:mt-2")}>
+                   <Card className={cn("shadow-none border-0 h-full", !isMobile && "md:border md:shadow-md")}>
                         <CardHeader className={cn("pt-4 pb-3", isMobile ? "px-3" : "px-6 md:pt-6")}>
                             <CardTitle className="flex items-center gap-2 text-lg">
-                                Your Connections
+                                Your Network
                             </CardTitle>
-                            <CardDescription>Businesses you are currently connected with.</CardDescription>
+                            <CardDescription>Businesses you are connected with.</CardDescription>
                         </CardHeader>
                         <CardContent className={cn("pb-4", isMobile ? "px-3" : "px-6 md:pb-6")}>
                             {isLoadingConnections ? (
@@ -233,7 +217,7 @@ const MessagesPage = () => {
                             ) : connections.length === 0 ? (
                                 <p className="text-muted-foreground text-sm text-center py-4">You haven't made any connections yet.</p>
                             ) : (
-                                <div className="space-y-4">
+                                <div className="space-y-3">
                                     {connections.map((connection) => (
                                         <ConnectionItem
                                             key={connection.connectionId}
@@ -253,4 +237,3 @@ const MessagesPage = () => {
 };
 
 export default MessagesPage;
-
