@@ -670,10 +670,16 @@ export default function MainLayout({
           </div>
         </header>
       )}
-      <main className={cn(
+      <main
+        className={cn(
           "flex-1 flex flex-col",
-          hideAppChrome ? "h-full" : (isMobile ? "pb-14" : "pb-0")
-        )}>
+          pathname === '/messages'
+            ? "h-full" // Messages page should always try to take full height
+            : isMobile
+            ? "pb-14" // Mobile, not messages page (has bottom nav)
+            : "pb-0"  // Desktop, not messages page
+        )}
+      >
         {children}
       </main>
       {!hideAppChrome && !isMobile && (
