@@ -13,43 +13,42 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from "@/components/ui/dialog"; // Removed DialogTrigger, DialogClose as they are used via asChild or implicitly
+  DialogTrigger, // Added DialogTrigger
+} from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger, // Ensured DropdownMenuTrigger is imported
+  DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, FileText, LogOut, PlusCircle, Settings, User, Bell, CreditCard, Factory, Handshake, HelpingHand } from "lucide-react"; // Added Handshake
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, Settings, User, Bell, CreditCard, Handshake } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import type {
   CreatePostFormData,
   CreatePostFormProps
-} from '@/components/CreatePostForm'; // Ensure this type is exported from CreatePostForm
+} from '@/components/CreatePostForm';
 import type {
   NewPostData,
-  SectorWithSubSectors as SectorWithSubSectorsType, // Renamed for clarity if needed, or use directly
+  SectorWithSubSectors as SectorWithSubSectorsType,
   SubSector as SubSectorType,
   Industry as IndustryType
 } from '@/types/post';
-import { addPostToFirestore, getPostsFromFirestore } from '@/services/postService';
-import { uploadPostImage } from '@/services/storageService'; // Import storage service
-import { useMutation, useQueryClient } from '@tanstack/react-query'; // Import useQueryClient
+import { addPostToFirestore } from '@/services/postService';
+import { uploadPostImage } from '@/services/storageService';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
 import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
-import { getReviewsForProfile } from '@/services/reviewService'; // For calculating rating score
-import { fetchFullUserProfile } from '@/services/connectionService'; // For prefetching
+import { getReviewsForProfile } from '@/services/reviewService';
+import { fetchFullUserProfile } from '@/services/connectionService';
 
-// This data structure is now the source of truth for sector/sub-sector/industry information.
-// It's used by CreatePostForm and the Discover pages.
 export const detailedSectorsData: SectorWithSubSectorsType[] = [
   {
     name: "Agriculture, Forestry, Fishing and Hunting", code: "11",
@@ -128,7 +127,7 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
     name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21",
     description: "Extracting naturally occurring mineral solids, liquids, and gases.",
     subSectors: [
-      { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "2111" }] }, // Simplified NAICS
+      { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "2111" }] },
       { name: "Coal Mining", code: "2121", industries: [{ name: "Coal Mining", code: "2121" }] },
       { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "21221" }, { name: "Gold and Silver Ore Mining", code: "21222" }] },
       { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Stone Mining and Quarrying", code: "21231" }] },
@@ -157,27 +156,174 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
     name: "Manufacturing", code: "31-33",
     description: "Mechanical, physical, or chemical transformation of materials into new products.",
     subSectors: [
-      { name: "Food Manufacturing", code: "311", industries: [ { name: "Animal Food Manufacturing", code: "3111" }, { name: "Grain and Oilseed Milling", code: "3112" }, { name: "Sugar and Confectionery Product Manufacturing", code: "3113" },  { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "3114"}, { name: "Dairy Product Manufacturing", code: "3115"}, { name: "Animal Slaughtering and Processing", code: "3116"}, { name: "Seafood Product Preparation and Packaging", code: "3117"}, { name: "Bakeries and Tortilla Manufacturing", code: "3118"}, { name: "Other Food Manufacturing", code: "3119"} ] },
-      { name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [ { name: "Beverage Manufacturing", code: "3121" }, { name: "Tobacco Manufacturing", code: "3122" } ] },
-      { name: "Textile Mills", code: "313", industries: [ { name: "Fiber, Yarn, and Thread Mills", code: "3131" }, { name: "Fabric Mills", code: "3132" }, { name: "Textile and Fabric Finishing and Fabric Coating Mills", code: "3133"} ] },
-      { name: "Textile Product Mills", code: "314", industries: [ { name: "Textile Furnishings Mills", code: "3141" }, { name: "Other Textile Product Mills", code: "3149" } ] },
-      { name: "Apparel Manufacturing", code: "315", industries: [ { name: "Apparel Knitting Mills", code: "3151" }, { name: "Cut and Sew Apparel Manufacturing", code: "3152" }, { name: "Apparel Accessories and Other Apparel Manufacturing", code: "3159"} ] },
-      { name: "Leather and Allied Product Manufacturing", code: "316", industries: [ { name: "Leather and Hide Tanning and Finishing", code: "3161" }, { name: "Footwear Manufacturing", code: "3162" }, { name: "Other Leather and Allied Product Manufacturing", code: "3169"} ] },
-      { name: "Wood Product Manufacturing", code: "321", industries: [ { name: "Sawmills and Wood Preservation", code: "3211" }, { name: "Veneer, Plywood, and Engineered Wood Product Manufacturing", code: "3212" }, { name: "Other Wood Product Manufacturing", code: "3219"} ] },
-      { name: "Paper Manufacturing", code: "322", industries: [ { name: "Pulp, Paper, and Paperboard Mills", code: "3221" }, { name: "Converted Paper Product Manufacturing", code: "3222" } ] },
-      { name: "Printing and Related Support Activities", code: "323", industries: [ { name: "Printing and Related Support Activities", code: "3231" } ] },
-      { name: "Petroleum and Coal Products Manufacturing", code: "324", industries: [ { name: "Petroleum Refineries", code: "324110" }, { name: "Asphalt Paving, Roofing, and Saturated Materials Manufacturing", code: "32412"}, { name: "Other Petroleum and Coal Products Manufacturing", code: "32419"} ] },
-      { name: "Chemical Manufacturing", code: "325", industries: [ { name: "Basic Chemical Manufacturing", code: "3251" }, { name: "Resin, Synthetic Rubber, and Artificial and Synthetic Fibers and Filaments Manufacturing", code: "3252"}, { name: "Pesticide, Fertilizer, and Other Agricultural Chemical Manufacturing", code: "3253"}, { name: "Pharmaceutical and Medicine Manufacturing", code: "325412" }, { name: "Paint, Coating, and Adhesive Manufacturing", code: "3255"}, { name: "Soap, Cleaning Compound, and Toilet Preparation Manufacturing", code: "3256"}, { name: "Other Chemical Product and Preparation Manufacturing", code: "3259"} ] },
-      { name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [ { name: "Plastics Product Manufacturing", code: "3261" }, { name: "Rubber Product Manufacturing", code: "3262" } ] },
-      { name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [ { name: "Clay Product and Refractory Manufacturing", code: "3271" }, { name: "Glass and Glass Product Manufacturing", code: "3272" }, { name: "Cement and Concrete Product Manufacturing", code: "3273"}, { name: "Lime and Gypsum Product Manufacturing", code: "3274"}, { name: "Other Nonmetallic Mineral Product Manufacturing", code: "3279"} ] },
-      { name: "Primary Metal Manufacturing", code: "331", industries: [ { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "331110" }, { name: "Steel Product Manufacturing from Purchased Steel", code: "3312"}, { name: "Alumina and Aluminum Production and Processing", code: "3313" }, { name: "Nonferrous Metal (except Aluminum) Production and Processing", code: "3314"}, { name: "Foundries", code: "3315"} ] },
-      { name: "Fabricated Metal Product Manufacturing", code: "332", industries: [ { name: "Forging and Stamping", code: "3321" }, { name: "Cutlery and Handtool Manufacturing", code: "3322" }, { name: "Architectural and Structural Metals Manufacturing", code: "3323" }, { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "3324"}, { name: "Hardware Manufacturing", code: "3325"}, { name: "Spring and Wire Product Manufacturing", code: "3326"}, { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "3327"}, { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "3328"}, { name: "Other Fabricated Metal Product Manufacturing", code: "3329"} ] },
-      { name: "Machinery Manufacturing", code: "333", industries: [ { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" },  { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333"}, { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334"}, { name: "Metalworking Machinery Manufacturing", code: "3335"}, { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336"}, { name: "Other General Purpose Machinery Manufacturing", code: "3339"} ] },
-      { name: "Computer and Electronic Product Manufacturing", code: "334", industries: [ { name: "Computer and Peripheral Equipment Manufacturing", code: "3341" }, { name: "Communications Equipment Manufacturing", code: "3342"}, { name: "Audio and Video Equipment Manufacturing", code: "3343"}, { name: "Semiconductor and Other Electronic Component Manufacturing", code: "334413" }, { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "3345"}, { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "3346"} ] },
-      { name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [ { name: "Electric Lighting Equipment Manufacturing", code: "3351" }, { name: "Household Appliance Manufacturing", code: "3352" }, { name: "Electrical Equipment Manufacturing", code: "3353"}, { name: "Other Electrical Equipment and Component Manufacturing", code: "3359"} ] },
-      { name: "Transportation Equipment Manufacturing", code: "336", industries: [ { name: "Motor Vehicle Manufacturing", code: "3361" }, { name: "Motor Vehicle Body and Trailer Manufacturing", code: "3362"}, { name: "Motor Vehicle Parts Manufacturing", code: "3363"}, { name: "Aerospace Product and Parts Manufacturing", code: "3364" }, { name: "Railroad Rolling Stock Manufacturing", code: "3365"}, { name: "Ship and Boat Building", code: "3366"}, { name: "Other Transportation Equipment Manufacturing", code: "3369"} ] },
-      { name: "Furniture and Related Product Manufacturing", code: "337", industries: [ { name: "Household and Institutional Furniture and Kitchen Cabinet Manufacturing", code: "3371" }, { name: "Office Furniture (including Fixtures) Manufacturing", code: "3372"}, { name: "Other Furniture Related Product Manufacturing", code: "3379"} ] },
-      { name: "Miscellaneous Manufacturing", code: "339", industries: [ { name: "Medical Equipment and Supplies Manufacturing", code: "3391" }, { name: "Other Miscellaneous Manufacturing", code: "3399" } ] },
+      {
+        name: "Food Manufacturing", code: "311", industries: [
+          { name: "Animal Food Manufacturing", code: "3111" },
+          { name: "Grain and Oilseed Milling", code: "3112" },
+          { name: "Sugar and Confectionery Product Manufacturing", code: "3113" },
+          { name: "Fruit and Vegetable Preserving and Specialty Food Manufacturing", code: "3114" },
+          { name: "Dairy Product Manufacturing", code: "3115" },
+          { name: "Animal Slaughtering and Processing", code: "3116" },
+          { name: "Seafood Product Preparation and Packaging", code: "3117" },
+          { name: "Bakeries and Tortilla Manufacturing", code: "3118" },
+          { name: "Other Food Manufacturing", code: "3119" }
+        ]
+      },
+      {
+        name: "Beverage and Tobacco Product Manufacturing", code: "312", industries: [
+          { name: "Beverage Manufacturing", code: "3121" },
+          { name: "Tobacco Manufacturing", code: "3122" }
+        ]
+      },
+      {
+        name: "Textile Mills", code: "313", industries: [
+          { name: "Fiber, Yarn, and Thread Mills", code: "3131" },
+          { name: "Fabric Mills", code: "3132" },
+          { name: "Textile and Fabric Finishing and Fabric Coating Mills", code: "3133" }
+        ]
+      },
+      {
+        name: "Textile Product Mills", code: "314", industries: [
+          { name: "Textile Furnishings Mills", code: "3141" },
+          { name: "Other Textile Product Mills", code: "3149" }
+        ]
+      },
+      {
+        name: "Apparel Manufacturing", code: "315", industries: [
+          { name: "Apparel Knitting Mills", code: "3151" },
+          { name: "Cut and Sew Apparel Manufacturing", code: "3152" },
+          { name: "Apparel Accessories and Other Apparel Manufacturing", code: "3159" }
+        ]
+      },
+      {
+        name: "Leather and Allied Product Manufacturing", code: "316", industries: [
+          { name: "Leather and Hide Tanning and Finishing", code: "3161" },
+          { name: "Footwear Manufacturing", code: "3162" },
+          { name: "Other Leather and Allied Product Manufacturing", code: "3169" }
+        ]
+      },
+      {
+        name: "Wood Product Manufacturing", code: "321", industries: [
+          { name: "Sawmills and Wood Preservation", code: "3211" },
+          { name: "Veneer, Plywood, and Engineered Wood Product Manufacturing", code: "3212" },
+          { name: "Other Wood Product Manufacturing", code: "3219" }
+        ]
+      },
+      {
+        name: "Paper Manufacturing", code: "322", industries: [
+          { name: "Pulp, Paper, and Paperboard Mills", code: "3221" },
+          { name: "Converted Paper Product Manufacturing", code: "3222" }
+        ]
+      },
+      { name: "Printing and Related Support Activities", code: "323", industries: [{ name: "Printing and Related Support Activities", code: "3231" }] },
+      {
+        name: "Petroleum and Coal Products Manufacturing", code: "324", industries: [
+          { name: "Petroleum Refineries", code: "324110" },
+          { name: "Asphalt Paving, Roofing, and Saturated Materials Manufacturing", code: "32412" },
+          { name: "Other Petroleum and Coal Products Manufacturing", code: "32419" }
+        ]
+      },
+      {
+        name: "Chemical Manufacturing", code: "325", industries: [
+          { name: "Basic Chemical Manufacturing", code: "3251" },
+          { name: "Resin, Synthetic Rubber, and Artificial and Synthetic Fibers and Filaments Manufacturing", code: "3252" },
+          { name: "Pesticide, Fertilizer, and Other Agricultural Chemical Manufacturing", code: "3253" },
+          { name: "Pharmaceutical and Medicine Manufacturing", code: "325412" }, // Specific NAICS
+          { name: "Paint, Coating, and Adhesive Manufacturing", code: "3255" },
+          { name: "Soap, Cleaning Compound, and Toilet Preparation Manufacturing", code: "3256" },
+          { name: "Other Chemical Product and Preparation Manufacturing", code: "3259" }
+        ]
+      },
+      {
+        name: "Plastics and Rubber Products Manufacturing", code: "326", industries: [
+          { name: "Plastics Product Manufacturing", code: "3261" },
+          { name: "Rubber Product Manufacturing", code: "3262" }
+        ]
+      },
+      {
+        name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [
+          { name: "Clay Product and Refractory Manufacturing", code: "3271" },
+          { name: "Glass and Glass Product Manufacturing", code: "3272" },
+          { name: "Cement and Concrete Product Manufacturing", code: "3273" },
+          { name: "Lime and Gypsum Product Manufacturing", code: "3274" },
+          { name: "Other Nonmetallic Mineral Product Manufacturing", code: "3279" }
+        ]
+      },
+      {
+        name: "Primary Metal Manufacturing", code: "331", industries: [
+          { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "331110" },
+          { name: "Steel Product Manufacturing from Purchased Steel", code: "3312" },
+          { name: "Alumina and Aluminum Production and Processing", code: "3313" },
+          { name: "Nonferrous Metal (except Aluminum) Production and Processing", code: "3314" },
+          { name: "Foundries", code: "3315" }
+        ]
+      },
+      {
+        name: "Fabricated Metal Product Manufacturing", code: "332", industries: [
+          { name: "Forging and Stamping", code: "3321" },
+          { name: "Cutlery and Handtool Manufacturing", code: "3322" },
+          { name: "Architectural and Structural Metals Manufacturing", code: "3323" },
+          { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "3324" },
+          { name: "Hardware Manufacturing", code: "3325" },
+          { name: "Spring and Wire Product Manufacturing", code: "3326" },
+          { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "3327" },
+          { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "3328" },
+          { name: "Other Fabricated Metal Product Manufacturing", code: "3329" }
+        ]
+      },
+      {
+        name: "Machinery Manufacturing", code: "333", industries: [
+          { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" },
+          { name: "Industrial Machinery Manufacturing", code: "33324" }, // Example more specific code
+          { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333" },
+          { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334" },
+          { name: "Metalworking Machinery Manufacturing", code: "3335" },
+          { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336" },
+          { name: "Other General Purpose Machinery Manufacturing", code: "3339" }
+        ]
+      },
+      {
+        name: "Computer and Electronic Product Manufacturing", code: "334", industries: [
+          { name: "Computer and Peripheral Equipment Manufacturing", code: "3341" },
+          { name: "Communications Equipment Manufacturing", code: "3342" },
+          { name: "Audio and Video Equipment Manufacturing", code: "3343" },
+          { name: "Semiconductor and Other Electronic Component Manufacturing", code: "334413" }, // Example specific
+          { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "3345" },
+          { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "3346" }
+        ]
+      },
+      {
+        name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [
+          { name: "Electric Lighting Equipment Manufacturing", code: "3351" },
+          { name: "Household Appliance Manufacturing", code: "3352" },
+          { name: "Electrical Equipment Manufacturing", code: "3353" },
+          { name: "Other Electrical Equipment and Component Manufacturing", code: "3359" }
+        ]
+      },
+      {
+        name: "Transportation Equipment Manufacturing", code: "336", industries: [
+          { name: "Motor Vehicle Manufacturing", code: "3361" },
+          { name: "Motor Vehicle Body and Trailer Manufacturing", code: "3362" },
+          { name: "Motor Vehicle Parts Manufacturing", code: "3363" },
+          { name: "Aerospace Product and Parts Manufacturing", code: "3364" },
+          { name: "Railroad Rolling Stock Manufacturing", code: "3365" },
+          { name: "Ship and Boat Building", code: "3366" },
+          { name: "Other Transportation Equipment Manufacturing", code: "3369" }
+        ]
+      },
+      {
+        name: "Furniture and Related Product Manufacturing", code: "337", industries: [
+          { name: "Household and Institutional Furniture and Kitchen Cabinet Manufacturing", code: "3371" },
+          { name: "Office Furniture (including Fixtures) Manufacturing", code: "3372" },
+          { name: "Other Furniture Related Product Manufacturing", code: "3379" }
+        ]
+      },
+      {
+        name: "Miscellaneous Manufacturing", code: "339", industries: [
+          { name: "Medical Equipment and Supplies Manufacturing", code: "3391" },
+          { name: "Other Miscellaneous Manufacturing", code: "3399" }
+        ]
+      },
     ],
   },
   {
@@ -250,7 +396,7 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
     name: "Management of Companies and Enterprises", code: "55",
     description: "Holding securities of companies for controlling interest or influencing management.",
     subSectors: [
-      { name: "Management of Companies and Enterprises", code: "551", industries: [{ name: "Offices of Bank Holding Companies", code: "551111" }, {"name": "Offices of Other Holding Companies", "code": "551112"}] },
+      { name: "Management of Companies and Enterprises", code: "551", industries: [{ name: "Offices of Bank Holding Companies", code: "551111" }, { "name": "Offices of Other Holding Companies", "code": "551112" }] },
     ],
   },
   {
@@ -319,7 +465,6 @@ export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
-// Dynamically import forms and other heavy components
 const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
   {
@@ -359,6 +504,16 @@ export default function MainLayout({
 
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
 
+  const handlePrefetchSettings = useCallback(() => {
+    if (user?.uid) {
+      queryClient.prefetchQuery({
+        queryKey: ['fullUserProfile', user.uid],
+        queryFn: () => fetchFullUserProfile(user.uid),
+        staleTime: 1000 * 60 * 5,
+      });
+    }
+  }, [user, queryClient]);
+
   useEffect(() => {
     if (isMobile) {
       const setVisualViewportHeight = () => {
@@ -391,33 +546,25 @@ export default function MainLayout({
 
       let currentRatingScore = 0;
       try {
-        console.log(`%c[MainLayout] addPostMutation: Fetching reviews for user ${user.uid} to calculate rating score.`, "color: #FF00FF;");
         const reviews = await getReviewsForProfile(user.uid);
-        console.log(`%c[MainLayout] addPostMutation: Fetched ${reviews.length} reviews for user ${user.uid}.`, "color: #FF00FF;");
+        console.log(`%c[MainLayout] addPostMutation: Fetched ${reviews.length} reviews for user ${user.uid} to calc rating.`, "color: #FF00FF;");
         if (reviews && reviews.length > 0) {
           const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
-          currentRatingScore = totalRating / reviews.length;
-          console.log(`%c[MainLayout] addPostMutation: Calculated totalRating: ${totalRating}, currentRatingScore: ${currentRatingScore.toFixed(1)}`, "color: #FF00FF;");
-        } else {
-           console.log(`%c[MainLayout] addPostMutation: No reviews found for user ${user.uid}. Rating score set to 0.`, "color: #FF00FF;");
+          currentRatingScore = parseFloat((totalRating / reviews.length).toFixed(1));
         }
       } catch (ratingError: any) {
-        console.error("[MainLayout] addPostMutation: Error fetching reviews for rating score:", ratingError.message, ratingError);
-         console.log(`%c[MainLayout] addPostMutation: Error fetching reviews. Rating score set to 0.`, "color: #FF00FF;");
+        console.error("[MainLayout] addPostMutation: Error fetching reviews for rating score:", ratingError.message);
       }
-       console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score before post: ${currentRatingScore.toFixed(1)}`, "color: magenta; font-weight: bold;");
+      console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score before post: ${currentRatingScore}`, "color: magenta; font-weight: bold;");
 
       let uploadedImageUrls: string[] = [];
       if (formData.imageFile && user) {
         try {
-          console.log("[MainLayout] addPostMutation: Uploading image...");
           const singleUploadedUrl = await uploadPostImage(formData.imageFile, user.uid);
           if (singleUploadedUrl) uploadedImageUrls.push(singleUploadedUrl);
-          console.log("[MainLayout] addPostMutation: Image uploaded, URL:", singleUploadedUrl);
         } catch (uploadError: any) {
-          console.error("[MainLayout] Image upload failed in mutationFn:", uploadError);
           toast({ variant: "destructive", title: "Image Upload Failed", description: uploadError.message || "Could not upload image." });
-          throw new Error(`Image upload failed: ${uploadError.message}`); // Re-throw to stop post creation
+          throw new Error(`Image upload failed: ${uploadError.message}`);
         }
       }
 
@@ -425,47 +572,41 @@ export default function MainLayout({
       const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
       const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
 
-      const postDataForService: NewPostData = {
+      const newPostData: NewPostData = {
         userId: user.uid,
         question: formData.question,
         requestType: formData.requestType,
-        
-        descriptionDetails: formData.descriptionDetails,
-        descriptionTried: formData.requestType === 'help_request' ? formData.descriptionTried : null,
-        descriptionOutcome: formData.requestType === 'help_request' ? formData.descriptionOutcome : null,
-        
+        descriptionDetails: formData.descriptionDetails || "",
+        descriptionTried: formData.descriptionTried || null,
+        descriptionOutcome: formData.descriptionOutcome || null,
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
         subSector: subSectorDetails?.name || null,
         industry: industryDetails?.name || null,
         naicsCode: formData.industry || formData.subSector || formData.sector,
-        
-        businessType: "Unknown", // Placeholder, consider fetching from user profile
+        businessType: "Startup", // Placeholder, consider fetching from user profile
         safetyIndicator: "Medium", // Placeholder
-        ratingScore: parseFloat(currentRatingScore.toFixed(1)),
+        ratingScore: currentRatingScore,
         imageUrls: uploadedImageUrls,
         mentionedUserIds: formData.mentionedUserIds || [],
-        
-        maxBudget: formData.requestType === 'help_request' ? formData.maxBudget : null,
+        maxBudget: formData.requestType === 'help_request' ? (formData.maxBudget === undefined ? null : formData.maxBudget) : null,
         deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
-        
         commentCount: 0,
       };
-      console.log(`%c[MainLayout] addPostMutation: Post data PREPARED. RatingScore: ${postDataForService.ratingScore}. Data:`, "color: #FF00FF;", postDataForService);
-      return addPostToFirestore(postDataForService);
+      console.log(`%c[MainLayout] addPostMutation: Post data PREPARED. RatingScore: ${newPostData.ratingScore}. Data:`, "color: #FF00FF;", newPostData);
+      return addPostToFirestore(newPostData);
     },
     onSuccess: (newlyCreatedPostId, variables) => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
       toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
-      setIsCreatePostOpen(false); // Close dialog on success
+      setIsCreatePostOpen(false);
 
-      // Handle notifications for mentions
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        const descriptionSource = variables.descriptionDetails; // Main description for all post types now
+        const descriptionSource = variables.descriptionDetails;
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) { // Don't notify self
+          if (mentionedUid !== user.uid) {
             try {
               await createNotification({
                 userId: mentionedUid,
@@ -475,7 +616,6 @@ export default function MainLayout({
                 postQuestion: variables.question,
                 textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "",
               });
-              console.log(`%c[MainLayout] Mention notification CREATED for ${mentionedUid} for post ${newlyCreatedPostId}`, "color: green;");
             } catch (notifyError) {
               console.error(`[MainLayout] Failed to create mention notification for post ${newlyCreatedPostId}:`, notifyError);
             }
@@ -484,9 +624,7 @@ export default function MainLayout({
       }
     },
     onError: (error: Error, variables) => {
-      console.error("[MainLayout] addPostMutation onError:", error);
       toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.` });
-      // Dialog remains open for user to correct
     },
   });
 
@@ -496,10 +634,9 @@ export default function MainLayout({
         toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
         return;
       }
-      console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       addPostMutation.mutate(formData);
     },
-    [user, toast, addPostMutation, queryClient] // Added queryClient to dependencies of addPostMutation's handlers
+    [user, toast, addPostMutation]
   );
 
   const handleLogout = async () => {
@@ -512,18 +649,6 @@ export default function MainLayout({
       toast({ variant: "destructive", title: "Logout Failed", description: "An error occurred. Please try again." });
     }
   };
-
-  const handlePrefetchSettings = useCallback(() => {
-    if (user?.uid) {
-      queryClient.prefetchQuery({
-        queryKey: ['fullUserProfile', user.uid],
-        queryFn: () => fetchFullUserProfile(user.uid),
-        staleTime: 1000 * 60 * 5, // Consider data fresh for 5 mins after prefetch
-      });
-      console.log('[MainLayout] Prefetching settings page data for user:', user.uid);
-    }
-  }, [user, queryClient]);
-
 
   const navItems = [
     { title: "Board", href: "/", icon: Home },
@@ -539,155 +664,145 @@ export default function MainLayout({
 
   return (
     <div className={rootLayoutClasses}>
-      {! (isMobile && pathname === '/contracts') && (
-        <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
-            <div className="mr-4 hidden md:flex">
-              <Link href="/" className="mr-6 flex items-center space-x-2">
-                <Factory className="h-6 w-6 text-primary" />
-                <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
-                  AnonyCollab
-                </span>
-              </Link>
-              <nav className="flex items-center gap-4 text-sm lg:gap-6">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.title}
-                    href={item.href}
-                    className={cn(
-                      "transition-colors hover:text-foreground/80 flex items-center",
-                      pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
-                    )}
-                  >
-                    <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
-                    {item.title}
-                  </Link>
-                ))}
-              </nav>
-            </div>
-            <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
-              {authLoading ? (
-                <div className="flex items-center space-x-2">
-                  <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
-                  <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
-                </div>
-              ) : user ? (
-                <>
-                  <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
-                      setIsCreatePostOpen(open);
-                      if (!open && addPostMutation.isSuccess) {
-                        // Form reset is handled internally by CreatePostForm via onDialogClose now
-                      }
-                  }}>
-                    <DialogTrigger asChild>
-                      <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                        <PlusCircle className="mr-2 h-4 w-4" />
-                        Create Post
-                      </Button>
-                    </DialogTrigger>
-                    <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                      <DialogHeader className="p-6 pb-4 border-b">
-                        <DialogTitle>Create New Submission</DialogTitle>
-                        <DialogDescription>
-                          Share your idea, question, or request help from the community.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                        {isCreatePostOpen && user && (
-                          <DynamicCreatePostForm
-                            onSubmit={handleCreatePostSubmit}
-                            availableTags={availableTags}
-                            detailedSectorsData={detailedSectorsData}
-                            isSubmitting={addPostMutation.isPending}
-                            currentUserId={user.uid}
-                            onDialogClose={() => setIsCreatePostOpen(false)}
-                          />
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
-
-                  {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
-                        <Avatar className="h-8 w-8">
-                          <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email)} />
-                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                            {getInitials(user.displayName || user.email)}
-                          </AvatarFallback>
-                        </Avatar>
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="w-56">
-                      <DropdownMenuLabel className="font-normal">
-                        <div className="flex flex-col space-y-1">
-                          <p className="text-sm font-medium leading-none">{user.displayName || generateAnonymousName(user.uid)}</p>
-                          {user.email && (<p className="text-xs leading-none text-muted-foreground">{user.email}</p>)}
-                        </div>
-                      </DropdownMenuLabel>
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
-                        <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Profile</span></Link>
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        asChild
-                        className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}
-                        onMouseEnter={handlePrefetchSettings}
-                      >
-                        <Link href="/settings/profile" className="w-full cursor-pointer"><Settings className="mr-2 h-4 w-4" /><span>Settings</span></Link>
-                      </DropdownMenuItem>
-                       <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
-                        <Link href="/subscription" className="w-full cursor-pointer"><CreditCard className="mr-2 h-4 w-4"/><span>Subscription</span></Link>
-                      </DropdownMenuItem>
-                      <DynamicThemeToggle />
-                      <DropdownMenuSeparator />
-                      <DropdownMenuItem onClick={handleLogout} className="cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </>
-              ) : (
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" asChild><Link href="/login">Login</Link></Button>
-                  <Button variant="default" size="sm" asChild><Link href="/signup">Sign Up</Link></Button>
-                </div>
-              )}
-            </div>
+      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+        <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+          <div className="mr-4 hidden md:flex">
+            <Link href="/" className="mr-6 flex items-center space-x-2">
+              { /* Assuming Factory icon is correctly imported from lucide-react if used here */ }
+              <Handshake className="h-6 w-6 text-primary" />
+              <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
+                AnonyCollab
+              </span>
+            </Link>
+            <nav className="flex items-center gap-4 text-sm lg:gap-6">
+              {navItems.map((item) => (
+                <Link
+                  key={item.title}
+                  href={item.href}
+                  className={cn(
+                    "transition-colors hover:text-foreground/80 flex items-center",
+                    pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
+                  )}
+                >
+                  <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
+                  {item.title}
+                </Link>
+              ))}
+            </nav>
           </div>
-        </header>
-      )}
+          <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+            {authLoading ? (
+              <div className="flex items-center space-x-2">
+                <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
+                <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
+              </div>
+            ) : user ? (
+              <>
+                <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
+                    if (!open && addPostMutation.isSuccess) {
+                      // Form reset is handled internally by CreatePostForm via onDialogClose
+                    }
+                    setIsCreatePostOpen(open);
+                  }}>
+                  <DialogTrigger asChild>
+                    <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      Create Post
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                    <DialogHeader className="p-6 pb-4 border-b">
+                      <DialogTitle>Create New Submission</DialogTitle>
+                      <DialogDescription>
+                        Share your idea, question, or request help from the community.
+                      </DialogDescription>
+                    </DialogHeader>
+                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                      {isCreatePostOpen && user && (
+                        <DynamicCreatePostForm
+                          onSubmit={handleCreatePostSubmit}
+                          availableTags={availableTags}
+                          detailedSectorsData={detailedSectorsData}
+                          isSubmitting={addPostMutation.isPending}
+                          currentUserId={user.uid}
+                          onDialogClose={() => setIsCreatePostOpen(false)}
+                        />
+                      )}
+                    </div>
+                  </DialogContent>
+                </Dialog>
+
+                {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
+                      <Avatar className="h-8 w-8">
+                        <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email)} />
+                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                          {getInitials(user.displayName || user.email)}
+                        </AvatarFallback>
+                      </Avatar>
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuLabel className="font-normal">
+                      <div className="flex flex-col space-y-1">
+                        <p className="text-sm font-medium leading-none">{user.displayName || generateAnonymousName(user.uid)}</p>
+                        {user.email && (<p className="text-xs leading-none text-muted-foreground">{user.email}</p>)}
+                      </div>
+                    </DropdownMenuLabel>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                      <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Profile</span></Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem
+                      asChild
+                      className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}
+                      onMouseEnter={handlePrefetchSettings}
+                    >
+                      <Link href="/settings/profile" className="w-full cursor-pointer"><Settings className="mr-2 h-4 w-4" /><span>Settings</span></Link>
+                    </DropdownMenuItem>
+                     <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                      <Link href="/subscription" className="w-full cursor-pointer"><CreditCard className="mr-2 h-4 w-4"/><span>Subscription</span></Link>
+                    </DropdownMenuItem>
+                    <DynamicThemeToggle />
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" asChild><Link href="/login">Login</Link></Button>
+                <Button variant="default" size="sm" asChild><Link href="/signup">Sign Up</Link></Button>
+              </div>
+            )}
+          </div>
+        </div>
+      </header>
       <main className={cn(
           "flex-1 flex flex-col",
-          (isMobile && pathname === '/contracts') ? "h-full" : "pb-14 md:pb-0"
+          "pb-14 md:pb-0" // Ensure bottom padding on mobile for nav, none on desktop
         )}>
         {children}
       </main>
-      {! (isMobile && pathname === '/contracts') && ( // Hide footer only if mobile and on contracts page
-        <footer className="py-4 border-t mt-auto md:block hidden"> {/* Also ensure it's hidden on mobile generally */}
-          <div className="container mx-auto text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} AnonyCollab. All rights reserved.
-          </div>
-        </footer>
-      )}
-      {! (isMobile && pathname === '/contracts') && isMobile && ( // Mobile bottom navigation
-        <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
-          <div className="container mx-auto flex justify-around items-center h-full">
-            {navItems.map((item) => (
-              <Link
-                key={`mobile-${item.title}`}
-                href={item.href}
-                className={cn(
-                  "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
-                  pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
-                )}
-              >
-                <item.icon className="h-5 w-5 mb-0.5" />
-                <span>{item.title}</span>
-              </Link>
-            ))}
-          </div>
-        </nav>
-      )}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
+        <div className="container mx-auto flex justify-around items-center h-full">
+          {navItems.map((item) => (
+            <Link
+              key={`mobile-${item.title}`}
+              href={item.href}
+              className={cn(
+                "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
+                pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
+              )}
+            >
+              <item.icon className="h-5 w-5 mb-0.5" />
+              <span>{item.title}</span>
+            </Link>
+          ))}
+        </div>
+      </nav>
     </div>
   );
 }
