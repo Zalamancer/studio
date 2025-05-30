@@ -85,7 +85,9 @@ export async function POST(request: NextRequest) {
     // });
 
     const existingPaymentMethods = userPrefDoc.exists && Array.isArray(userPrefDoc.data()?.paymentMethods) ? userPrefDoc.data()?.paymentMethods : [];
-    const updatedPaymentMethods = existingPaymentMethods.map(pm => ({ ...pm, isDefault: false }));
+    
+    // Ensure all existing are not default before adding the new one as default
+    const updatedPaymentMethodsNonDefault = existingPaymentMethods.map(pm => ({ ...pm, isDefault: false }));
 
     const newSavedPaymentMethod = {
       stripePaymentMethodId: paymentMethod.id,
@@ -93,12 +95,12 @@ export async function POST(request: NextRequest) {
       last4: paymentMethod.card?.last4 || '0000',
       expMonth: paymentMethod.card?.exp_month || 0,
       expYear: paymentMethod.card?.exp_year || 0,
-      isDefault: true,
+      isDefault: true, // Newest card is default
     };
-    updatedPaymentMethods.push(newSavedPaymentMethod);
+    updatedPaymentMethodsNonDefault.push(newSavedPaymentMethod);
 
     await userPreferencesRef.update({
-      paymentMethods: updatedPaymentMethods,
+      paymentMethods: updatedPaymentMethodsNonDefault, // Save the array with the new default
       updatedAt: FieldValue.serverTimestamp(),
     });
 
@@ -122,7 +124,12 @@ export async function POST(request: NextRequest) {
         }
     } else if (error.message && error.message.includes('Firebase Admin SDK initialization error')) {
         errorMessage = 'Server configuration error. Please try again later.';
+    } else if (error.message && error.message.includes('doesn\'t exist')) { // Catch specific Firestore "doesn't exist" if relevant
+        errorMessage = 'User profile not found. Cannot save payment method.';
+        statusCode = 404;
     }
+    
+    // Log the full error structure for better debugging on the server
     console.error('Full error object passed to client:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
 
     return NextResponse.json({ error: errorMessage, stripeErrorCode: error.code }, { status: statusCode });
