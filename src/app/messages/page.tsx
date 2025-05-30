@@ -27,10 +27,11 @@ const MessagesPage = () => {
     const isMobile = useIsMobile();
     
     const initialConversationId = searchParams?.get('conversationId');
+    const initialMessageText = searchParams?.get('initialMessageText'); // For pre-filling message from bid
     
     const [activeTab, setActiveTab] = useState<string>(() => {
         if (initialConversationId && isMobile) return 'chats';
-        return 'chats'; // Default to 'chats' tab
+        return 'chats'; 
     });
 
     useEffect(() => {
@@ -98,7 +99,10 @@ const MessagesPage = () => {
 
     if (authLoading) {
         return (
-            <div className="flex flex-col flex-grow items-center justify-center p-6 h-full">
+            <div className={cn(
+                "flex flex-col flex-grow items-center justify-center h-full",
+                 isMobile ? "p-0" : "md:container md:mx-auto md:p-6"
+            )}>
                 <Loader2 className="h-8 w-8 animate-spin text-primary" />
                 <p className="ml-2 text-muted-foreground mt-2">Loading user...</p>
             </div>
@@ -107,7 +111,10 @@ const MessagesPage = () => {
 
     if (!user) {
         return (
-            <div className="flex flex-col flex-grow items-center justify-center p-6 text-center h-full">
+            <div className={cn(
+                "flex flex-col flex-grow items-center justify-center text-center h-full",
+                 isMobile ? "p-4" : "md:container md:mx-auto md:p-6"
+            )}>
                 <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
                 <p className="text-muted-foreground font-semibold">Please log in to view messages and connections.</p>
                 <Button onClick={() => router.push('/login')} className="mt-4">Log In</Button>
@@ -120,15 +127,12 @@ const MessagesPage = () => {
        connectionsError?.message,
     ].filter(Boolean).join('; ');
     
-    const pageRootClasses = cn(
-        "flex flex-col flex-grow", // Ensures the page takes up available vertical space
-        isMobile ? "p-0" : "md:container md:mx-auto md:p-6"
-    );
-
     return (
-        <div className={pageRootClasses}>
-            {/* Title and description section REMOVED */}
-            <div className={cn("flex justify-end", isMobile ? "p-2 border-b md:border-none" : "mb-4 md:mb-0")}>
+        <div className={cn(
+            "flex flex-col flex-grow h-full", // Ensure this takes full height from MainLayout's <main>
+            isMobile ? "p-0" : "md:p-0" // No padding on desktop for the Tabs to fill edge-to-edge if desired
+        )}>
+            <div className={cn("flex justify-end items-center", isMobile ? "p-2 border-b md:border-none" : "mb-2 md:mb-0 md:p-4 md:pb-2")}> {/* Added padding for desktop refresh button */}
                 <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections}>
                     <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections ? 'animate-spin' : ''} mr-2`} />
                     Refresh
@@ -136,7 +140,7 @@ const MessagesPage = () => {
             </div>
 
             {isRequestsError || isConnectionsError ? (
-               <div className={cn("my-4 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive flex items-center gap-3", isMobile ? "mx-2" : "")}>
+               <div className={cn("my-2 mx-2 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive flex items-center gap-3", isMobile ? "" : "md:mx-4")}>
                    <AlertTriangle className="h-5 w-5" />
                    <div>
                      <p className="font-semibold">Error Loading Connection Data</p>
@@ -145,8 +149,11 @@ const MessagesPage = () => {
                </div>
             ) : null}
 
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow h-full">
-                <TabsList className={cn("grid w-full mb-0", isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4")}>
+            <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-col flex-grow overflow-hidden h-full"> {/* Added h-full */}
+                <TabsList className={cn(
+                    "grid w-full flex-shrink-0", // Added flex-shrink-0
+                    isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4"
+                )}>
                     <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
                     <TabsTrigger value="requests" className="flex items-center gap-1.5">
                         <UserPlus className="h-4 w-4"/>Requests
@@ -161,17 +168,18 @@ const MessagesPage = () => {
 
                 <TabsContent value="chats" className="mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow flex flex-col overflow-hidden">
                     <div className={cn(
-                        "flex-grow flex flex-col overflow-hidden h-full", // Ensure this wrapper takes full height
-                        !isMobile && "border rounded-lg shadow-sm bg-card"
+                        "flex-grow flex flex-col overflow-hidden h-full",
+                        !isMobile && "border rounded-lg shadow-sm bg-card md:m-4 md:mt-0" // Add margin for desktop card view
                     )}>
                         <MessagingInterface
                             currentUserId={user.uid}
                             initialConversationId={initialConversationId}
+                            initialMessageText={initialMessageText || undefined}
                         />
                     </div>
                 </TabsContent>
 
-                <TabsContent value="requests" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow overflow-auto", isMobile ? "p-1" : "p-1 md:mt-2")}>
+                <TabsContent value="requests" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow overflow-auto", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
                     <Card className={cn("shadow-none border-0 h-full", !isMobile && "md:border md:shadow-md")}>
                         <CardHeader className={cn("pt-4 pb-3", isMobile ? "px-3" : "px-6 md:pt-6")}>
                             <CardTitle className="flex items-center gap-2 text-lg">
@@ -200,7 +208,7 @@ const MessagesPage = () => {
                     </Card>
                 </TabsContent>
 
-                <TabsContent value="connections" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow overflow-auto", isMobile ? "p-1" : "p-1 md:mt-2")}>
+                <TabsContent value="connections" className={cn("mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-grow overflow-auto", isMobile ? "p-1" : "md:p-4 md:pt-0")}>
                    <Card className={cn("shadow-none border-0 h-full", !isMobile && "md:border md:shadow-md")}>
                         <CardHeader className={cn("pt-4 pb-3", isMobile ? "px-3" : "px-6 md:pt-6")}>
                             <CardTitle className="flex items-center gap-2 text-lg">
