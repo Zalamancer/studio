@@ -1,3 +1,4 @@
+
 // src/components/board-page/PostDetailHeader.tsx
 "use client";
 
@@ -7,7 +8,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { X, HandHelping, DollarSign, CalendarDays, Star, Trash2, Loader2, MessageSquare } from 'lucide-react';
+import { X, HandHelping, DollarSign, CalendarDays, Star, Trash2, Loader2, MessageSquare, AtSign, Briefcase, CheckCircle } from 'lucide-react';
 import type { Post } from '@/types/post';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
@@ -27,14 +28,15 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import type { ConnectionStatus } from '@/types/connection';
 
 interface PostDetailHeaderProps {
   post: Post;
   currentUser: FirebaseUser | null;
   onClose: () => void;
-  onDelete: () => void; // Changed from (postId: string) => void
+  onDelete: (postId: string) => void;
   deletePostMutationIsPending: boolean;
-  connectionStatus?: 'connected' | 'pending_sent' | 'pending_received' | 'not_connected' | null; // For showing Message button
+  connectionStatus?: ConnectionStatus | null;
 }
 
 export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
@@ -51,27 +53,29 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
 
   const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
-    : typeof post.createdAt === 'number'
-    ? new Date(post.createdAt).toLocaleDateString()
+    : typeof (post.createdAt as any)?.seconds === 'number' // Handle unconverted Timestamps
+    ? new Timestamp((post.createdAt as any).seconds, (post.createdAt as any).nanoseconds).toDate().toLocaleDateString()
     : 'Date unavailable';
 
-  const postAuthorMentionName = post.userId ? generateAnonymousName(post.userId) : 'Unknown User';
+
+  const postAuthorMentionName = post.userId ? (post.mentionName || generateAnonymousName(post.userId)) : 'Unknown User';
   const postAuthorProfileLink = post.userId ? `/profile/${post.userId}` : '#';
   const isOwnPost = post.userId === currentUser?.uid;
 
   const handleStartChat = async () => {
-    if (!currentUser || !post.userId || isOwnPost) return;
+    if (!currentUser || !post.userId || isOwnPost || isStartingChat) return;
     setIsStartingChat(true);
     try {
       const conversationId = await findOrCreateConversation(currentUser.uid, post.userId, post.id);
       if (conversationId) {
-        router.push(`/contracts?conversationId=${conversationId}&postId=${post.id}`);
+        // Redirect to the new /messages page with conversationId and postId
+        router.push(`/messages?conversationId=${conversationId}&postId=${post.id}`);
         onClose(); // Close panel after navigating
       } else {
         throw new Error("Failed to initiate conversation.");
       }
     } catch (error: any) {
-      toast({ variant: "destructive", title: "Error", description: error.message || "Could not start chat." });
+      toast({ variant: "destructive", title: "Error Starting Chat", description: error.message || "Could not start chat." });
     } finally {
       setIsStartingChat(false);
     }
@@ -122,7 +126,7 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
                 <CalendarDays className="h-3.5 w-3.5" /> Deadline: {post.deadline instanceof Date ? post.deadline.toLocaleDateString() : (post.deadline as unknown as Timestamp)?.toDate?.().toLocaleDateString() || 'N/A'}
               </span>
             )}
-            {post.ratingScore != null && (
+            {post.ratingScore != null && post.ratingScore > 0 && (
               <span className="inline-flex items-center text-xs">
                 <Star className={cn("h-3.5 w-3.5 mr-1", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
                 {post.ratingScore.toFixed(1)}/5
@@ -148,7 +152,7 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
                 </AlertDialogHeader>
                 <AlertDialogFooter>
                   <AlertDialogCancel disabled={deletePostMutationIsPending}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={onDelete} disabled={deletePostMutationIsPending} className="bg-destructive hover:bg-destructive/90">
+                  <AlertDialogAction onClick={() => onDelete(post.id)} disabled={deletePostMutationIsPending} className="bg-destructive hover:bg-destructive/90">
                     {deletePostMutationIsPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</> : 'Continue'}
                   </AlertDialogAction>
                 </AlertDialogFooter>
