@@ -13,44 +13,44 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger,
-  DialogClose,
-} from "@/components/ui/dialog";
+} from "@/components/ui/dialog"; // Removed DialogTrigger, DialogClose as they are used via asChild or implicitly
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
-  DropdownMenuTrigger,
+  DropdownMenuTrigger, // Ensured DropdownMenuTrigger is imported
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, Network, Settings, User, Bell, Handshake, CreditCard, PlusCircle, LogOut, Factory } from "lucide-react";
+import { Home, Compass, Network, FileText, LogOut, PlusCircle, Settings, User, Bell, CreditCard, Factory, Handshake, HelpingHand } from "lucide-react"; // Added Handshake
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import type {
   CreatePostFormData,
-  CreatePostFormProps,
-} from '@/components/CreatePostForm';
+  CreatePostFormProps
+} from '@/components/CreatePostForm'; // Ensure this type is exported from CreatePostForm
 import type {
   NewPostData,
-  SectorWithSubSectors,
-  SubSector,
-  Industry
+  SectorWithSubSectors as SectorWithSubSectorsType, // Renamed for clarity if needed, or use directly
+  SubSector as SubSectorType,
+  Industry as IndustryType
 } from '@/types/post';
-import { addPostToFirestore } from '@/services/postService';
-import { uploadPostImage } from '@/services/storageService';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { addPostToFirestore, getPostsFromFirestore } from '@/services/postService';
+import { uploadPostImage } from '@/services/storageService'; // Import storage service
+import { useMutation, useQueryClient } from '@tanstack/react-query'; // Import useQueryClient
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
 import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
-import { getReviewsForProfile } from '@/services/reviewService';
-import { fetchFullUserProfile } from '@/services/connectionService';
+import { getReviewsForProfile } from '@/services/reviewService'; // For calculating rating score
+import { fetchFullUserProfile } from '@/services/connectionService'; // For prefetching
 
-export const detailedSectorsData: SectorWithSubSectors[] = [
+// This data structure is now the source of truth for sector/sub-sector/industry information.
+// It's used by CreatePostForm and the Discover pages.
+export const detailedSectorsData: SectorWithSubSectorsType[] = [
   {
     name: "Agriculture, Forestry, Fishing and Hunting", code: "11",
     description: "Growing crops, raising animals, harvesting timber, and fishing.",
@@ -128,7 +128,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
     name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21",
     description: "Extracting naturally occurring mineral solids, liquids, and gases.",
     subSectors: [
-      { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "2111" }] },
+      { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "2111" }] }, // Simplified NAICS
       { name: "Coal Mining", code: "2121", industries: [{ name: "Coal Mining", code: "2121" }] },
       { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "21221" }, { name: "Gold and Silver Ore Mining", code: "21222" }] },
       { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Stone Mining and Quarrying", code: "21231" }] },
@@ -172,7 +172,7 @@ export const detailedSectorsData: SectorWithSubSectors[] = [
       { name: "Nonmetallic Mineral Product Manufacturing", code: "327", industries: [ { name: "Clay Product and Refractory Manufacturing", code: "3271" }, { name: "Glass and Glass Product Manufacturing", code: "3272" }, { name: "Cement and Concrete Product Manufacturing", code: "3273"}, { name: "Lime and Gypsum Product Manufacturing", code: "3274"}, { name: "Other Nonmetallic Mineral Product Manufacturing", code: "3279"} ] },
       { name: "Primary Metal Manufacturing", code: "331", industries: [ { name: "Iron and Steel Mills and Ferroalloy Manufacturing", code: "331110" }, { name: "Steel Product Manufacturing from Purchased Steel", code: "3312"}, { name: "Alumina and Aluminum Production and Processing", code: "3313" }, { name: "Nonferrous Metal (except Aluminum) Production and Processing", code: "3314"}, { name: "Foundries", code: "3315"} ] },
       { name: "Fabricated Metal Product Manufacturing", code: "332", industries: [ { name: "Forging and Stamping", code: "3321" }, { name: "Cutlery and Handtool Manufacturing", code: "3322" }, { name: "Architectural and Structural Metals Manufacturing", code: "3323" }, { name: "Boiler, Tank, and Shipping Container Manufacturing", code: "3324"}, { name: "Hardware Manufacturing", code: "3325"}, { name: "Spring and Wire Product Manufacturing", code: "3326"}, { name: "Machine Shops; Turned Product; and Screw, Nut, and Bolt Manufacturing", code: "3327"}, { name: "Coating, Engraving, Heat Treating, and Allied Activities", code: "3328"}, { name: "Other Fabricated Metal Product Manufacturing", code: "3329"} ] },
-      { name: "Machinery Manufacturing", code: "333", industries: [ { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" }, { name: "Industrial Machinery Manufacturing", code: "33324" },  { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333"}, { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334"}, { name: "Metalworking Machinery Manufacturing", code: "3335"}, { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336"}, { name: "Other General Purpose Machinery Manufacturing", code: "3339"} ] },
+      { name: "Machinery Manufacturing", code: "333", industries: [ { name: "Agriculture, Construction, and Mining Machinery Manufacturing", code: "3331" },  { name: "Commercial and Service Industry Machinery Manufacturing", code: "3333"}, { name: "Ventilation, Heating, Air-Conditioning, and Commercial Refrigeration Equipment Manufacturing", code: "3334"}, { name: "Metalworking Machinery Manufacturing", code: "3335"}, { name: "Engine, Turbine, and Power Transmission Equipment Manufacturing", code: "3336"}, { name: "Other General Purpose Machinery Manufacturing", code: "3339"} ] },
       { name: "Computer and Electronic Product Manufacturing", code: "334", industries: [ { name: "Computer and Peripheral Equipment Manufacturing", code: "3341" }, { name: "Communications Equipment Manufacturing", code: "3342"}, { name: "Audio and Video Equipment Manufacturing", code: "3343"}, { name: "Semiconductor and Other Electronic Component Manufacturing", code: "334413" }, { name: "Navigational, Measuring, Electromedical, and Control Instruments Manufacturing", code: "3345"}, { name: "Manufacturing and Reproducing Magnetic and Optical Media", code: "3346"} ] },
       { name: "Electrical Equipment, Appliance, and Component Manufacturing", code: "335", industries: [ { name: "Electric Lighting Equipment Manufacturing", code: "3351" }, { name: "Household Appliance Manufacturing", code: "3352" }, { name: "Electrical Equipment Manufacturing", code: "3353"}, { name: "Other Electrical Equipment and Component Manufacturing", code: "3359"} ] },
       { name: "Transportation Equipment Manufacturing", code: "336", industries: [ { name: "Motor Vehicle Manufacturing", code: "3361" }, { name: "Motor Vehicle Body and Trailer Manufacturing", code: "3362"}, { name: "Motor Vehicle Parts Manufacturing", code: "3363"}, { name: "Aerospace Product and Parts Manufacturing", code: "3364" }, { name: "Railroad Rolling Stock Manufacturing", code: "3365"}, { name: "Ship and Boat Building", code: "3366"}, { name: "Other Transportation Equipment Manufacturing", code: "3369"} ] },
@@ -355,7 +355,7 @@ export default function MainLayout({
   const router = useRouter();
   const pathname = usePathname();
   const isMobile = useIsMobile();
-  const queryClient = useQueryClient(); // Get query client instance
+  const queryClient = useQueryClient();
 
   const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
 
@@ -383,11 +383,11 @@ export default function MainLayout({
     }
   }, [user, authLoading, isCreatePostOpen]);
 
-
   const addPostMutation = useMutation({
     mutationFn: async (formData: CreatePostFormData) => {
       if (!user) throw new Error("User not authenticated to create post.");
-      console.log(`%c[MainLayout] addPostMutation: Initiated for type '${formData.requestType}' by user: ${user.uid}`, "color: magenta;");
+      console.log(`%c[MainLayout] addPostMutation: Initiated by user: ${user.uid}`, "color: magenta;");
+      console.log(`%c[MainLayout] addPostMutation: Form data received:`, "color: magenta;", formData);
 
       let currentRatingScore = 0;
       try {
@@ -407,7 +407,6 @@ export default function MainLayout({
       }
        console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score before post: ${currentRatingScore.toFixed(1)}`, "color: magenta; font-weight: bold;");
 
-
       let uploadedImageUrls: string[] = [];
       if (formData.imageFile && user) {
         try {
@@ -417,7 +416,8 @@ export default function MainLayout({
           console.log("[MainLayout] addPostMutation: Image uploaded, URL:", singleUploadedUrl);
         } catch (uploadError: any) {
           console.error("[MainLayout] Image upload failed in mutationFn:", uploadError);
-          throw new Error(`Image upload failed: ${uploadError.message}`);
+          toast({ variant: "destructive", title: "Image Upload Failed", description: uploadError.message || "Could not upload image." });
+          throw new Error(`Image upload failed: ${uploadError.message}`); // Re-throw to stop post creation
         }
       }
 
@@ -429,21 +429,26 @@ export default function MainLayout({
         userId: user.uid,
         question: formData.question,
         requestType: formData.requestType,
+        
         descriptionDetails: formData.descriptionDetails,
-        descriptionTried: formData.descriptionTried || null,
-        descriptionOutcome: formData.descriptionOutcome || null,
+        descriptionTried: formData.requestType === 'help_request' ? formData.descriptionTried : null,
+        descriptionOutcome: formData.requestType === 'help_request' ? formData.descriptionOutcome : null,
+        
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
-        subSector: subSectorDetails?.name || formData.subSector || null,
-        industry: industryDetails?.name || formData.industry || null,
-        naicsCode: formData.industry || formData.subSector || formData.sector || null,
-        businessType: "Startup", // Or derive from user profile if available
-        safetyIndicator: "Medium",
+        subSector: subSectorDetails?.name || null,
+        industry: industryDetails?.name || null,
+        naicsCode: formData.industry || formData.subSector || formData.sector,
+        
+        businessType: "Unknown", // Placeholder, consider fetching from user profile
+        safetyIndicator: "Medium", // Placeholder
         ratingScore: parseFloat(currentRatingScore.toFixed(1)),
         imageUrls: uploadedImageUrls,
         mentionedUserIds: formData.mentionedUserIds || [],
+        
         maxBudget: formData.requestType === 'help_request' ? formData.maxBudget : null,
         deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
+        
         commentCount: 0,
       };
       console.log(`%c[MainLayout] addPostMutation: Post data PREPARED. RatingScore: ${postDataForService.ratingScore}. Data:`, "color: #FF00FF;", postDataForService);
@@ -454,12 +459,13 @@ export default function MainLayout({
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
       toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
-      setIsCreatePostOpen(false);
+      setIsCreatePostOpen(false); // Close dialog on success
 
+      // Handle notifications for mentions
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        const descriptionSource = variables.descriptionDetails;
+        const descriptionSource = variables.descriptionDetails; // Main description for all post types now
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) { // Don't notify self for mentions in own post
+          if (mentionedUid !== user.uid) { // Don't notify self
             try {
               await createNotification({
                 userId: mentionedUid,
@@ -480,6 +486,7 @@ export default function MainLayout({
     onError: (error: Error, variables) => {
       console.error("[MainLayout] addPostMutation onError:", error);
       toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.` });
+      // Dialog remains open for user to correct
     },
   });
 
@@ -492,7 +499,7 @@ export default function MainLayout({
       console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       addPostMutation.mutate(formData);
     },
-    [user, toast, addPostMutation] // addPostMutation is stable
+    [user, toast, addPostMutation, queryClient] // Added queryClient to dependencies of addPostMutation's handlers
   );
 
   const handleLogout = async () => {
@@ -517,6 +524,7 @@ export default function MainLayout({
     }
   }, [user, queryClient]);
 
+
   const navItems = [
     { title: "Board", href: "/", icon: Home },
     { title: "Discover", href: "/discover", icon: Compass },
@@ -531,134 +539,137 @@ export default function MainLayout({
 
   return (
     <div className={rootLayoutClasses}>
-      <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
-          <div className="mr-4 hidden md:flex">
-            <Link href="/" className="mr-6 flex items-center space-x-2">
-              <Factory className="h-6 w-6 text-primary" />
-              <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
-                AnonyCollab
-              </span>
-            </Link>
-            <nav className="flex items-center gap-4 text-sm lg:gap-6">
-              {navItems.map((item) => (
-                <Link
-                  key={item.title}
-                  href={item.href}
-                  className={cn(
-                    "transition-colors hover:text-foreground/80 flex items-center",
-                    pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
-                  )}
-                >
-                  <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
-                  {item.title}
-                </Link>
-              ))}
-            </nav>
-          </div>
-          <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
-            {authLoading ? (
-              <div className="flex items-center space-x-2">
-                <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
-                <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
-              </div>
-            ) : user ? (
-              <>
-                <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
-                    setIsCreatePostOpen(open);
-                    if (!open && addPostMutation.isSuccess) {
-                       // Form reset is handled internally by CreatePostForm via onDialogClose now
-                    }
-                }}>
-                  <DialogTrigger asChild>
-                    <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                      <PlusCircle className="mr-2 h-4 w-4" />
-                      Create Post
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                    <DialogHeader className="p-6 pb-4 border-b">
-                      <DialogTitle>Create New Submission</DialogTitle>
-                      <DialogDescription>
-                        Share your idea, question, or request help from the community.
-                      </DialogDescription>
-                    </DialogHeader>
-                    <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                      {isCreatePostOpen && user && (
-                        <DynamicCreatePostForm
-                          onSubmit={handleCreatePostSubmit}
-                          availableTags={availableTags}
-                          detailedSectorsData={detailedSectorsData}
-                          isSubmitting={addPostMutation.isPending}
-                          currentUserId={user.uid}
-                          onDialogClose={() => setIsCreatePostOpen(false)}
-                        />
-                      )}
-                    </div>
-                  </DialogContent>
-                </Dialog>
-                {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
-                      <Avatar className="h-8 w-8">
-                        <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email)} />
-                        <AvatarFallback className="bg-primary text-primary-foreground text-xs">
-                          {getInitials(user.displayName || user.email)}
-                        </AvatarFallback>
-                      </Avatar>
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-56">
-                    <DropdownMenuLabel className="font-normal">
-                      <div className="flex flex-col space-y-1">
-                        <p className="text-sm font-medium leading-none">{user.displayName || generateAnonymousName(user.uid)}</p>
-                        {user.email && (<p className="text-xs leading-none text-muted-foreground">{user.email}</p>)}
+      {! (isMobile && pathname === '/contracts') && (
+        <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+            <div className="mr-4 hidden md:flex">
+              <Link href="/" className="mr-6 flex items-center space-x-2">
+                <Factory className="h-6 w-6 text-primary" />
+                <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
+                  AnonyCollab
+                </span>
+              </Link>
+              <nav className="flex items-center gap-4 text-sm lg:gap-6">
+                {navItems.map((item) => (
+                  <Link
+                    key={item.title}
+                    href={item.href}
+                    className={cn(
+                      "transition-colors hover:text-foreground/80 flex items-center",
+                      pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
+                    )}
+                  >
+                    <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
+                    {item.title}
+                  </Link>
+                ))}
+              </nav>
+            </div>
+            <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+              {authLoading ? (
+                <div className="flex items-center space-x-2">
+                  <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
+                  <div className="h-8 w-8 rounded-full bg-muted animate-pulse"></div>
+                </div>
+              ) : user ? (
+                <>
+                  <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
+                      setIsCreatePostOpen(open);
+                      if (!open && addPostMutation.isSuccess) {
+                        // Form reset is handled internally by CreatePostForm via onDialogClose now
+                      }
+                  }}>
+                    <DialogTrigger asChild>
+                      <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                        <PlusCircle className="mr-2 h-4 w-4" />
+                        Create Post
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                      <DialogHeader className="p-6 pb-4 border-b">
+                        <DialogTitle>Create New Submission</DialogTitle>
+                        <DialogDescription>
+                          Share your idea, question, or request help from the community.
+                        </DialogDescription>
+                      </DialogHeader>
+                      <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                        {isCreatePostOpen && user && (
+                          <DynamicCreatePostForm
+                            onSubmit={handleCreatePostSubmit}
+                            availableTags={availableTags}
+                            detailedSectorsData={detailedSectorsData}
+                            isSubmitting={addPostMutation.isPending}
+                            currentUserId={user.uid}
+                            onDialogClose={() => setIsCreatePostOpen(false)}
+                          />
+                        )}
                       </div>
-                    </DropdownMenuLabel>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
-                      <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Profile</span></Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      asChild
-                      className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}
-                      onMouseEnter={handlePrefetchSettings} // Prefetch on hover
-                    >
-                      <Link href="/settings/profile" className="w-full cursor-pointer"><Settings className="mr-2 h-4 w-4" /><span>Settings</span></Link>
-                    </DropdownMenuItem>
-                     <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
-                      <Link href="/subscription" className="w-full cursor-pointer"><CreditCard className="mr-2 h-4 w-4"/><span>Subscription</span></Link>
-                    </DropdownMenuItem>
-                    <DynamicThemeToggle />
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={handleLogout} className="cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button variant="outline" size="sm" asChild><Link href="/login">Login</Link></Button>
-                <Button variant="default" size="sm" asChild><Link href="/signup">Sign Up</Link></Button>
-              </div>
-            )}
+                    </DialogContent>
+                  </Dialog>
+
+                  {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" size="icon" aria-label="User Menu" className="rounded-full h-8 w-8">
+                        <Avatar className="h-8 w-8">
+                          <AvatarImage src={user.photoURL ?? undefined} alt={getInitials(user.displayName || user.email)} />
+                          <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                            {getInitials(user.displayName || user.email)}
+                          </AvatarFallback>
+                        </Avatar>
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="w-56">
+                      <DropdownMenuLabel className="font-normal">
+                        <div className="flex flex-col space-y-1">
+                          <p className="text-sm font-medium leading-none">{user.displayName || generateAnonymousName(user.uid)}</p>
+                          {user.email && (<p className="text-xs leading-none text-muted-foreground">{user.email}</p>)}
+                        </div>
+                      </DropdownMenuLabel>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
+                        <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Profile</span></Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem
+                        asChild
+                        className={cn("cursor-pointer w-full", pathname.startsWith("/settings") && "bg-accent text-accent-foreground")}
+                        onMouseEnter={handlePrefetchSettings}
+                      >
+                        <Link href="/settings/profile" className="w-full cursor-pointer"><Settings className="mr-2 h-4 w-4" /><span>Settings</span></Link>
+                      </DropdownMenuItem>
+                       <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/subscription" && "bg-accent text-accent-foreground")}>
+                        <Link href="/subscription" className="w-full cursor-pointer"><CreditCard className="mr-2 h-4 w-4"/><span>Subscription</span></Link>
+                      </DropdownMenuItem>
+                      <DynamicThemeToggle />
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem onClick={handleLogout} className="cursor-pointer"><LogOut className="mr-2 h-4 w-4" /><span>Log out</span></DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" asChild><Link href="/login">Login</Link></Button>
+                  <Button variant="default" size="sm" asChild><Link href="/signup">Sign Up</Link></Button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      )}
       <main className={cn(
           "flex-1 flex flex-col",
-           isMobile ? "pb-14" : "pb-0" // Keep padding for mobile nav, none for desktop
+          (isMobile && pathname === '/contracts') ? "h-full" : "pb-14 md:pb-0"
         )}>
         {children}
       </main>
-      {!isMobile && ( // Desktop footer
-        <footer className="py-4 border-t mt-auto">
+      {! (isMobile && pathname === '/contracts') && ( // Hide footer only if mobile and on contracts page
+        <footer className="py-4 border-t mt-auto md:block hidden"> {/* Also ensure it's hidden on mobile generally */}
           <div className="container mx-auto text-center text-sm text-muted-foreground">
             © {new Date().getFullYear()} AnonyCollab. All rights reserved.
           </div>
         </footer>
       )}
-      {isMobile && ( // Mobile bottom navigation
+      {! (isMobile && pathname === '/contracts') && isMobile && ( // Mobile bottom navigation
         <nav className="fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
           <div className="container mx-auto flex justify-around items-center h-full">
             {navItems.map((item) => (
@@ -680,4 +691,3 @@ export default function MainLayout({
     </div>
   );
 }
-```
