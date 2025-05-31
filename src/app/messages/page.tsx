@@ -33,49 +33,53 @@ const MessagesPage = () => {
     const initialMessageTextFromUrl = searchParams?.get('initialMessageText');
     const initialTabFromUrl = searchParams?.get('tab');
 
-    const determineInitialTab = () => {
+    const determineInitialTab = useCallback(() => {
         if (initialConversationIdFromUrl) return 'chats';
         if (initialTabFromUrl && ['chats', 'requests', 'connections'].includes(initialTabFromUrl)) return initialTabFromUrl;
         return 'chats';
-    };
+    }, [initialConversationIdFromUrl, initialTabFromUrl]);
 
     const [activeTab, setActiveTab] = useState<string>(determineInitialTab);
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationIdFromUrl || null);
 
-    // Update URL when activeTab changes (if not driven by conversationId)
     useEffect(() => {
-        const currentUrlTab = searchParams?.get('tab');
-        const currentUrlConvId = searchParams?.get('conversationId');
+        setActiveTab(determineInitialTab());
+        setSelectedConversationId(initialConversationIdFromUrl || null);
+    }, [determineInitialTab, initialConversationIdFromUrl]);
+
+    // Update URL when activeTab or selectedConversationId changes
+    useEffect(() => {
+        const currentUrlParams = new URLSearchParams(searchParams?.toString());
+        let newPath = '/messages';
+        const paramsToSet = new URLSearchParams();
 
         if (activeTab === 'chats' && selectedConversationId) {
-            if (currentUrlConvId !== selectedConversationId || currentUrlTab) {
-                router.replace(`/messages?conversationId=${selectedConversationId}`, { scroll: false });
-            }
+            paramsToSet.set('conversationId', selectedConversationId);
         } else if (activeTab !== 'chats') {
-            if (currentUrlTab !== activeTab || currentUrlConvId) {
-                router.replace(`/messages?tab=${activeTab}`, { scroll: false });
-            }
-        } else if (activeTab === 'chats' && !selectedConversationId && (currentUrlConvId || currentUrlTab !== 'chats')) {
-             // If chats tab is active but no conversation selected, ensure URL reflects this (e.g. /messages?tab=chats or just /messages)
-            if (currentUrlConvId || (currentUrlTab && currentUrlTab !== 'chats')) {
-                 router.replace(`/messages?tab=chats`, { scroll: false });
-            }
+            paramsToSet.set('tab', activeTab);
+        } else if (activeTab === 'chats' && !selectedConversationId) {
+            // Optionally, set tab=chats or leave it to imply chats as default
+            // paramsToSet.set('tab', 'chats');
         }
+        
+        const newQueryString = paramsToSet.toString();
+        if (newQueryString) {
+            newPath += `?${newQueryString}`;
+        }
+
+        // Only push if the path actually changes to avoid redundant navigations
+        if (router && (pathnameWithQuery(searchParams) !== newPath)) {
+            router.replace(newPath, { scroll: false });
+        }
+
     }, [activeTab, selectedConversationId, router, searchParams]);
 
-
-    // Sync selectedConversationId from URL if it changes externally
-    useEffect(() => {
-        const urlConvId = searchParams?.get('conversationId');
-        if (urlConvId && urlConvId !== selectedConversationId) {
-            setSelectedConversationId(urlConvId);
-            if (activeTab !== 'chats') setActiveTab('chats');
-        } else if (!urlConvId && selectedConversationId && activeTab === 'chats') {
-            // If URL convId is removed and we were on chats tab with a selection, clear selection
-            // This might happen on browser back, etc.
-            // setSelectedConversationId(null); // Optional: clear selection if URL doesn't have it
-        }
-    }, [searchParams, selectedConversationId, activeTab]);
+    // Helper to get current path with query as string
+    const pathnameWithQuery = (params: URLSearchParams | null) => {
+        const currentPath = '/messages';
+        const queryString = params ? params.toString() : '';
+        return queryString ? `${currentPath}?${queryString}` : currentPath;
+    };
 
 
     const currentUserId = user?.uid;
@@ -127,6 +131,7 @@ const MessagesPage = () => {
       refetchConnections();
       if (currentUserId) {
           queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
+          queryClient.invalidateQueries({ queryKey: ['postDetails']}); // Invalidate post details for conversation list items
       }
        toast({
           title: "Refreshing...",
@@ -149,11 +154,12 @@ const MessagesPage = () => {
       retry: 1,
     });
 
-    const handleConversationSelect = useCallback((conversationId: string) => {
+    const handleSelectConversationFromList = useCallback((conversationId: string) => {
         setSelectedConversationId(conversationId);
-        setActiveTab('chats'); // Ensure chats tab is active
-        // URL update will be handled by the useEffect hook for activeTab/selectedConversationId
-    }, [setSelectedConversationId, setActiveTab]);
+        if (activeTab !== 'chats') {
+            setActiveTab('chats');
+        }
+    }, [activeTab, setActiveTab]);
 
 
     if (authLoading) {
@@ -189,18 +195,9 @@ const MessagesPage = () => {
 
     return (
         <div className={cn(
-            "flex flex-col flex-grow h-full",
+            "flex flex-col flex-grow h-full", // Parent is responsible for overall height
             isMobile ? "" : "md:container md:mx-auto md:py-6 md:px-4"
         )}>
-             {!isMobile && (
-                 <div className={cn("flex justify-end items-center flex-shrink-0", isMobile ? "p-2" : "p-4 pb-2")}>
-                     <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections || isLoadingConversationsForTabCount}>
-                         <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections || isLoadingConversationsForTabCount ? 'animate-spin' : ''} mr-2`} />
-                         Refresh
-                     </Button>
-                 </div>
-             )}
-
             {(isRequestsError || isConnectionsError || isConversationsErrorTrueForTabCount) && combinedErrorMessage && (
                <div className={cn("my-2 mx-2 p-4 bg-destructive/10 border border-destructive/30 rounded-lg text-destructive flex items-center gap-3 flex-shrink-0", isMobile ? "" : "md:mx-4")}>
                    <AlertTriangle className="h-5 w-5" />
@@ -216,39 +213,56 @@ const MessagesPage = () => {
                 onValueChange={(tab) => {
                     setActiveTab(tab);
                     if (tab !== 'chats') {
-                        setSelectedConversationId(null); // Clear conversation ID if switching away from chats tab
+                        setSelectedConversationId(null);
                     }
                 }}
-                className="flex flex-col flex-1 overflow-hidden" // Tabs component grows and manages overflow
+                className="flex flex-col flex-1 overflow-hidden" // Tabs component grows and manages its column layout
             >
-                <TabsList className={cn(
-                    "grid w-full flex-shrink-0",
-                    isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md md:mb-4"
+                {/* Container for TabsList and Refresh button */}
+                <div className={cn(
+                    "relative flex-shrink-0", // flex-shrink-0 prevents this row from shrinking
+                    isMobile ? "" : "md:mb-4" // Margin only on desktop
                 )}>
-                    <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
-                    <TabsTrigger value="requests" className="flex items-center gap-1.5">
-                        <UserPlus className="h-4 w-4"/>Requests
-                        {pendingRequests.length > 0 && (
-                            <span className="ml-1.5 inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full bg-primary text-primary-foreground">
-                                {pendingRequests.length}
-                            </span>
-                        )}
-                    </TabsTrigger>
-                    <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Network</TabsTrigger>
-                </TabsList>
+                    <TabsList className={cn(
+                        "grid w-full flex-shrink-0",
+                        isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md" // md:mb-4 removed from here
+                    )}>
+                        <TabsTrigger value="chats" className="flex items-center gap-1.5"><MessageSquare className="h-4 w-4"/>Messages</TabsTrigger>
+                        <TabsTrigger value="requests" className="flex items-center gap-1.5">
+                            <UserPlus className="h-4 w-4"/>Requests
+                            {pendingRequests.length > 0 && (
+                                <span className="ml-1.5 inline-flex items-center justify-center px-2 py-0.5 text-xs font-semibold rounded-full bg-primary text-primary-foreground">
+                                    {pendingRequests.length}
+                                </span>
+                            )}
+                        </TabsTrigger>
+                        <TabsTrigger value="connections" className="flex items-center gap-1.5"><Users className="h-4 w-4"/>Network</TabsTrigger>
+                    </TabsList>
+                    {!isMobile && (
+                         <div className="absolute top-1/2 right-0 -translate-y-1/2">
+                             <Button onClick={handleManualRefetchAll} variant="outline" size="sm" disabled={isLoadingRequests || isLoadingConnections || isLoadingConversationsForTabCount}>
+                                 <RefreshCw className={`h-4 w-4 ${isLoadingRequests || isLoadingConnections || isLoadingConversationsForTabCount ? 'animate-spin' : ''} mr-2`} />
+                                 Refresh
+                             </Button>
+                         </div>
+                     )}
+                </div>
+
 
                 <TabsContent
                     value="chats"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1", // flex-1 for active content to grow
-                        isMobile ? "" : "md:p-0" // No padding on desktop TabsContent, inner div handles it
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        "flex-1 flex flex-col overflow-hidden", // This makes active tab content fill space
+                        isMobile ? "" : "md:p-0"
                     )}
                 >
+                    {/* Inner div ensures MessagingInterface can use h-full correctly */}
                     <div className="h-full flex flex-col overflow-hidden rounded-md md:border bg-background">
                         <MessagingInterface
                             currentUserId={user.uid}
                             activeConversationId={selectedConversationId}
-                            onSelectConversation={handleConversationSelect}
+                            onSelectConversation={handleSelectConversationFromList}
                             initialMessageText={initialMessageTextFromUrl || undefined}
                         />
                     </div>
@@ -257,13 +271,14 @@ const MessagesPage = () => {
                 <TabsContent
                     value="requests"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1", // flex-1 for active content to grow
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        "flex-1 flex flex-col overflow-hidden", // This makes active tab content fill space
                         isMobile ? "p-1" : "md:p-0"
                     )}
                 >
-                  <div className="h-full flex flex-col overflow-hidden">
+                  <div className="h-full flex flex-col overflow-hidden"> {/* Inner div for structure */}
                         <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden h-full rounded-md",
+                            "flex-1 flex flex-col overflow-hidden h-full rounded-md", // Card fills the inner div
                             !isMobile && "md:border md:shadow-md"
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
@@ -273,7 +288,7 @@ const MessagesPage = () => {
                                 <CardDescription>Review businesses wanting to connect.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto",
+                                "pb-4 flex-1 overflow-auto", // Content scrolls
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingRequests ? (
@@ -300,13 +315,14 @@ const MessagesPage = () => {
                 <TabsContent
                     value="connections"
                      className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1", // flex-1 for active content to grow
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+                        "flex-1 flex flex-col overflow-hidden", // This makes active tab content fill space
                         isMobile ? "p-1" : "md:p-0"
                     )}
                 >
-                   <div className="h-full flex flex-col overflow-hidden">
+                   <div className="h-full flex flex-col overflow-hidden"> {/* Inner div for structure */}
                        <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden h-full rounded-md",
+                            "flex-1 flex flex-col overflow-hidden h-full rounded-md", // Card fills the inner div
                             !isMobile && "md:border md:shadow-md"
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
@@ -316,7 +332,7 @@ const MessagesPage = () => {
                                 <CardDescription>Businesses you are connected with.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto",
+                                "pb-4 flex-1 overflow-auto", // Content scrolls
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingConnections ? (

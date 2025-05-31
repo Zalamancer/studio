@@ -554,7 +554,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
           ) : (
             // This "Select or Start" message will typically only show on desktop if no conversation is auto-selected
              !isMobile && (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
+                <div className="h-[70vh] flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
                      <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
                      <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
                      <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
@@ -564,7 +564,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         </div>
       ) : (
          !isMobile && ( // Only show the "Select or Start" message on desktop if no conversation is active
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
+            <div className="h-[70vh] flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
                  <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
                  <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
                  <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
