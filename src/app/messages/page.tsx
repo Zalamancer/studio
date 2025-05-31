@@ -57,8 +57,7 @@ const MessagesPage = () => {
         } else if (activeTab !== 'chats') {
             paramsToSet.set('tab', activeTab);
         } else if (activeTab === 'chats' && !selectedConversationId) {
-            // Default to 'chats' tab in URL if no conversation selected
-            if (activeTab !== currentUrlParams.get('tab')) { // Only set if it's different or not present
+            if (activeTab !== currentUrlParams.get('tab')) { 
                  paramsToSet.set('tab', 'chats');
             }
         }
@@ -139,25 +138,25 @@ const MessagesPage = () => {
     }, [refetchRequests, refetchConnections, queryClient, currentUserId, toast]);
 
     const {
-        data: conversationsForTabCount = [], // Renamed to avoid conflict
+        data: conversationsForTabCount = [], 
         isLoading: isLoadingConversationsForTabCount,
         error: conversationsErrorForTabCount,
         isError: isConversationsErrorTrueForTabCount,
       } = useQuery<ClientConversation[], Error>({
-      queryKey: ['conversationsForTabCount', currentUserId], // Unique key
+      queryKey: ['conversationsForTabCount', currentUserId],
       queryFn: () => currentUserId ? getConversationsForUser(currentUserId) : Promise.resolve([]),
       enabled: !!currentUserId,
-      staleTime: 1000 * 60 * 5, // Example: 5 minutes
-      refetchOnWindowFocus: false, // Optional: depends on desired behavior
+      staleTime: 1000 * 60 * 5, 
+      refetchOnWindowFocus: false, 
       retry: 1,
     });
 
     const handleSelectConversationFromList = useCallback((conversationId: string) => {
         setSelectedConversationId(conversationId);
-        if (activeTab !== 'chats') { // Switch to chats tab if a conversation is selected
+        if (activeTab !== 'chats') { 
             setActiveTab('chats');
         }
-    }, [activeTab, setActiveTab]); // Added activeTab, setActiveTab dependencies
+    }, [activeTab, setActiveTab]); 
 
     if (authLoading) {
         return (
@@ -213,9 +212,9 @@ const MessagesPage = () => {
                         setSelectedConversationId(null);
                     }
                 }}
-                className="flex flex-col flex-1 overflow-hidden" // Tabs component takes full height and manages overflow
+                className="flex flex-col flex-1 overflow-hidden" 
             >
-                <div className={cn( "relative flex-shrink-0", isMobile ? "" : "md:mb-4")}>
+                 <div className={cn( "relative flex-shrink-0", isMobile ? "" : "md:mb-4")}>
                     <TabsList className={cn(
                         "grid w-full flex-shrink-0",
                         isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md"
@@ -241,16 +240,13 @@ const MessagesPage = () => {
                      )}
                 </div>
 
-                {/* Chat Tab Content */}
                 <TabsContent
                     value="chats"
                     className={cn(
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1",
                         isMobile ? "" : "md:p-0" 
-                        // Removed flex-1, flex-col, overflow-hidden from TabsContent itself
                     )}
                 >
-                    {/* Inner div handles the actual layout and overflow for this tab */}
                     <div className="h-full flex flex-col overflow-hidden rounded-md md:border bg-background">
                         <MessagingInterface
                             currentUserId={user.uid}
@@ -261,19 +257,16 @@ const MessagesPage = () => {
                     </div>
                 </TabsContent>
 
-                {/* Requests Tab Content */}
                 <TabsContent
                     value="requests"
                     className={cn(
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1",
                         isMobile ? "p-1" : "md:p-0"
-                         // Removed flex-1, flex-col, overflow-hidden from TabsContent itself
                     )}
                 >
-                     {/* Inner div handles the actual layout and overflow */}
                     <div className="h-full flex flex-col overflow-hidden">
                         <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden h-full rounded-md", // Card fills the inner div
+                            "flex-1 flex flex-col overflow-hidden h-[70vh] rounded-md", 
                             !isMobile && "md:border md:shadow-md"
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
@@ -283,7 +276,7 @@ const MessagesPage = () => {
                                 <CardDescription>Review businesses wanting to connect.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto", // CardContent scrolls
+                                "pb-4 flex-1 overflow-auto", 
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingRequests ? (
@@ -307,19 +300,16 @@ const MessagesPage = () => {
                     </div>
                 </TabsContent>
 
-                {/* Connections Tab Content */}
                 <TabsContent
                     value="connections"
                      className={cn(
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1",
                         isMobile ? "p-1" : "md:p-0"
-                         // Removed flex-1, flex-col, overflow-hidden from TabsContent itself
                     )}
                 >
-                    {/* Inner div handles the actual layout and overflow */}
                    <div className="h-full flex flex-col overflow-hidden">
                        <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden h-full rounded-md", // Card fills the inner div
+                            "flex-1 flex flex-col overflow-hidden h-[70vh] rounded-md", 
                             !isMobile && "md:border md:shadow-md"
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
@@ -329,7 +319,7 @@ const MessagesPage = () => {
                                 <CardDescription>Businesses you are connected with.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto", // CardContent scrolls
+                                "pb-4 flex-1 overflow-auto", 
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingConnections ? (
