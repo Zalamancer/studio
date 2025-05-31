@@ -84,34 +84,32 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
   return (
     <div className="flex flex-col h-full">
       <div className="mb-4 px-1">
-        <div className="flex items-center gap-2 mb-1">
+        <ScrollArea className="w-full whitespace-nowrap rounded-md">
+          <div className="flex items-center space-x-2 pb-2">
             <span className="text-sm font-medium text-muted-foreground mr-2 flex-shrink-0">Filter by Tag:</span>
-            <ScrollArea className="w-full whitespace-nowrap rounded-md flex-grow min-w-0">
-                <div className="flex space-x-2 pb-2">
-                    {availableTags.map((tag) => (
-                    <Button
-                        key={tag}
-                        variant={selectedTags.includes(tag) ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => handleTagClick(tag)}
-                        className={cn(
-                        "rounded-full px-3 py-1 text-xs transition-colors duration-150 flex-shrink-0", // Added flex-shrink-0
-                        selectedTags.includes(tag) ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                        )}
-                        aria-pressed={selectedTags.includes(tag)}
-                    >
-                        {tag}
-                    </Button>
-                    ))}
-                    {selectedTags.length > 0 && (
-                    <Button variant="ghost" size="sm" onClick={() => setSelectedTags([])} className="text-xs text-primary hover:underline p-1 h-auto flex-shrink-0">
-                        Clear Filters
-                    </Button>
-                    )}
-                </div>
-                <ScrollBar orientation="horizontal" />
-            </ScrollArea>
-        </div>
+            {availableTags.map((tag) => (
+              <Button
+                key={tag}
+                variant={selectedTags.includes(tag) ? "default" : "outline"}
+                size="sm"
+                onClick={() => handleTagClick(tag)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs transition-colors duration-150 flex-shrink-0",
+                  selectedTags.includes(tag) ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                )}
+                aria-pressed={selectedTags.includes(tag)}
+              >
+                {tag}
+              </Button>
+            ))}
+            {selectedTags.length > 0 && (
+              <Button variant="ghost" size="sm" onClick={() => setSelectedTags([])} className="text-xs text-primary hover:underline p-1 h-auto flex-shrink-0">
+                Clear Filters
+              </Button>
+            )}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-grow">
