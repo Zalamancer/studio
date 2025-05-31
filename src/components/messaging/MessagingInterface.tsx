@@ -22,8 +22,8 @@ import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDo
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { useIsMobile } from '@/hooks/use-mobile'; // Corrected import
-import { Timestamp } from 'firebase/firestore'; // Added missing import
+import { useIsMobile } from '@/hooks/use-mobile';
+import { Timestamp } from 'firebase/firestore';
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -72,19 +72,19 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
       <button
         onClick={() => onSelect(conversation.id)}
         className={cn(
-          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-start gap-0", // Changed gap-3 to gap-0
+          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-start", // items-start for top alignment
           isSelected ? "bg-muted" : ""
         )}
         aria-current={isSelected ? "page" : undefined}
       >
-         <Avatar className="h-9 w-9 flex-shrink-0 mt-0.5 mr-3"> {/* Added mr-3 */}
+         <Avatar className="h-9 w-9 flex-shrink-0 mt-0.5 mr-3"> {/* Explicit margin */}
           <AvatarImage src={otherParticipantDetails?.avatar} alt={participantName} />
           <AvatarFallback className="bg-primary text-primary-foreground text-xs">{initials}</AvatarFallback>
          </Avatar>
         <div className="flex-grow overflow-hidden min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{participantName}</p>
           {postQuestion && (
-              <p className="text-xs text-primary truncate font-medium mt-0.5 max-w-[80px] sm:max-w-[160px] md:max-w-xs lg:max-w-sm"> {/* Added responsive max-width */}
+              <p className="text-xs text-primary truncate font-medium mt-0.5 max-w-[80px] sm:max-w-[160px] md:max-w-xs lg:max-w-sm"> {/* Responsive max-width */}
                   Re: {postQuestion}
               </p>
           )}
@@ -93,7 +93,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
           </p>
         </div>
         {formattedTime && (
-          <span className="text-xs text-muted-foreground self-start pt-0.5 ml-2 flex-shrink-0"> {/* Added flex-shrink-0 */}
+          <span className="text-xs text-muted-foreground self-start pt-0.5 ml-2 flex-shrink-0"> {/* Explicit margin, self-start */}
             {formattedTime}
           </span>
         )}
@@ -265,7 +265,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
   useEffect(() => {
     if (activeConversationId !== prevActiveConversationIdRef.current) {
-      setIsInitialMessagesLoad(true); // Reset on conversation change
+      setIsInitialMessagesLoad(true); 
       prevActiveConversationIdRef.current = activeConversationId;
     }
 
@@ -387,6 +387,15 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       setTimeout(() => {
         event.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }, 400); 
+    }
+  };
+
+  const handleInputBlur = () => {
+    if (isMobile) {
+      // Small delay to allow keyboard to fully retract before scrolling
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 200);
     }
   };
 
@@ -547,6 +556,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onFocus={handleInputFocus}
+                    onBlur={handleInputBlur} // Added onBlur handler
                     disabled={sendMessageMutation.isPending || isLoadingMessagesState}
                     className="flex-grow bg-background"
                     aria-label="Message input"
@@ -580,6 +590,3 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
-
-
-    
