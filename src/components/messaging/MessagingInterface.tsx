@@ -1,4 +1,3 @@
-
 // src/components/messaging/MessagingInterface.tsx
 "use client";
 
@@ -22,7 +21,7 @@ import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDo
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-isMobile';
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -324,7 +323,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                if (isInitialMessagesLoad) {
                  setIsInitialMessagesLoad(false);
                }
-           }, 100); // A slight delay might be needed for new messages to render
+           }, 100); 
            return () => clearTimeout(timer);
        }
    }, [messages, isInitialMessagesLoad]);
@@ -380,7 +379,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setTimeout(() => {
         event.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 300); // Delay to allow keyboard to appear
+      }, 300); 
     }
   };
 
@@ -390,7 +389,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       {(!isMobile || !activeConversationId) && (
         <div
           className={cn(
-            "flex flex-col border-r bg-background min-w-0 flex-1", // Ensure flex-1 here
+            "flex flex-col border-r bg-background min-w-0 flex-1", 
             isMobile ? (activeConversationId ? "hidden" : "w-full") : "md:w-2/5 lg:w-1/3"
           )}
         >
@@ -520,7 +519,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 </div>
               </ScrollArea>
 
-              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2 pb-16" : "p-4")}>
+              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2" : "p-4")}>
                 {replyingTo && (
                   <div className="mb-2 p-2 bg-secondary/50 rounded-md text-xs text-secondary-foreground relative">
                     <div className="flex justify-between items-start">
@@ -574,5 +573,3 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
-
-    

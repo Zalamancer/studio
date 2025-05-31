@@ -42,7 +42,7 @@ import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile } from "@/hooks/use-mobile"; // Corrected import path
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
@@ -548,8 +548,7 @@ export default function MainLayout({
   );
 
   // Determine if header/footer/mobile nav should be hidden
-  // For messages page, we want the mobile nav to show.
-  const hideAppChrome = false; // Modified: No longer hide chrome on messages page by default.
+  const hideAppChrome = false; 
 
 
   return (
@@ -674,11 +673,7 @@ export default function MainLayout({
       <main
         className={cn(
           "flex-1 flex flex-col",
-          pathname === '/messages'
-            ? "h-full" // Messages page should always try to take full height
-            : isMobile
-            ? "pb-14" // Mobile, not messages page (has bottom nav)
-            : "pb-0"  // Desktop, not messages page
+          isMobile ? "pb-14" : "pb-0"
         )}
       >
         {children}
