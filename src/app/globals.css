@@ -113,6 +113,9 @@ body {
     @apply bg-background text-foreground;
      min-height: 100vh;
   }
+  body.overflow-hidden-page {
+    overflow: hidden;
+  }
 }
 
 /* Add styles for the spinner animation */

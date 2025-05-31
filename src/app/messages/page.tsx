@@ -43,6 +43,18 @@ const MessagesPage = () => {
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationIdFromUrl || null);
 
     useEffect(() => {
+      if (typeof window !== 'undefined') {
+        document.body.classList.add('overflow-hidden-page');
+      }
+      return () => {
+        if (typeof window !== 'undefined') {
+          document.body.classList.remove('overflow-hidden-page');
+        }
+      };
+    }, []);
+
+
+    useEffect(() => {
         setActiveTab(determineInitialTab());
         setSelectedConversationId(initialConversationIdFromUrl || null);
     }, [determineInitialTab, initialConversationIdFromUrl]);
@@ -57,11 +69,11 @@ const MessagesPage = () => {
         } else if (activeTab !== 'chats') {
             paramsToSet.set('tab', activeTab);
         } else if (activeTab === 'chats' && !selectedConversationId) {
-            if (activeTab !== currentUrlParams.get('tab')) { 
+            if (activeTab !== currentUrlParams.get('tab')) {
                  paramsToSet.set('tab', 'chats');
             }
         }
-        
+
         const newQueryString = paramsToSet.toString();
         if (newQueryString) {
             newPath += `?${newQueryString}`;
@@ -138,7 +150,7 @@ const MessagesPage = () => {
     }, [refetchRequests, refetchConnections, queryClient, currentUserId, toast]);
 
     const {
-        data: conversationsForTabCount = [], 
+        data: conversationsForTabCount = [],
         isLoading: isLoadingConversationsForTabCount,
         error: conversationsErrorForTabCount,
         isError: isConversationsErrorTrueForTabCount,
@@ -146,17 +158,17 @@ const MessagesPage = () => {
       queryKey: ['conversationsForTabCount', currentUserId],
       queryFn: () => currentUserId ? getConversationsForUser(currentUserId) : Promise.resolve([]),
       enabled: !!currentUserId,
-      staleTime: 1000 * 60 * 5, 
-      refetchOnWindowFocus: false, 
+      staleTime: 1000 * 60 * 5,
+      refetchOnWindowFocus: false,
       retry: 1,
     });
 
     const handleSelectConversationFromList = useCallback((conversationId: string) => {
         setSelectedConversationId(conversationId);
-        if (activeTab !== 'chats') { 
+        if (activeTab !== 'chats') {
             setActiveTab('chats');
         }
-    }, [activeTab, setActiveTab]); 
+    }, [activeTab, setActiveTab]);
 
     if (authLoading) {
         return (
@@ -212,9 +224,9 @@ const MessagesPage = () => {
                         setSelectedConversationId(null);
                     }
                 }}
-                className="flex flex-col flex-1 overflow-hidden" 
+                className="flex flex-col flex-1 overflow-hidden"
             >
-                 <div className={cn( "relative flex-shrink-0", isMobile ? "" : "md:mb-4")}>
+                 <div className={cn("relative flex-shrink-0", isMobile ? "" : "md:mb-4")}>
                     <TabsList className={cn(
                         "grid w-full flex-shrink-0",
                         isMobile ? "grid-cols-3 mx-0 rounded-none border-b" : "grid-cols-3 mx-auto max-w-md"
@@ -243,8 +255,8 @@ const MessagesPage = () => {
                 <TabsContent
                     value="chats"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1",
-                        isMobile ? "" : "md:p-0" 
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1 flex flex-col overflow-hidden", // Added flex-1 flex flex-col overflow-hidden
+                        isMobile ? "" : "md:p-0"
                     )}
                 >
                     <div className="h-full flex flex-col overflow-hidden rounded-md md:border bg-background">
@@ -260,14 +272,14 @@ const MessagesPage = () => {
                 <TabsContent
                     value="requests"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1",
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1 flex flex-col overflow-hidden", // Added flex-1 flex flex-col overflow-hidden
                         isMobile ? "p-1" : "md:p-0"
                     )}
                 >
                     <div className="h-full flex flex-col overflow-hidden">
                         <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden h-[70vh] rounded-md", 
-                            !isMobile && "md:border md:shadow-md"
+                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md",
+                            !isMobile && "h-full" // For desktop, ensure card takes full height of its parent
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
                                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -276,7 +288,7 @@ const MessagesPage = () => {
                                 <CardDescription>Review businesses wanting to connect.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto", 
+                                "pb-4 flex-1 overflow-auto",
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingRequests ? (
@@ -303,14 +315,14 @@ const MessagesPage = () => {
                 <TabsContent
                     value="connections"
                      className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1",
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1 flex flex-col overflow-hidden", // Added flex-1 flex flex-col overflow-hidden
                         isMobile ? "p-1" : "md:p-0"
                     )}
                 >
                    <div className="h-full flex flex-col overflow-hidden">
                        <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden h-[70vh] rounded-md", 
-                            !isMobile && "md:border md:shadow-md"
+                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md",
+                            !isMobile && "h-full" // For desktop, ensure card takes full height of its parent
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
                                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -319,7 +331,7 @@ const MessagesPage = () => {
                                 <CardDescription>Businesses you are connected with.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto", 
+                                "pb-4 flex-1 overflow-auto",
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingConnections ? (
@@ -348,5 +360,3 @@ const MessagesPage = () => {
 };
 
 export default MessagesPage;
-
-        

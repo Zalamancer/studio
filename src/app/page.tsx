@@ -42,6 +42,8 @@ import type { ClientBid, NewBidData } from '@/types/bid';
 import { formatDistanceToNow } from 'date-fns';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet"; // Added Sheet imports
+import { useIsMobile } from "@/hooks/use-mobile"; // Added useIsMobile
 
 import { cn } from "@/lib/utils";
 import type { Post } from '@/types/post';
@@ -60,7 +62,9 @@ import { availableTags } from '@/components/layout/MainLayout';
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_PAGE } from '@/lib/utils';
 import dynamic from 'next/dynamic';
-import { PostCard } from '@/components/board-page/PostCard'; // Import PostCard
+import { PostCard } from '@/components/board-page/PostCard';
+import { PostList } from '@/components/board-page/PostList';
+
 
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
@@ -74,9 +78,8 @@ const BoardPageContent = () => {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
+  const isMobile = useIsMobile();
 
-  const [activeTab, setActiveTab] = useState<string>("recommended");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 
 
@@ -119,20 +122,26 @@ const BoardPageContent = () => {
 
 
   // --- Post Selection & URL Handling ---
+  const handleCloseDetailView = useCallback(() => {
+    setSelectedPost(null);
+    if (searchParams?.get('postId')) { // Only replace if URL actually had the postId
+      router.replace('/', undefined, { shallow: true });
+    }
+  }, [searchParams, router, setSelectedPost]);
+
+
   const openPostCallback = useCallback((postToOpen: Post) => {
     console.log("[BoardPageContent] openPostCallback, opening post:", postToOpen.id);
     if (selectedPost && selectedPost.id === postToOpen.id) {
-      setSelectedPost(null);
-      if (searchParams?.get('postId') === postToOpen.id) {
-        router.replace('/', undefined, { shallow: true });
-      }
+      handleCloseDetailView(); // Toggle off if same post is clicked
     } else {
       setSelectedPost(postToOpen);
       if (searchParams?.get('postId') !== postToOpen.id) {
         router.push(`/?postId=${postToOpen.id}`, { scroll: false });
       }
     }
-  }, [selectedPost, router, searchParams]);
+  }, [selectedPost, router, searchParams, handleCloseDetailView]);
+
 
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
@@ -144,147 +153,79 @@ const BoardPageContent = () => {
         if (postToOpen) {
           console.log(`  Found post in URL: ${postIdFromUrl}. Setting as selectedPost.`);
           setSelectedPost(postToOpen);
-          // DO NOT clear URL here, it's handled by the close button or by selecting another post.
         } else {
-          console.warn(`  Post with ID '${postIdFromUrl}' from URL not found in fetched posts. Clearing URL.`);
+          console.warn(`  Post with ID '${postIdFromUrl}' from URL not found in fetched posts. Closing detail view.`);
           toast({ variant: "destructive", title: "Post Not Found", description: "The requested post could not be found or is no longer available." });
-          router.replace('/', undefined, { shallow: true });
+          handleCloseDetailView();
         }
-      } else {
-        console.log(`  Post ID in URL ('${postIdFromUrl}') already matches selectedPost. No action needed to open.`);
       }
     } else if (!postIdFromUrl && selectedPost) {
-      // This condition can be tricky. If user navigates back, or if URL is cleared by other means,
-      // and selectedPost is still set, it means the panel should remain open.
-      // No action needed here to close it based on URL clearing alone.
-      console.log(`  No postId in URL, but a post is selected ('${selectedPost.id}'). Panel remains open.`);
+      // If URL is cleared but a post is selected (e.g., by sheet closure not updating URL yet, or back navigation),
+      // ensure local state also clears. This can happen if Sheet's onOpenChange fires before URL logic.
+      // handleCloseDetailView(); // This might be too aggressive, let Sheet's onOpenChange manage it.
     }
-  }, [searchParams, posts, router, toast, selectedPost]); // selectedPost is needed to prevent re-opening if already selected from URL.
+  }, [searchParams, posts, router, toast, selectedPost, handleCloseDetailView]);
 
 
-  // --- Filtering and Display Logic ---
-  const handleTagClick = useCallback((tag: string) => {
-    setSelectedTags(prevTags =>
-      prevTags.includes(tag)
-        ? prevTags.filter(t => t !== tag)
-        : [...prevTags, tag]
+  const renderPostDetailPanel = () => {
+    if (!selectedPost) return null;
+    return (
+      <DynamicPostDetailPanel
+        post={selectedPost}
+        currentUser={user}
+        onClose={handleCloseDetailView}
+        onDelete={handleDeletePost}
+        deletePostMutationIsPending={deletePostMutation.isPending}
+      />
     );
-  }, []);
-
-  const filteredPostsByTags = useMemo(() => {
-    if (!Array.isArray(posts)) return [];
-    let filtered = selectedTags.length === 0 ? posts : posts.filter(post =>
-      Array.isArray(post.tags) && selectedTags.every(tag => post.tags.includes(tag))
-    );
-    return filtered.sort((a, b) => {
-      const timeA = a.createdAt instanceof Timestamp ? a.createdAt.toMillis() : (typeof a.createdAt === 'number' ? a.createdAt : 0);
-      const timeB = b.createdAt instanceof Timestamp ? b.createdAt.toMillis() : (typeof b.createdAt === 'number' ? b.createdAt : 0);
-      return timeB - timeA;
-    });
-  }, [posts, selectedTags]);
-
-  const helpRequestPosts = useMemo(() =>
-    filteredPostsByTags.filter(post => post.requestType === 'help_request'),
-    [filteredPostsByTags]
-  );
-
-  const opportunitiesPosts = useMemo(() =>
-    filteredPostsByTags.filter(post => post.requestType === 'post' || !post.requestType), // Default to 'post' if type is missing
-    [filteredPostsByTags]
-  );
-
-  const renderPosts = useCallback((postsToRender: Post[]) => (
-    <div className="columns-1 md:columns-2 gap-4 space-y-4"> {/* Ensure 2 columns for md and up */}
-      {postsToRender.length > 0 ? (
-        postsToRender.map((post) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            onOpen={openPostCallback}
-            isSelected={selectedPost?.id === post.id}
-          />
-        ))
-      ) : (
-        <div className="col-span-full text-center py-10">
-          <p className="text-muted-foreground">
-            {isLoadingPosts ? "Loading posts..." : (selectedTags.length > 0 ? "No posts found matching the selected tags." : "No posts available in this category yet.")}
-          </p>
-        </div>
-      )}
-    </div>
-  ), [isLoadingPosts, selectedTags, openPostCallback, selectedPost?.id]);
-
+  };
 
   // Main Return
   return (
     <div className="container mx-auto p-4 pt-6 flex flex-col flex-grow">
-      <div className="md:grid md:grid-cols-2 md:gap-8 flex-grow">
-        {/* Left Column: Post List */}
-        <div className="md:col-span-1 flex flex-col overflow-hidden">
-          <div className="mb-6 flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-muted-foreground mr-2">Filter by Tag:</span>
-            {availableTags.map((tag) => (
-              <Button
-                key={tag}
-                variant={selectedTags.includes(tag) ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleTagClick(tag)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs transition-colors duration-150",
-                  selectedTags.includes(tag) ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                )}
-                aria-pressed={selectedTags.includes(tag)}
-              >
-                {tag}
-              </Button>
-            ))}
-            {selectedTags.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setSelectedTags([])} className="text-xs text-primary hover:underline p-1 h-auto ml-2">
-                Clear Filters
-              </Button>
-            )}
-          </div>
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-grow">
-            <TabsList className="grid w-full grid-cols-3 mb-4">
-              <TabsTrigger value="recommended" className="flex items-center gap-1.5 text-xs sm:text-sm"><Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Recommended</TabsTrigger>
-              <TabsTrigger value="help_requests" className="flex items-center gap-1.5 text-xs sm:text-sm"><HandHelping className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Help Requests</TabsTrigger>
-              <TabsTrigger value="opportunities" className="flex items-center gap-1.5 text-xs sm:text-sm"><Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Opportunities</TabsTrigger>
-            </TabsList>
-            <TabsContent value="recommended" className="mt-0 flex-grow overflow-hidden">
-              <ScrollArea className="h-full pr-2"> {isLoadingPosts && posts.length === 0 ? <Skeleton className="h-40 w-full"/> : renderPosts(filteredPostsByTags)} </ScrollArea>
-            </TabsContent>
-            <TabsContent value="help_requests" className="mt-0 flex-grow overflow-hidden">
-              <ScrollArea className="h-full pr-2"> {isLoadingPosts && helpRequestPosts.length === 0 ? <Skeleton className="h-40 w-full"/> : renderPosts(helpRequestPosts)} </ScrollArea>
-            </TabsContent>
-            <TabsContent value="opportunities" className="mt-0 flex-grow overflow-hidden">
-              <ScrollArea className="h-full pr-2"> {isLoadingPosts && opportunitiesPosts.length === 0 ? <Skeleton className="h-40 w-full"/> : renderPosts(opportunitiesPosts)} </ScrollArea>
-            </TabsContent>
-          </Tabs>
+      <div className={cn(
+        "flex-grow",
+        isMobile ? "grid grid-cols-1" : "md:grid md:grid-cols-2 md:gap-8"
+      )}>
+        {/* Left Column: Post List - always visible on desktop, full width on mobile if no post selected */}
+        <div className={cn(
+          "flex flex-col overflow-hidden",
+          isMobile && selectedPost ? "hidden" : "md:col-span-1"
+        )}>
+          <PostList
+            posts={posts}
+            isLoading={isLoadingPosts}
+            onPostSelect={openPostCallback}
+            selectedPostId={selectedPost?.id}
+          />
         </div>
 
-        {/* Right Column: Selected Post Details or Placeholder */}
-        {selectedPost ? (
-          <div className="md:col-span-1 flex flex-col mt-8 md:mt-0"> {/* Add margin top for mobile, none for desktop */}
-            <DynamicPostDetailPanel
-              post={selectedPost}
-              currentUser={user}
-              onClose={() => {
-                setSelectedPost(null);
-                // Clear URL only if it matches the selected post, to avoid clearing other potential params
-                if (searchParams?.get('postId') === selectedPost.id) {
-                  router.replace('/', undefined, { shallow: true });
-                }
-              }}
-              onDelete={handleDeletePost}
-              deletePostMutationIsPending={deletePostMutation.isPending}
-            />
-          </div>
+        {/* Right Column: Selected Post Details or Placeholder (Desktop) / Full-Screen Sheet (Mobile) */}
+        {isMobile ? (
+          <Sheet
+            open={!!selectedPost}
+            onOpenChange={(isOpen) => {
+              if (!isOpen) {
+                handleCloseDetailView();
+              }
+            }}
+          >
+            <SheetContent side="right" className="w-full h-full p-0 flex flex-col sm:max-w-full">
+              {renderPostDetailPanel()}
+            </SheetContent>
+          </Sheet>
         ) : (
-          <div className="hidden md:flex md:col-span-1 flex-col items-center justify-center p-8 border rounded-lg bg-card/50 text-muted-foreground sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)]">
-            <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
-            <p className="text-lg">Select a post to view details</p>
-            <p className="text-sm mt-1">Details will appear here once you click on a post from the list.</p>
-          </div>
+          selectedPost ? (
+            <div className="md:col-span-1 flex flex-col"> {/* For Desktop Layout */}
+              {renderPostDetailPanel()}
+            </div>
+          ) : (
+            <div className="hidden md:flex md:col-span-1 flex-col items-center justify-center p-8 border rounded-lg bg-card/50 text-muted-foreground sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)]">
+              <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
+              <p className="text-lg">Select a post to view details</p>
+              <p className="text-sm mt-1">Details will appear here once you click on a post from the list.</p>
+            </div>
+          )
         )}
       </div>
     </div>
