@@ -26,7 +26,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 interface MessagingInterfaceProps {
   currentUserId: string;
-  initialConversationId?: string | null;
+  activeConversationId?: string | null; // Changed from initialConversationId
+  onSelectConversation: (conversationId: string) => void; // Callback to parent
   initialMessageText?: string;
 }
 
@@ -191,12 +192,14 @@ MessageBubble.displayName = 'MessageBubble';
 
 export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     currentUserId,
-    initialConversationId,
+    activeConversationId, // Changed from initialConversationId
+    onSelectConversation, // Added prop
     initialMessageText,
 }) => {
   const isMobile = useIsMobile();
-  const [activeMobileView, setActiveMobileView] = useState<'list' | 'chat'>(initialConversationId ? 'chat' : 'list');
-  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(initialConversationId || null);
+  // activeMobileView is now managed by parent (MessagesPage) if needed, or simpler logic here
+  // For now, assume MessagingInterface is always visible when rendered (parent controls visibility)
+  // const [activeMobileView, setActiveMobileView] = useState<'list' | 'chat'>(activeConversationId ? 'chat' : 'list');
 
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<SerializableMessage | null>(null);
@@ -211,11 +214,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
 
   useEffect(() => {
-    if (initialMessageText && selectedConversationId && newMessage === '') {
+    if (initialMessageText && activeConversationId && newMessage === '') {
       setNewMessage(initialMessageText);
       setTimeout(() => messageInputRef.current?.focus(), 0);
     }
-  }, [initialMessageText, selectedConversationId, newMessage]);
+  }, [initialMessageText, activeConversationId, newMessage]);
 
 
   const {
@@ -262,7 +265,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
    const postDetailsMap = postDetailsQueries.data;
 
   useEffect(() => {
-    if (!selectedConversationId) {
+    if (!activeConversationId) {
       setMessages([]);
       setIsLoadingMessagesState(false);
       setMessagesErrorState(null);
@@ -273,7 +276,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     setMessagesErrorState(null);
 
     const unsubscribe = getMessagesForConversation(
-      selectedConversationId,
+      activeConversationId,
       (newMessagesFromListener) => {
         setMessages(newMessagesFromListener);
         setIsLoadingMessagesState(false);
@@ -292,7 +295,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     return () => {
         if (unsubscribe) unsubscribe();
     };
-  }, [selectedConversationId, toast]);
+  }, [activeConversationId, toast]);
 
   const sendMessageMutation = useMutation({
     mutationFn: sendMessage,
@@ -319,37 +322,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        }
    }, [messages]);
 
-  useEffect(() => {
-    if (initialConversationId && conversations.length > 0) {
-        const conversationExists = conversations.some(c => c.id === initialConversationId);
-        if (conversationExists) {
-            if (selectedConversationId !== initialConversationId) {
-              setSelectedConversationId(initialConversationId);
-            }
-            if (isMobile && activeMobileView !== 'chat') {
-              setActiveMobileView('chat');
-            }
-        }
-    }
-  }, [initialConversationId, conversations, isMobile, activeMobileView, selectedConversationId]);
-
-
-   const handleConversationSelect = useCallback((conversationId: string) => {
-    setSelectedConversationId(conversationId);
-    setNewMessage(''); 
-    setReplyingTo(null);
-    if (isMobile) {
-      setActiveMobileView('chat');
-    }
-  }, [isMobile, setActiveMobileView, setSelectedConversationId, setNewMessage, setReplyingTo]);
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMessage.trim() || !selectedConversationId || sendMessageMutation.isPending) {
+    if (!newMessage.trim() || !activeConversationId || sendMessageMutation.isPending) {
         return;
     }
     const messageData: NewMessageData = {
-        conversationId: selectedConversationId,
+        conversationId: activeConversationId,
         senderId: currentUserId,
         text: newMessage.trim(),
         isBotMessage: false,
@@ -361,7 +341,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     sendMessageMutation.mutate(messageData);
   };
 
-   const selectedConversation = conversations.find(c => c.id === selectedConversationId);
+   const selectedConversation = conversations.find(c => c.id === activeConversationId);
    const otherParticipantId = selectedConversation?.participants.find(p => p !== currentUserId);
 
    const { data: headerParticipantDetails, isLoading: isLoadingHeaderDetails } = useQuery({
@@ -389,210 +369,208 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     setReplyingTo(null);
   }, []);
 
+  // Determine if we are in a mobile layout where the parent (MessagesPage) controls view switching
+  // For this component, if isMobile is true, assume the parent handles activeMobileView logic.
+  // The `activeMobileView` check here is mostly for standalone testing or if this component
+  // were to manage its own mobile view state.
+  const parentControlsMobileView = isMobile; // Simplified: if mobile, parent handles visibility
+
   return (
     <div className="flex flex-1 h-full overflow-hidden">
-      {/* Conversation List Panel */}
-      <div
-        className={cn(
-          "flex flex-col border-r bg-background min-w-0", 
-          isMobile
-            ? activeMobileView === 'list' ? "w-full flex" : "hidden"
-            : "md:w-2/5 lg:w-1/3 flex"
-        )}
-      >
-        <div className={cn("border-b flex-shrink-0", isMobile ? "p-3" : "p-4")}>
-          <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
-              <MessageSquare className="h-5 w-5" /> All Messages
-          </h2>
-        </div>
-        <ScrollArea className={cn("flex-1 overflow-y-auto", isMobile ? "bg-background" : "bg-card")}>
-          <div className={cn(isMobile ? "p-1" : "p-2", "space-y-1")}>
-            {isLoadingConversations ? (
-              Array.from({ length: 5 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 p-3">
-                      <Skeleton className="h-9 w-9 rounded-full" />
-                      <div className="flex-grow space-y-1">
-                          <Skeleton className="h-4 w-3/4" />
-                          <Skeleton className="h-3 w-1/2" />
-                      </div>
-                  </div>
-              ))
-             ) : isConversationsError ? (
-                 <div className="p-4 text-center text-destructive">
-                     <AlertTriangle className="mx-auto h-8 w-8 mb-2" />
-                     <p className="text-sm font-medium">Error Loading Conversations</p>
-                     <p className="text-xs mt-1">
-                         {conversationsError?.message || "An unknown error occurred."}
-                     </p>
-                 </div>
-             ) : conversations.length === 0 ? (
-                <p className="p-4 text-sm text-muted-foreground text-center">No messages yet.</p>
-            ) : (
-              conversations.map((conv) => {
-                 const postQuestionText = conv.postId && conv.postId !== 'general_connection' && postDetailsMap ? postDetailsMap.get(conv.postId)?.question : null;
-                 return (
-                     <ConversationListItem
-                         key={conv.id}
-                         conversation={conv}
-                         isSelected={selectedConversationId === conv.id}
-                         currentUserId={currentUserId}
-                         onSelect={handleConversationSelect}
-                         postQuestion={postQuestionText}
-                         highlight={initialConversationId === conv.id && selectedConversationId === conv.id}
-                     />
-                 );
-             })
-            )}
+      {/* Conversation List Panel - only shown if NOT mobile OR if mobile AND list view active (handled by parent) */}
+      {!parentControlsMobileView || (isMobile && !activeConversationId) ? ( // Simplified visibility based on selected conversation for mobile
+        <div
+          className={cn(
+            "flex flex-col border-r bg-background min-w-0",
+            isMobile ? "w-full" : "md:w-2/5 lg:w-1/3"
+          )}
+        >
+          <div className={cn("border-b flex-shrink-0", isMobile ? "p-3" : "p-4")}>
+            <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
+                <MessageSquare className="h-5 w-5" /> All Messages
+            </h2>
           </div>
-        </ScrollArea>
-      </div>
-
-      {/* Message Display Panel */}
-      <div
-        className={cn(
-          "flex flex-1 flex-col overflow-hidden",
-          isMobile
-            ? activeMobileView === 'chat' ? "w-full flex" : "hidden"
-            : "md:flex"
-        )}
-      >
-        {selectedConversationId ? (
-          <>
-            <div className={cn("border-b flex items-center gap-3 bg-muted/50 flex-shrink-0", isMobile ? "p-3" : "p-4")}>
-               {isMobile && activeMobileView === 'chat' && (
-                 <Button variant="ghost" size="icon" className="mr-1" onClick={() => setActiveMobileView('list')}>
-                   <ArrowLeft className="h-5 w-5" />
-                 </Button>
-               )}
-               <Avatar className="h-9 w-9 flex-shrink-0">
-                   <AvatarImage src={otherParticipantAvatar} alt={otherParticipantName} />
-                   <AvatarFallback className="bg-primary text-primary-foreground text-xs">{otherParticipantInitials}</AvatarFallback>
-               </Avatar>
-               <div className="flex-grow min-w-0">
-                  <h3 className="text-lg font-semibold text-foreground truncate">{otherParticipantName}</h3>
-                  {selectedPostQuestion && (
-                      <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                          Regarding: <span className="font-medium text-primary">{selectedPostQuestion}</span>
-                      </p>
-                   )}
-                    {otherParticipantId && (
-                        <Link
-                            href={`/profile/${otherParticipantId}`}
-                            className="text-xs text-muted-foreground hover:text-primary hover:underline flex items-center gap-1 mt-0.5"
-                        >
-                            <Building className="h-3 w-3" /> View Profile
-                        </Link>
-                    )}
-               </div>
-               {selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && (
-                   <Link href={`/?postId=${selectedConversation.postId}`}
-                         className={cn(
-                             "text-primary hover:underline text-xs items-center gap-1 ml-auto flex-shrink-0",
-                             "focus:outline-none focus:ring-1 focus:ring-ring rounded p-1",
-                             "hidden md:flex"
-                         )}
-                         title="View Post Details"
-                         aria-label="View Post Details"
-                    >
-                        <Eye className="h-3.5 w-3.5" /> View Post
-                   </Link>
-                )}
-            </div>
-
-            <ScrollArea className="flex-1 overflow-y-auto bg-background">
-              <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
-                {isLoadingMessagesState ? (
-                     <div className="flex justify-center items-center h-full">
-                         <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                     </div>
-                 ) : messagesErrorState ? (
-                     <p className="text-sm text-destructive text-center">{messagesErrorState.message || "Error loading messages."}</p>
-                 ) : messages.length === 0 ? (
-                     <p className="text-sm text-muted-foreground text-center h-full flex items-center justify-center">
-                          Start the conversation!
-                     </p>
-                 ) : (
-                   messages.map((msg) => {
-                     return (
-                       <MessageBubble
-                         key={msg.id}
-                         message={msg}
-                         currentUserId={currentUserId}
-                         onStartReply={handleStartReply}
-                       />
-                     );
-                   })
-                 )}
-                 <div ref={messagesEndRef} />
-              </div>
-            </ScrollArea>
-
-            <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2" : "p-4")}>
-              {replyingTo && (
-                <div className="mb-2 p-2 bg-secondary/50 rounded-md text-xs text-secondary-foreground relative">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <p className="font-medium opacity-70">Replying to: <span className="italic">"{replyingTo.text.substring(0,50)}{replyingTo.text.length > 50 ? '...' : ''}"</span></p>
+          <ScrollArea className={cn("flex-1 overflow-y-auto", isMobile ? "bg-background" : "bg-card")}>
+            <div className={cn(isMobile ? "p-1" : "p-2", "space-y-1")}>
+              {isLoadingConversations ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-3 p-3">
+                        <Skeleton className="h-9 w-9 rounded-full" />
+                        <div className="flex-grow space-y-1">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-3 w-1/2" />
+                        </div>
                     </div>
-                    <Button variant="ghost" size="icon" className="h-5 w-5 absolute top-1 right-1" onClick={handleCancelReply} aria-label="Cancel reply">
-                      <X className="h-3.5 w-3.5" />
-                    </Button>
-                  </div>
-                </div>
+                ))
+               ) : isConversationsError ? (
+                   <div className="p-4 text-center text-destructive">
+                       <AlertTriangle className="mx-auto h-8 w-8 mb-2" />
+                       <p className="text-sm font-medium">Error Loading Conversations</p>
+                       <p className="text-xs mt-1">
+                           {conversationsError?.message || "An unknown error occurred."}
+                       </p>
+                   </div>
+               ) : conversations.length === 0 ? (
+                  <p className="p-4 text-sm text-muted-foreground text-center">No messages yet.</p>
+              ) : (
+                conversations.map((conv) => {
+                   const postQuestionText = conv.postId && conv.postId !== 'general_connection' && postDetailsMap ? postDetailsMap.get(conv.postId)?.question : null;
+                   return (
+                       <ConversationListItem
+                           key={conv.id}
+                           conversation={conv}
+                           isSelected={activeConversationId === conv.id}
+                           currentUserId={currentUserId}
+                           onSelect={onSelectConversation} // Use prop
+                           postQuestion={postQuestionText}
+                           highlight={activeConversationId === conv.id} // Use activeConversationId
+                       />
+                   );
+               })
               )}
-              <form onSubmit={handleSendMessage} className="flex items-center gap-2">
-                <Input
-                  ref={messageInputRef}
-                  type="text"
-                  placeholder="Type your message..."
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  disabled={sendMessageMutation.isPending || isLoadingMessagesState}
-                  className="flex-grow bg-background"
-                  aria-label="Message input"
-                />
-                <Button
-                  type="submit"
-                  size="icon"
-                  disabled={!newMessage.trim() || sendMessageMutation.isPending || isLoadingMessagesState}
-                  aria-label="Send message"
-                >
-                   {sendMessageMutation.isPending ? (
-                       <Loader2 className="h-4 w-4 animate-spin" />
-                   ) : (
-                       <Send className="h-4 w-4" />
-                   )}
-                </Button>
-              </form>
             </div>
-          </>
-        ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
-             {isConversationsError ? (
-                  <>
-                     <AlertTriangle className="mx-auto h-12 w-12 text-destructive mb-4" />
-                     <h3 className="text-lg font-medium text-destructive">Could Not Load Conversations</h3>
-                     <p className="text-sm text-muted-foreground mt-2">
-                         {conversationsError?.message || "Please try again later or check your connection/permissions."}
-                     </p>
-                  </>
-             ) : isLoadingConversations ? (
-                 <>
-                     <Loader2 className="h-12 w-12 text-primary animate-spin mb-4" />
-                     <h3 className="text-lg font-medium text-muted-foreground">Loading Messages...</h3>
-                 </>
-             ) : (
-                  <>
+          </ScrollArea>
+        </div>
+      ) : null}
+
+      {/* Message Display Panel - shown if a conversation is selected OR if mobile AND chat view is active (handled by parent) */}
+      {activeConversationId || (isMobile && activeConversationId) ? (
+        <div
+          className={cn(
+            "flex flex-1 flex-col overflow-hidden h-[70vh]", // Added h-[70vh]
+            isMobile ? "w-full" : "md:flex" // md:flex ensures it's visible on desktop
+          )}
+        >
+          {activeConversationId ? (
+            <>
+              <div className={cn("border-b flex items-center gap-3 bg-muted/50 flex-shrink-0", isMobile ? "p-3" : "p-4")}>
+                 {isMobile && ( // Back button for mobile when chat is active
+                   <Button variant="ghost" size="icon" className="mr-1" onClick={() => onSelectConversation('')}>
+                     <ArrowLeft className="h-5 w-5" />
+                   </Button>
+                 )}
+                 <Avatar className="h-9 w-9 flex-shrink-0">
+                     <AvatarImage src={otherParticipantAvatar} alt={otherParticipantName} />
+                     <AvatarFallback className="bg-primary text-primary-foreground text-xs">{otherParticipantInitials}</AvatarFallback>
+                 </Avatar>
+                 <div className="flex-grow min-w-0">
+                    <h3 className="text-lg font-semibold text-foreground truncate">{otherParticipantName}</h3>
+                    {selectedPostQuestion && (
+                        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                            Regarding: <span className="font-medium text-primary">{selectedPostQuestion}</span>
+                        </p>
+                     )}
+                      {otherParticipantId && (
+                          <Link
+                              href={`/profile/${otherParticipantId}`}
+                              className="text-xs text-muted-foreground hover:text-primary hover:underline flex items-center gap-1 mt-0.5"
+                          >
+                              <Building className="h-3 w-3" /> View Profile
+                          </Link>
+                      )}
+                 </div>
+                 {selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && (
+                     <Link href={`/?postId=${selectedConversation.postId}`}
+                           className={cn(
+                               "text-primary hover:underline text-xs items-center gap-1 ml-auto flex-shrink-0",
+                               "focus:outline-none focus:ring-1 focus:ring-ring rounded p-1",
+                               "hidden md:flex"
+                           )}
+                           title="View Post Details"
+                           aria-label="View Post Details"
+                      >
+                          <Eye className="h-3.5 w-3.5" /> View Post
+                     </Link>
+                  )}
+              </div>
+
+              <ScrollArea className="flex-1 overflow-y-auto bg-background">
+                <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
+                  {isLoadingMessagesState ? (
+                       <div className="flex justify-center items-center h-full">
+                           <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                       </div>
+                   ) : messagesErrorState ? (
+                       <p className="text-sm text-destructive text-center">{messagesErrorState.message || "Error loading messages."}</p>
+                   ) : messages.length === 0 ? (
+                       <p className="text-sm text-muted-foreground text-center h-full flex items-center justify-center">
+                            Start the conversation!
+                       </p>
+                   ) : (
+                     messages.map((msg) => {
+                       return (
+                         <MessageBubble
+                           key={msg.id}
+                           message={msg}
+                           currentUserId={currentUserId}
+                           onStartReply={handleStartReply}
+                         />
+                       );
+                     })
+                   )}
+                   <div ref={messagesEndRef} />
+                </div>
+              </ScrollArea>
+
+              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2" : "p-4")}>
+                {replyingTo && (
+                  <div className="mb-2 p-2 bg-secondary/50 rounded-md text-xs text-secondary-foreground relative">
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <p className="font-medium opacity-70">Replying to: <span className="italic">"{replyingTo.text.substring(0,50)}{replyingTo.text.length > 50 ? '...' : ''}"</span></p>
+                      </div>
+                      <Button variant="ghost" size="icon" className="h-5 w-5 absolute top-1 right-1" onClick={handleCancelReply} aria-label="Cancel reply">
+                        <X className="h-3.5 w-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <form onSubmit={handleSendMessage} className="flex items-center gap-2">
+                  <Input
+                    ref={messageInputRef}
+                    type="text"
+                    placeholder="Type your message..."
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    disabled={sendMessageMutation.isPending || isLoadingMessagesState}
+                    className="flex-grow bg-background"
+                    aria-label="Message input"
+                  />
+                  <Button
+                    type="submit"
+                    size="icon"
+                    disabled={!newMessage.trim() || sendMessageMutation.isPending || isLoadingMessagesState}
+                    aria-label="Send message"
+                  >
+                     {sendMessageMutation.isPending ? (
+                         <Loader2 className="h-4 w-4 animate-spin" />
+                     ) : (
+                         <Send className="h-4 w-4" />
+                     )}
+                  </Button>
+                </form>
+              </div>
+            </>
+          ) : (
+            // This "Select or Start" message will typically only show on desktop if no conversation is auto-selected
+             !isMobile && (
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
                      <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
                      <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
                      <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
-                  </>
-              )}
-          </div>
-        )}
-      </div>
+                </div>
+             )
+          )}
+        </div>
+      ) : (
+         !isMobile && ( // Only show the "Select or Start" message on desktop if no conversation is active
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
+                 <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
+                 <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
+                 <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
+            </div>
+         )
+      )}
     </div>
   );
 };
-
-    
