@@ -547,8 +547,9 @@ export default function MainLayout({
     isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
   );
 
-  // Determine if header/footer/mobile nav should be hidden (e.g., for /messages on mobile)
-  const hideAppChrome = isMobile && pathname === '/messages';
+  // Determine if header/footer/mobile nav should be hidden
+  // For messages page, we want the mobile nav to show.
+  const hideAppChrome = false; // Modified: No longer hide chrome on messages page by default.
 
 
   return (
@@ -682,13 +683,6 @@ export default function MainLayout({
       >
         {children}
       </main>
-      {!hideAppChrome && !isMobile && (
-        <footer className="py-4 border-t">
-          <div className="container mx-auto text-center text-sm text-muted-foreground">
-            © {new Date().getFullYear()} AnonyCollab. All rights reserved.
-          </div>
-        </footer>
-      )}
       {!hideAppChrome && isMobile && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
           <div className="container mx-auto flex justify-around items-center h-full">
