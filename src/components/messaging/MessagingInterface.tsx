@@ -72,19 +72,19 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
       <button
         onClick={() => onSelect(conversation.id)}
         className={cn(
-          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-start", // items-start for top alignment
+          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-start", 
           isSelected ? "bg-muted" : ""
         )}
         aria-current={isSelected ? "page" : undefined}
       >
-         <Avatar className="h-9 w-9 flex-shrink-0 mt-0.5 mr-3"> {/* Explicit margin */}
+         <Avatar className="h-9 w-9 flex-shrink-0 mt-0.5 mr-3"> 
           <AvatarImage src={otherParticipantDetails?.avatar} alt={participantName} />
           <AvatarFallback className="bg-primary text-primary-foreground text-xs">{initials}</AvatarFallback>
          </Avatar>
         <div className="flex-grow overflow-hidden min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{participantName}</p>
           {postQuestion && (
-              <p className="text-xs text-primary truncate font-medium mt-0.5 max-w-[80px] sm:max-w-[160px] md:max-w-xs lg:max-w-sm"> {/* Responsive max-width */}
+              <p className="text-xs text-primary truncate font-medium mt-0.5 max-w-[80px] sm:max-w-[160px] md:max-w-xs lg:max-w-sm"> 
                   Re: {postQuestion}
               </p>
           )}
@@ -93,7 +93,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
           </p>
         </div>
         {formattedTime && (
-          <span className="text-xs text-muted-foreground self-start pt-0.5 ml-2 flex-shrink-0"> {/* Explicit margin, self-start */}
+          <span className="text-xs text-muted-foreground self-start pt-0.5 ml-2 flex-shrink-0"> 
             {formattedTime}
           </span>
         )}
@@ -139,7 +139,6 @@ const MessageBubble: React.FC<MessageBubbleProps> = React.memo(({ message, curre
   if (message.isBotMessage) {
     bubbleClasses = cn("rounded-lg px-3 py-2 max-w-[75%] break-words shadow-sm relative", "bg-muted text-foreground");
   }
-
 
   return (
     <div className={cn("flex group mb-1", isOwnMessage ? "justify-end" : "justify-start")}>
@@ -206,11 +205,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const messageInputRef = useRef<HTMLInputElement>(null);
   const prevActiveConversationIdRef = useRef<string | null | undefined>(null);
   const [isInitialMessagesLoad, setIsInitialMessagesLoad] = useState(true);
+  const visualViewportHeightRef = useRef<number>(0);
 
   const [messages, setMessages] = useState<SerializableMessage[]>([]);
   const [isLoadingMessagesState, setIsLoadingMessagesState] = useState(true);
   const [messagesErrorState, setMessagesErrorState] = useState<Error | null>(null);
-
 
   useEffect(() => {
     if (initialMessageText && activeConversationId && newMessage === '') {
@@ -218,7 +217,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       setTimeout(() => messageInputRef.current?.focus(), 0);
     }
   }, [initialMessageText, activeConversationId, newMessage]);
-
 
   const {
       data: conversations = [],
@@ -295,7 +293,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         });
       }
     );
-
     return () => {
         if (unsubscribe) unsubscribe();
     };
@@ -334,7 +331,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
            return () => clearTimeout(timer);
        }
    }, [messages, isInitialMessagesLoad]);
-
 
   const handleSendMessage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -392,16 +388,41 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
   const handleInputBlur = () => {
     if (isMobile) {
-      // Small delay to allow keyboard to fully retract before scrolling
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }, 200);
     }
   };
 
+   useEffect(() => {
+    if (isMobile && typeof window !== 'undefined' && window.visualViewport) {
+      const vv = window.visualViewport;
+      visualViewportHeightRef.current = vv.height;
+
+      const handleViewportResize = () => {
+        if (!vv) return;
+        const newHeight = vv.height;
+        const heightDiff = newHeight - visualViewportHeightRef.current;
+
+        // Heuristic: if viewport height increased significantly, keyboard likely hid
+        if (heightDiff > 50) { // 50px is a guess, might need adjustment
+          setTimeout(() => { // Added timeout
+            messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
+          }, 100); // Short delay to allow layout to settle
+        }
+        visualViewportHeightRef.current = newHeight;
+      };
+
+      vv.addEventListener('resize', handleViewportResize);
+      return () => {
+        vv.removeEventListener('resize', handleViewportResize);
+      };
+    }
+  }, [isMobile]);
+
+
   return (
     <div className="flex flex-col flex-1 h-full overflow-hidden">
-      {/* Conversation List (Left Panel) */}
       {(!isMobile || !activeConversationId) && (
         <div
           className={cn(
@@ -457,7 +478,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         </div>
       )}
 
-      {/* Chat View (Right Panel) */}
       {activeConversationId && (
         <div
           className={cn(
@@ -507,7 +527,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                   )}
               </div>
 
-              <ScrollArea className="flex-1 overflow-y-auto bg-background min-h-0">
+              <ScrollArea className="flex-1 overflow-y-auto bg-background min-h-0" style={{ touchAction: 'none' }}>
                 <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
                   {isLoadingMessagesState ? (
                        <div className="flex justify-center items-center h-full">
@@ -556,7 +576,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
                     onFocus={handleInputFocus}
-                    onBlur={handleInputBlur} // Added onBlur handler
+                    onBlur={handleInputBlur}
                     disabled={sendMessageMutation.isPending || isLoadingMessagesState}
                     className="flex-grow bg-background"
                     aria-label="Message input"
@@ -579,7 +599,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
           
         </div>
       )}
-      {/* Placeholder if no active conversation on desktop (and not mobile, because mobile handles list view) */}
       {!activeConversationId && !isMobile && (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
