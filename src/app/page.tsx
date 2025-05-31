@@ -98,8 +98,8 @@ const BoardPageContent = () => {
       queryClient.invalidateQueries({ queryKey: ['posts'] });
       toast({ title: "Post Deleted", description: "The post has been removed." });
       if (selectedPost?.id === postId) {
-        setSelectedPost(null);
-        router.replace('/', undefined, { shallow: true });
+        // If the deleted post was selected, close the detail view
+        handleCloseDetailView();
       }
     },
     onError: (error: Error) => {
@@ -117,53 +117,66 @@ const BoardPageContent = () => {
       return;
     }
     deletePostMutation.mutate(postId);
-  }, [user, deletePostMutation, toast, queryClient, selectedPost, router]);
+  }, [user, deletePostMutation, toast]);
 
 
-  // --- Post Selection & URL Handling ---
+  // --- Post Selection & URL Handling (URL as Source of Truth) ---
+
+  // Callback to close the detail view (primarily clears the URL)
   const handleCloseDetailView = useCallback(() => {
-    setSelectedPost(null);
-    if (searchParams?.get('postId')) { // Only replace if URL actually had the postId
+    if (searchParams?.get('postId')) {
       router.replace('/', undefined, { shallow: true });
+    } else if (selectedPost) {
+      // If URL is already clear but state is not (e.g., programmatic close not via URL)
+      setSelectedPost(null);
     }
-  }, [searchParams, router, setSelectedPost]);
+  }, [searchParams, router, selectedPost, setSelectedPost]);
 
-
-  const openPostCallback = useCallback((postToOpen: Post) => {
-    console.log("[BoardPageContent] openPostCallback, opening post:", postToOpen.id);
-    if (selectedPost && selectedPost.id === postToOpen.id) {
-      handleCloseDetailView(); // Toggle off if same post is clicked
-    } else {
-      setSelectedPost(postToOpen);
-      if (searchParams?.get('postId') !== postToOpen.id) {
-        router.push(`/?postId=${postToOpen.id}`, { scroll: false });
-      }
-    }
-  }, [selectedPost, router, searchParams, handleCloseDetailView]);
-
-
+  // Effect to sync `selectedPost` state with `postId` from URL
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
-    console.log(`[BoardPageContent] useEffect for URL postId: postIdFromUrl='${postIdFromUrl}', posts.length=${posts.length}, currentSelectedPostId='${selectedPost?.id}'`);
 
-    if (postIdFromUrl && posts.length > 0) {
+    if (postIdFromUrl) {
+      // URL indicates a post should be open
       if (!selectedPost || selectedPost.id !== postIdFromUrl) {
-        const postToOpen = posts.find(p => p.id === postIdFromUrl);
-        if (postToOpen) {
-          console.log(`  Found post in URL: ${postIdFromUrl}. Setting as selectedPost.`);
-          setSelectedPost(postToOpen);
-        } else {
-          console.warn(`  Post with ID '${postIdFromUrl}' from URL not found in fetched posts. Closing detail view.`);
-          toast({ variant: "destructive", title: "Post Not Found", description: "The requested post could not be found or is no longer available." });
-          handleCloseDetailView();
+        // State is not matching the URL, or no post is selected. Try to open/sync.
+        if (posts.length > 0) { // Only proceed if posts are loaded
+          const postToOpen = posts.find(p => p.id === postIdFromUrl);
+          if (postToOpen) {
+            setSelectedPost(postToOpen); // Sync state with URL
+          } else {
+            // Invalid postId in URL
+            toast({ variant: "destructive", title: "Post Not Found", description: "The requested post could not be found or is no longer available." });
+            router.replace('/', undefined, { shallow: true }); // Clean invalid URL
+            if (selectedPost) setSelectedPost(null); // Ensure state is also cleared
+          }
         }
+        // If posts are not loaded yet, this effect will re-run when posts load.
       }
-    } else if (!postIdFromUrl && selectedPost) {
-      // If URL is cleared but a post is selected (e.g., by sheet closure not updating URL yet, or back navigation),
-      // ensure local state also clears. This can happen if Sheet's onOpenChange fires before URL logic.
-      // handleCloseDetailView(); // This might be too aggressive, let Sheet's onOpenChange manage it.
+      // If selectedPost.id === postIdFromUrl, state and URL are in sync, do nothing.
+    } else {
+      // URL indicates no post should be open
+      if (selectedPost) {
+        // State says a post is open, but URL is clear. Sync state by closing.
+        setSelectedPost(null);
+      }
     }
-  }, [searchParams, posts, router, toast, selectedPost, handleCloseDetailView]);
+  }, [searchParams, posts, selectedPost, router, toast, setSelectedPost]);
+
+
+  // Callback when a PostCard is clicked
+  const openPostCallback = useCallback((postToOpen: Post) => {
+    const currentPostIdInUrl = searchParams?.get('postId');
+    if (currentPostIdInUrl === postToOpen.id) {
+      // Clicking the same post that's already open (or supposed to be open via URL)
+      // This means we should close it.
+      handleCloseDetailView();
+    } else {
+      // Open a new post or switch to a different post by updating the URL.
+      // The useEffect will then handle setting selectedPost.
+      router.push(`/?postId=${postToOpen.id}`, { scroll: false });
+    }
+  }, [searchParams, router, handleCloseDetailView]);
 
 
   const renderPostDetailPanel = () => {
@@ -212,15 +225,13 @@ const BoardPageContent = () => {
             <SheetContent
               side="right"
               className="w-full h-full p-0 flex flex-col sm:max-w-full"
-              showCloseButton={false} // Hide default Sheet close button
+              showCloseButton={false} 
             >
-              {selectedPost && (
-                <SheetTitle className="sr-only">
-                  {`Details for post: ${selectedPost.question.substring(0, 50)}${selectedPost.question.length > 50 ? '...' : ''}`}
-                </SheetTitle>
-              )}
+              <SheetTitle className="sr-only">
+                {selectedPost ? `Details for post: ${selectedPost.question.substring(0, 50)}${selectedPost.question.length > 50 ? '...' : ''}` : "Post Details"}
+              </SheetTitle>
               <div className="flex-1 overflow-y-auto">
-                {renderPostDetailPanel()}
+                 {renderPostDetailPanel()}
               </div>
             </SheetContent>
           </Sheet>
@@ -243,3 +254,5 @@ const BoardPageContent = () => {
 };
 
 export default BoardPageContent;
+
+    
