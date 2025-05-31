@@ -159,7 +159,16 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
               </AlertDialogContent>
             </AlertDialog>
           )}
-          <Button variant="ghost" size="icon" onClick={onClose} aria-label="Close post details" className="h-7 w-7 p-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={(e) => {
+              e.stopPropagation(); // Prevent event from bubbling up
+              onClose();
+            }}
+            aria-label="Close post details"
+            className="h-7 w-7 p-1"
+          >
             <X className="h-5 w-5" />
           </Button>
         </div>
