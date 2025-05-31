@@ -382,6 +382,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setTimeout(() => {
         event.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
       }, 400); 
     }
   };
@@ -390,14 +391,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 200);
+      }, 200); // Delay to allow keyboard to retract
     }
   };
 
    useEffect(() => {
     if (isMobile && typeof window !== 'undefined' && window.visualViewport) {
       const vv = window.visualViewport;
-      visualViewportHeightRef.current = vv.height;
+      visualViewportHeightRef.current = vv.height; // Initialize
 
       const handleViewportResize = () => {
         if (!vv) return;
@@ -405,10 +406,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         const heightDiff = newHeight - visualViewportHeightRef.current;
 
         // Heuristic: if viewport height increased significantly, keyboard likely hid
-        if (heightDiff > 50) { // 50px is a guess, might need adjustment
-          setTimeout(() => { // Added timeout
+        if (heightDiff > 50) { 
+          console.log(`[MSGI] VisualViewport resized. Height diff: ${heightDiff}. Scrolling to end.`);
+          setTimeout(() => { 
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-          }, 100); // Short delay to allow layout to settle
+          }, 250); // Increased delay
         }
         visualViewportHeightRef.current = newHeight;
       };
@@ -527,7 +529,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                   )}
               </div>
 
-              <ScrollArea className="flex-1 overflow-y-auto bg-background min-h-0" style={{ touchAction: 'none' }}>
+              <ScrollArea
+                className="flex-1 overflow-y-auto bg-background min-h-0"
+                style={{ touchAction: 'none' }} // Prevent touch scroll
+                onWheel={(e) => e.preventDefault()} // Prevent mouse wheel scroll
+              >
                 <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
                   {isLoadingMessagesState ? (
                        <div className="flex justify-center items-center h-full">
@@ -609,3 +615,5 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
+    
