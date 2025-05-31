@@ -140,4 +140,44 @@ body {
 [data-radix-scroll-area-viewport] {
   padding: 4px;
 }
+
+/* CSS for horizontal scroll with fade effect */
+.horizontal-scroll-with-fade {
+  position: relative; /* Needed for absolute positioning of pseudo-elements */
+}
+
+/* Hide scrollbar for Firefox */
+.horizontal-scroll-with-fade > [data-radix-scroll-area-viewport] {
+  scrollbar-width: none;
+  -ms-overflow-style: none; /* IE and Edge */
+}
+
+/* Hide scrollbar for Chrome, Safari, and Opera */
+.horizontal-scroll-with-fade > [data-radix-scroll-area-viewport]::-webkit-scrollbar {
+  display: none;
+}
+
+/* Mobile-specific fade effect for horizontal scroll */
+@media (max-width: 767px) { /* Apply fade only on screens smaller than md (768px) */
+  .horizontal-scroll-with-fade::before,
+  .horizontal-scroll-with-fade::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0; /* Make fade cover the full height of the scroll area */
+    width: 20px; /* Width of the fade effect - reduced a bit */
+    pointer-events: none; /* Allow clicks to pass through */
+    z-index: 2; /* Ensure fade is above content */
+  }
+
+  .horizontal-scroll-with-fade::before {
+    left: 0;
+    background: linear-gradient(to right, hsl(var(--background)), hsla(var(--background), 0%));
+  }
+
+  .horizontal-scroll-with-fade::after {
+    right: 0;
+    background: linear-gradient(to left, hsl(var(--background)), hsla(var(--background), 0%));
+  }
+}
     

@@ -4,7 +4,7 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"; // Import ScrollArea and ScrollBar
+import { ScrollArea } from "@/components/ui/scroll-area"; // ScrollBar removed as we'll hide it with CSS
 import { Loader2, Sparkles, HandHelping, Briefcase } from "lucide-react";
 import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
@@ -84,8 +84,10 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
   return (
     <div className="flex flex-col h-full">
       <div className="mb-4 px-1">
-        <ScrollArea className="w-full whitespace-nowrap rounded-md">
-          <div className="flex items-center space-x-2 pb-2">
+        {/* Added horizontal-scroll-with-fade class here for mobile fade */}
+        <ScrollArea className="w-full whitespace-nowrap rounded-md horizontal-scroll-with-fade">
+          {/* This div ensures content is laid out horizontally and can overflow */}
+          <div className="flex items-center space-x-2 pb-2 min-w-[max-content]">
             <span className="text-sm font-medium text-muted-foreground mr-2 flex-shrink-0">Filter by Tag:</span>
             {availableTags.map((tag) => (
               <Button
@@ -94,7 +96,7 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
                 size="sm"
                 onClick={() => handleTagClick(tag)}
                 className={cn(
-                  "rounded-full px-3 py-1 text-xs transition-colors duration-150 flex-shrink-0",
+                  "rounded-full px-3 py-1 text-xs transition-colors duration-150 flex-shrink-0", // Added flex-shrink-0
                   selectedTags.includes(tag) ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                 )}
                 aria-pressed={selectedTags.includes(tag)}
@@ -108,7 +110,7 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
               </Button>
             )}
           </div>
-          <ScrollBar orientation="horizontal" />
+          {/* ScrollBar component is removed to hide it completely, CSS will handle hiding native scrollbar */}
         </ScrollArea>
       </div>
 
