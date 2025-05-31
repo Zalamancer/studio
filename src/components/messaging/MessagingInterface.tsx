@@ -22,7 +22,7 @@ import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDo
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { useIsMobile } from '@/hooks/use-mobile'; // Corrected import path
+import { useIsMobile } from '@/hooks/use-mobile'; 
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -379,8 +379,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const handleInputFocus = (event: React.FocusEvent<HTMLInputElement>) => {
     if (isMobile) {
       setTimeout(() => {
-        event.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      }, 300); 
+        event.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }, 400); 
     }
   };
 
@@ -574,3 +574,4 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
