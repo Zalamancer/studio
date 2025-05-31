@@ -1,3 +1,4 @@
+
 // src/components/connect/ConnectionItem.tsx
 'use client';
 
@@ -57,7 +58,8 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
     }
   };
 
-  const handleStartChat = async () => {
+  const handleStartChat = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation(); // Stop event propagation
     setIsLoadingChat(true);
     try {
       // Use null for postId to indicate a general chat not tied to a specific post
@@ -102,7 +104,7 @@ export const ConnectionItem: React.FC<ConnectionItemProps> = ({
          <Button
            size="sm"
            variant="outline"
-           onClick={handleStartChat}
+           onClick={(e) => handleStartChat(e)}
            disabled={isLoadingChat || isLoadingRemove}
            aria-label={`Message ${displayName}`}
          >
