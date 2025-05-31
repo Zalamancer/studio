@@ -1,3 +1,4 @@
+
 // src/components/messaging/MessagingInterface.tsx
 "use client";
 
@@ -21,7 +22,7 @@ import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDo
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { useIsMobile } from '@/hooks/use-isMobile';
+import { useIsMobile } from '@/hooks/use-mobile'; // Corrected import path
 
 interface MessagingInterfaceProps {
   currentUserId: string;
