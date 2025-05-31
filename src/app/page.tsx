@@ -23,8 +23,7 @@ import {
   AlertDialogDescription,
   AlertDialogFooter,
   AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
+  AlertDialogTitle as AlertDialogPrimitiveTitle, // Alias to avoid conflict if needed
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -42,7 +41,7 @@ import type { ClientBid, NewBidData } from '@/types/bid';
 import { formatDistanceToNow } from 'date-fns';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sheet, SheetContent, SheetTrigger, SheetClose } from "@/components/ui/sheet"; // Added Sheet imports
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet"; // Added SheetHeader and SheetTitle
 import { useIsMobile } from "@/hooks/use-mobile"; // Added useIsMobile
 
 import { cn } from "@/lib/utils";
@@ -211,7 +210,16 @@ const BoardPageContent = () => {
             }}
           >
             <SheetContent side="right" className="w-full h-full p-0 flex flex-col sm:max-w-full">
-              {renderPostDetailPanel()}
+              {/* Add an accessible title for the sheet itself */}
+              {selectedPost && (
+                <SheetTitle className="sr-only">
+                  {`Details for post: ${selectedPost.question.substring(0, 50)}${selectedPost.question.length > 50 ? '...' : ''}`}
+                </SheetTitle>
+              )}
+              {/* The PostDetailPanel will be the main content and should fill the sheet */}
+              <div className="flex-1 overflow-y-auto">
+                {renderPostDetailPanel()}
+              </div>
             </SheetContent>
           </Sheet>
         ) : (
