@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsContent, TabsList } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { MessagingInterface } from '@/components/messaging/MessagingInterface';
 import { getPendingRequests, getConnections } from '@/services/connectionService';
@@ -29,7 +29,6 @@ const MessagesPage = () => {
     const router = useRouter();
     const isMobile = useIsMobile();
 
-    // State will be derived from URL by useEffect
     const [activeTab, setActiveTab] = useState<string>('chats');
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
 
@@ -44,12 +43,11 @@ const MessagesPage = () => {
       };
     }, []);
 
-    // Central useEffect to set state based on URL parameters
     useEffect(() => {
         const conversationIdFromUrl = searchParams?.get('conversationId');
         const tabFromUrl = searchParams?.get('tab');
 
-        let newActiveTab = 'chats'; // Default
+        let newActiveTab = 'chats';
         let newSelectedConversationId = null;
 
         if (conversationIdFromUrl) {
@@ -57,10 +55,8 @@ const MessagesPage = () => {
             newSelectedConversationId = conversationIdFromUrl;
         } else if (tabFromUrl && ['chats', 'requests', 'connections'].includes(tabFromUrl)) {
             newActiveTab = tabFromUrl;
-            // newSelectedConversationId remains null
         }
-        // If neither, defaults remain 'chats' and null.
-
+        
         setActiveTab(newActiveTab);
         setSelectedConversationId(newSelectedConversationId);
 
@@ -126,12 +122,12 @@ const MessagesPage = () => {
     }, [refetchRequests, refetchConnections, queryClient, currentUserId, toast]);
 
     const {
-        data: conversationsForTabCount = [], // Used for unread counts or display, not directly for active chat
+        data: conversationsForTabCount = [],
         isLoading: isLoadingConversationsForTabCount,
         error: conversationsErrorForTabCount,
         isError: isConversationsErrorTrueForTabCount,
       } = useQuery<ClientConversation[], Error>({
-      queryKey: ['conversationsForTabCount', currentUserId], // Distinct queryKey for this purpose
+      queryKey: ['conversationsForTabCount', currentUserId],
       queryFn: () => currentUserId ? getConversationsForUser(currentUserId) : Promise.resolve([]),
       enabled: !!currentUserId,
       staleTime: 1000 * 60 * 5,
@@ -139,18 +135,17 @@ const MessagesPage = () => {
       retry: 1,
     });
 
-    // Called when a conversation is selected from the list in MessagingInterface
     const handleSelectConversationFromList = useCallback((conversationId: string) => {
         router.replace(`/messages?conversationId=${conversationId}`, { scroll: false });
     }, [router]);
     
-    // Called when a tab button is clicked
     const handleTabChange = useCallback((tabValue: string) => {
         const newParams = new URLSearchParams();
+        // if user clicks on "chats" tab and a conversation was previously selected, keep it in URL
         if (tabValue === 'chats' && selectedConversationId) {
-            // If switching to chats tab AND a conversation is already selected, keep it.
             newParams.set('conversationId', selectedConversationId);
         } else {
+            // For other tabs, or if no conversation selected for "chats", just set the tab
             newParams.set('tab', tabValue);
         }
         router.replace(`/messages?${newParams.toString()}`, { scroll: false });
@@ -190,7 +185,7 @@ const MessagesPage = () => {
 
     return (
         <div className={cn(
-            "flex flex-col flex-grow h-full",
+            "flex flex-col flex-grow h-full", // Main container takes full height
             isMobile ? "" : "md:container md:mx-auto md:py-6 md:px-4"
         )}>
             {(isRequestsError || isConnectionsError || isConversationsErrorTrueForTabCount) && combinedErrorMessage && (
@@ -205,8 +200,8 @@ const MessagesPage = () => {
 
             <Tabs
                 value={activeTab}
-                onValueChange={handleTabChange} // Use new handler
-                className="flex flex-col flex-1 overflow-hidden"
+                onValueChange={handleTabChange}
+                className="flex flex-col flex-1 overflow-hidden" // Tabs component fills remaining space
             >
                  <div className={cn("relative flex-shrink-0", isMobile ? "" : "md:mb-4")}>
                     <TabsList className={cn(
@@ -236,13 +231,12 @@ const MessagesPage = () => {
 
                 <TabsContent
                     value="chats"
-                    className={cn(
+                    className={cn( // Removed flex-1, flex-col, overflow-hidden from TabsContent
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                         "flex-1 flex flex-col overflow-hidden", // Added for height
                         isMobile ? "" : "md:p-0"
                     )}
                 >
-                    <div className="h-full flex flex-col flex-1 overflow-hidden">
+                    <div className="h-full flex flex-col flex-1 overflow-hidden"> {/* Inner div takes flex-1 */}
                         <MessagingInterface
                             currentUserId={user.uid}
                             activeConversationId={selectedConversationId}
@@ -254,15 +248,14 @@ const MessagesPage = () => {
 
                 <TabsContent
                     value="requests"
-                    className={cn(
+                    className={cn( // Removed flex-1, flex-col, overflow-hidden from TabsContent
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        "flex-1 flex flex-col overflow-hidden", // Added for height
                         isMobile ? "p-1" : "md:p-0"
                     )}
                 >
-                   <div className="h-full flex flex-col flex-1 overflow-hidden">
+                   <div className="h-full flex flex-col flex-1 overflow-hidden"> {/* Inner div takes flex-1 */}
                         <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md"
+                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md" // Card is flex-1 of inner div
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
                                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -271,7 +264,7 @@ const MessagesPage = () => {
                                 <CardDescription>Review businesses wanting to connect.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto",
+                                "pb-4 flex-1 overflow-auto", // CardContent scrolls
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingRequests ? (
@@ -297,15 +290,14 @@ const MessagesPage = () => {
 
                 <TabsContent
                     value="connections"
-                     className={cn(
+                     className={cn( // Removed flex-1, flex-col, overflow-hidden from TabsContent
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        "flex-1 flex flex-col overflow-hidden", // Added for height
                         isMobile ? "p-1" : "md:p-0"
                     )}
                 >
-                   <div className="h-full flex flex-col flex-1 overflow-hidden">
+                   <div className="h-full flex flex-col flex-1 overflow-hidden"> {/* Inner div takes flex-1 */}
                        <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md"
+                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md" // Card is flex-1 of inner div
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
                                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -314,7 +306,7 @@ const MessagesPage = () => {
                                 <CardDescription>Businesses you are connected with.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto",
+                                "pb-4 flex-1 overflow-auto", // CardContent scrolls
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingConnections ? (

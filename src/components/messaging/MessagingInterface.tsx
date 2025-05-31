@@ -368,13 +368,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const parentControlsMobileView = isMobile;
 
   return (
-    <div className="flex flex-1 h-full overflow-hidden">
+    <div className="flex flex-1 flex-col h-full overflow-hidden"> {/* Ensured flex-col here */}
       {!parentControlsMobileView || (isMobile && !activeConversationId) ? (
         <div
           className={cn(
             "flex flex-col border-r bg-background min-w-0",
-             // On mobile, if no active chat, this list takes full width and is a flex container.
-             // On desktop, it's always flex and takes its defined width.
             isMobile ? (activeConversationId ? "hidden" : "w-full flex flex-1") : "md:w-2/5 lg:w-1/3 flex flex-1"
           )}
         >
@@ -426,10 +424,10 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         </div>
       ) : null}
 
-      {activeConversationId ? ( // Always render chat view if a conversation is active, parent handles its visibility on mobile
+      {activeConversationId ? (
         <div
           className={cn(
-            "flex flex-1 flex-col overflow-hidden", // Removed h-[70vh]
+            "flex flex-1 flex-col overflow-hidden",
             isMobile ? (activeConversationId ? "w-full flex" : "hidden") : "md:flex"
           )}
         >
@@ -476,7 +474,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                   )}
               </div>
 
-              <ScrollArea className="flex-1 overflow-y-auto bg-background">
+              <ScrollArea className="flex-1 overflow-y-auto bg-background"> {/* ScrollArea is flex-1 */}
                 <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
                   {isLoadingMessagesState ? (
                        <div className="flex justify-center items-center h-full">
@@ -504,7 +502,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 </div>
               </ScrollArea>
 
-              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2 pb-16" : "p-4")}> {/* Added pb-16 for mobile */}
+              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2 pb-16" : "p-4")}> {/* Input area is flex-shrink-0 */}
                 {replyingTo && (
                   <div className="mb-2 p-2 bg-secondary/50 rounded-md text-xs text-secondary-foreground relative">
                     <div className="flex justify-between items-start">
