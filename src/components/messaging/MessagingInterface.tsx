@@ -1,4 +1,3 @@
-
 // src/components/messaging/MessagingInterface.tsx
 "use client";
 
@@ -22,7 +21,7 @@ import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDo
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { useIsMobile } from '@/hooks/use-mobile'; 
+import { useIsMobile } from '@/hooks/use-mobile';
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -264,7 +263,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
   useEffect(() => {
     if (activeConversationId !== prevActiveConversationIdRef.current) {
-      setIsInitialMessagesLoad(true);
+      setIsInitialMessagesLoad(true); // Reset on conversation change
       prevActiveConversationIdRef.current = activeConversationId;
     }
 
@@ -318,13 +317,18 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
    useEffect(() => {
        if (messagesEndRef.current) {
-           const behavior = isInitialMessagesLoad ? 'auto' : 'smooth';
+           const options: ScrollIntoViewOptions = {
+               behavior: isInitialMessagesLoad ? 'auto' : 'smooth',
+               block: isInitialMessagesLoad ? 'end' : 'nearest',
+           };
+           const timerDelay = isInitialMessagesLoad ? 200 : 100;
+
            const timer = setTimeout(() => {
-               messagesEndRef.current?.scrollIntoView({ behavior });
+               messagesEndRef.current?.scrollIntoView(options);
                if (isInitialMessagesLoad) {
-                 setIsInitialMessagesLoad(false);
+                 setIsInitialMessagesLoad(false); // Set to false after the initial scroll
                }
-           }, 100); 
+           }, timerDelay);
            return () => clearTimeout(timer);
        }
    }, [messages, isInitialMessagesLoad]);
@@ -380,7 +384,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setTimeout(() => {
         event.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 400); 
+      }, 400);
     }
   };
 
@@ -390,7 +394,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       {(!isMobile || !activeConversationId) && (
         <div
           className={cn(
-            "flex flex-col border-r bg-background min-w-0 flex-1", 
+            "flex flex-col border-r bg-background min-w-0 flex-1",
             isMobile ? (activeConversationId ? "hidden" : "w-full") : "md:w-2/5 lg:w-1/3"
           )}
         >
@@ -574,4 +578,3 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
-
