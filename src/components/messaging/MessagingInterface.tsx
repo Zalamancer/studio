@@ -365,15 +365,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     setReplyingTo(null);
   }, []);
 
-  const parentControlsMobileView = isMobile;
-
   return (
-    <div className="flex flex-1 flex-col h-full overflow-hidden"> {/* Ensured flex-col here */}
-      {!parentControlsMobileView || (isMobile && !activeConversationId) ? (
+    <div className="flex flex-col flex-1 h-full overflow-hidden">
+      {/* Conversation List (Left Panel) */}
+      {(!isMobile || !activeConversationId) && (
         <div
           className={cn(
             "flex flex-col border-r bg-background min-w-0",
-            isMobile ? (activeConversationId ? "hidden" : "w-full flex flex-1") : "md:w-2/5 lg:w-1/3 flex flex-1"
+            isMobile ? (activeConversationId ? "hidden" : "w-full flex-1") : "md:w-2/5 lg:w-1/3 flex-1"
           )}
         >
           <div className={cn("border-b flex-shrink-0", isMobile ? "p-3" : "p-4")}>
@@ -381,7 +380,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 <MessageSquare className="h-5 w-5" /> All Messages
             </h2>
           </div>
-          <ScrollArea className={cn("flex-1 overflow-y-auto", isMobile ? "bg-background" : "bg-card")}>
+          <ScrollArea className={cn("flex-1 overflow-y-auto min-h-0", isMobile ? "bg-background" : "bg-card")}>
             <div className={cn(isMobile ? "p-1" : "p-2", "space-y-1")}>
               {isLoadingConversations ? (
                 Array.from({ length: 5 }).map((_, i) => (
@@ -422,16 +421,16 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             </div>
           </ScrollArea>
         </div>
-      ) : null}
+      )}
 
-      {activeConversationId ? (
+      {/* Chat View (Right Panel) */}
+      {activeConversationId && (
         <div
           className={cn(
-            "flex flex-1 flex-col overflow-hidden",
+            "flex flex-1 flex-col overflow-hidden", 
             isMobile ? (activeConversationId ? "w-full flex" : "hidden") : "md:flex"
           )}
         >
-          {activeConversationId ? (
             <>
               <div className={cn("border-b flex items-center gap-3 bg-muted/50 flex-shrink-0", isMobile ? "p-3" : "p-4")}>
                  {isMobile && (
@@ -474,7 +473,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                   )}
               </div>
 
-              <ScrollArea className="flex-1 overflow-y-auto bg-background"> {/* ScrollArea is flex-1 */}
+              <ScrollArea className="flex-1 overflow-y-auto bg-background min-h-0">
                 <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
                   {isLoadingMessagesState ? (
                        <div className="flex justify-center items-center h-full">
@@ -502,7 +501,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 </div>
               </ScrollArea>
 
-              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2 pb-16" : "p-4")}> {/* Input area is flex-shrink-0 */}
+              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2 pb-16" : "p-4")}>
                 {replyingTo && (
                   <div className="mb-2 p-2 bg-secondary/50 rounded-md text-xs text-secondary-foreground relative">
                     <div className="flex justify-between items-start">
@@ -541,26 +540,17 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 </form>
               </div>
             </>
-          ) : (
-             !isMobile && (
-                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
-                     <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
-                     <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
-                     <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
-                </div>
-             )
-          )}
+          
         </div>
-      ) : (
-         !isMobile && (
-            <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
-                 <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
-                 <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
-                 <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
-            </div>
-         )
+      )}
+      {/* Placeholder if no active conversation on desktop (and not mobile, because mobile handles list view) */}
+      {!activeConversationId && !isMobile && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
+              <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
+              <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
+              <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
+          </div>
       )}
     </div>
   );
 };
-

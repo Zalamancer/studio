@@ -8,7 +8,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Added TabsTrigger here
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { MessagingInterface } from '@/components/messaging/MessagingInterface';
 import { getPendingRequests, getConnections } from '@/services/connectionService';
@@ -46,7 +46,7 @@ const MessagesPage = () => {
     useEffect(() => {
         const conversationIdFromUrl = searchParams?.get('conversationId');
         const tabFromUrl = searchParams?.get('tab');
-        let newActiveTabState = 'chats'; // Default to 'chats'
+        let newActiveTabState = 'chats';
         let newSelectedConversationIdState: string | null = null;
 
         if (conversationIdFromUrl) {
@@ -55,7 +55,6 @@ const MessagesPage = () => {
         } else if (tabFromUrl && ['chats', 'requests', 'connections'].includes(tabFromUrl)) {
             newActiveTabState = tabFromUrl;
         }
-        // If no relevant params, it defaults to 'chats' and null conversationId (initial state)
 
         setActiveTab(newActiveTabState);
         setSelectedConversationId(newSelectedConversationIdState);
@@ -112,7 +111,7 @@ const MessagesPage = () => {
       refetchConnections();
       if (currentUserId) {
           queryClient.invalidateQueries({ queryKey: ['conversations', currentUserId] });
-          queryClient.invalidateQueries({ queryKey: ['postDetails']});
+          queryClient.invalidateQueries({ queryKey: ['postDetails']}); // For conversation list post questions
       }
        toast({
           title: "Refreshing...",
@@ -122,7 +121,7 @@ const MessagesPage = () => {
     }, [refetchRequests, refetchConnections, queryClient, currentUserId, toast]);
 
     const {
-        data: conversationsForTabCount = [], // Used for badge counts, not primary display
+        data: conversationsForTabCount = [],
         isLoading: isLoadingConversationsForTabCount,
         error: conversationsErrorForTabCount,
         isError: isConversationsErrorTrueForTabCount,
@@ -130,27 +129,40 @@ const MessagesPage = () => {
       queryKey: ['conversationsForTabCount', currentUserId],
       queryFn: () => currentUserId ? getConversationsForUser(currentUserId) : Promise.resolve([]),
       enabled: !!currentUserId,
-      staleTime: 1000 * 60 * 5, // Less frequent updates for badge counts
+      staleTime: 1000 * 60 * 5,
       refetchOnWindowFocus: false,
       retry: 1,
     });
 
     const handleSelectConversationFromList = useCallback((conversationId: string) => {
-        const newParams = new URLSearchParams();
-        newParams.set('conversationId', conversationId);
-        // No need to set 'tab' as 'conversationId' implies 'chats' tab.
+        const newParams = new URLSearchParams(searchParams?.toString());
+        if (conversationId) {
+            newParams.set('conversationId', conversationId);
+            newParams.delete('tab'); // Ensure tab is not set if conversationId is present
+        } else {
+            newParams.delete('conversationId');
+            newParams.set('tab', 'chats'); // Default to chats tab if conversation is cleared
+        }
         router.replace(`/messages?${newParams.toString()}`, { scroll: false });
-    }, [router]);
+    }, [router, searchParams]);
     
     const handleTabChange = useCallback((tabValue: string) => {
-        const newParams = new URLSearchParams();
+        const newParams = new URLSearchParams(searchParams?.toString());
         if (tabValue === 'chats' && selectedConversationId) {
+            // If switching to chats and a conversation was already selected, preserve it
             newParams.set('conversationId', selectedConversationId);
+            newParams.delete('tab');
+        } else if (tabValue === 'chats' && !selectedConversationId) {
+            // Switching to chats but no specific conversation, just remove conversationId
+            newParams.delete('conversationId');
+            newParams.set('tab', 'chats'); // Explicitly set tab to chats
         } else {
+            // For other tabs, clear conversationId and set the tab
+            newParams.delete('conversationId');
             newParams.set('tab', tabValue);
         }
         router.replace(`/messages?${newParams.toString()}`, { scroll: false });
-    }, [router, selectedConversationId]);
+    }, [router, selectedConversationId, searchParams]);
 
 
     if (authLoading) {
@@ -186,7 +198,7 @@ const MessagesPage = () => {
 
     return (
         <div className={cn(
-            "flex flex-col flex-grow h-full", // Main container takes full height
+            "flex flex-col flex-grow h-full", 
             isMobile ? "" : "md:container md:mx-auto md:py-6 md:px-4"
         )}>
             {(isRequestsError || isConnectionsError || isConversationsErrorTrueForTabCount) && combinedErrorMessage && (
@@ -202,7 +214,7 @@ const MessagesPage = () => {
             <Tabs
                 value={activeTab}
                 onValueChange={handleTabChange}
-                className="flex flex-col flex-1 overflow-hidden" // Tabs component fills remaining space
+                className="flex flex-col flex-1 overflow-hidden" 
             >
                  <div className={cn("relative flex-shrink-0", isMobile ? "" : "md:mb-4")}>
                     <TabsList className={cn(
@@ -234,10 +246,10 @@ const MessagesPage = () => {
                     value="chats"
                     className={cn( 
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        isMobile ? "" : "md:p-0"
+                        "relative flex-1" 
                     )}
                 >
-                    <div className="h-full flex flex-col flex-1 overflow-hidden">
+                    <div className="absolute inset-0 flex flex-col overflow-hidden"> 
                         <MessagingInterface
                             currentUserId={user.uid}
                             activeConversationId={selectedConversationId}
@@ -251,10 +263,10 @@ const MessagesPage = () => {
                     value="requests"
                     className={cn(
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        isMobile ? "p-1" : "md:p-0"
+                        "relative flex-1" 
                     )}
                 >
-                   <div className="h-full flex flex-col flex-1 overflow-hidden">
+                   <div className="absolute inset-0 flex flex-col overflow-hidden p-1 md:p-0"> 
                         <Card className={cn(
                             "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md"
                         )}>
@@ -293,10 +305,10 @@ const MessagesPage = () => {
                     value="connections"
                      className={cn(
                         "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-                        isMobile ? "p-1" : "md:p-0"
+                        "relative flex-1" 
                     )}
                 >
-                   <div className="h-full flex flex-col flex-1 overflow-hidden">
+                   <div className="absolute inset-0 flex flex-col overflow-hidden p-1 md:p-0"> 
                        <Card className={cn(
                             "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md"
                         )}>
@@ -336,5 +348,3 @@ const MessagesPage = () => {
 };
 
 export default MessagesPage;
-
-    
