@@ -1,3 +1,4 @@
+
 // src/components/messaging/MessagingInterface.tsx
 "use client";
 
@@ -21,7 +22,8 @@ import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDo
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-mobile'; // Corrected import
+import { Timestamp } from 'firebase/firestore'; // Added missing import
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -70,19 +72,19 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
       <button
         onClick={() => onSelect(conversation.id)}
         className={cn(
-          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-center gap-3",
+          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-start gap-0", // Changed gap-3 to gap-0
           isSelected ? "bg-muted" : ""
         )}
         aria-current={isSelected ? "page" : undefined}
       >
-         <Avatar className="h-9 w-9 flex-shrink-0">
+         <Avatar className="h-9 w-9 flex-shrink-0 mt-0.5 mr-3"> {/* Added mr-3 */}
           <AvatarImage src={otherParticipantDetails?.avatar} alt={participantName} />
           <AvatarFallback className="bg-primary text-primary-foreground text-xs">{initials}</AvatarFallback>
          </Avatar>
         <div className="flex-grow overflow-hidden min-w-0">
           <p className="text-sm font-medium text-foreground truncate">{participantName}</p>
           {postQuestion && (
-              <p className="text-xs text-primary truncate font-medium mt-0.5">
+              <p className="text-xs text-primary truncate font-medium mt-0.5 max-w-[80px] sm:max-w-[160px] md:max-w-xs lg:max-w-sm"> {/* Added responsive max-width */}
                   Re: {postQuestion}
               </p>
           )}
@@ -91,7 +93,7 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
           </p>
         </div>
         {formattedTime && (
-          <span className="text-xs text-muted-foreground self-start pt-1 flex-shrink-0">
+          <span className="text-xs text-muted-foreground self-start pt-0.5 ml-2 flex-shrink-0"> {/* Added flex-shrink-0 */}
             {formattedTime}
           </span>
         )}
@@ -319,14 +321,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        if (messagesEndRef.current) {
            const options: ScrollIntoViewOptions = {
                behavior: isInitialMessagesLoad ? 'auto' : 'smooth',
-               block: isInitialMessagesLoad ? 'end' : 'nearest',
+               block: isInitialMessagesLoad ? 'end' : 'nearest', 
            };
-           const timerDelay = isInitialMessagesLoad ? 200 : 100;
+           const timerDelay = isInitialMessagesLoad ? 200 : 100; 
 
            const timer = setTimeout(() => {
                messagesEndRef.current?.scrollIntoView(options);
                if (isInitialMessagesLoad) {
-                 setIsInitialMessagesLoad(false); // Set to false after the initial scroll
+                 setIsInitialMessagesLoad(false);
                }
            }, timerDelay);
            return () => clearTimeout(timer);
@@ -384,7 +386,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setTimeout(() => {
         event.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 400);
+      }, 400); 
     }
   };
 
@@ -578,3 +580,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
+
+    
