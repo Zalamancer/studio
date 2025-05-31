@@ -209,14 +209,16 @@ const BoardPageContent = () => {
               }
             }}
           >
-            <SheetContent side="right" className="w-full h-full p-0 flex flex-col sm:max-w-full">
-              {/* Add an accessible title for the sheet itself */}
+            <SheetContent
+              side="right"
+              className="w-full h-full p-0 flex flex-col sm:max-w-full"
+              showCloseButton={false} // Hide default Sheet close button
+            >
               {selectedPost && (
                 <SheetTitle className="sr-only">
                   {`Details for post: ${selectedPost.question.substring(0, 50)}${selectedPost.question.length > 50 ? '...' : ''}`}
                 </SheetTitle>
               )}
-              {/* The PostDetailPanel will be the main content and should fill the sheet */}
               <div className="flex-1 overflow-y-auto">
                 {renderPostDetailPanel()}
               </div>
