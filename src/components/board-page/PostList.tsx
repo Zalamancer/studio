@@ -4,11 +4,11 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ScrollArea, ScrollBar } from "@/components/ui/scroll-area"; // Import ScrollArea and ScrollBar
 import { Loader2, Sparkles, HandHelping, Briefcase } from "lucide-react";
-import { PostCard } from './PostCard'; // Assuming PostCard is in the same directory
+import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
-import { availableTags } from '@/components/layout/MainLayout'; // Assuming availableTags is exported from MainLayout
+import { availableTags } from '@/components/layout/MainLayout';
 import { cn } from '@/lib/utils';
 
 interface PostListProps {
@@ -35,7 +35,6 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
     let filtered = selectedTags.length === 0 ? posts : posts.filter(post => 
         Array.isArray(post.tags) && selectedTags.every(tag => post.tags.includes(tag))
     );
-    // Ensure posts are sorted by creation date, newest first
     return filtered.sort((a, b) => {
         const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : (typeof a.createdAt === 'number' ? a.createdAt : 0);
         const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : 0);
@@ -84,28 +83,35 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
 
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-4 flex flex-wrap items-center gap-2 px-1">
-        <span className="text-sm font-medium text-muted-foreground mr-2">Filter by Tag:</span>
-        {availableTags.map((tag) => (
-          <Button
-            key={tag}
-            variant={selectedTags.includes(tag) ? "default" : "outline"}
-            size="sm"
-            onClick={() => handleTagClick(tag)}
-            className={cn(
-              "rounded-full px-3 py-1 text-xs transition-colors duration-150",
-              selectedTags.includes(tag) ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-            )}
-            aria-pressed={selectedTags.includes(tag)}
-          >
-            {tag}
-          </Button>
-        ))}
-        {selectedTags.length > 0 && (
-          <Button variant="ghost" size="sm" onClick={() => setSelectedTags([])} className="text-xs text-primary hover:underline p-1 h-auto ml-2">
-            Clear Filters
-          </Button>
-        )}
+      <div className="mb-4 px-1">
+        <div className="flex items-center gap-2 mb-1">
+            <span className="text-sm font-medium text-muted-foreground mr-2 flex-shrink-0">Filter by Tag:</span>
+            <ScrollArea className="w-full whitespace-nowrap rounded-md flex-grow min-w-0">
+                <div className="flex space-x-2 pb-2">
+                    {availableTags.map((tag) => (
+                    <Button
+                        key={tag}
+                        variant={selectedTags.includes(tag) ? "default" : "outline"}
+                        size="sm"
+                        onClick={() => handleTagClick(tag)}
+                        className={cn(
+                        "rounded-full px-3 py-1 text-xs transition-colors duration-150 flex-shrink-0", // Added flex-shrink-0
+                        selectedTags.includes(tag) ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                        )}
+                        aria-pressed={selectedTags.includes(tag)}
+                    >
+                        {tag}
+                    </Button>
+                    ))}
+                    {selectedTags.length > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => setSelectedTags([])} className="text-xs text-primary hover:underline p-1 h-auto flex-shrink-0">
+                        Clear Filters
+                    </Button>
+                    )}
+                </div>
+                <ScrollBar orientation="horizontal" />
+            </ScrollArea>
+        </div>
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-grow">
