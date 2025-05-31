@@ -203,7 +203,7 @@ const MessagesPage = () => {
 
     return (
         <div className={cn(
-            "flex flex-col flex-grow h-full",
+            "flex flex-col flex-grow h-full", // Ensure this container can grow
             isMobile ? "" : "md:container md:mx-auto md:py-6 md:px-4"
         )}>
             {(isRequestsError || isConnectionsError || isConversationsErrorTrueForTabCount) && combinedErrorMessage && (
@@ -224,7 +224,7 @@ const MessagesPage = () => {
                         setSelectedConversationId(null);
                     }
                 }}
-                className="flex flex-col flex-1 overflow-hidden"
+                className="flex flex-col flex-1 overflow-hidden" // Primary flex container for tabbed UI
             >
                  <div className={cn("relative flex-shrink-0", isMobile ? "" : "md:mb-4")}>
                     <TabsList className={cn(
@@ -255,11 +255,11 @@ const MessagesPage = () => {
                 <TabsContent
                     value="chats"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1 flex flex-col overflow-hidden", // Added flex-1 flex flex-col overflow-hidden
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", // Removed flex-1
                         isMobile ? "" : "md:p-0"
                     )}
                 >
-                    <div className="h-full flex flex-col overflow-hidden rounded-md md:border bg-background">
+                    <div className="h-full flex flex-col flex-1 overflow-hidden"> {/* Added flex-1 here */}
                         <MessagingInterface
                             currentUserId={user.uid}
                             activeConversationId={selectedConversationId}
@@ -272,14 +272,14 @@ const MessagesPage = () => {
                 <TabsContent
                     value="requests"
                     className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1 flex flex-col overflow-hidden", // Added flex-1 flex flex-col overflow-hidden
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", // Removed flex-1
                         isMobile ? "p-1" : "md:p-0"
                     )}
                 >
-                    <div className="h-full flex flex-col overflow-hidden">
+                   <div className="h-full flex flex-col flex-1 overflow-hidden"> {/* Added flex-1 here */}
                         <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md",
-                            !isMobile && "h-full" // For desktop, ensure card takes full height of its parent
+                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md"
+                            // Removed fixed h-[70vh] for full height expansion
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
                                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -288,7 +288,7 @@ const MessagesPage = () => {
                                 <CardDescription>Review businesses wanting to connect.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto",
+                                "pb-4 flex-1 overflow-auto", // Ensure CardContent can scroll
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingRequests ? (
@@ -315,14 +315,14 @@ const MessagesPage = () => {
                 <TabsContent
                     value="connections"
                      className={cn(
-                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 flex-1 flex flex-col overflow-hidden", // Added flex-1 flex flex-col overflow-hidden
+                        "mt-0 ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2", // Removed flex-1
                         isMobile ? "p-1" : "md:p-0"
                     )}
                 >
-                   <div className="h-full flex flex-col overflow-hidden">
+                   <div className="h-full flex flex-col flex-1 overflow-hidden"> {/* Added flex-1 here */}
                        <Card className={cn(
-                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md",
-                            !isMobile && "h-full" // For desktop, ensure card takes full height of its parent
+                            "flex-1 flex flex-col overflow-hidden rounded-md md:border md:shadow-md"
+                            // Removed fixed h-[70vh]
                         )}>
                             <CardHeader className={cn("pt-4 pb-3 flex-shrink-0", isMobile ? "px-3" : "px-6 md:pt-6")}>
                                 <CardTitle className="flex items-center gap-2 text-lg">
@@ -331,7 +331,7 @@ const MessagesPage = () => {
                                 <CardDescription>Businesses you are connected with.</CardDescription>
                             </CardHeader>
                             <CardContent className={cn(
-                                "pb-4 flex-1 overflow-auto",
+                                "pb-4 flex-1 overflow-auto", // Ensure CardContent can scroll
                                 isMobile ? "px-3" : "px-6 md:pb-6"
                             )}>
                                 {isLoadingConnections ? (
@@ -360,3 +360,4 @@ const MessagesPage = () => {
 };
 
 export default MessagesPage;
+

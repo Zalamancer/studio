@@ -26,8 +26,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 
 interface MessagingInterfaceProps {
   currentUserId: string;
-  activeConversationId?: string | null; // Changed from initialConversationId
-  onSelectConversation: (conversationId: string) => void; // Callback to parent
+  activeConversationId?: string | null;
+  onSelectConversation: (conversationId: string) => void;
   initialMessageText?: string;
 }
 
@@ -192,15 +192,11 @@ MessageBubble.displayName = 'MessageBubble';
 
 export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     currentUserId,
-    activeConversationId, // Changed from initialConversationId
-    onSelectConversation, // Added prop
+    activeConversationId,
+    onSelectConversation,
     initialMessageText,
 }) => {
   const isMobile = useIsMobile();
-  // activeMobileView is now managed by parent (MessagesPage) if needed, or simpler logic here
-  // For now, assume MessagingInterface is always visible when rendered (parent controls visibility)
-  // const [activeMobileView, setActiveMobileView] = useState<'list' | 'chat'>(activeConversationId ? 'chat' : 'list');
-
   const [newMessage, setNewMessage] = useState('');
   const [replyingTo, setReplyingTo] = useState<SerializableMessage | null>(null);
   const queryClient = useQueryClient();
@@ -369,20 +365,17 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     setReplyingTo(null);
   }, []);
 
-  // Determine if we are in a mobile layout where the parent (MessagesPage) controls view switching
-  // For this component, if isMobile is true, assume the parent handles activeMobileView logic.
-  // The `activeMobileView` check here is mostly for standalone testing or if this component
-  // were to manage its own mobile view state.
-  const parentControlsMobileView = isMobile; // Simplified: if mobile, parent handles visibility
+  const parentControlsMobileView = isMobile;
 
   return (
     <div className="flex flex-1 h-full overflow-hidden">
-      {/* Conversation List Panel - only shown if NOT mobile OR if mobile AND list view active (handled by parent) */}
-      {!parentControlsMobileView || (isMobile && !activeConversationId) ? ( // Simplified visibility based on selected conversation for mobile
+      {!parentControlsMobileView || (isMobile && !activeConversationId) ? (
         <div
           className={cn(
             "flex flex-col border-r bg-background min-w-0",
-            isMobile ? "w-full" : "md:w-2/5 lg:w-1/3"
+             // On mobile, if no active chat, this list takes full width and is a flex container.
+             // On desktop, it's always flex and takes its defined width.
+            isMobile ? (activeConversationId ? "hidden" : "w-full flex flex-1") : "md:w-2/5 lg:w-1/3 flex flex-1"
           )}
         >
           <div className={cn("border-b flex-shrink-0", isMobile ? "p-3" : "p-4")}>
@@ -421,9 +414,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                            conversation={conv}
                            isSelected={activeConversationId === conv.id}
                            currentUserId={currentUserId}
-                           onSelect={onSelectConversation} // Use prop
+                           onSelect={onSelectConversation}
                            postQuestion={postQuestionText}
-                           highlight={activeConversationId === conv.id} // Use activeConversationId
+                           highlight={activeConversationId === conv.id}
                        />
                    );
                })
@@ -433,18 +426,17 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         </div>
       ) : null}
 
-      {/* Message Display Panel - shown if a conversation is selected OR if mobile AND chat view is active (handled by parent) */}
-      {activeConversationId || (isMobile && activeConversationId) ? (
+      {activeConversationId ? ( // Always render chat view if a conversation is active, parent handles its visibility on mobile
         <div
           className={cn(
-            "flex flex-1 flex-col overflow-hidden h-[70vh]", // Added h-[70vh]
-            isMobile ? "w-full" : "md:flex" // md:flex ensures it's visible on desktop
+            "flex flex-1 flex-col overflow-hidden", // Removed h-[70vh]
+            isMobile ? (activeConversationId ? "w-full flex" : "hidden") : "md:flex"
           )}
         >
           {activeConversationId ? (
             <>
               <div className={cn("border-b flex items-center gap-3 bg-muted/50 flex-shrink-0", isMobile ? "p-3" : "p-4")}>
-                 {isMobile && ( // Back button for mobile when chat is active
+                 {isMobile && (
                    <Button variant="ghost" size="icon" className="mr-1" onClick={() => onSelectConversation('')}>
                      <ArrowLeft className="h-5 w-5" />
                    </Button>
@@ -512,7 +504,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 </div>
               </ScrollArea>
 
-              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2" : "p-4")}>
+              <div className={cn("border-t bg-muted/50 flex-shrink-0", isMobile ? "p-2 pb-16" : "p-4")}> {/* Added pb-16 for mobile */}
                 {replyingTo && (
                   <div className="mb-2 p-2 bg-secondary/50 rounded-md text-xs text-secondary-foreground relative">
                     <div className="flex justify-between items-start">
@@ -552,9 +544,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
               </div>
             </>
           ) : (
-            // This "Select or Start" message will typically only show on desktop if no conversation is auto-selected
              !isMobile && (
-                <div className="h-[70vh] flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
+                <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
                      <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
                      <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
                      <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
@@ -563,8 +554,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
           )}
         </div>
       ) : (
-         !isMobile && ( // Only show the "Select or Start" message on desktop if no conversation is active
-            <div className="h-[70vh] flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
+         !isMobile && (
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
                  <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
                  <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
                  <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
@@ -574,3 +565,4 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
