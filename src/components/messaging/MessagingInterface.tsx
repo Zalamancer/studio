@@ -203,6 +203,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const { toast } = useToast();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLInputElement>(null);
+  const prevActiveConversationIdRef = useRef<string | null | undefined>(null);
+  const [isInitialMessagesLoad, setIsInitialMessagesLoad] = useState(true);
 
   const [messages, setMessages] = useState<SerializableMessage[]>([]);
   const [isLoadingMessagesState, setIsLoadingMessagesState] = useState(true);
@@ -261,6 +263,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
    const postDetailsMap = postDetailsQueries.data;
 
   useEffect(() => {
+    if (activeConversationId !== prevActiveConversationIdRef.current) {
+      setIsInitialMessagesLoad(true);
+      prevActiveConversationIdRef.current = activeConversationId;
+    }
+
     if (!activeConversationId) {
       setMessages([]);
       setIsLoadingMessagesState(false);
@@ -311,12 +318,16 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
    useEffect(() => {
        if (messagesEndRef.current) {
+           const behavior = isInitialMessagesLoad ? 'auto' : 'smooth';
            const timer = setTimeout(() => {
-               messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-           }, 100);
+               messagesEndRef.current?.scrollIntoView({ behavior });
+               if (isInitialMessagesLoad) {
+                 setIsInitialMessagesLoad(false);
+               }
+           }, 100); // A slight delay might be needed for new messages to render
            return () => clearTimeout(timer);
        }
-   }, [messages]);
+   }, [messages, isInitialMessagesLoad]);
 
 
   const handleSendMessage = (e: React.FormEvent) => {
@@ -365,14 +376,22 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     setReplyingTo(null);
   }, []);
 
+  const handleInputFocus = (event: React.FocusEvent<HTMLInputElement>) => {
+    if (isMobile) {
+      setTimeout(() => {
+        event.target.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      }, 300); // Delay to allow keyboard to appear
+    }
+  };
+
   return (
     <div className="flex flex-col flex-1 h-full overflow-hidden">
       {/* Conversation List (Left Panel) */}
       {(!isMobile || !activeConversationId) && (
         <div
           className={cn(
-            "flex flex-col border-r bg-background min-w-0",
-            isMobile ? (activeConversationId ? "hidden" : "w-full flex-1") : "md:w-2/5 lg:w-1/3 flex-1"
+            "flex flex-col border-r bg-background min-w-0 flex-1", // Ensure flex-1 here
+            isMobile ? (activeConversationId ? "hidden" : "w-full") : "md:w-2/5 lg:w-1/3"
           )}
         >
           <div className={cn("border-b flex-shrink-0", isMobile ? "p-3" : "p-4")}>
@@ -427,7 +446,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       {activeConversationId && (
         <div
           className={cn(
-            "flex flex-1 flex-col overflow-hidden", 
+            "flex flex-1 flex-col overflow-hidden",
             isMobile ? (activeConversationId ? "w-full flex" : "hidden") : "md:flex"
           )}
         >
@@ -521,6 +540,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                     placeholder="Type your message..."
                     value={newMessage}
                     onChange={(e) => setNewMessage(e.target.value)}
+                    onFocus={handleInputFocus}
                     disabled={sendMessageMutation.isPending || isLoadingMessagesState}
                     className="flex-grow bg-background"
                     aria-label="Message input"
@@ -554,3 +574,5 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
+    
