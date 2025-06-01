@@ -1,7 +1,8 @@
+
 // src/services/userPreferenceService.ts
 import { db, auth } from '@/lib/firebase/config'; // Import auth
 import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, Timestamp } from 'firebase/firestore';
-import type { UserPreference, UpdateUserPreferencesData } from '@/types/userPreferences';
+import type { UserPreference, UpdateUserPreferencesData, SavedPaymentMethod } from '@/types/userPreferences';
 
 const PREFERENCES_COLLECTION = 'userPreferences';
 
@@ -13,35 +14,46 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   const clientAuthUid = auth.currentUser?.uid;
   console.log(`%c[userPreferenceService] getUserPreferences: Fetching for userId: '${userId}'. Current client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
-  // Log the UID that will be compared by the Firestore rule
   console.log(`%c[userPreferenceService] Rule Check Debug: For this call, rule will effectively check if '${clientAuthUid || 'NULL'}' == '${userId}'`, "color: #FF8C00; font-weight: bold;");
-
 
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     const docSnap = await getDoc(prefDocRef);
     if (docSnap.exists()) {
-      const data = docSnap.data() as UserPreference;
-      console.log(`%c[userPreferenceService] getUserPreferences: Preferences found for ${userId}:`, "color: green;", data);
-      return {
-        userId: data.userId,
-        favoriteSectorCodes: data.favoriteSectorCodes || [],
+      const data = docSnap.data();
+      console.log(`%c[userPreferenceService] getUserPreferences: Raw data from Firestore for ${userId}:`, "color: green;", data);
+      
+      const paymentMethodsRaw = data.paymentMethods;
+      let parsedPaymentMethods: SavedPaymentMethod[] = [];
+      if (Array.isArray(paymentMethodsRaw)) {
+        parsedPaymentMethods = paymentMethodsRaw as SavedPaymentMethod[];
+      } else if (paymentMethodsRaw) {
+        console.warn(`[userPreferenceService] paymentMethods for user ${userId} is not an array, but: ${typeof paymentMethodsRaw}. Will default to empty array. Data:`, paymentMethodsRaw);
+      }
+      console.log(`%c[userPreferenceService] getUserPreferences: Parsed paymentMethods for ${userId}:`, "color: green;", parsedPaymentMethods);
+
+      const preferences: UserPreference = {
+        userId: data.userId || userId, // Fallback to param userId if missing
+        favoriteSectorCodes: Array.isArray(data.favoriteSectorCodes) ? data.favoriteSectorCodes : [],
         notifyOnReply: data.notifyOnReply ?? true,
         notifyOnMention: data.notifyOnMention ?? true,
         notifyOnNewConnectionRequest: data.notifyOnNewConnectionRequest ?? true,
         notifyOnConnectionAccepted: data.notifyOnConnectionAccepted ?? true,
         notifyOnNewMessage: data.notifyOnNewMessage ?? true,
         notifyOnPlatformUpdates: data.notifyOnPlatformUpdates ?? true,
-        // @ts-ignore
-        createdAt: data.createdAt, // Keep existing timestamps if they exist
-        // @ts-ignore
+        stripeCustomerId: data.stripeCustomerId || undefined,
+        paymentMethods: parsedPaymentMethods,
+        createdAt: data.createdAt,
         updatedAt: data.updatedAt
       };
+      console.log(`%c[userPreferenceService] getUserPreferences: Preferences object being returned for ${userId}:`, "color: green; font-weight:bold;", preferences);
+      return preferences;
     }
     console.log(`%c[userPreferenceService] getUserPreferences: No preferences document found for ${userId}. Returning defaults.`, "color: orange;");
     return {
         userId: userId,
         favoriteSectorCodes: [],
+        paymentMethods: [],
         notifyOnReply: true,
         notifyOnMention: true,
         notifyOnNewConnectionRequest: true,
@@ -49,9 +61,8 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
         notifyOnNewMessage: true,
         notifyOnPlatformUpdates: true,
     };
-  } catch (error: any) { // Changed from error without type
+  } catch (error: any) {
     console.error(`%c[userPreferenceService] getUserPreferences: Error fetching preferences for ${userId}:`, "color: red;", error);
-    // Log the auth state again at the point of error
     console.error(`%c  Auth state at error point: auth.currentUser?.uid = ${auth.currentUser?.uid || 'NULL'}`, "color: red;");
     return null;
   }
@@ -78,29 +89,38 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     const docSnap = await getDoc(prefDocRef);
-    const updatePayload: Partial<UserPreference> & { updatedAt: Timestamp } = {
+    const updatePayload: Partial<UserPreference> & { updatedAt: Timestamp, userId: string } = {
       ...dataToUpdate,
+      userId: userId, // Explicitly ensure userId is part of the update for rules on create
       updatedAt: Timestamp.now()
     };
+    
+    // Ensure paymentMethods is an array, even if it's empty in dataToUpdate
+    if (dataToUpdate.paymentMethods !== undefined) {
+        updatePayload.paymentMethods = Array.isArray(dataToUpdate.paymentMethods) ? dataToUpdate.paymentMethods : [];
+    }
+
 
     if (docSnap.exists()) {
       await updateDoc(prefDocRef, updatePayload);
-      console.log(`%c[userPreferenceService] updateUserPreferences: Preferences updated for user ${userId}.`, "color: green;");
+      console.log(`%c[userPreferenceService] updateUserPreferences: Preferences updated for user ${userId}. Payload:`, "color: green;", updatePayload);
     } else {
       const createPayload: UserPreference = {
         userId: userId,
         favoriteSectorCodes: dataToUpdate.favoriteSectorCodes || [],
+        paymentMethods: Array.isArray(dataToUpdate.paymentMethods) ? dataToUpdate.paymentMethods : [],
         notifyOnReply: dataToUpdate.notifyOnReply ?? true,
         notifyOnMention: dataToUpdate.notifyOnMention ?? true,
         notifyOnNewConnectionRequest: dataToUpdate.notifyOnNewConnectionRequest ?? true,
         notifyOnConnectionAccepted: dataToUpdate.notifyOnConnectionAccepted ?? true,
         notifyOnNewMessage: dataToUpdate.notifyOnNewMessage ?? true,
         notifyOnPlatformUpdates: dataToUpdate.notifyOnPlatformUpdates ?? true,
+        stripeCustomerId: dataToUpdate.stripeCustomerId || undefined,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
       await setDoc(prefDocRef, createPayload);
-      console.log(`%c[userPreferenceService] updateUserPreferences: Preferences doc created for user ${userId}.`, "color: green;");
+      console.log(`%c[userPreferenceService] updateUserPreferences: Preferences doc created for user ${userId}. Payload:`, "color: green;", createPayload);
     }
   } catch (error: any) {
     console.error(`%c[userPreferenceService] updateUserPreferences: Firestore error for user ${userId}:`, "color: red;", error);
@@ -128,7 +148,7 @@ export const addFavoriteSector = async (userId: string, sectorCode: string): Pro
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     await setDoc(prefDocRef, {
-      userId: userId, // Ensure userId is written for new docs for rules
+      userId: userId, 
       favoriteSectorCodes: arrayUnion(sectorCode),
       updatedAt: Timestamp.now()
     }, { merge: true });
@@ -153,7 +173,7 @@ export const removeFavoriteSector = async (userId: string, sectorCode: string): 
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     const docSnap = await getDoc(prefDocRef);
-    if (docSnap.exists()) { // Only update if doc exists
+    if (docSnap.exists()) { 
       await updateDoc(prefDocRef, {
         favoriteSectorCodes: arrayRemove(sectorCode),
         updatedAt: Timestamp.now()
@@ -170,3 +190,5 @@ export const removeFavoriteSector = async (userId: string, sectorCode: string): 
     throw new Error(error.message || "Could not remove favorite sector.");
   }
 };
+    
+    

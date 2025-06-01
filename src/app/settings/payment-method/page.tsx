@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle, Star, CheckCircle } from 'lucide-react'; // Added CheckCircle
+import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle, Star, CheckCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -221,6 +221,12 @@ const PaymentMethodSettingsPage = () => {
     enabled: !!user,
   });
 
+  useEffect(() => {
+    if(userPreferences) {
+      console.log("[PaymentMethodSettingsPage] User preferences updated/fetched:", userPreferences);
+    }
+  }, [userPreferences]);
+
   const updatePreferencesMutation = useMutation({
     mutationFn: ({ userIdToUpdate, dataToUpdate }: { userIdToUpdate: string, dataToUpdate: UpdateUserPreferencesData }) => {
       return updateUserPreferences(userIdToUpdate, dataToUpdate);
@@ -242,15 +248,19 @@ const PaymentMethodSettingsPage = () => {
 
   const handleRemovePaymentMethod = async (paymentMethodIdToRemove: string) => {
     if (!user || !userPreferences) return;
-    const updatedPaymentMethods = (userPreferences.paymentMethods || []).filter(
+    let updatedPaymentMethods = (userPreferences.paymentMethods || []).filter(
       pm => pm.stripePaymentMethodId !== paymentMethodIdToRemove
     );
     
-    if (updatedPaymentMethods.length > 0) {
-      const wasDefaultRemoved = !(userPreferences.paymentMethods || []).find(pm => pm.stripePaymentMethodId === paymentMethodIdToRemove)?.isDefault === false;
+    // If the default card was removed and there are other cards left, set the first remaining one as default
+    const removedCardWasDefault = userPreferences.paymentMethods?.find(pm => pm.stripePaymentMethodId === paymentMethodIdToRemove)?.isDefault;
+    if (removedCardWasDefault && updatedPaymentMethods.length > 0) {
       const isAnyDefaultRemaining = updatedPaymentMethods.some(pm => pm.isDefault);
-      if (wasDefaultRemoved || !isAnyDefaultRemaining) {
-        updatedPaymentMethods[0].isDefault = true;
+      if (!isAnyDefaultRemaining) {
+        updatedPaymentMethods = updatedPaymentMethods.map((pm, index) => ({
+          ...pm,
+          isDefault: index === 0, // Set the first one as default
+        }));
       }
     }
 
@@ -315,6 +325,8 @@ const PaymentMethodSettingsPage = () => {
   }
 
   const savedMethods = userPreferences?.paymentMethods || [];
+  console.log("[PaymentMethodSettingsPage] Rendering with savedMethods:", savedMethods);
+
 
   return (
     <Elements stripe={stripePromise}>
@@ -426,15 +438,15 @@ const PaymentMethodSettingsPage = () => {
       </Card>
       <style jsx global>{`
         .stripe-element-container {
-          // background-color: hsl(var(--input)); 
+          /* background-color: hsl(var(--input)); */
         }
         .stripe-element-base {
         }
         .stripe-element-focus {
-          // box-shadow: 0 0 0 2px hsl(var(--ring)); 
+          /* box-shadow: 0 0 0 2px hsl(var(--ring)); */
         }
         .stripe-element-invalid {
-          // border-color: hsl(var(--destructive));
+          /* border-color: hsl(var(--destructive)); */
         }
         .stripe-element-complete {
         }
@@ -444,4 +456,5 @@ const PaymentMethodSettingsPage = () => {
 };
 
 export default PaymentMethodSettingsPage;
-
+    
+    
