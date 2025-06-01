@@ -11,8 +11,8 @@ export interface Conversation {
   // Group-specific fields (optional for direct chats)
   groupName?: string | null;
   groupAvatarUrl?: string | null;
-  ownerId?: string | null; // UID of the group creator/owner
-  adminIds?: string[];   // UIDs of group administrators
+  ownerId: string | null; // UID of the group creator/owner, MUST be set for groups
+  adminIds: string[];   // UIDs of group administrators, MUST include owner for groups
 
   lastMessage: string | null; // Text of the last message sent
   lastMessageTimestamp: Timestamp | null; // Timestamp of the last message (Firestore Timestamp)
@@ -20,14 +20,14 @@ export interface Conversation {
 }
 
 // Represents a conversation object safe to pass to Client Components (uses number for timestamps)
-export interface ClientConversation extends Omit<Conversation, 'lastMessageTimestamp' | 'createdAt'> {
+export interface ClientConversation extends Omit<Conversation, 'lastMessageTimestamp' | 'createdAt' | 'adminIds'> {
   lastMessageTimestamp: number | null; // Milliseconds since epoch
   createdAt: number; // Milliseconds since epoch
-  // Ensure group fields are here and consistently optional
+  adminIds: string[]; // Ensure adminIds is present
+  // Ensure group fields are here and consistently optional or required
   groupName?: string | null;
   groupAvatarUrl?: string | null;
-  ownerId?: string | null;
-  adminIds?: string[];
+  ownerId: string | null; // ownerId should be present, can be null for old direct chats
   type: 'direct' | 'group'; // Make type non-optional on client
 }
 
@@ -63,9 +63,9 @@ export interface NewConversationData extends Omit<Conversation, 'id' | 'createdA
   lastMessageTimestamp: Timestamp | null; // Initialized to null
   // Type will be set based on creation logic
   type: 'direct' | 'group';
-  // Group specific fields are optional here, but will be required by createGroupConversation
-  groupName?: string | null;
-  groupAvatarUrl?: string | null;
-  ownerId?: string | null;
-  adminIds?: string[];
+  // Group specific fields are required for group type during creation
+  groupName: string | null; // Required for group, null for direct
+  groupAvatarUrl: string | null;
+  ownerId: string | null; // Required for group, null for direct
+  adminIds: string[]; // Required for group, empty for direct
 }

@@ -16,8 +16,11 @@ import {
   type QueryConstraint,
   onSnapshot, // Added for real-time listeners
   type Unsubscribe, // Type for the unsubscribe function
+  updateDoc, // For updating documents
+  arrayUnion, // For adding to arrays
+  arrayRemove, // For removing from arrays
 } from 'firebase/firestore';
-import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message, Conversation } from '@/types/messaging'; // Added Conversation
+import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message, Conversation } from '@/types/messaging';
 import { fetchUserProfileBasic } from './connectionService';
 import { createNotification } from './notificationService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
@@ -37,7 +40,7 @@ export const createGroupConversation = async (
   if (!initialMemberIds || initialMemberIds.length === 0) throw new Error("At least one initial member (besides creator) is required for a group.");
 
   const allParticipants = Array.from(new Set([creatorId, ...initialMemberIds])).sort();
-  if (allParticipants.length < 2) { 
+  if (allParticipants.length < 2) {
       throw new Error("A group chat needs at least two unique participants (including the creator).");
   }
 
@@ -48,9 +51,9 @@ export const createGroupConversation = async (
     groupAvatarUrl: groupAvatarUrl || null,
     ownerId: creatorId,
     adminIds: [creatorId], // Creator is the first admin
-    postId: null, // Groups are not tied to posts by default
-    lastMessage: null,
-    lastMessageTimestamp: serverTimestamp() as Timestamp, 
+    postId: null,
+    lastMessage: `Group created by ${generateAnonymousName(creatorId)}`,
+    lastMessageTimestamp: serverTimestamp() as Timestamp,
     createdAt: serverTimestamp() as Timestamp,
   };
 
@@ -60,7 +63,7 @@ export const createGroupConversation = async (
     return docRef.id;
   } catch (error: any) {
     console.error(`%c[messagingService] Error creating GROUP conversation:`, "color: red;", error);
-    if (error.code === 'permission-denied') { // Specific check for permission denied
+    if (error.code === 'permission-denied') {
         console.error("[messagingService] createGroupConversation: Firestore permission denied. Check Firestore Rules. Authenticated user:", auth.currentUser?.uid);
         throw new Error("Permission denied to create group. Check Firestore security rules.");
     }
@@ -90,7 +93,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
     console.log(`%c  [messagingService] Query snapshot received. Found ${querySnapshot.docs.length} documents.`, "color: dodgerblue;");
 
     const conversations = querySnapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as Conversation; // Use Conversation type here
+      const data = docSnap.data() as Conversation;
       if (!data.participants || !Array.isArray(data.participants)) {
           console.warn(`%c  [messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`, "color: orange;");
           return null;
@@ -106,7 +109,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
       return {
         id: docSnap.id,
         participants: data.participants,
-        type: data.type || 'direct', // Default to 'direct' if type is missing for older data
+        type: data.type || 'direct',
         postId: data.postId || null,
         groupName: data.groupName || null,
         groupAvatarUrl: data.groupAvatarUrl || null,
@@ -156,7 +159,7 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
   try {
     const queryConstraints: QueryConstraint[] = [
         where('participants', '==', participants),
-        where('type', '==', 'direct'), 
+        where('type', '==', 'direct'),
         where('postId', '==', postIdForQuery),
         limit(1)
     ];
@@ -174,11 +177,11 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
     console.log(`%c[messagingService] No existing DIRECT conversation found for ${contextDescription}. Creating new one.`, "color: orange;");
     const newConversationData: NewConversationData = {
         participants: participants,
-        type: 'direct', 
+        type: 'direct',
         postId: postIdForQuery,
         createdAt: serverTimestamp() as Timestamp,
         lastMessage: null,
-        lastMessageTimestamp: serverTimestamp() as Timestamp, 
+        lastMessageTimestamp: serverTimestamp() as Timestamp,
         groupName: null,
         groupAvatarUrl: null,
         ownerId: null,
@@ -315,7 +318,7 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
 
     const conversationSnap = await getDoc(conversationDocRef);
     if (conversationSnap.exists()) {
-        const conversationData = conversationSnap.data() as Conversation; 
+        const conversationData = conversationSnap.data() as Conversation;
         const participantsArray = Array.isArray(conversationData?.participants) ? conversationData.participants : [];
 
         for (const participantId of participantsArray) {
@@ -356,7 +359,6 @@ export const getUserDetails = async (userId: string): Promise<{ name: string; av
     };
 };
 
-// Fetches group details if the conversationId belongs to a group chat
 export const getGroupChatDetails = async (conversationId: string): Promise<{ name: string; avatar?: string, participantCount?: number } | null> => {
   if (!conversationId) return null;
   const convRef = doc(db, 'conversations', conversationId);
@@ -389,4 +391,176 @@ export const getPostDetails = async (postId: string): Promise<{ question: string
         console.error(`[messagingService] Error fetching post details for ${postId}:`, error);
         return null;
     }
+};
+
+// --- Group Management Functions ---
+
+export const updateGroupDetails = async (
+  conversationId: string,
+  currentUserId: string,
+  updates: { groupName?: string; groupAvatarUrl?: string | null }
+): Promise<void> => {
+  if (!conversationId || !currentUserId) throw new Error("Conversation ID and User ID are required.");
+  if (Object.keys(updates).length === 0) return;
+
+  const convRef = doc(conversationsCollectionRef, conversationId);
+  const conversationSnap = await getDoc(convRef);
+  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') {
+    throw new Error("Group conversation not found.");
+  }
+  const groupData = conversationSnap.data() as Conversation;
+  if (!groupData.adminIds.includes(currentUserId)) {
+    throw new Error("Only group admins can update group details.");
+  }
+
+  const payload: any = { updatedAt: serverTimestamp() };
+  if (updates.groupName !== undefined && updates.groupName.trim() !== "") {
+    payload.groupName = updates.groupName.trim();
+  } else if (updates.groupName !== undefined && updates.groupName.trim() === "") {
+    throw new Error("Group name cannot be empty.");
+  }
+  
+  if (updates.groupAvatarUrl !== undefined) { // Allow setting to null to remove avatar
+    payload.groupAvatarUrl = updates.groupAvatarUrl;
+  }
+
+  if (Object.keys(payload).length > 1) { // ensure there's more than just updatedAt
+    await updateDoc(convRef, payload);
+  }
+};
+
+export const addMembersToGroup = async (
+  conversationId: string,
+  currentUserId: string,
+  memberIdsToAdd: string[]
+): Promise<void> => {
+  if (!conversationId || !currentUserId || !memberIdsToAdd || memberIdsToAdd.length === 0) {
+    throw new Error("Required parameters missing or invalid.");
+  }
+  const convRef = doc(conversationsCollectionRef, conversationId);
+  const conversationSnap = await getDoc(convRef);
+  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') {
+    throw new Error("Group conversation not found.");
+  }
+  const groupData = conversationSnap.data() as Conversation;
+  if (!groupData.adminIds.includes(currentUserId)) {
+    throw new Error("Only group admins can add members.");
+  }
+
+  const uniqueNewMembers = Array.from(new Set(memberIdsToAdd.filter(id => !groupData.participants.includes(id) && id !== currentUserId)));
+  if (uniqueNewMembers.length === 0) {
+    console.log("No new, valid members to add.");
+    return;
+  }
+
+  await updateDoc(convRef, {
+    participants: arrayUnion(...uniqueNewMembers),
+    updatedAt: serverTimestamp()
+  });
+};
+
+export const removeMemberFromGroup = async (
+  conversationId: string,
+  currentUserId: string,
+  memberIdToRemove: string
+): Promise<void> => {
+  if (!conversationId || !currentUserId || !memberIdToRemove) {
+    throw new Error("Required parameters missing.");
+  }
+  const convRef = doc(conversationsCollectionRef, conversationId);
+  const conversationSnap = await getDoc(convRef);
+  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') {
+    throw new Error("Group conversation not found.");
+  }
+  const groupData = conversationSnap.data() as Conversation;
+  if (!groupData.adminIds.includes(currentUserId)) {
+    throw new Error("Only group admins can remove members.");
+  }
+  if (memberIdToRemove === groupData.ownerId) {
+    throw new Error("Cannot remove the group owner using this function.");
+  }
+  if (!groupData.participants.includes(memberIdToRemove)) {
+    console.log("User to remove is not a participant.");
+    return; // User already not in group
+  }
+  if (groupData.participants.length <= 2) { // Check before removal
+    throw new Error("Cannot remove member; group must have at least two participants after removal (or consider deleting the group).");
+  }
+
+  await updateDoc(convRef, {
+    participants: arrayRemove(memberIdToRemove),
+    adminIds: arrayRemove(memberIdToRemove), // Also remove from admins if they were one
+    updatedAt: serverTimestamp()
+  });
+};
+
+export const leaveGroup = async (conversationId: string, userId: string): Promise<void> => {
+  if (!conversationId || !userId) throw new Error("Conversation ID and User ID are required.");
+  const convRef = doc(conversationsCollectionRef, conversationId);
+  const conversationSnap = await getDoc(convRef);
+  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') {
+    throw new Error("Group conversation not found.");
+  }
+  const groupData = conversationSnap.data() as Conversation;
+  if (!groupData.participants.includes(userId)) {
+    throw new Error("User is not a member of this group.");
+  }
+  
+  // Prevent owner from leaving if they are the sole admin AND there are other participants
+  if (userId === groupData.ownerId && groupData.adminIds.length === 1 && groupData.adminIds[0] === userId && groupData.participants.length > 1) {
+    throw new Error("Owner cannot leave if they are the sole admin and other members exist. Promote another admin first or ensure other admins can manage the group.");
+  }
+  
+  // If the user is the last participant, the group will become empty.
+  // Consider if group should be deleted or marked inactive in such cases (outside scope of this function for now).
+  if (groupData.participants.length === 1 && groupData.participants[0] === userId) {
+      console.warn(`User ${userId} is the last participant leaving group ${conversationId}. The group will now be empty. Consider cleanup logic.`);
+      // Potentially, delete the group document here or in a Cloud Function triggered by this state.
+  }
+
+  await updateDoc(convRef, {
+    participants: arrayRemove(userId),
+    adminIds: arrayRemove(userId), // Also remove from admins if they were one
+    updatedAt: serverTimestamp()
+  });
+};
+
+export const promoteToAdmin = async (
+  conversationId: string,
+  currentUserId: string, // User performing the action
+  memberIdToPromote: string
+): Promise<void> => {
+  if (!conversationId || !currentUserId || !memberIdToPromote) throw new Error("Required parameters missing.");
+  const convRef = doc(conversationsCollectionRef, conversationId);
+  const conversationSnap = await getDoc(convRef);
+  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') throw new Error("Group conversation not found.");
+  const groupData = conversationSnap.data() as Conversation;
+  if (groupData.ownerId !== currentUserId) throw new Error("Only the group owner can promote admins.");
+  if (!groupData.participants.includes(memberIdToPromote)) throw new Error("User to promote is not a member of this group.");
+  if (groupData.adminIds.includes(memberIdToPromote)) return; // Already an admin
+
+  await updateDoc(convRef, {
+    adminIds: arrayUnion(memberIdToPromote),
+    updatedAt: serverTimestamp()
+  });
+};
+
+export const demoteAdmin = async (
+  conversationId: string,
+  currentUserId: string, // User performing the action
+  adminIdToDemote: string
+): Promise<void> => {
+  if (!conversationId || !currentUserId || !adminIdToDemote) throw new Error("Required parameters missing.");
+  const convRef = doc(conversationsCollectionRef, conversationId);
+  const conversationSnap = await getDoc(convRef);
+  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') throw new Error("Group conversation not found.");
+  const groupData = conversationSnap.data() as Conversation;
+  if (groupData.ownerId !== currentUserId) throw new Error("Only the group owner can demote admins.");
+  if (adminIdToDemote === groupData.ownerId) throw new Error("The group owner cannot be demoted from admin status.");
+  if (!groupData.adminIds.includes(adminIdToDemote)) return; // Not an admin, nothing to demote
+
+  await updateDoc(convRef, {
+    adminIds: arrayRemove(adminIdToDemote),
+    updatedAt: serverTimestamp()
+  });
 };
