@@ -12,7 +12,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building, CalendarDays, CheckCircle, Loader2, AlertTriangle, Star, MessageSquare, Edit3, Trash2, Briefcase, Info, AtSign, DollarSign } from 'lucide-react';
+import { Building, CalendarDays, CheckCircle, Loader2, AlertTriangle, Star, MessageSquare, Edit3, Trash2, Briefcase, Info, AtSign, DollarSign, UserX } from 'lucide-react'; // Added UserX
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ConnectionButton } from '@/components/ConnectionButton';
@@ -126,7 +126,7 @@ const BusinessProfilePage = () => {
   });
 
   const reviewsQueryEnabled = useMemo(() => {
-    const enabled = !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId); // Removed currentUser check as read for reviews is public for authenticated
+    const enabled = !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId);
     console.log(`%c[BusinessProfilePage] REVIEWS QUERY CHECK:
       - profileUserId: ${profileUserId || 'NULL'}
       - IS_VALID_FIREBASE_UID_REGEX.test(profileUserId): ${profileUserId ? IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) : 'N/A'}
@@ -157,7 +157,7 @@ const BusinessProfilePage = () => {
         }
         return getReviewsGivenByUserId(profileUserId);
     },
-    enabled: reviewsQueryEnabled && !!currentUser, // Only fetch reviews given if we have a current user context for potential future display logic
+    enabled: reviewsQueryEnabled && !!currentUser,
   });
 
 
@@ -331,15 +331,19 @@ const BusinessProfilePage = () => {
 
   if (!viewedUserProfileData && isProfileIdValidUid && !isLoadingProfile) {
     return (
-      <div className="w-full flex flex-col items-center justify-center p-8 min-h-[calc(100vh-10rem)]">
-        <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
-        <p className="text-muted-foreground font-semibold">Business profile not found for ID: {profileUserId}.</p>
-         <Button onClick={() => router.back()} className="mt-4">Go Back</Button>
+      <div className="w-full flex flex-col items-center justify-center p-8 min-h-[calc(100vh-10rem)] text-center">
+        <UserX className="mx-auto h-16 w-16 text-muted-foreground mb-4" />
+        <h1 className="text-2xl font-semibold text-foreground mb-2">Profile Unavailable</h1>
+        <p className="text-muted-foreground max-w-md">
+          The user profile you are trying to view (ID: <code>{profileUserId}</code>) no longer exists or could not be found on our platform.
+          This can happen if the user has deleted their account or the link is incorrect.
+        </p>
+         <Button onClick={() => router.push('/')} className="mt-8">Return to Homepage</Button>
       </div>
     );
   }
   
-  if (!viewedUserProfileData) { // Fallback if profileUserId itself was invalid and didn't trigger earlier return
+  if (!viewedUserProfileData) { 
     return (
       <div className="w-full flex flex-col items-center justify-center p-8 min-h-[calc(100vh-10rem)]">
         <AlertTriangle className="mx-auto h-10 w-10 text-destructive mb-2" />
@@ -676,3 +680,6 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
+
+
+    
