@@ -1,4 +1,3 @@
-
 // src/components/notifications/NotificationDropdown.tsx
 "use client";
 
@@ -48,7 +47,7 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
 
     let title = '';
     let description = '';
-    let linkHref: string = '/'; 
+    let linkHref: string = '/messages'; // Default fallback
 
     switch (notification.type) {
         case 'reply':
@@ -82,17 +81,20 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
     }
 
     const handleSelect = (event: Event) => {
-      event.preventDefault(); // Prevent Radix default behavior (like closing menu)
-      if (!notification.isRead) {
-        onRead(notification.id); // Perform our action (mark as read)
-      }
+      event.preventDefault();
+      // Defer the mutation slightly to allow Radix UI to finish its event processing
+      setTimeout(() => {
+        if (!notification.isRead) {
+          onRead(notification.id);
+        }
+      }, 0); // A timeout of 0ms is often enough to push to next event loop tick
       // Navigation will be handled by the Link component due to asChild
     };
 
      return (
        <DropdownMenuItem
           asChild
-          onSelect={handleSelect} // Use Radix's onSelect prop
+          onSelect={handleSelect}
           className={cn(
             "flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/50 rounded-md relative focus:bg-muted/60",
             !notification.isRead && "bg-primary/5 font-medium"
@@ -179,7 +181,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
         console.log(`[NotificationDropdown] Marked notification ${variables} as read and invalidated query.`);
-      }, 100); // Small delay (e.g., 100ms)
+      }, 100);
     },
     onError: (error: Error, variables) => {
       console.error(`[NotificationDropdown] Failed to mark notification ${variables} as read:`, error);
@@ -271,5 +273,3 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     </DropdownMenu>
   );
 };
-
-    
