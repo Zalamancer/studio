@@ -39,6 +39,58 @@ const getConnectionDocId = (userId1: string, userId2: string): string => {
   return [id1, id2].sort().join('_');
 };
 
+async function findUniqueMentionName(
+  baseUid: string,
+  maxAttempts: number = 10
+): Promise<{ uniqueName: string; uniqueNameLower: string }> {
+  let attempt = 0;
+  let currentSeedUid = baseUid; // Seed for initial generation
+  let candidateName = generateAnonymousName(currentSeedUid);
+  let candidateNameLower = candidateName.toLowerCase();
+
+  while (attempt < maxAttempts) {
+    const q = query(usersCollectionRef, where("mentionNameLowercase", "==", candidateNameLower), limit(1));
+    const snapshot = await getDocs(q);
+    if (snapshot.empty) {
+      return { uniqueName: candidateName, uniqueNameLower: candidateNameLower }; // Found unique
+    }
+    // Collision detected
+    attempt++;
+    if (attempt >= maxAttempts) {
+      // Fallback strategy: append a short random string to the base UID-generated name
+      // This is extremely unlikely to be needed if the primary generation space is large
+      const fallbackSuffix = Math.random().toString(36).substring(2, 7);
+      const fallbackBase = generateAnonymousName(baseUid); // Regenerate base name for fallback
+      candidateName = `${fallbackBase}_${fallbackSuffix}`;
+      candidateNameLower = candidateName.toLowerCase();
+      console.warn(`[connectionService] findUniqueMentionName: Max attempts reached for UID ${baseUid}. Using fallback: ${candidateName}`);
+      // Check the fallback once more, though collision is now astronomically low
+      const fallbackQ = query(usersCollectionRef, where("mentionNameLowercase", "==", candidateNameLower), limit(1));
+      const fallbackSnapshot = await getDocs(fallbackQ);
+      if (fallbackSnapshot.empty) {
+        return { uniqueName: candidateName, uniqueNameLower: candidateNameLower };
+      }
+      // If even fallback collides, this is an extreme edge case.
+      // Consider logging a critical error and returning a UID-based placeholder or failing.
+      console.error(`[connectionService] CRITICAL: Fallback mentionName ${candidateName} also collided for UID ${baseUid}.`);
+      const ultimateFallback = `User${baseUid.substring(0,8)}_${Date.now().toString().slice(-4)}`;
+      return { uniqueName: ultimateFallback, uniqueNameLower: ultimateFallback.toLowerCase() };
+    }
+
+    // Generate a new candidate by slightly modifying the original name, e.g., append attempt number
+    // Or, regenerate with a modified seed for generateAnonymousName if that's preferred
+    const baseNameForRetry = generateAnonymousName(baseUid); // Get the original ColorAnimalNumber
+    candidateName = `${baseNameForRetry}_${attempt}`; // e.g., BlueCat123_1
+    candidateNameLower = candidateName.toLowerCase();
+    console.log(`[connectionService] findUniqueMentionName: Collision for ${candidateNameLower.split('_')[0]}, attempt ${attempt}, trying ${candidateName}`);
+  }
+  // Should not be reached if maxAttempts logic is correct, but as a safeguard:
+  console.error(`[connectionService] findUniqueMentionName: Loop finished without returning for UID ${baseUid}. This indicates an issue.`);
+  const finalFallback = `ErrUser${baseUid.substring(0,6)}`;
+  return {uniqueName: finalFallback, uniqueNameLower: finalFallback.toLowerCase()};
+}
+
+
 export const initializeUserProfile = async (userData: InitializeUserProfileArgs): Promise<void> => {
   const clientAuthUser = auth.currentUser;
   console.log(`%c[connectionService] initializeUserProfile: Called. Client auth UID: ${clientAuthUser?.uid || 'NULL'}. Incoming userData:`, "color: orange", userData);
@@ -49,11 +101,15 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
   }
 
   const userDocRef = doc(usersCollectionRef, userData.uid);
-  const generatedMentionName = generateAnonymousName(userData.uid); // "ColorAnimalNumber"
+  
 
   try {
     const docSnap = await getDoc(userDocRef);
     let operationType: 'CREATE' | 'UPDATE' = 'CREATE';
+    
+    let finalMentionName: string;
+    let finalMentionNameLowercase: string;
+
     let dataPayload: Partial<UserProfileData> & { updatedAt: FieldValue, createdAt?: FieldValue, lastLoginAt?: FieldValue } = {
         uid: userData.uid,
         updatedAt: serverTimestamp(),
@@ -65,18 +121,22 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
     if (!docSnap.exists()) {
       console.log(`%c[connectionService] initializeUserProfile: CREATING NEW PROFILE for UID ${userData.uid}.`, "color: green; font-weight: bold;");
       operationType = 'CREATE';
+      const { uniqueName, uniqueNameLower } = await findUniqueMentionName(userData.uid);
+      finalMentionName = uniqueName;
+      finalMentionNameLowercase = uniqueNameLower;
+      
       dataPayload.createdAt = serverTimestamp();
       dataPayload.lastLoginAt = serverTimestamp();
-      dataPayload.mentionName = generatedMentionName;
-      dataPayload.mentionNameLowercase = generatedMentionName.toLowerCase();
+      dataPayload.mentionName = finalMentionName;
+      dataPayload.mentionNameLowercase = finalMentionNameLowercase;
       dataPayload.email = userData.email || null;
       dataPayload.companyName = userData.companyName || null;
-      dataPayload.industry = userData.industry || null; // Save industry from sign-up
-      dataPayload.avatarUrl = null; // Always start with null avatar for initials
-      dataPayload.descriptionVisibility = 'everyone'; // Default visibility
+      dataPayload.industry = userData.industry || null;
+      dataPayload.avatarUrl = null;
+      dataPayload.descriptionVisibility = 'everyone';
 
-      finalAuthDisplayName = userData.googleDisplayName || userData.companyName || generatedMentionName;
-      finalAuthPhotoURL = null; // Ensure auth photoURL is null on creation
+      finalAuthDisplayName = userData.googleDisplayName || userData.companyName || finalMentionName;
+      finalAuthPhotoURL = null;
 
     } else {
       operationType = 'UPDATE';
@@ -84,16 +144,22 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
       console.log(`%c[connectionService] initializeUserProfile: UPDATING EXISTING PROFILE for UID ${userData.uid}. Existing data:`, "color: blue; font-weight: bold;", existingData);
       dataPayload.lastLoginAt = serverTimestamp();
 
-      // Ensure mentionName and its lowercase version exist, generate if missing (for older docs)
-      dataPayload.mentionName = existingData.mentionName || generatedMentionName;
-      dataPayload.mentionNameLowercase = (existingData.mentionName || generatedMentionName).toLowerCase();
-
-      // Preserve or update specific fields if provided in userData (e.g., from Google sign-in)
+      if (!existingData.mentionName || !existingData.mentionNameLowercase) {
+        console.log(`%c[connectionService] initializeUserProfile: Existing profile for ${userData.uid} missing mentionName. Generating unique one.`, "color: orange;");
+        const { uniqueName, uniqueNameLower } = await findUniqueMentionName(userData.uid);
+        finalMentionName = uniqueName;
+        finalMentionNameLowercase = uniqueNameLower;
+      } else {
+        finalMentionName = existingData.mentionName;
+        finalMentionNameLowercase = existingData.mentionNameLowercase;
+      }
+      dataPayload.mentionName = finalMentionName;
+      dataPayload.mentionNameLowercase = finalMentionNameLowercase;
+      
       dataPayload.email = userData.email !== undefined ? (userData.email || null) : existingData.email;
       dataPayload.companyName = userData.companyName !== undefined ? (userData.companyName || null) : existingData.companyName;
       dataPayload.industry = userData.industry !== undefined ? (userData.industry || null) : existingData.industry;
       
-      // Avatar update: only if Google provides a new one AND it's different from current Firestore avatar
       if (userData.googlePhotoURL && userData.googlePhotoURL !== existingData.avatarUrl) {
         dataPayload.avatarUrl = userData.googlePhotoURL;
         finalAuthPhotoURL = userData.googlePhotoURL;
@@ -101,10 +167,7 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
         dataPayload.avatarUrl = existingData.avatarUrl || null;
         finalAuthPhotoURL = existingData.avatarUrl || null;
       }
-      // If this is a Google sign-in, userData.googleDisplayName might be present
-      finalAuthDisplayName = userData.googleDisplayName || existingData.companyName || dataPayload.mentionName;
-      
-      // Preserve existing visibility or set defaults if missing
+      finalAuthDisplayName = userData.googleDisplayName || existingData.companyName || finalMentionName;
       dataPayload.descriptionVisibility = existingData.descriptionVisibility || 'everyone';
     }
 
@@ -112,7 +175,7 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
     Object.keys(dataToWrite).forEach(keyStr => {
       const key = keyStr as keyof typeof dataToWrite;
       if (dataToWrite[key] === undefined) {
-        delete dataToWrite[key]; // Remove undefined, Firestore doesn't like it
+        delete dataToWrite[key];
       }
     });
     
@@ -212,7 +275,7 @@ export const fetchFullUserProfile = async (userIdParam: string): Promise<UserPro
     if (userSnap.exists()) {
       const userData = userSnap.data() as UserProfileData;
       const finalMentionName = userData.mentionName || generateAnonymousName(trimmedUserId);
-      const finalMentionNameLowercase = finalMentionName.toLowerCase();
+      const finalMentionNameLowercase = (userData.mentionNameLowercase || finalMentionName).toLowerCase();
 
 
       const fullProfile: UserProfileData = {
@@ -220,14 +283,14 @@ export const fetchFullUserProfile = async (userIdParam: string): Promise<UserPro
         email: userData.email || null,
         companyName: userData.companyName || null,
         mentionName: finalMentionName,
-        mentionNameLowercase: userData.mentionNameLowercase || finalMentionNameLowercase,
+        mentionNameLowercase: finalMentionNameLowercase,
         avatarUrl: userData.avatarUrl || null,
         industry: userData.industry || null,
         description: userData.description || null,
         descriptionVisibility: userData.descriptionVisibility || 'everyone',
         sectorName: userData.sectorName || null,
         subSectorName: userData.subSectorName || null,
-        industryName: userData.industryName || null,
+        industryName: userData.industryName || null, // NAICS industry title
         naicsCode: userData.naicsCode || null,
         tags: userData.tags || [],
         established: userData.established || null,
@@ -690,3 +753,4 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
     throw new Error(`Failed to fetch connections: ${error.message}`);
   }
 };
+

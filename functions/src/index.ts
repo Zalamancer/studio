@@ -42,6 +42,7 @@ interface BotProfileBase {
   id?: string; // Added for clarity when mapping doc.id
   email?: string;
   mentionName?: string;
+  mentionNameLowercase?: string; // For uniqueness check
   industry?: string; // Main categorization field
   sectorName?: string;
   subSectorName?: string | null;
@@ -87,6 +88,48 @@ async function isRealUser(userId: string): Promise<boolean> {
 }
 
 /**
+ * Helper function to find a unique mention name for bots.
+ * @param {string} basePrefix The prefix for the bot name (e.g., "Bot").
+ * @param {number} initialSuffix The initial random suffix.
+ * @param {number} maxAttempts Max attempts to find a unique name.
+ * @return {Promise<string>} A unique mention name.
+ */
+async function findUniqueBotMentionName(
+  basePrefix: string,
+  initialSuffix: number,
+  maxAttempts: number = 10
+): Promise<string> {
+  let attempt = 0;
+  let currentSuffix = initialSuffix;
+  let candidateName = `${basePrefix}${currentSuffix}`;
+  let candidateNameLower = candidateName.toLowerCase();
+
+  while (attempt < maxAttempts) {
+    const usersRef = dbAdmin.collection("users");
+    const q = usersRef.where("mentionNameLowercase", "==", candidateNameLower).limit(1);
+    const snapshot = await q.get();
+
+    if (snapshot.empty) {
+      return candidateName; // Found unique
+    }
+
+    attempt++;
+    if (attempt >= maxAttempts) {
+      logger.error(`[findUniqueBotMentionName] Max attempts reached for prefix ${basePrefix}. Using fallback.`);
+      // Fallback: append timestamp to make it highly unique
+      return `${basePrefix}${initialSuffix}_${Date.now().toString().slice(-5)}`;
+    }
+    // Generate a new suffix for the next attempt
+    currentSuffix = Math.floor(1000 + Math.random() * 9000); // New 4-digit suffix
+    candidateName = `${basePrefix}${currentSuffix}`;
+    candidateNameLower = candidateName.toLowerCase();
+  }
+  // Should ideally not be reached if maxAttempts > 0
+  return `${basePrefix}${initialSuffix}_fallback_${Date.now().toString().slice(-3)}`;
+}
+
+
+/**
  * Core logic to create a bot user account with randomized details.
  * @return {Promise<BotUser | null>} An object with bot user details or null.
  */
@@ -95,9 +138,9 @@ async function _createBotUserLogic(targetIndustryName?: string): Promise<BotUser
   logger.info(`[${functionName}] Attempting to create new bot user. Target: ` +
         (targetIndustryName || "Random"));
   try {
-    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-    const botEmail = `bot_${Date.now()}_${randomSuffix}@example.com`;
-    const botPassword = `strongPassword${Date.now()}${randomSuffix}`;
+    const initialRandomSuffix = Math.floor(1000 + Math.random() * 9000); // Start with a 4-digit suffix
+    const botEmail = `bot_${Date.now()}_${initialRandomSuffix}@example.com`;
+    const botPassword = `strongPassword${Date.now()}${initialRandomSuffix}`;
 
     const userRecord = await authAdmin.createUser({
       email: botEmail,
@@ -105,7 +148,8 @@ async function _createBotUserLogic(targetIndustryName?: string): Promise<BotUser
       disabled: false,
     });
 
-    const generatedMentionName = generateAnonymousName(userRecord.uid);
+    // Ensure unique mentionName for the bot
+    const uniqueMentionName = await findUniqueBotMentionName("Bot", initialRandomSuffix);
 
     let industryForBot: string;
     let selectedSector: SectorWithSubSectors | undefined;
@@ -144,16 +188,16 @@ async function _createBotUserLogic(targetIndustryName?: string): Promise<BotUser
     }
 
 
-    const userProfileData = {
+    const userProfileData: BotProfileBase = { // Use BotProfileBase for stricter typing
       uid: userRecord.uid,
       email: botEmail,
-      mentionName: generatedMentionName,
-      mentionNameLowercase: generatedMentionName.toLowerCase(),
-      industry: industryForBot, // This is the primary field for categorization
+      mentionName: uniqueMentionName,
+      mentionNameLowercase: uniqueMentionName.toLowerCase(),
+      industry: industryForBot,
       description:
         `This is an automated bot account for the ` +
         `${industryForBot} ` +
-        `industry, known as ${generatedMentionName}.`,
+        `industry, known as ${uniqueMentionName}.`,
       descriptionVisibility: "everyone" as const,
       tags: [],
       established: String(
@@ -166,21 +210,21 @@ async function _createBotUserLogic(targetIndustryName?: string): Promise<BotUser
       lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
       sectorName: selectedSector?.name || null,
       subSectorName: selectedSubSector?.name || null,
-      industryName: selectedIndustry?.name || null, // NAICS specific industry title
+      industryName: selectedIndustry?.name || null,
       naicsCode: selectedIndustry?.code || selectedSubSector?.code || selectedSector?.code || null,
     };
 
     await dbAdmin.collection("users").doc(userRecord.uid).set(userProfileData);
     logger.info(
-      `[${functionName}] Bot user ${userRecord.uid} (${generatedMentionName}) ` +
+      `[${functionName}] Bot user ${userRecord.uid} (${uniqueMentionName}) ` +
       `for industry "${userProfileData.industry}" created successfully.`,
     );
 
     return {
       userId: userRecord.uid,
       email: botEmail,
-      mentionName: generatedMentionName,
-      industry: userProfileData.industry,
+      mentionName: uniqueMentionName,
+      industry: userProfileData.industry!,
     };
   } catch (error) {
     logger.error(`[${functionName}] Error:`, error);
