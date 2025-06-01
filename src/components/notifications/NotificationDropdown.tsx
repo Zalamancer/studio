@@ -1,3 +1,4 @@
+
 // src/components/notifications/NotificationDropdown.tsx
 "use client";
 
@@ -81,13 +82,13 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
     }
 
     const handleSelect = (event: Event) => {
-      event.preventDefault();
-      // Defer the mutation slightly to allow Radix UI to finish its event processing
+      // Do NOT call event.preventDefault() here.
+      // Allow Radix to perform its default action (like closing the menu).
       setTimeout(() => {
         if (!notification.isRead) {
           onRead(notification.id);
         }
-      }, 0); // A timeout of 0ms is often enough to push to next event loop tick
+      }, 0);
       // Navigation will be handled by the Link component due to asChild
     };
 
@@ -177,7 +178,6 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
   const markReadMutation = useMutation({
     mutationFn: markNotificationAsRead,
     onSuccess: (data, variables) => {
-      // Delay invalidation to allow Radix to finish its event processing
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
         console.log(`[NotificationDropdown] Marked notification ${variables} as read and invalidated query.`);
