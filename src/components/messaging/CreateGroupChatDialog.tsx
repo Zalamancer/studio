@@ -176,21 +176,21 @@ export const CreateGroupChatDialog: React.FC<CreateGroupChatDialogProps> = ({
                                 "flex items-center space-x-3 p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors",
                                 isChecked && "bg-muted"
                               )}
-                              onClick={() => {
-                                const newValue = isChecked
-                                  ? field.value?.filter((id) => id !== member.userId)
-                                  : [...(field.value || []), member.userId];
-                                field.onChange(newValue);
-                              }}
+                              // Removed onClick from this div
                             >
                               <Checkbox
                                 id={`member-${member.userId}`}
                                 checked={isChecked}
-                                onCheckedChange={(checked) => {
-                                  const newValue = checked
-                                    ? [...(field.value || []), member.userId]
-                                    : field.value?.filter((id) => id !== member.userId);
-                                  field.onChange(newValue);
+                                onCheckedChange={(checkedParam) => {
+                                  const isNowChecked = typeof checkedParam === 'boolean' ? checkedParam : false;
+                                  const currentSelectedIds = field.value || [];
+                                  let newSelectedIds;
+                                  if (isNowChecked) {
+                                    newSelectedIds = [...currentSelectedIds, member.userId];
+                                  } else {
+                                    newSelectedIds = currentSelectedIds.filter((id) => id !== member.userId);
+                                  }
+                                  field.onChange(newSelectedIds);
                                 }}
                                 className="flex-shrink-0"
                                 disabled={isSubmitting}
@@ -237,3 +237,4 @@ export const CreateGroupChatDialog: React.FC<CreateGroupChatDialogProps> = ({
     </Dialog>
   );
 };
+
