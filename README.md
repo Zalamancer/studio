@@ -1,3 +1,4 @@
+
 # AnonyCollab
 
 This is a Next.js application for the AnonyCollab platform, built using Firebase Studio.
@@ -45,6 +46,12 @@ This is a Next.js application for the AnonyCollab platform, built using Firebase
     STRIPE_SECRET_KEY=YOUR_STRIPE_SECRET_KEY
     # Optional: Stripe Webhook Secret for verifying webhook events
     # STRIPE_WEBHOOK_SECRET=YOUR_STRIPE_WEBHOOK_SECRET
+
+    # Google reCAPTCHA Enterprise Config (Required for Signup Form)
+    # Create a site key in Google Cloud Console under "reCAPTCHA Enterprise".
+    # Ensure the key type is "Checkbox (challenge)" if using the visual widget.
+    # Add your application's domain(s) to the allowed list for this key.
+    NEXT_PUBLIC_RECAPTCHA_SITE_KEY=YOUR_RECAPTCHA_ENTERPRISE_SITE_KEY
     ```
 
     *   You can find your Firebase client configuration details in your Firebase project settings:
@@ -73,7 +80,7 @@ This is a Next.js application for the AnonyCollab platform, built using Firebase
 
 ## Key Features Implemented
 
-*   **User Authentication**: Secure signup and login using Firebase Authentication (Email/Password and Google Sign-In).
+*   **User Authentication**: Secure signup and login using Firebase Authentication (Email/Password and Google Sign-In). Signup form now includes reCAPTCHA Enterprise.
 *   **Homepage Dashboard**: Displays posts in a masonry layout after login.
 *   **Post Filtering**: Filter posts based on tags.
 *   **Post Detail View**: Clicking a post card opens a sliding side panel with details.
@@ -91,4 +98,3 @@ This is a Next.js application for the AnonyCollab platform, built using Firebase
 *   `npm run start`: Starts the production server.
 *   `npm run lint`: Lints the codebase using Next.js's built-in ESLint configuration.
 *   `npm run typecheck`: Runs TypeScript type checking.
-```
