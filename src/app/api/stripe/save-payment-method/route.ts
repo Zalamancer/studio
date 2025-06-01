@@ -1,17 +1,16 @@
+
 // src/app/api/stripe/save-payment-method/route.ts
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { authAdmin as firebaseAuthAdmin, dbAdmin } from '@/lib/firebase/auth-admin';
 import { FieldValue } from 'firebase-admin/firestore';
+import type { SavedPaymentMethod } from '@/types/userPreferences'; // Import the type
 
 export const runtime = 'nodejs';
 
-type PaymentMethod = Stripe.PaymentMethod;
-
 // Initialize Stripe with your secret key.
-// IMPORTANT: Store your secret key in .env.local and DO NOT expose it on the client.
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
-  apiVersion: '2024-06-20', // Use the latest API version
+  apiVersion: '2024-06-20',
 });
 
 export async function POST(request: NextRequest) {
@@ -41,7 +40,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Invalid or expired token' }, { status: 401 });
     }
 
-    // Ensure the UID from the token matches the userId in the request body
     if (decodedToken.uid !== userId) {
       console.error(`[API Stripe Save] Forbidden: Token UID (${decodedToken.uid}) does not match request userId (${userId}).`);
       return NextResponse.json({ error: 'Forbidden - User ID mismatch' }, { status: 403 });
@@ -58,6 +56,7 @@ export async function POST(request: NextRequest) {
     const userPreferencesRef = dbAdmin.collection('userPreferences').doc(userId);
     const userPrefDoc = await userPreferencesRef.get();
     let stripeCustomerId = userPrefDoc.exists ? userPrefDoc.data()?.stripeCustomerId : null;
+    let userCreatedNewStripeCustomer = false;
 
     if (!stripeCustomerId) {
       const userAuthRecord = await firebaseAuthAdmin.getUser(userId);
@@ -69,7 +68,7 @@ export async function POST(request: NextRequest) {
         },
       });
       stripeCustomerId = customer.id;
-      await userPreferencesRef.set({ stripeCustomerId, userId, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+      userCreatedNewStripeCustomer = true;
       console.log(`[API Stripe Save] Created Stripe customer ${stripeCustomerId} for user ${userId}`);
     } else {
       console.log(`[API Stripe Save] Found existing Stripe customer ${stripeCustomerId} for user ${userId}`);
@@ -79,36 +78,40 @@ export async function POST(request: NextRequest) {
       customer: stripeCustomerId,
     });
 
-    // Optional: Set as default payment method for subscriptions
-    // await stripe.customers.update(stripeCustomerId, {
-    //   invoice_settings: {
-    //     default_payment_method: paymentMethod.id,
-    //   },
-    // });
-
-    const existingPaymentMethods = userPrefDoc.exists && Array.isArray(userPrefDoc.data()?.paymentMethods) ? userPrefDoc.data()?.paymentMethods : [];
+    const existingPaymentMethodsRaw = userPrefDoc.exists ? userPrefDoc.data()?.paymentMethods : [];
+    const existingPaymentMethods: SavedPaymentMethod[] = Array.isArray(existingPaymentMethodsRaw) ? existingPaymentMethodsRaw : [];
     
-    const updatedPaymentMethodsNonDefault = existingPaymentMethods.map((pm: PaymentMethod & { isDefault: boolean }) => ({
+    const updatedPaymentMethodsNonDefault = existingPaymentMethods.map((pm: SavedPaymentMethod) => ({
       ...pm,
       isDefault: false,
-    }))
+    }));
 
-    const newSavedPaymentMethod = {
+    const newSavedPaymentMethod: SavedPaymentMethod = {
       stripePaymentMethodId: paymentMethod.id,
       brand: paymentMethod.card?.brand || 'Unknown',
       last4: paymentMethod.card?.last4 || '0000',
       expMonth: paymentMethod.card?.exp_month || 0,
       expYear: paymentMethod.card?.exp_year || 0,
-      isDefault: true, // New newest card is default
+      isDefault: true, 
     };
     updatedPaymentMethodsNonDefault.push(newSavedPaymentMethod);
 
-    await userPreferencesRef.update({
+    console.log(`[API Stripe Save] Attempting to update Firestore userPreferences for user ${userId} with paymentMethods:`, JSON.stringify(updatedPaymentMethodsNonDefault, null, 2));
+    
+    const dataToSet: any = {
       paymentMethods: updatedPaymentMethodsNonDefault,
+      stripeCustomerId: stripeCustomerId, // Ensure stripeCustomerId is always included
       updatedAt: FieldValue.serverTimestamp(),
-    });
+      userId: userId, // Include userId, especially if creating the doc for the first time (rules might need it)
+    };
 
-    console.log(`[API Stripe Save] Payment method ${paymentMethodId} attached to customer ${stripeCustomerId} for user ${userId} and saved to Firestore.`);
+    if (userCreatedNewStripeCustomer || !userPrefDoc.exists()) {
+        dataToSet.createdAt = FieldValue.serverTimestamp(); // Add createdAt if new doc or new customer was created
+    }
+
+    await userPreferencesRef.set(dataToSet, { merge: true });
+    console.log(`[API Stripe Save] Firestore userPreferences document for user ${userId} created/updated successfully.`);
+
     return NextResponse.json({
       success: true,
       message: 'Payment method saved successfully!',
@@ -126,11 +129,11 @@ export async function POST(request: NextRequest) {
         if (error.statusCode) {
             statusCode = error.statusCode;
         }
+    } else if (error.code && error.code.startsWith('firestore/')) {
+        console.error(`[API Stripe Save] Firestore specific error: Code: ${error.code}, Message: ${error.message}`);
+        errorMessage = `Failed to update payment preferences: ${error.message}`;
     } else if (error.message && error.message.includes('Firebase Admin SDK initialization error')) {
         errorMessage = 'Server configuration error. Please try again later.';
-    } else if (error.message && error.message.includes("doesn't exist")) { 
-        errorMessage = 'User profile not found. Cannot save payment method.';
-        statusCode = 404;
     }
     
     console.error('Full error object passed to client:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
@@ -138,3 +141,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: errorMessage, stripeErrorCode: error.code }, { status: statusCode });
   }
 }
+    
