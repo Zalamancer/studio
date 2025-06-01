@@ -70,17 +70,17 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
         case 'connection_request':
             title = `${senderDisplayName} wants to connect`;
             description = 'Review the connection request.';
-            linkHref = '/connect';
+            linkHref = '/messages?tab=requests'; // Corrected
             break;
         case 'connection_accepted':
             title = `Connected with ${senderDisplayName}`;
             description = 'View their profile or start a chat.';
-            linkHref = notification.senderId ? `/profile/${notification.senderId}` : '/connect';
+            linkHref = notification.senderId ? `/profile/${notification.senderId}` : '/messages?tab=connections'; // Corrected fallback
             break;
         case 'new_message':
             title = `New message from ${senderDisplayName}`;
             description = notification.textSnippet || 'View message';
-            linkHref = notification.conversationId ? `/contracts?conversationId=${notification.conversationId}` : '/contracts';
+            linkHref = notification.conversationId ? `/messages?conversationId=${notification.conversationId}` : '/messages'; // Corrected
             break;
         default:
             title = 'New Notification';
@@ -269,3 +269,4 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     </DropdownMenu>
   );
 };
+
