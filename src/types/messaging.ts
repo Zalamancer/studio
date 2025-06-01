@@ -1,3 +1,4 @@
+
 // src/types/messaging.ts
 import type { Timestamp } from 'firebase/firestore';
 
@@ -5,7 +6,15 @@ import type { Timestamp } from 'firebase/firestore';
 export interface Conversation {
   id: string; // Firestore document ID
   participants: string[]; // Array of user IDs participating in the conversation
-  postId?: string; // Optional ID of the post this conversation is about
+  type: 'direct' | 'group'; // Type of conversation
+  postId?: string | null; // Optional ID of the post this conversation is about
+
+  // Group-specific fields (optional for direct chats)
+  groupName?: string | null;
+  groupAvatarUrl?: string | null;
+  ownerId?: string | null; // UID of the group creator/owner
+  adminIds?: string[];   // UIDs of group administrators
+
   lastMessage: string | null; // Text of the last message sent
   lastMessageTimestamp: Timestamp | null; // Timestamp of the last message (Firestore Timestamp)
   createdAt: Timestamp; // When the conversation was created (Firestore Timestamp)
@@ -15,6 +24,12 @@ export interface Conversation {
 export interface ClientConversation extends Omit<Conversation, 'lastMessageTimestamp' | 'createdAt'> {
   lastMessageTimestamp: number | null; // Milliseconds since epoch
   createdAt: number; // Milliseconds since epoch
+  // Ensure group fields are here
+  groupName?: string | null;
+  groupAvatarUrl?: string | null;
+  ownerId?: string | null;
+  adminIds?: string[];
+  type: 'direct' | 'group';
 }
 
 
@@ -34,16 +49,24 @@ export interface Message {
 // Represents a message with a serializable timestamp (e.g., number) for client components
 export interface SerializableMessage extends Omit<Message, 'timestamp'> {
   timestamp: number; // Timestamp as milliseconds since epoch
-  // isBotMessage is inherited from Message via Omit if not re-declared
-  // but explicitly adding it here for clarity if Message could change
-  isBotMessage?: boolean; 
+  isBotMessage?: boolean;
 }
 
 
 // Type for data needed to create a new message (uses client-side data, serverTimestamp used in service)
 export type NewMessageData = Omit<Message, 'id' | 'timestamp' | 'read'>;
-// We might need to adjust NewMessageData if isBotMessage should be settable at creation
-// For now, assuming isBotMessage is determined by the backend or not set by client directly for new messages
 
 // Type for data needed to create a new conversation
-export type NewConversationData = Omit<Conversation, 'id'>;
+// Updated to include group-specific fields for group creation
+export interface NewConversationData extends Omit<Conversation, 'id' | 'createdAt' | 'lastMessage' | 'lastMessageTimestamp'> {
+  createdAt: Timestamp; // Always set by server
+  lastMessage: string | null; // Initialized to null
+  lastMessageTimestamp: Timestamp | null; // Initialized to null
+  // Type will be set based on creation logic
+  type: 'direct' | 'group';
+  // Group specific fields are optional here, but will be required by createGroupConversation
+  groupName?: string | null;
+  groupAvatarUrl?: string | null;
+  ownerId?: string | null;
+  adminIds?: string[];
+}

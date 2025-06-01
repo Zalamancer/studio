@@ -1,3 +1,4 @@
+
 // src/services/messagingService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -17,13 +18,53 @@ import {
   onSnapshot, // Added for real-time listeners
   type Unsubscribe, // Type for the unsubscribe function
 } from 'firebase/firestore';
-import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message } from '@/types/messaging';
+import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message, Conversation } from '@/types/messaging'; // Added Conversation
 import { fetchUserProfileBasic } from './connectionService';
 import { createNotification } from './notificationService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 const conversationsCollectionRef = collection(db, 'conversations');
 const messagesSubcollectionRef = (conversationId: string) => collection(db, 'conversations', conversationId, 'messages');
+
+export const createGroupConversation = async (
+  creatorId: string,
+  groupName: string,
+  initialMemberIds: string[],
+  groupAvatarUrl?: string | null
+): Promise<string> => {
+  console.log(`%c[messagingService] createGroupConversation: Called. Creator: '${creatorId}', GroupName: '${groupName}', Members: [${initialMemberIds.join(', ')}]`, "color: #20B2AA;");
+  if (!creatorId) throw new Error("Creator ID is required.");
+  if (!groupName.trim()) throw new Error("Group name is required.");
+  if (!initialMemberIds || initialMemberIds.length === 0) throw new Error("At least one initial member (besides creator) is required for a group.");
+
+  const allParticipants = Array.from(new Set([creatorId, ...initialMemberIds])).sort();
+  if (allParticipants.length < 2) { 
+      throw new Error("A group chat needs at least two unique participants (including the creator).");
+  }
+
+  const newConversationDoc: Omit<Conversation, 'id'> = {
+    participants: allParticipants,
+    type: 'group',
+    groupName: groupName.trim(),
+    groupAvatarUrl: groupAvatarUrl || null,
+    ownerId: creatorId,
+    adminIds: [creatorId], // Creator is the first admin
+    postId: null, // Groups are not tied to posts by default
+    lastMessage: null,
+    lastMessageTimestamp: serverTimestamp() as Timestamp, 
+    createdAt: serverTimestamp() as Timestamp,
+  };
+
+  try {
+    const docRef = await addDoc(conversationsCollectionRef, newConversationDoc);
+    console.log(`%c[messagingService] New GROUP conversation CREATED with ID: ${docRef.id}`, "color: green;");
+    return docRef.id;
+  } catch (error: any) {
+    console.error(`%c[messagingService] Error creating GROUP conversation:`, "color: red;", error);
+    throw new Error(`Failed to create group conversation: ${error.message}`);
+  }
+};
+
 
 export const getConversationsForUser = async (userId: string): Promise<ClientConversation[]> => {
   if (!userId) {
@@ -32,7 +73,6 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
   }
   const currentClientAuthUid = auth.currentUser?.uid;
   console.log(`%c[messagingService] getConversationsForUser: Fetching for userId: '${userId}'. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: dodgerblue;");
-
 
   try {
     const constraints: QueryConstraint[] = [
@@ -47,14 +87,14 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
     console.log(`%c  [messagingService] Query snapshot received. Found ${querySnapshot.docs.length} documents.`, "color: dodgerblue;");
 
     const conversations = querySnapshot.docs.map((docSnap) => {
-      const data = docSnap.data();
+      const data = docSnap.data() as Conversation; // Use Conversation type here
       if (!data.participants || !Array.isArray(data.participants)) {
           console.warn(`%c  [messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`, "color: orange;");
-          return null; // Skip this document
+          return null;
       }
       const lastTimestampMillis = data.lastMessageTimestamp instanceof Timestamp
             ? data.lastMessageTimestamp.toMillis()
-            : (typeof data.lastMessageTimestamp === 'number' ? data.lastMessageTimestamp : Date.now()); // Fallback to now for sorting if null
+            : (typeof data.lastMessageTimestamp === 'number' ? data.lastMessageTimestamp : null);
 
        const createdAtTimestampMillis = data.createdAt instanceof Timestamp
             ? data.createdAt.toMillis()
@@ -63,7 +103,12 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
       return {
         id: docSnap.id,
         participants: data.participants,
+        type: data.type || 'direct', // Default to 'direct' if type is missing for older data
         postId: data.postId || null,
+        groupName: data.groupName || null,
+        groupAvatarUrl: data.groupAvatarUrl || null,
+        ownerId: data.ownerId || null,
+        adminIds: data.adminIds || [],
         lastMessage: data.lastMessage || null,
         lastMessageTimestamp: lastTimestampMillis,
         createdAt: createdAtTimestampMillis,
@@ -89,9 +134,9 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
 export const findOrCreateConversation = async (userId1: string, userId2: string, postIdParam?: string | null): Promise<string> => {
   const currentClientAuthUid = auth.currentUser?.uid;
   const postIdForQuery = postIdParam === 'general_connection' || !postIdParam ? null : postIdParam;
-  const contextDescription = postIdForQuery ? `post ${postIdForQuery}` : 'general chat';
+  const contextDescription = postIdForQuery ? `direct chat related to post ${postIdForQuery}` : 'general direct chat';
 
-  console.log(`%c[messagingService] findOrCreateConversation: Called. User1: '${userId1}', User2: '${userId2}', PostId for query: '${postIdForQuery === null ? "NULL (general_connection)" : postIdForQuery}'. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: #FF8C00;");
+  console.log(`%c[messagingService] findOrCreateConversation (DIRECT): Called. User1: '${userId1}', User2: '${userId2}', PostId for query: '${postIdForQuery === null ? "NULL (general)" : postIdForQuery}'. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: #FF8C00;");
 
 
   if (userId1 === userId2) {
@@ -106,9 +151,12 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
   const participants = [userId1, userId2].sort();
 
   try {
-    const queryConstraints: QueryConstraint[] = [where('participants', '==', participants)];
-    queryConstraints.push(where('postId', '==', postIdForQuery));
-    queryConstraints.push(limit(1));
+    const queryConstraints: QueryConstraint[] = [
+        where('participants', '==', participants),
+        where('type', '==', 'direct'), 
+        where('postId', '==', postIdForQuery),
+        limit(1)
+    ];
 
 
     const q = query(conversationsCollectionRef, ...queryConstraints);
@@ -116,20 +164,25 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
 
     if (!querySnapshot.empty) {
       const existingConvId = querySnapshot.docs[0].id;
-      console.log(`%c[messagingService] Found existing conversation for ${contextDescription} with ID: ${existingConvId}`, "color: green;");
+      console.log(`%c[messagingService] Found existing DIRECT conversation for ${contextDescription} with ID: ${existingConvId}`, "color: green;");
       return existingConvId;
     }
 
-    console.log(`%c[messagingService] No existing conversation found for ${contextDescription}. Creating new one.`, "color: orange;");
+    console.log(`%c[messagingService] No existing DIRECT conversation found for ${contextDescription}. Creating new one.`, "color: orange;");
     const newConversationData: NewConversationData = {
         participants: participants,
+        type: 'direct', 
         postId: postIdForQuery,
         createdAt: serverTimestamp() as Timestamp,
         lastMessage: null,
-        lastMessageTimestamp: null,
+        lastMessageTimestamp: serverTimestamp() as Timestamp, 
+        groupName: null,
+        groupAvatarUrl: null,
+        ownerId: null,
+        adminIds: [],
     };
 
-    console.log(`%c[messagingService] Pre-Create Firestore Rule Check Values:
+    console.log(`%c[messagingService] Pre-Create DIRECT Firestore Rule Check Values:
         - clientAuthUid:                               '${currentClientAuthUid || 'NULL'}'
         - newConversationData.participants.length === 2: ${newConversationData.participants.length === 2}
         - newConversationData.participants.includes(currentClientAuthUid): ${currentClientAuthUid ? newConversationData.participants.includes(currentClientAuthUid) : false}
@@ -137,11 +190,11 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
 
 
     const docRef = await addDoc(conversationsCollectionRef, newConversationData);
-    console.log(`%c[messagingService] New conversation CREATED for ${contextDescription} with ID: ${docRef.id}`, "color: green;");
+    console.log(`%c[messagingService] New DIRECT conversation CREATED for ${contextDescription} with ID: ${docRef.id}`, "color: green;");
     return docRef.id;
 
   } catch (error: any) {
-    console.error(`%c[messagingService] Error finding/creating conversation for ${contextDescription}:`, "color: red;", error);
+    console.error(`%c[messagingService] Error finding/creating DIRECT conversation for ${contextDescription}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
         console.error("[messagingService] Firestore permission denied for creating/accessing conversation. Check security rules.");
         console.error("Ensure rule allows 'create' on '/conversations/{conversationId}' when authenticated, participants array is size 2, contains the auth uid, and handles postId correctly.");
@@ -149,7 +202,7 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
         throw new Error(`Permission denied when trying to access or create conversation. Ensure Firestore Rules allow 'create' on '/conversations/{conversationId}' when authenticated.`);
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-         console.error("[messagingService] Firestore query requires an index. Please create the necessary index in the Firebase console (e.g., composite on 'participants' and 'postId').");
+         console.error("[messagingService] Firestore query requires an index. Please create the necessary index in the Firebase console (e.g., composite on 'participants', 'type', and 'postId').");
          throw new Error("Firestore query requires an index for finding conversations. Please create it.");
     }
     throw new Error(`Failed to find or create conversation: ${error.message}`);
@@ -181,7 +234,6 @@ export const getMessagesForConversation = (
       console.log(`%c[Service] onSnapshot fired for ${conversationId}. Docs count: ${querySnapshot.docs.length}`, "color: cyan;");
       const messages = querySnapshot.docs.map((docSnap) => {
         const data = docSnap.data() as Message;
-        console.log(`    [Service] Mapping doc ${docSnap.id} - Raw data: `, data); // Log raw data
         const timestampMillis = data.timestamp instanceof Timestamp
             ? data.timestamp.toMillis()
             : (typeof data.timestamp === 'number' ? data.timestamp : Date.now());
@@ -193,11 +245,10 @@ export const getMessagesForConversation = (
           text: data.text || "",
           timestamp: timestampMillis,
           read: data.read || false,
-          isBotMessage: data.isBotMessage === true, // Explicitly check for true
+          isBotMessage: data.isBotMessage === true,
           replyToMessageId: data.replyToMessageId || undefined,
           repliedToTextSnippet: data.repliedToTextSnippet || undefined,
         };
-        console.log(`    [Service] Mapped message: isBotMessage = ${serializableMsg.isBotMessage}`, serializableMsg);
         return serializableMsg;
       });
       const botMessageCount = messages.filter(m => m.isBotMessage).length;
@@ -228,19 +279,19 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     const conversationDocRef = doc(db, 'conversations', messageData.conversationId);
     const messagesRef = messagesSubcollectionRef(messageData.conversationId);
     const batch = writeBatch(db);
-    const newMessageRef = doc(messagesRef); 
+    const newMessageRef = doc(messagesRef);
 
     const messagePayload: Partial<Message> & { timestamp: any } = {
         conversationId: messageData.conversationId,
         senderId: messageData.senderId,
         text: messageData.text,
         read: false,
-        isBotMessage: messageData.isBotMessage === true ? true : false, 
+        isBotMessage: messageData.isBotMessage === true ? true : false,
         replyToMessageId: messageData.replyToMessageId || null,
         repliedToTextSnippet: messageData.repliedToTextSnippet || null,
         timestamp: serverTimestamp(),
     };
-    
+
     Object.keys(messagePayload).forEach(key => {
         if (messagePayload[key as keyof typeof messagePayload] === undefined) {
             messagePayload[key as keyof typeof messagePayload] = null;
@@ -261,11 +312,11 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
 
     const conversationSnap = await getDoc(conversationDocRef);
     if (conversationSnap.exists()) {
-        const conversationData = conversationSnap.data();
+        const conversationData = conversationSnap.data() as Conversation; 
         const participantsArray = Array.isArray(conversationData?.participants) ? conversationData.participants : [];
 
         for (const participantId of participantsArray) {
-            if (participantId !== messageData.senderId) { 
+            if (participantId !== messageData.senderId) {
                 try {
                     await createNotification({
                         userId: participantId,
@@ -273,6 +324,7 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
                         senderId: messageData.senderId,
                         conversationId: messageData.conversationId,
                         textSnippet: messageData.text.substring(0, 100),
+                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined,
                     });
                 } catch (notificationError) {
                     console.error(`[messagingService] Failed to create notification for participant ${participantId} in conv ${messageData.conversationId}:`, notificationError);
@@ -288,21 +340,37 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
   }
 };
 
-export const getUserDetails = async (userId: string): Promise<{ name: string; avatar?: string } | null> => {
+export const getUserDetails = async (userId: string): Promise<{ name: string; avatar?: string, isGroup?: boolean, participantCount?: number } | null> => {
     if (!userId) return null;
-    console.log(`%c[messagingService] getUserDetails: Fetching details for userId: ${userId}`, "color: #DAA520;");
     const profile = await fetchUserProfileBasic(userId);
     if (!profile) {
-        console.warn(`%c[messagingService] getUserDetails: No profile found for ${userId}, using generated name.`, "color: #DAA520;");
         return { name: generateAnonymousName(userId) };
     }
-    const displayName = profile.displayName || generateAnonymousName(userId); 
-    console.log(`%c[messagingService] getUserDetails: Profile found for ${userId}. DisplayName: '${displayName}', Avatar: ${!!profile.avatarUrl}`, "color: #DAA520;");
+    const displayName = profile.displayName || generateAnonymousName(userId);
     return {
         name: displayName,
         avatar: profile.avatarUrl,
     };
 };
+
+// Fetches group details if the conversationId belongs to a group chat
+export const getGroupChatDetails = async (conversationId: string): Promise<{ name: string; avatar?: string, participantCount?: number } | null> => {
+  if (!conversationId) return null;
+  const convRef = doc(db, 'conversations', conversationId);
+  const convSnap = await getDoc(convRef);
+  if (convSnap.exists()) {
+    const data = convSnap.data() as Conversation;
+    if (data.type === 'group') {
+      return {
+        name: data.groupName || 'Group Chat',
+        avatar: data.groupAvatarUrl || undefined,
+        participantCount: data.participants.length
+      };
+    }
+  }
+  return null;
+};
+
 
 export const getPostDetails = async (postId: string): Promise<{ question: string } | null> => {
     if (!postId || postId === 'general_connection') return null;

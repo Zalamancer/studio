@@ -10,6 +10,7 @@ import {
   sendMessage,
   getPostDetails,
   getUserDetails,
+  getGroupChatDetails, // Import getGroupChatDetails
 } from '@/services/messagingService';
 import type { ClientConversation, SerializableMessage, NewMessageData, Message } from '@/types/messaging';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -18,12 +19,13 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDownLeft, ArrowLeft } from 'lucide-react';
+import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDownLeft, ArrowLeft, Users, PlusCircle } from 'lucide-react'; // Added Users, PlusCircle
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Timestamp } from 'firebase/firestore';
+import { CreateGroupChatDialog } from './CreateGroupChatDialog'; // Import the new dialog
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -46,22 +48,34 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
   isSelected,
   currentUserId,
   onSelect,
-  postQuestion,
+  postQuestion, 
   highlight,
 }) => {
-    const otherParticipantId = conversation.participants.find(p => p !== currentUserId);
+    const isGroupChat = conversation.type === 'group';
+    const otherParticipantId = !isGroupChat ? conversation.participants.find(p => p !== currentUserId) : null;
 
-    const { data: otherParticipantDetails, isLoading: isLoadingDetails } = useQuery({
-        queryKey: ['userDetails', otherParticipantId, 'messagingInterfaceList'],
+    const { data: otherParticipantDetails, isLoading: isLoadingDirectDetails } = useQuery({
+        queryKey: ['userDetails', otherParticipantId, 'messagingList'],
         queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : Promise.resolve(null),
-        enabled: !!otherParticipantId,
+        enabled: !!otherParticipantId && !isGroupChat,
         staleTime: Infinity,
     });
 
-    const participantName = isLoadingDetails
-        ? 'Loading...'
-        : otherParticipantDetails?.name || generateAnonymousName(otherParticipantId || 'unknown_user');
-    const initials = getInitials(participantName);
+    let displayName: string;
+    let avatarUrl: string | undefined;
+    let displayInitials: string;
+
+    if (isGroupChat) {
+        displayName = conversation.groupName || 'Group Chat';
+        avatarUrl = conversation.groupAvatarUrl || undefined;
+        displayInitials = getInitials(displayName);
+    } else {
+        displayName = isLoadingDirectDetails
+            ? 'Loading...'
+            : otherParticipantDetails?.name || generateAnonymousName(otherParticipantId || 'unknown_user');
+        avatarUrl = otherParticipantDetails?.avatar;
+        displayInitials = getInitials(displayName);
+    }
 
     const formattedTime = conversation.lastMessageTimestamp
         ? new Date(conversation.lastMessageTimestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -72,33 +86,38 @@ const ConversationListItem: React.FC<ConversationListItemProps> = React.memo(({
       <button
         onClick={() => onSelect(conversation.id)}
         className={cn(
-          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-start", 
+          "w-full text-left p-3 hover:bg-muted/50 transition-colors rounded-lg flex items-start",
           isSelected ? "bg-muted" : ""
         )}
         aria-current={isSelected ? "page" : undefined}
       >
-         <Avatar className="h-9 w-9 flex-shrink-0 mt-0.5 mr-3"> 
-          <AvatarImage src={otherParticipantDetails?.avatar} alt={participantName} />
-          <AvatarFallback className="bg-primary text-primary-foreground text-xs">{initials}</AvatarFallback>
+         <Avatar className="h-9 w-9 flex-shrink-0 mt-0.5 mr-3">
+          <AvatarImage src={avatarUrl} alt={displayName} />
+          <AvatarFallback className={cn("text-xs", isGroupChat ? "bg-secondary text-secondary-foreground" : "bg-primary text-primary-foreground")}>
+            {isGroupChat ? <Users className="h-4 w-4" /> : displayInitials}
+          </AvatarFallback>
          </Avatar>
         <div className="flex-grow overflow-hidden min-w-0">
-          <p className="text-sm font-medium text-foreground truncate">{participantName}</p>
-          {postQuestion && (
-              <p className="text-xs text-primary truncate font-medium mt-0.5 max-w-[80px] sm:max-w-[160px] md:max-w-xs lg:max-w-sm"> 
+          <p className="text-sm font-medium text-foreground truncate flex items-center">
+            {displayName}
+            {isGroupChat && <Users className="h-3.5 w-3.5 text-muted-foreground ml-1.5 flex-shrink-0" />}
+          </p>
+          {!isGroupChat && postQuestion && (
+              <p className="text-xs text-primary truncate font-medium mt-0.5 max-w-[80px] sm:max-w-[160px] md:max-w-xs lg:max-w-sm">
                   Re: {postQuestion}
               </p>
           )}
           <p className={cn("text-xs text-muted-foreground truncate mt-0.5", isSelected && conversation.lastMessage ? "font-semibold" : "")}>
-              {conversation.lastMessage || 'No messages yet'}
+              {conversation.lastMessage || (isGroupChat ? `Created by ${conversation.ownerId ? generateAnonymousName(conversation.ownerId) : 'Admin'}` : 'No messages yet')}
           </p>
         </div>
         {formattedTime && (
-          <span className="text-xs text-muted-foreground self-start pt-0.5 ml-2 flex-shrink-0"> 
+          <span className="text-xs text-muted-foreground self-start pt-0.5 ml-2 flex-shrink-0">
             {formattedTime}
           </span>
         )}
       </button>
-       {conversation.postId && conversation.postId !== 'general_connection' && (
+       {!isGroupChat && conversation.postId && conversation.postId !== 'general_connection' && (
            <Link href={`/?postId=${conversation.postId}`}
                  className={cn(
                      "absolute right-2 bottom-2 opacity-0 group-hover:opacity-100 transition-opacity",
@@ -206,6 +225,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const prevActiveConversationIdRef = useRef<string | null | undefined>(null);
   const [isInitialMessagesLoad, setIsInitialMessagesLoad] = useState(true);
   const visualViewportHeightRef = useRef<number>(0);
+  const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
 
   const [messages, setMessages] = useState<SerializableMessage[]>([]);
   const [isLoadingMessagesState, setIsLoadingMessagesState] = useState(true);
@@ -227,8 +247,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     queryKey: ['conversations', currentUserId],
     queryFn: () => getConversationsForUser(currentUserId),
     enabled: !!currentUserId,
-    staleTime: 1000 * 60 * 1,
-    refetchOnWindowFocus: true,
+    staleTime: 1000 * 30, 
+    refetchInterval: 1000 * 60, 
     retry: 1,
   });
 
@@ -263,7 +283,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
   useEffect(() => {
     if (activeConversationId !== prevActiveConversationIdRef.current) {
-      setIsInitialMessagesLoad(true); 
+      setIsInitialMessagesLoad(true);
       prevActiveConversationIdRef.current = activeConversationId;
     }
 
@@ -318,9 +338,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
        if (messagesEndRef.current) {
            const options: ScrollIntoViewOptions = {
                behavior: isInitialMessagesLoad ? 'auto' : 'smooth',
-               block: isInitialMessagesLoad ? 'end' : 'nearest', 
+               block: isInitialMessagesLoad ? 'end' : 'nearest',
            };
-           const timerDelay = isInitialMessagesLoad ? 200 : 100; 
+           const timerDelay = isInitialMessagesLoad ? 200 : 100;
 
            const timer = setTimeout(() => {
                messagesEndRef.current?.scrollIntoView(options);
@@ -350,24 +370,44 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     sendMessageMutation.mutate(messageData);
   };
 
-   const selectedConversation = conversations.find(c => c.id === activeConversationId);
-   const otherParticipantId = selectedConversation?.participants.find(p => p !== currentUserId);
+  const selectedConversation = conversations.find(c => c.id === activeConversationId);
+  const isGroupChatActive = selectedConversation?.type === 'group';
+  const otherParticipantId = !isGroupChatActive ? selectedConversation?.participants.find(p => p !== currentUserId) : null;
 
-   const { data: headerParticipantDetails, isLoading: isLoadingHeaderDetails } = useQuery({
-       queryKey: ['userDetails', otherParticipantId, 'messagingInterfaceHeader'],
-       queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : Promise.resolve(null),
-       enabled: !!otherParticipantId,
-       staleTime: Infinity,
+  const { data: headerParticipantDetails, isLoading: isLoadingHeaderDirectDetails } = useQuery({
+      queryKey: ['userDetails', otherParticipantId, 'messagingHeader'],
+      queryFn: () => otherParticipantId ? getUserDetails(otherParticipantId) : Promise.resolve(null),
+      enabled: !!otherParticipantId && !isGroupChatActive,
+      staleTime: Infinity,
+  });
+
+   const { data: headerGroupDetails, isLoading: isLoadingHeaderGroupDetails } = useQuery({
+       queryKey: ['groupChatDetails', activeConversationId, 'messagingHeader'],
+       queryFn: () => activeConversationId && isGroupChatActive ? getGroupChatDetails(activeConversationId) : Promise.resolve(null),
+       enabled: !!activeConversationId && isGroupChatActive,
+       staleTime: 1000 * 60 * 5,
    });
 
-   const otherParticipantName = isLoadingHeaderDetails
-       ? 'Loading...'
-       : headerParticipantDetails?.name || generateAnonymousName(otherParticipantId || 'Select Conversation');
-   const otherParticipantInitials = getInitials(otherParticipantName);
-   const otherParticipantAvatar = headerParticipantDetails?.avatar;
-   const selectedPostQuestion = selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && postDetailsMap
-        ? postDetailsMap.get(selectedConversation.postId)?.question
-        : null;
+
+  let headerDisplayName: string;
+  let headerAvatarUrl: string | undefined;
+  let headerInitials: string;
+  let headerParticipantCount: number | undefined;
+
+  if (isGroupChatActive) {
+    headerDisplayName = isLoadingHeaderGroupDetails ? "Loading..." : headerGroupDetails?.name || selectedConversation?.groupName || 'Group Chat';
+    headerAvatarUrl = headerGroupDetails?.avatar || selectedConversation?.groupAvatarUrl || undefined;
+    headerInitials = getInitials(headerDisplayName);
+    headerParticipantCount = headerGroupDetails?.participantCount || selectedConversation?.participants.length;
+  } else {
+    headerDisplayName = isLoadingHeaderDirectDetails ? "Loading..." : headerParticipantDetails?.name || generateAnonymousName(otherParticipantId || 'Select Conversation');
+    headerAvatarUrl = headerParticipantDetails?.avatar;
+    headerInitials = getInitials(headerDisplayName);
+  }
+  const selectedPostQuestion = !isGroupChatActive && selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && postDetailsMap
+       ? postDetailsMap.get(selectedConversation.postId)?.question
+       : null;
+
 
   const handleStartReply = useCallback((message: SerializableMessage) => {
     setReplyingTo(message);
@@ -383,7 +423,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       setTimeout(() => {
         event.target.scrollIntoView({ behavior: 'smooth', block: 'end' });
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 400); 
+      }, 400);
     }
   };
 
@@ -391,25 +431,24 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 250); 
+      }, 250);
     }
   };
 
    useEffect(() => {
     if (isMobile && typeof window !== 'undefined' && window.visualViewport) {
       const vv = window.visualViewport;
-      visualViewportHeightRef.current = vv.height; 
+      visualViewportHeightRef.current = vv.height;
 
       const handleViewportResize = () => {
         if (!vv) return;
         const newHeight = vv.height;
         const heightDiff = newHeight - visualViewportHeightRef.current;
 
-        if (heightDiff > 50) { 
-          console.log(`[MSGI] VisualViewport resized. Height diff: ${heightDiff}. Scrolling to end.`);
-          setTimeout(() => { 
+        if (heightDiff > 50) {
+          setTimeout(() => {
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-          }, 250); 
+          }, 250);
         }
         visualViewportHeightRef.current = newHeight;
       };
@@ -420,6 +459,11 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
       };
     }
   }, [isMobile]);
+
+  const handleGroupCreated = (newConvId: string) => {
+    queryClient.invalidateQueries({queryKey: ['conversations', currentUserId]});
+    onSelectConversation(newConvId); 
+  };
 
 
   return (
@@ -434,10 +478,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             isMobile ? (activeConversationId ? "hidden" : "w-full flex-1") : "md:w-2/5 lg:w-1/3 md:flex-shrink-0"
           )}
         >
-          <div className={cn("border-b flex-shrink-0", isMobile ? "p-3" : "p-4")}>
+          <div className={cn("border-b flex-shrink-0 flex items-center justify-between", isMobile ? "p-3" : "p-4")}>
             <h2 className="text-lg font-semibold text-foreground flex items-center gap-2">
                 <MessageSquare className="h-5 w-5" /> All Messages
             </h2>
+            <Button variant="ghost" size="sm" onClick={() => setIsCreateGroupOpen(true)} title="Create New Group Chat">
+              <PlusCircle className="h-4 w-4 mr-1 md:mr-2" />
+              <span className="hidden md:inline">New Group</span>
+            </Button>
           </div>
           <ScrollArea className={cn("flex-1 overflow-y-auto min-h-0", isMobile ? "bg-background" : "bg-card")}>
             <div className={cn(isMobile ? "p-1" : "p-2", "space-y-1")}>
@@ -460,10 +508,10 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                        </p>
                    </div>
                ) : conversations.length === 0 ? (
-                  <p className="p-4 text-sm text-muted-foreground text-center">No messages yet.</p>
+                  <p className="p-4 text-sm text-muted-foreground text-center">No messages yet. Start a new chat or create a group!</p>
               ) : (
                 conversations.map((conv) => {
-                   const postQuestionText = conv.postId && conv.postId !== 'general_connection' && postDetailsMap ? postDetailsMap.get(conv.postId)?.question : null;
+                   const postQuestionText = conv.type === 'direct' && conv.postId && conv.postId !== 'general_connection' && postDetailsMap ? postDetailsMap.get(conv.postId)?.question : null;
                    return (
                        <ConversationListItem
                            key={conv.id}
@@ -497,17 +545,22 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                    </Button>
                  )}
                  <Avatar className="h-9 w-9 flex-shrink-0">
-                     <AvatarImage src={otherParticipantAvatar} alt={otherParticipantName} />
-                     <AvatarFallback className="bg-primary text-primary-foreground text-xs">{otherParticipantInitials}</AvatarFallback>
+                     <AvatarImage src={headerAvatarUrl} alt={headerDisplayName} />
+                     <AvatarFallback className={cn("text-xs", isGroupChatActive ? "bg-secondary text-secondary-foreground" : "bg-primary text-primary-foreground")}>
+                        {isGroupChatActive ? <Users className="h-4 w-4" /> : headerInitials}
+                     </AvatarFallback>
                  </Avatar>
                  <div className="flex-grow min-w-0">
-                    <h3 className="text-lg font-semibold text-foreground truncate">{otherParticipantName}</h3>
-                    {selectedPostQuestion && (
+                    <h3 className="text-lg font-semibold text-foreground truncate">{headerDisplayName}</h3>
+                    {isGroupChatActive && headerParticipantCount && (
+                      <p className="text-xs text-muted-foreground mt-0.5">{headerParticipantCount} members</p>
+                    )}
+                    {!isGroupChatActive && selectedPostQuestion && (
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">
                             Regarding: <span className="font-medium text-primary">{selectedPostQuestion}</span>
                         </p>
                      )}
-                      {otherParticipantId && (
+                      {!isGroupChatActive && otherParticipantId && (
                           <Link
                               href={`/profile/${otherParticipantId}`}
                               className="text-xs text-muted-foreground hover:text-primary hover:underline flex items-center gap-1 mt-0.5"
@@ -516,7 +569,12 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                           </Link>
                       )}
                  </div>
-                 {selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && (
+                 {isGroupChatActive && (
+                    <Button variant="ghost" size="icon" className="ml-auto" title="Group Info (Coming Soon)" disabled>
+                        <Users className="h-5 w-5" />
+                    </Button>
+                 )}
+                 {!isGroupChatActive && selectedConversation?.postId && selectedConversation.postId !== 'general_connection' && (
                      <Link href={`/?postId=${selectedConversation.postId}`}
                            className={cn(
                                "text-primary hover:underline text-xs items-center gap-1 ml-auto flex-shrink-0",
@@ -533,8 +591,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
               <ScrollArea
                 className="flex-1 overflow-y-auto bg-background min-h-0"
-                style={{ touchAction: 'none' }} 
-                onWheel={(e) => e.preventDefault()} 
+                style={{ touchAction: 'none' }}
               >
                 <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
                   {isLoadingMessagesState ? (
@@ -604,19 +661,22 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 </form>
               </div>
             </>
-          
         </div>
       )}
       {!activeConversationId && !isMobile && (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background md:flex">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
-              <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
+              <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one.</p>
           </div>
+      )}
+      {currentUserId && (
+        <CreateGroupChatDialog
+            isOpen={isCreateGroupOpen}
+            onOpenChange={setIsCreateGroupOpen}
+            onGroupCreated={handleGroupCreated}
+        />
       )}
     </div>
   );
 };
-
-
-    
