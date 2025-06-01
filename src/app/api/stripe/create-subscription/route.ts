@@ -97,7 +97,7 @@ export async function POST(request: NextRequest) {
     const subscription = await stripe.subscriptions.create({
       customer: stripeCustomerId,
       items: [{ price: priceId }],
-      payment_behavior: 'default_incomplete_if_confirmation_needed',
+      payment_behavior: 'default_incomplete', // CORRECTED VALUE
       expand: ['latest_invoice.payment_intent'],
       // trial_period_days: priceId === 'YOUR_STRIPE_PRICE_ID_PRO' ? 7 : undefined, // Example: Add trial for specific plans
     });
