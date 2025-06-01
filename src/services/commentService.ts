@@ -18,7 +18,8 @@ import {
   runTransaction, // Import runTransaction for atomic updates
   arrayUnion, // For adding to likedBy array
   arrayRemove, // For removing from likedBy array
-  increment, // For updating likeCount atomically
+  increment, // For updating likeCount and commentCount atomically
+  updateDoc, // For updating commentCount directly
 } from 'firebase/firestore';
 import type { NewCommentData, ClientComment, NewSubCommentData, ClientSubComment } from '@/types/comment';
 import { fetchUserProfileBasic } from '@/services/connectionService'; // CORRECTED IMPORT
@@ -73,6 +74,12 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
     const newCommentId = docRef.id;
     console.log(`%c[commentService] addCommentToPost: Comment added successfully to post ${postId} with ID: ${newCommentId}`, "color: green;");
 
+    // Atomically increment commentCount on the post
+    await updateDoc(postDocRef, {
+      commentCount: increment(1)
+    });
+    console.log(`%c[commentService] addCommentToPost: Incremented commentCount for post ${postId}`, "color: green;");
+
     const postDetails = await getPostDetails(postId);
 
     if (resolvedMentionedUids.length > 0) {
@@ -104,7 +111,7 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
   } catch (error: any) {
     console.error(`%c[commentService] addCommentToPost: Error adding comment to post ${postId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
-      console.error("Firestore permission denied. Check security rules for writing to posts/{postId}/comments subcollection.");
+      console.error("Firestore permission denied. Check security rules for writing to posts/{postId}/comments subcollection and updating post document.");
       throw new Error('Permission denied. Check Firestore security rules.');
     }
     throw new Error(`Failed to add comment: ${error.message}`);
@@ -202,14 +209,14 @@ export const toggleLikeComment = async (postId: string, commentId: string, userI
 
             if (isLiked) {
                 newLikedBy = likedBy.filter(uid => uid !== userId);
-                newLikeCount = Math.max(0, likeCount - 1); 
+                newLikeCount = Math.max(0, likeCount - 1);
                 console.log(`%c[commentService] toggleLikeComment: UNLIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             } else {
                 newLikedBy = [...likedBy, userId];
                 newLikeCount = likeCount + 1;
                 console.log(`%c[commentService] toggleLikeComment: LIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             }
-            
+
             transaction.update(commentRef, {
                 likedBy: newLikedBy,
                 likeCount: newLikeCount,
@@ -232,12 +239,25 @@ export const deleteCommentFromPost = async (postId: string, commentId: string): 
     throw new Error('Post ID and Comment ID are required to delete a comment.');
   }
   try {
-    const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
+    const postDocRef = doc(db, 'posts', postId);
+    const commentDocRef = doc(postDocRef, 'comments', commentId);
+
+    // Atomically decrement commentCount on the post
+    // Ensure commentCount doesn't go below 0, though increment(-1) should handle this well.
+    // If the field might not exist, it's safer to use a transaction to read and then write.
+    // For simplicity here, we assume commentCount is always initialized to 0 or more.
+    await updateDoc(postDocRef, {
+      commentCount: increment(-1)
+    });
+    console.log(`%c[commentService] deleteCommentFromPost: Decremented commentCount for post ${postId}`, "color: orange;");
+
     await deleteDoc(commentDocRef);
+    console.log(`%c[commentService] Comment ${commentId} deleted successfully from post ${postId}`, "color: green;");
+
   } catch (error: any) {
     console.error(`[commentService] Error deleting comment ${commentId} from post ${postId}:`, error);
     if (error.code === 'permission-denied') {
-      throw new Error('Permission denied deleting comment. Ensure you own the comment or have appropriate permissions.');
+      throw new Error('Permission denied deleting comment. Ensure you own the comment or have appropriate permissions, and can update the post.');
     }
     throw new Error(`Failed to delete comment: ${error.message}`);
   }
@@ -271,6 +291,9 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
     const newSubCommentId = docRef.id;
     console.log(`%c[commentService] addSubCommentToComment: Subcomment added successfully to comment ${commentId} with ID: ${newSubCommentId}`, "color: green;");
+
+    // Note: Sub-comments do not typically update the main post's commentCount.
+    // That count usually refers to top-level comments only.
 
     const postDetails = await getPostDetails(postId);
     const commentSnap = await getDoc(commentDocRef);
@@ -404,6 +427,7 @@ export const deleteSubCommentFromComment = async (postId: string, commentId: str
   try {
     const subCommentDocRef = doc(db, 'posts', postId, 'comments', commentId, 'subcomments', subCommentId);
     await deleteDoc(subCommentDocRef);
+    // Note: Deleting a sub-comment does not affect the parent Post's commentCount.
   } catch (error: any) {
     console.error(`[commentService] Error deleting subcomment ${subCommentId} from comment ${commentId}:`, error);
     if (error.code === 'permission-denied') {
@@ -451,7 +475,7 @@ export const toggleLikeSubComment = async (postId: string, commentId: string, su
                 newLikeCount = likeCount + 1;
                 console.log(`%c[commentService] toggleLikeSubComment: LIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             }
-            
+
             transaction.update(subCommentRef, {
                 likedBy: newLikedBy,
                 likeCount: newLikeCount,
@@ -469,5 +493,3 @@ export const toggleLikeSubComment = async (postId: string, commentId: string, su
     }
 };
 
-
-    
