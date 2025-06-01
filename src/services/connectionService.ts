@@ -41,53 +41,46 @@ const getConnectionDocId = (userId1: string, userId2: string): string => {
 
 async function findUniqueMentionName(
   baseUid: string,
-  maxAttempts: number = 10
+  maxAttempts: number = 10,
+  maxRandomRetries: number = 3
 ): Promise<{ uniqueName: string; uniqueNameLower: string }> {
   let attempt = 0;
-  let currentSeedUid = baseUid; // Seed for initial generation
-  let candidateName = generateAnonymousName(currentSeedUid);
-  let candidateNameLower = candidateName.toLowerCase();
+  let candidateName: string;
+  let candidateNameLower: string;
+  const originalBaseName = generateAnonymousName(baseUid); // Generate base name once for suffixing
 
   while (attempt < maxAttempts) {
+    if (attempt === 0) {
+      // First attempt uses the original name from baseUid
+      candidateName = originalBaseName;
+    } else if (attempt < maxRandomRetries) {
+      // Subsequent attempts (up to maxRandomRetries) try a new random name
+      console.log(`[findUniqueMentionName] Collision on attempt ${attempt}. Trying new random name for baseUid ${baseUid}.`);
+      candidateName = generateAnonymousName(baseUid + "_retry" + attempt); // Alter seed for new random name
+    } else {
+      // After random retries, start suffixing the *original* base name
+      const suffixNumber = attempt - maxRandomRetries + 1;
+      candidateName = `${originalBaseName}_${suffixNumber}`;
+      console.log(`[findUniqueMentionName] Collision on attempt ${attempt}. Trying suffixed name: ${candidateName} for baseUid ${baseUid}.`);
+    }
+    candidateNameLower = candidateName.toLowerCase();
+
     const q = query(usersCollectionRef, where("mentionNameLowercase", "==", candidateNameLower), limit(1));
     const snapshot = await getDocs(q);
-    if (snapshot.empty) {
-      return { uniqueName: candidateName, uniqueNameLower: candidateNameLower }; // Found unique
-    }
-    // Collision detected
-    attempt++;
-    if (attempt >= maxAttempts) {
-      // Fallback strategy: append a short random string to the base UID-generated name
-      // This is extremely unlikely to be needed if the primary generation space is large
-      const fallbackSuffix = Math.random().toString(36).substring(2, 7);
-      const fallbackBase = generateAnonymousName(baseUid); // Regenerate base name for fallback
-      candidateName = `${fallbackBase}_${fallbackSuffix}`;
-      candidateNameLower = candidateName.toLowerCase();
-      console.warn(`[connectionService] findUniqueMentionName: Max attempts reached for UID ${baseUid}. Using fallback: ${candidateName}`);
-      // Check the fallback once more, though collision is now astronomically low
-      const fallbackQ = query(usersCollectionRef, where("mentionNameLowercase", "==", candidateNameLower), limit(1));
-      const fallbackSnapshot = await getDocs(fallbackQ);
-      if (fallbackSnapshot.empty) {
-        return { uniqueName: candidateName, uniqueNameLower: candidateNameLower };
-      }
-      // If even fallback collides, this is an extreme edge case.
-      // Consider logging a critical error and returning a UID-based placeholder or failing.
-      console.error(`[connectionService] CRITICAL: Fallback mentionName ${candidateName} also collided for UID ${baseUid}.`);
-      const ultimateFallback = `User${baseUid.substring(0,8)}_${Date.now().toString().slice(-4)}`;
-      return { uniqueName: ultimateFallback, uniqueNameLower: ultimateFallback.toLowerCase() };
-    }
 
-    // Generate a new candidate by slightly modifying the original name, e.g., append attempt number
-    // Or, regenerate with a modified seed for generateAnonymousName if that's preferred
-    const baseNameForRetry = generateAnonymousName(baseUid); // Get the original ColorAnimalNumber
-    candidateName = `${baseNameForRetry}_${attempt}`; // e.g., BlueCat123_1
-    candidateNameLower = candidateName.toLowerCase();
-    console.log(`[connectionService] findUniqueMentionName: Collision for ${candidateNameLower.split('_')[0]}, attempt ${attempt}, trying ${candidateName}`);
+    if (snapshot.empty) {
+      console.log(`[findUniqueMentionName] Found unique name '${candidateName}' for baseUid ${baseUid} on attempt ${attempt + 1}.`);
+      return { uniqueName: candidateName, uniqueNameLower: candidateNameLower };
+    }
+    attempt++;
   }
-  // Should not be reached if maxAttempts logic is correct, but as a safeguard:
-  console.error(`[connectionService] findUniqueMentionName: Loop finished without returning for UID ${baseUid}. This indicates an issue.`);
-  const finalFallback = `ErrUser${baseUid.substring(0,6)}`;
-  return {uniqueName: finalFallback, uniqueNameLower: finalFallback.toLowerCase()};
+
+  // Fallback if all attempts fail
+  console.error(`[findUniqueMentionName] Max attempts (${maxAttempts}) reached for base UID ${baseUid}. Using ultimate fallback.`);
+  const fallbackSuffix = Date.now().toString().slice(-5) + Math.random().toString(36).substring(2, 5);
+  candidateName = `${originalBaseName}_fb_${fallbackSuffix}`;
+  candidateNameLower = candidateName.toLowerCase();
+  return { uniqueName: candidateName, uniqueNameLower: candidateNameLower };
 }
 
 

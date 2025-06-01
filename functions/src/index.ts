@@ -89,43 +89,55 @@ async function isRealUser(userId: string): Promise<boolean> {
 
 /**
  * Helper function to find a unique mention name for bots.
+ * Prioritizes random generation before suffixing.
  * @param {string} basePrefix The prefix for the bot name (e.g., "Bot").
  * @param {number} initialSuffix The initial random suffix.
- * @param {number} maxAttempts Max attempts to find a unique name.
+ * @param {number} maxAttempts Max total attempts to find a unique name.
+ * @param {number} maxRandomRetries Max attempts to find a unique name by random generation.
  * @return {Promise<string>} A unique mention name.
  */
 async function findUniqueBotMentionName(
   basePrefix: string,
-  initialSuffix: number,
-  maxAttempts: number = 10
+  initialSuffix: number, // This is a 4-digit number for bots
+  maxAttempts: number = 10,
+  maxRandomRetries: number = 3
 ): Promise<string> {
   let attempt = 0;
-  let currentSuffix = initialSuffix;
-  let candidateName = `${basePrefix}${currentSuffix}`;
-  let candidateNameLower = candidateName.toLowerCase();
+  let candidateName: string;
+  let candidateNameLower: string;
+  const originalBotName = `${basePrefix}${initialSuffix}`; // e.g., Bot1234
 
   while (attempt < maxAttempts) {
+    if (attempt === 0) {
+      candidateName = originalBotName;
+    } else if (attempt < maxRandomRetries) {
+      // Random retry: generate a new 4-digit suffix
+      const newRandomSuffix = Math.floor(1000 + Math.random() * 9000);
+      candidateName = `${basePrefix}${newRandomSuffix}`;
+      logger.info(`[findUniqueBotMentionName] Collision on attempt ${attempt}. Trying new random bot name: ${candidateName}`);
+    } else {
+      // Suffix retry: append to the *original* bot name
+      const suffixNumber = attempt - maxRandomRetries + 1;
+      candidateName = `${originalBotName}_${suffixNumber}`; // e.g., Bot1234_1
+      logger.info(`[findUniqueBotMentionName] Collision on attempt ${attempt}. Trying suffixed bot name: ${candidateName}`);
+    }
+    candidateNameLower = candidateName.toLowerCase();
+
     const usersRef = dbAdmin.collection("users");
     const q = usersRef.where("mentionNameLowercase", "==", candidateNameLower).limit(1);
     const snapshot = await q.get();
 
     if (snapshot.empty) {
+      logger.info(`[findUniqueBotMentionName] Found unique bot name '${candidateName}' on attempt ${attempt + 1}.`);
       return candidateName; // Found unique
     }
-
     attempt++;
-    if (attempt >= maxAttempts) {
-      logger.error(`[findUniqueBotMentionName] Max attempts reached for prefix ${basePrefix}. Using fallback.`);
-      // Fallback: append timestamp to make it highly unique
-      return `${basePrefix}${initialSuffix}_${Date.now().toString().slice(-5)}`;
-    }
-    // Generate a new suffix for the next attempt
-    currentSuffix = Math.floor(1000 + Math.random() * 9000); // New 4-digit suffix
-    candidateName = `${basePrefix}${currentSuffix}`;
-    candidateNameLower = candidateName.toLowerCase();
   }
-  // Should ideally not be reached if maxAttempts > 0
-  return `${basePrefix}${initialSuffix}_fallback_${Date.now().toString().slice(-3)}`;
+
+  // Fallback if all attempts fail
+  logger.error(`[findUniqueBotMentionName] Max attempts (${maxAttempts}) reached for prefix ${basePrefix} and initial suffix ${initialSuffix}. Using ultimate fallback.`);
+  const fallbackSuffix = Date.now().toString().slice(-5) + Math.random().toString(36).substring(2, 5);
+  return `${originalBotName}_fb_${fallbackSuffix}`;
 }
 
 
@@ -138,7 +150,7 @@ async function _createBotUserLogic(targetIndustryName?: string): Promise<BotUser
   logger.info(`[${functionName}] Attempting to create new bot user. Target: ` +
         (targetIndustryName || "Random"));
   try {
-    const initialRandomSuffix = Math.floor(1000 + Math.random() * 9000); // Start with a 4-digit suffix
+    const initialRandomSuffix = Math.floor(1000 + Math.random() * 9000); // Start with a 4-digit suffix for bots
     const botEmail = `bot_${Date.now()}_${initialRandomSuffix}@example.com`;
     const botPassword = `strongPassword${Date.now()}${initialRandomSuffix}`;
 
