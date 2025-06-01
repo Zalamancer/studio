@@ -1,7 +1,9 @@
+
 {
   "name": "nextn",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "scripts": {
     "dev": "next dev --turbopack -p 9003",
     "genkit:dev": "genkit start -- tsx src/ai/dev.ts",
@@ -77,3 +79,5 @@
     "typescript": "^5"
   }
 }
+
+    

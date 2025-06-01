@@ -1,3 +1,4 @@
+
 // functions/src/index.ts
 /* eslint-disable max-len */
 import {onRequest} from "firebase-functions/v2/https";
@@ -9,7 +10,7 @@ import {GoogleGenerativeAI} from "@google/generative-ai";
 // Corrected import for generateAnonymousName
 import {generateAnonymousName} from "./utils/pseudonymUtils";
 // Corrected import for detailedSectorsData
-import {detailedSectorsData} from "./data/sectorData";
+import {detailedSectorsData, findIndustryByName} from "./data/sectorData"; // Added findIndustryByName
 import type {
   SectorWithSubSectors,
   SubSector,
@@ -28,12 +29,27 @@ if (admin.apps.length === 0) {
 export const dbAdmin = admin.firestore();
 export const authAdmin = admin.auth();
 
-interface BotUser {
+interface BotUser { // Used as return type for _createBotUserLogic
   userId: string;
   email: string;
   mentionName: string;
-  industry: string;
+  industry: string; // This is the key field for categorization
 }
+
+// Base profile structure for bot users as stored/retrieved from Firestore
+interface BotProfileBase {
+  uid?: string; // uid is set, but when mapping doc.id, we use id.
+  id?: string; // Added for clarity when mapping doc.id
+  email?: string;
+  mentionName?: string;
+  industry?: string; // Main categorization field
+  sectorName?: string;
+  subSectorName?: string | null;
+  industryName?: string | null; // More specific NAICS industry title
+  naicsCode?: string | null;
+  // Add other fields from UserProfileData if used in bot logic
+}
+
 
 interface BotPostDetails {
   postId: string;
@@ -74,9 +90,10 @@ async function isRealUser(userId: string): Promise<boolean> {
  * Core logic to create a bot user account with randomized details.
  * @return {Promise<BotUser | null>} An object with bot user details or null.
  */
-async function _createBotUserLogic(): Promise<BotUser | null> {
+async function _createBotUserLogic(targetIndustryName?: string): Promise<BotUser | null> {
   const functionName = "_createBotUserLogic";
-  logger.info(`[${functionName}] Attempting to create new bot user.`);
+  logger.info(`[${functionName}] Attempting to create new bot user. Target: ` +
+        (targetIndustryName || "Random"));
   try {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000);
     const botEmail = `bot_${Date.now()}_${randomSuffix}@example.com`;
@@ -90,37 +107,52 @@ async function _createBotUserLogic(): Promise<BotUser | null> {
 
     const generatedMentionName = generateAnonymousName(userRecord.uid);
 
-    const randomSector = detailedSectorsData[
-      Math.floor(Math.random() * detailedSectorsData.length)
-    ];
-    let randomSubSector: SubSector | null = null;
-    if (randomSector.subSectors && randomSector.subSectors.length > 0) {
-      randomSubSector = randomSector.subSectors[
-        Math.floor(Math.random() * randomSector.subSectors.length)
-      ];
+    let industryForBot: string;
+    let selectedSector: SectorWithSubSectors | undefined;
+    let selectedSubSector: SubSector | null = null;
+    let selectedIndustry: Industry | null = null;
+
+    if (targetIndustryName) {
+        const foundIndustryDetails = findIndustryByName(targetIndustryName);
+        if (foundIndustryDetails) {
+            selectedIndustry = foundIndustryDetails.industry;
+            selectedSubSector = foundIndustryDetails.subSector;
+            selectedSector = foundIndustryDetails.sector;
+            industryForBot = selectedIndustry?.name || selectedSubSector?.name || selectedSector?.name || targetIndustryName;
+        } else {
+            logger.warn(`[${functionName}] Target industry "${targetIndustryName}" not ` +
+                "found. Assigning to random industry.");
+            // Fallback to random if targetIndustryName is not found
+            selectedSector = detailedSectorsData[Math.floor(Math.random() * detailedSectorsData.length)];
+            if (selectedSector.subSectors && selectedSector.subSectors.length > 0) {
+                selectedSubSector = selectedSector.subSectors[Math.floor(Math.random() * selectedSector.subSectors.length)];
+            }
+            if (selectedSubSector && selectedSubSector.industries && selectedSubSector.industries.length > 0) {
+                selectedIndustry = selectedSubSector.industries[Math.floor(Math.random() * selectedSubSector.industries.length)];
+            }
+            industryForBot = selectedIndustry?.name || selectedSubSector?.name || selectedSector?.name || "General Business";
+        }
+    } else {
+        selectedSector = detailedSectorsData[Math.floor(Math.random() * detailedSectorsData.length)];
+        if (selectedSector.subSectors && selectedSector.subSectors.length > 0) {
+            selectedSubSector = selectedSector.subSectors[Math.floor(Math.random() * selectedSector.subSectors.length)];
+        }
+        if (selectedSubSector && selectedSubSector.industries && selectedSubSector.industries.length > 0) {
+            selectedIndustry = selectedSubSector.industries[Math.floor(Math.random() * selectedSubSector.industries.length)];
+        }
+        industryForBot = selectedIndustry?.name || selectedSubSector?.name || selectedSector?.name || "General Business";
     }
-    let randomIndustry: Industry | null = null;
-    if (randomSubSector && randomSubSector.industries &&
-        randomSubSector.industries.length > 0) {
-      randomIndustry = randomSubSector.industries[
-        Math.floor(Math.random() * randomSubSector.industries.length)
-      ];
-    }
+
 
     const userProfileData = {
       uid: userRecord.uid,
       email: botEmail,
       mentionName: generatedMentionName,
       mentionNameLowercase: generatedMentionName.toLowerCase(),
-      industry: randomIndustry?.name || randomSubSector?.name ||
-                randomSector.name || "General Business",
-      // Fields to omit for bots:
-      // actualDisplayName, companyName, avatarUrl, contactEmail, contactPhone,
-      // location, incomeRange
-      // These will not be written to Firestore for bot users.
+      industry: industryForBot, // This is the primary field for categorization
       description:
         `This is an automated bot account for the ` +
-        `${randomIndustry?.name || randomSubSector?.name || randomSector.name} ` +
+        `${industryForBot} ` +
         `industry, known as ${generatedMentionName}.`,
       descriptionVisibility: "everyone" as const,
       tags: [],
@@ -132,11 +164,10 @@ async function _createBotUserLogic(): Promise<BotUser | null> {
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       lastLoginAt: admin.firestore.FieldValue.serverTimestamp(),
-      sectorName: randomSector.name,
-      subSectorName: randomSubSector?.name || null,
-      industryName: randomIndustry?.name || null,
-      naicsCode: randomIndustry?.code || randomSubSector?.code ||
-                 randomSector.code,
+      sectorName: selectedSector?.name || null,
+      subSectorName: selectedSubSector?.name || null,
+      industryName: selectedIndustry?.name || null, // NAICS specific industry title
+      naicsCode: selectedIndustry?.code || selectedSubSector?.code || selectedSector?.code || null,
     };
 
     await dbAdmin.collection("users").doc(userRecord.uid).set(userProfileData);
@@ -181,30 +212,27 @@ async function _createBotPostLogic(): Promise<BotPostDetails | null> {
       .limit(50)
       .get();
 
-    let randomBot: any;
+    let randomBot: BotProfileBase; // Use the defined interface
     if (botUsersSnapshot.empty) {
       logger.warn(
         `[${functionName}] No bot users found. Creating a new one for post.`,
       );
-      const newBot = await _createBotUserLogic();
+      const newBot = await _createBotUserLogic(); // Gets a random industry by default
       if (!newBot) {
         logger.error(
           `[${functionName}] Failed to create new bot. Aborting post creation.`,
         );
         return null;
       }
-      // Fetch the full profile of the newly created bot to get all fields
-      const newBotProfile = await dbAdmin.collection("users")
-        .doc(newBot.userId).get();
+      const newBotProfile = await dbAdmin.collection("users").doc(newBot.userId).get();
       if (!newBotProfile.exists) {
-        logger.error(`[${functionName}] Failed to fetch profile for newly ` +
-        `created bot ${newBot.userId}. Aborting post.`);
+        logger.error(`[${functionName}] Failed to fetch profile for newly created bot ${newBot.userId}. Aborting post.`);
         return null;
       }
-      randomBot = {id: newBot.userId, ...newBotProfile.data()};
+      randomBot = {id: newBot.userId, ...(newBotProfile.data() as Partial<BotProfileBase>)} as BotProfileBase;
     } else {
       const botUsers = botUsersSnapshot.docs.map((doc) =>
-        ({id: doc.id, ...doc.data()}));
+        ({id: doc.id, ...(doc.data() as Partial<BotProfileBase>)} as BotProfileBase));
       randomBot = botUsers[Math.floor(Math.random() * botUsers.length)];
     }
 
@@ -219,14 +247,13 @@ async function _createBotPostLogic(): Promise<BotPostDetails | null> {
     const genAI = new GoogleGenerativeAI(API_KEY);
     const model = genAI.getGenerativeModel({model: "gemini-1.5-flash-latest"});
 
-    const postIndustry = randomBot.industryName ||
-                         randomBot.subSectorName ||
-                         randomBot.sectorName ||
-                         "General Business";
+    // Use the bot's 'industry' field for the prompt, or fallback to specific NAICS fields if 'industry' is too general
+    const postCreationIndustryContext = randomBot.industry || randomBot.industryName || randomBot.subSectorName || randomBot.sectorName || "General Business";
+
 
     const prompt =
       `Generate a unique and relevant question and a detailed description for a ` +
-      `forum post in the field of ${postIndustry}. The user, ` +
+      `forum post in the field of ${postCreationIndustryContext}. The user, ` +
       `${randomBot.mentionName}, is seeking insights. Output should be JSON: ` +
       `{"question": "string", "descriptionDetails": "string", ` +
       `"descriptionTried": "string (optional)", ` +
@@ -263,18 +290,17 @@ async function _createBotPostLogic(): Promise<BotPostDetails | null> {
           jsonString,
           parseError,
         );
-        // Fallback content
-        generatedContent.question = `Question for ${postIndustry} (ParseError)`;
+        generatedContent.question = `Question for ${postCreationIndustryContext} (ParseError)`;
         generatedContent.descriptionDetails =
-          `Details for ${postIndustry}. (Content parse failed)`;
+          `Details for ${postCreationIndustryContext}. (Content parse failed)`;
       }
     } catch (error) {
       logger.error(
         `[${functionName}] Error calling Gemini API for post:`, error,
       );
-      generatedContent.question = `Question for ${postIndustry} (API Error)`;
+      generatedContent.question = `Question for ${postCreationIndustryContext} (API Error)`;
       generatedContent.descriptionDetails =
-        `Seeking insights in ${postIndustry}. (Content gen failed)`;
+        `Seeking insights in ${postCreationIndustryContext}. (Content gen failed)`;
     }
 
     const sampleTagsPool = [
@@ -295,19 +321,18 @@ async function _createBotPostLogic(): Promise<BotPostDetails | null> {
       tags: sampleTagsPool[Math.floor(Math.random() * sampleTagsPool.length)],
       sector: randomBot.sectorName || "General",
       subSector: randomBot.subSectorName || null,
-      industry: randomBot.industryName || null,
+      industry: randomBot.industryName || null, // More specific NAICS industry title
       naicsCode: randomBot.naicsCode || null,
-      ratingScore: 0, // Bots can have a default rating or this can be updated
+      ratingScore: 0,
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
       imageUrls: [],
       mentionedUserIds: [],
       requestType: (Math.random() < 0.3) ? "help_request" : "post" as const,
       commentCount: 0,
-      // Fields removed: businessType, safetyIndicator
     };
     if (newPostData.requestType === "help_request") {
-      newPostData.maxBudget = Math.floor(Math.random() * 5000) + 100; // e.g. 100-5100
-      if (Math.random() < 0.5) { // 50% chance of having a deadline
+      newPostData.maxBudget = Math.floor(Math.random() * 5000) + 100;
+      if (Math.random() < 0.5) {
         const futureDate = new Date();
         futureDate.setDate(futureDate.getDate() + (Math.floor(Math.random() * 30) + 7));
         newPostData.deadline = admin.firestore.Timestamp.fromDate(futureDate);
@@ -322,13 +347,13 @@ async function _createBotPostLogic(): Promise<BotPostDetails | null> {
     const postRef = await dbAdmin.collection("posts").add(newPostData);
     logger.info(
       `[${functionName}] Bot user ${randomBot.id} (${randomBot.mentionName}) ` +
-      `created post ${postRef.id} in industry "${postIndustry}".`,
+      `created post ${postRef.id} in industry "${postCreationIndustryContext}".`,
     );
 
     return {
       postId: postRef.id,
       botUserId: randomBot.id,
-      botMentionName: randomBot.mentionName,
+      botMentionName: randomBot.mentionName || generateAnonymousName(randomBot.id),
     };
   } catch (error) {
     logger.error(`[${functionName}] Error:`, error);
@@ -400,10 +425,10 @@ async function _createBotCommentLogic(
       return null;
     }
 
-    const postIndustry = postData.industry || "General Business";
+    const postIndustry = postData.industry || postData.subSector || postData.sector || "General Business";
     const originalPosterId = postData.userId;
 
-    let commentingBot: any = null;
+    let commentingBot: BotUser | null = null;
     const botUsersSnapshot = await dbAdmin
       .collection("users")
       .where("isBotAccount", "==", true)
@@ -411,39 +436,44 @@ async function _createBotCommentLogic(
 
     if (!botUsersSnapshot.empty) {
       const availableBots = botUsersSnapshot.docs
-        .map((doc) => ({id: doc.id, ...doc.data()}))
+        .map((doc) => ({id: doc.id, ...(doc.data() as Partial<BotProfileBase>)} as BotProfileBase))
         .filter((bot) => bot.id !== originalPosterId);
 
       if (availableBots.length > 0) {
         const botsInIndustry = availableBots.filter(
-          (b) => b.industry === postIndustry,
+          (b) => b.industry === postIndustry, // Using the bot's 'industry' field
         );
-        commentingBot = botsInIndustry.length > 0 ?
+        const selectedBotData = botsInIndustry.length > 0 ?
           botsInIndustry[Math.floor(Math.random() * botsInIndustry.length)] :
           availableBots[Math.floor(Math.random() * availableBots.length)];
+        
+        commentingBot = {
+            userId: selectedBotData.id!,
+            mentionName: selectedBotData.mentionName || generateAnonymousName(selectedBotData.id!),
+            email: selectedBotData.email || `bot_${selectedBotData.id}@example.com`,
+            industry: selectedBotData.industry || "General Business",
+        };
       }
     }
 
     if (!commentingBot) {
       logger.info(
         `[${functionName}] No suitable existing bot for post ${targetPostId}.` +
-        ` Creating new one.`,
+        ` Creating new one targeting industry: ${postIndustry}.`,
       );
-      const newBotUser = await _createBotUserLogic(); // It will get a random industry
+      const newBotUser = await _createBotUserLogic(postIndustry); // Target post's industry
       if (newBotUser && newBotUser.userId !== originalPosterId) {
-        const newBotProfile = await dbAdmin.collection("users")
-          .doc(newBotUser.userId).get();
-        if (newBotProfile.exists) {
-          commentingBot = {id: newBotUser.userId, ...newBotProfile.data()};
-        } else {
-          logger.error(`[${functionName}] Failed to fetch profile for newly` +
-          ` created bot ${newBotUser.userId}. Aborting comment.`);
-          return null;
-        }
+        commentingBot = newBotUser;
       } else if (newBotUser && newBotUser.userId === originalPosterId) {
         logger.warn(`[${functionName}] New bot created is OP for post ` +
-        `${targetPostId}. Cannot comment.`);
-        return null; // Avoid infinite loop or bot commenting on own post
+        `${targetPostId}. Cannot comment. Trying again with random industry.`);
+        const fallbackBot = await _createBotUserLogic(); // Random industry
+         if (fallbackBot && fallbackBot.userId !== originalPosterId) {
+            commentingBot = fallbackBot;
+        } else {
+            logger.error(`[${functionName}] Fallback bot creation also failed or was OP.`);
+            return null;
+        }
       } else {
         logger.error(
           `[${functionName}] Failed to create new bot for comment. Aborting.`,
@@ -505,16 +535,16 @@ async function _createBotCommentLogic(
     }
 
     const newCommentData = {
-      userId: commentingBot.id,
+      userId: commentingBot.userId,
       mentionName: commentingBot.mentionName,
       text: generatedComment.commentText,
       postId: targetPostId,
       timestamp: admin.firestore.FieldValue.serverTimestamp(),
-      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      replies: [],
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(), // For comments as well
+      replies: [], // Assuming comments can have replies, but bots don't start them
       likeCount: 0,
-      parentCommentId: null, // This is a top-level comment
-      mentionedUserIds: [], // Bots don't @mention for now in comments
+      parentCommentId: null,
+      mentionedUserIds: [],
     };
 
     const commentRef = await postDocRef.collection("comments")
@@ -524,14 +554,14 @@ async function _createBotCommentLogic(
     });
 
     logger.info(
-      `[${functionName}] Bot user ${commentingBot.id} ` +
+      `[${functionName}] Bot user ${commentingBot.userId} ` +
       `(${commentingBot.mentionName}) created comment ${commentRef.id} ` +
       `on post ${targetPostId}.`,
     );
     return {
       commentId: commentRef.id,
       postId: targetPostId,
-      commentingUserId: commentingBot.id,
+      commentingUserId: commentingBot.userId,
       commentingUserMentionName: commentingBot.mentionName,
     };
   } catch (error) {
@@ -566,7 +596,6 @@ export const onNewMessageReplyWithBot = onDocumentWritten(
       return;
     }
 
-    // Log the full newMessage object for inspection
     logger.info(`[${functionName}] Full newMessage data:`, newMessage);
 
     if (newMessage.isBotMessage === true) {
@@ -785,7 +814,8 @@ export const autoAcceptBotConnectionRequests = onDocumentWritten(
 export const createBotUser = onRequest(async (req, res) => {
   const functionName = "createBotUser (HTTP)";
   logger.info(`[${functionName}] Triggered.`);
-  const result = await _createBotUserLogic();
+  const targetIndustry = req.query.industry as string | undefined;
+  const result = await _createBotUserLogic(targetIndustry);
   if (result) {
     res.status(200).send({
       message: "Bot user created successfully!",
@@ -864,7 +894,7 @@ export const scheduledBotActivity = onMessagePublished(
     const actionType = Math.random();
     if (actionType < 0.15) {
       logger.info(`[${functionName}] Decided to create a bot user.`);
-      await _createBotUserLogic();
+      await _createBotUserLogic(); // Random industry by default
     } else if (actionType < 0.60) {
       logger.info(`[${functionName}] Decided to create a bot post.`);
       await _createBotPostLogic();
@@ -885,3 +915,7 @@ export const scheduledBotActivity = onMessagePublished(
   },
 );
 // Ensure newline at end of file
+import {onDocumentWritten} from "firebase-functions/v2/firestore"; // Corrected import
+
+
+    
