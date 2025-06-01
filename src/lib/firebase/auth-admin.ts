@@ -14,25 +14,39 @@ const serviceAccountKeyFileName = 'serviceAccountKey.json';
 console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Module loaded. Attempting to initialize Firebase Admin SDK with app name: ${ADMIN_APP_NAME}...`);
 console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} NODE_ENV: ${process.env.NODE_ENV}`);
 console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Current Working Directory (process.cwd()): ${process.cwd()}`);
+console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} DEBUG: typeof admin.firestore is: ${typeof admin.firestore}`);
+console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} DEBUG: typeof admin.firestore.FieldValue is: ${typeof admin.firestore.FieldValue}`);
+
 
 function getAdminApp(): admin.app.App | null {
   try {
-    return admin.app(ADMIN_APP_NAME);
-  } catch (e) {
-    return null; // App doesn't exist
+    // Attempt to get the app by its unique name
+    const app = admin.apps.find(app => app?.name === ADMIN_APP_NAME);
+    if (app) {
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} getAdminApp: Found existing app by name '${ADMIN_APP_NAME}'.`);
+      return app;
+    }
+    // Fallback for environments where named apps might behave differently or if it's the default app
+    if (admin.apps.length > 0) {
+        console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} getAdminApp: No app found by name '${ADMIN_APP_NAME}', but admin.apps has ${admin.apps.length} app(s). Returning admin.apps[0].`);
+        return admin.apps[0]; // Could be [DEFAULT] or another named app
+    }
+    return null; // No apps exist
+  } catch (e: any) {
+    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} getAdminApp: Error checking for app '${ADMIN_APP_NAME}': ${e.message}`);
+    return null; // App doesn't exist or error occurred
   }
 }
 
 function initializeAdminAppWithCredentials(credential: admin.credential.Credential, sourceDescription: string): boolean {
   try {
-    if (!getAdminApp()) { // Only initialize if it doesn't exist
+    if (!getAdminApp()) { // Only initialize if no app (by name or default) exists
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Initializing NEW Firebase ADMIN App '${ADMIN_APP_NAME}' using ${sourceDescription}.`);
       admin.initializeApp({
         credential,
-        // databaseURL: `https://${process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID}.firebaseio.com` // Optional: if using Realtime Database
-      }, ADMIN_APP_NAME); // Initialize with a specific name
-      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase ADMIN App '${ADMIN_APP_NAME}' initialized successfully using ${sourceDescription}.`);
+      }, ADMIN_APP_NAME);
     } else {
-      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase ADMIN App '${ADMIN_APP_NAME}' already exists. Using existing instance.`);
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase ADMIN App '${ADMIN_APP_NAME}' (or a default) already exists. Using existing instance for credentials check logic, but new services will be from the named app if created.`);
     }
     return true;
   } catch (error: any) {
@@ -88,12 +102,12 @@ if (!getAdminApp()) {
   if (!initialized) {
     console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account key not found or failed. Attempting default initialization (for managed environments like Cloud Run/Functions).`);
     try {
-      if (!getAdminApp()) { // Check again before default init
-         admin.initializeApp(undefined, ADMIN_APP_NAME); // Default init with specific name
-         console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase ADMIN App '${ADMIN_APP_NAME}' initialized successfully using DEFAULT (managed environment) credentials.`);
+      if (!getAdminApp()) { 
+         console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Initializing Firebase ADMIN App with DEFAULT credentials and specific name '${ADMIN_APP_NAME}'.`);
+         admin.initializeApp(undefined, ADMIN_APP_NAME); 
          initialized = true;
       } else {
-         console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase ADMIN App '${ADMIN_APP_NAME}' was found (possibly initialized by another means just before default init).`);
+         console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase ADMIN App was found just before default init attempt. Assuming already initialized.`);
          initialized = true;
       }
     } catch (defaultInitError: any) {
@@ -101,34 +115,36 @@ if (!getAdminApp()) {
     }
   }
 } else {
-    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase ADMIN App '${ADMIN_APP_NAME}' already initialized or detected by getAdminApp().`);
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase ADMIN App already initialized or detected by getAdminApp().`);
 }
 
-// Assign instances from the named app
-const adminAppInstance = getAdminApp();
+const adminAppInstance = getAdminApp(); // Get the app (either newly initialized by name or existing)
+
 if (adminAppInstance) {
+  console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Retrieved adminAppInstance. Name: ${adminAppInstance.name}. Attempting to get auth() and firestore().`);
   try {
     authAdminInstance = adminAppInstance.auth();
     dbAdminInstance = adminAppInstance.firestore();
-    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Auth and DB instances obtained from ADMIN App '${ADMIN_APP_NAME}'.`);
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Auth and DB instances obtained from ADMIN App '${adminAppInstance.name}'.`);
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} typeof dbAdminInstance.collection: ${typeof dbAdminInstance?.collection}`);
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} dbAdminInstance constructor name: ${dbAdminInstance?.constructor?.name}`);
   } catch (e: any) {
-    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error getting auth/db from ADMIN App '${ADMIN_APP_NAME}': ${e.message}`);
+    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error getting auth/db from ADMIN App '${adminAppInstance.name}': ${e.message}`);
   }
 } else {
-  console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: Firebase ADMIN App '${ADMIN_APP_NAME}' not available after all initialization attempts.`);
+  console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: Firebase ADMIN App instance NOT available after all initialization attempts.`);
 }
 
-
 if (authAdminInstance) {
-    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} authAdmin (Firebase Admin Auth from '${ADMIN_APP_NAME}') IS INITIALIZED and available.`, "color: green;");
+    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} authAdmin (Firebase Admin Auth from '${adminAppInstance?.name || 'UNKNOWN_APP'}') IS INITIALIZED and available.`, "color: green;");
 } else {
-    console.error(`%c${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: authAdmin (Firebase Admin Auth from '${ADMIN_APP_NAME}') IS NULL. API routes requiring admin auth WILL FAIL.`, "color: red; font-weight: bold;");
+    console.error(`%c${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: authAdmin (Firebase Admin Auth from '${adminAppInstance?.name || 'UNKNOWN_APP'}') IS NULL. API routes requiring admin auth WILL FAIL.`, "color: red; font-weight: bold;");
 }
 
 if (dbAdminInstance) {
-    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} dbAdmin (Firebase Admin Firestore from '${ADMIN_APP_NAME}') IS INITIALIZED and available.`, "color: green;");
+    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} dbAdmin (Firebase Admin Firestore from '${adminAppInstance?.name || 'UNKNOWN_APP'}') IS INITIALIZED and available.`, "color: green;");
 } else {
-    console.error(`%c${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: dbAdmin (Firebase Admin Firestore from '${ADMIN_APP_NAME}') IS NULL. API routes requiring admin Firestore WILL FAIL.`, "color: red; font-weight: bold;");
+    console.error(`%c${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: dbAdmin (Firebase Admin Firestore from '${adminAppInstance?.name || 'UNKNOWN_APP'}') IS NULL. API routes requiring admin Firestore WILL FAIL.`, "color: red; font-weight: bold;");
 }
 
 export const authAdmin = authAdminInstance;

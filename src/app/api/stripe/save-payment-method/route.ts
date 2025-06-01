@@ -3,12 +3,11 @@
 import { NextResponse, type NextRequest } from 'next/server';
 import Stripe from 'stripe';
 import { authAdmin as firebaseAuthAdmin, dbAdmin } from '@/lib/firebase/auth-admin';
-import { FieldValue } from 'firebase-admin/firestore';
-import type { SavedPaymentMethod } from '@/types/userPreferences'; // Import the type
+import { FieldValue } from 'firebase-admin/firestore'; // Ensure this is from firebase-admin
+import type { SavedPaymentMethod } from '@/types/userPreferences';
 
 export const runtime = 'nodejs';
 
-// Initialize Stripe with your secret key.
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2024-06-20',
 });
@@ -24,7 +23,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Missing paymentMethodId or userId' }, { status: 400 });
     }
 
-    // --- AUTHENTICATION & AUTHORIZATION ---
     const idToken = request.headers.get('Authorization')?.split('Bearer ')[1];
     if (!idToken) {
       console.error('[API Stripe Save] Unauthorized: Missing ID token.');
@@ -48,7 +46,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Forbidden - User ID mismatch' }, { status: 403 });
     }
     console.log(`[API Stripe Save] Request authorized for user: ${userId}`);
-    // --- END OF AUTHENTICATION & AUTHORIZATION ---
+
+    console.log('[API Stripe Save] DEBUG: dbAdmin object:', dbAdmin);
+    console.log('[API Stripe Save] DEBUG: dbAdmin constructor name:', dbAdmin?.constructor?.name);
+    console.log('[API Stripe Save] DEBUG: typeof FieldValue is:', typeof FieldValue);
 
 
     if (!dbAdmin) {
@@ -57,8 +58,19 @@ export async function POST(request: NextRequest) {
     }
 
     const userPreferencesRef = dbAdmin.collection('userPreferences').doc(userId);
-    const userPrefDoc = await userPreferencesRef.get();
-    let stripeCustomerId = userPrefDoc.exists ? userPrefDoc.data()?.stripeCustomerId : null;
+    let userPrefDoc;
+    let userPrefDocExists = false;
+    try {
+        console.log(`[API Stripe Save] Attempting to get userPreferencesRef for user ${userId}`);
+        userPrefDoc = await userPreferencesRef.get();
+        userPrefDocExists = userPrefDoc.exists; // For Admin SDK, .exists is a property
+        console.log(`[API Stripe Save] userPreferencesRef.get() success. userPrefDoc.exists is: ${userPrefDocExists}`);
+    } catch (getDocError: any) {
+        console.error(`[API Stripe Save] CRITICAL ERROR during userPreferencesRef.get() for user ${userId}:`, getDocError);
+        return NextResponse.json({ error: 'Server error fetching user preferences.', details: getDocError.message }, { status: 500 });
+    }
+    
+    let stripeCustomerId = userPrefDocExists ? userPrefDoc.data()?.stripeCustomerId : null;
     let userCreatedNewStripeCustomer = false;
 
     if (!stripeCustomerId) {
@@ -82,7 +94,7 @@ export async function POST(request: NextRequest) {
     });
     console.log(`[API Stripe Save] Stripe PaymentMethod pm_id: ${paymentMethod.id} attached to customer: ${stripeCustomerId}`);
 
-    const existingPaymentMethodsRaw = userPrefDoc.exists ? userPrefDoc.data()?.paymentMethods : [];
+    const existingPaymentMethodsRaw = userPrefDocExists ? userPrefDoc.data()?.paymentMethods : [];
     console.log(`[API Stripe Save] DEBUG: Fetched existingPaymentMethodsRaw from Firestore:`, JSON.stringify(existingPaymentMethodsRaw));
     const existingPaymentMethods: SavedPaymentMethod[] = Array.isArray(existingPaymentMethodsRaw) ? existingPaymentMethodsRaw : [];
     console.log(`[API Stripe Save] DEBUG: Parsed existingPaymentMethods (ensure it's an array):`, JSON.stringify(existingPaymentMethods));
@@ -105,20 +117,28 @@ export async function POST(request: NextRequest) {
     
     const dataToSet: any = {
       paymentMethods: updatedPaymentMethodsNonDefault,
-      stripeCustomerId: stripeCustomerId, // Ensure stripeCustomerId is always included
-      updatedAt: FieldValue.serverTimestamp(),
-      userId: userId, // Include userId, especially if creating the doc for the first time (rules might need it)
+      stripeCustomerId: stripeCustomerId,
+      userId: userId, 
     };
 
-    if (userCreatedNewStripeCustomer || !userPrefDoc.exists()) {
-        dataToSet.createdAt = FieldValue.serverTimestamp(); // Add createdAt if new doc or new customer was created
-        console.log(`[API Stripe Save] Adding 'createdAt' field because it's a new document or new Stripe customer.`);
+    if (userCreatedNewStripeCustomer || !userPrefDocExists) {
+        dataToSet.createdAt = FieldValue.serverTimestamp();
+        dataToSet.updatedAt = FieldValue.serverTimestamp();
+        console.log(`[API Stripe Save] Adding 'createdAt' and 'updatedAt' field because it's a new document or new Stripe customer.`);
+    } else {
+        dataToSet.updatedAt = FieldValue.serverTimestamp();
+        console.log(`[API Stripe Save] Adding 'updatedAt' field for existing document.`);
     }
 
     console.log(`[API Stripe Save] Attempting to SET Firestore userPreferences for user ${userId} with dataToSet:`, JSON.stringify(dataToSet, null, 2));
-    await userPreferencesRef.set(dataToSet, { merge: true }); // Use set with merge:true
-    console.log(`[API Stripe Save] Firestore userPreferences document for user ${userId} created/updated successfully.`);
-
+    try {
+        await userPreferencesRef.set(dataToSet, { merge: true });
+        console.log(`[API Stripe Save] Firestore userPreferences document for user ${userId} SET with merge:true successfully.`);
+    } catch (setDocError: any) {
+        console.error(`[API Stripe Save] CRITICAL ERROR during userPreferencesRef.set() for user ${userId}:`, setDocError);
+        return NextResponse.json({ error: 'Server error saving payment preferences.', details: setDocError.message }, { status: 500 });
+    }
+    
     return NextResponse.json({
       success: true,
       message: 'Payment method saved successfully!',
@@ -134,9 +154,7 @@ export async function POST(request: NextRequest) {
     if (error instanceof Stripe.errors.StripeError) {
         console.error('[API Stripe Save] Stripe Error:', error.code, error.message);
         errorMessage = error.message;
-        if (error.statusCode) {
-            statusCode = error.statusCode;
-        }
+        if (error.statusCode) statusCode = error.statusCode;
     } else if (error.code && (String(error.code).startsWith('firestore/') || String(error.code).startsWith('functions/'))) {
         console.error(`[API Stripe Save] Firebase specific error: Code: ${error.code}, Message: ${error.message}`);
         errorMessage = `Failed to update payment preferences: ${error.message}`;
@@ -152,5 +170,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: errorMessage, stripeErrorCode: error.code, details: error.message }, { status: statusCode });
   }
 }
-    
     
