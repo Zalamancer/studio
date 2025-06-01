@@ -2,7 +2,7 @@
 // src/services/commentService.ts
 // Client-callable by default (no 'use server;' at the top)
 
-import { db } from '@/lib/firebase/config';
+import { db, auth } from '@/lib/firebase/config';
 import {
   collection,
   addDoc,
@@ -31,7 +31,7 @@ import { generateAnonymousName } from '@/lib/pseudonymUtils'; // For fallback na
 // This assumes mentions are in the format @UID and UIDs are alphanumeric with underscores.
 // This helper is LOCAL to this service. The global one is in page.tsx
 const extractMentionsFromTextService = (text: string): string[] => {
-  console.log(`%c[commentService] extractMentionsFromTextService - Input Text: "${text}"`, "color: #FF8C00");
+  console.log(`%c[commentService] extractMentionsFromTextService - Input Text: "${text}"`, "color: #FF8C00;");
   const mentionRegex = /@([a-zA-Z0-9_.'-]+(?: [a-zA-Z0-9_.'-]+)*)/g;
   const matches = text.matchAll(mentionRegex);
   const userIdentifiers = new Set<string>();
@@ -171,35 +171,55 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
 };
 
 export const toggleLikeComment = async (postId: string, commentId: string, userId: string): Promise<void> => {
+    console.log(`%c[commentService] toggleLikeComment: User '${userId}' on post '${postId}', comment '${commentId}'`, "color: magenta;");
     if (!postId || !commentId || !userId) {
-        throw new Error('Post ID, Comment ID, and User ID are required to toggle like.');
+        const errorMsg = 'Post ID, Comment ID, and User ID are required to toggle like.';
+        console.error(`%c[commentService] toggleLikeComment: VALIDATION FAILED - ${errorMsg}`, "color: red;");
+        throw new Error(errorMsg);
     }
     const commentRef = doc(db, 'posts', postId, 'comments', commentId);
+    console.log(`%c[commentService] toggleLikeComment: Document ref: ${commentRef.path}`, "color: magenta;");
+
     try {
         await runTransaction(db, async (transaction) => {
+            console.log(`%c[commentService] toggleLikeComment: Transaction started for comment '${commentId}'. Fetching document...`, "color: magenta;");
             const commentSnap = await transaction.get(commentRef);
             if (!commentSnap.exists()) {
+                console.error(`%c[commentService] toggleLikeComment: Comment '${commentId}' does not exist!`, "color: red;");
                 throw new Error("Comment does not exist!");
             }
             const commentData = commentSnap.data();
+            console.log(`%c[commentService] toggleLikeComment: Comment data fetched:`, "color: magenta;", commentData);
+
             const likedBy: string[] = commentData.likedBy || [];
+            const likeCount: number = typeof commentData.likeCount === 'number' ? commentData.likeCount : 0;
             const isLiked = likedBy.includes(userId);
+            console.log(`%c[commentService] toggleLikeComment: User '${userId}' ${isLiked ? 'has liked' : 'has NOT liked'} this comment. Current likeCount: ${likeCount}`, "color: magenta;");
+
+            let newLikedBy: string[];
+            let newLikeCount: number;
+
             if (isLiked) {
-                transaction.update(commentRef, {
-                    likedBy: arrayRemove(userId),
-                    likeCount: increment(-1)
-                });
+                newLikedBy = likedBy.filter(uid => uid !== userId);
+                newLikeCount = Math.max(0, likeCount - 1); // Ensure count doesn't go below 0
+                console.log(`%c[commentService] toggleLikeComment: UNLIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             } else {
-                transaction.update(commentRef, {
-                    likedBy: arrayUnion(userId),
-                    likeCount: increment(1)
-                });
+                newLikedBy = [...likedBy, userId];
+                newLikeCount = likeCount + 1;
+                console.log(`%c[commentService] toggleLikeComment: LIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             }
+            
+            transaction.update(commentRef, {
+                likedBy: newLikedBy,
+                likeCount: newLikeCount
+            });
+            console.log(`%c[commentService] toggleLikeComment: Transaction update prepared for comment '${commentId}'.`, "color: magenta;");
         });
+        console.log(`%c[commentService] toggleLikeComment: Transaction for comment '${commentId}' SUCCEEDED.`, "color: green;");
     } catch (error: any) {
-        console.error(`[commentService] Error toggling like for comment ${commentId}:`, error);
+        console.error(`%c[commentService] toggleLikeComment: Error toggling like for comment ${commentId}:`, "color: red;", error);
         if (error.code === 'permission-denied') {
-            throw new Error('Permission denied. Check Firestore security rules.');
+            throw new Error('Permission denied to like/unlike comment. Check Firestore security rules.');
         }
         throw new Error(`Failed to toggle like: ${error.message}`);
     }
@@ -391,35 +411,55 @@ export const deleteSubCommentFromComment = async (postId: string, commentId: str
 };
 
 export const toggleLikeSubComment = async (postId: string, commentId: string, subCommentId: string, userId: string): Promise<void> => {
+    console.log(`%c[commentService] toggleLikeSubComment: User '${userId}' on post '${postId}', comment '${commentId}', subComment '${subCommentId}'`, "color: magenta;");
     if (!postId || !commentId || !subCommentId || !userId) {
-        throw new Error('Post ID, Comment ID, SubComment ID, and User ID are required to toggle like.');
+        const errorMsg = 'Post ID, Comment ID, SubComment ID, and User ID are required to toggle like.';
+        console.error(`%c[commentService] toggleLikeSubComment: VALIDATION FAILED - ${errorMsg}`, "color: red;");
+        throw new Error(errorMsg);
     }
     const subCommentRef = doc(db, 'posts', postId, 'comments', commentId, 'subcomments', subCommentId);
+    console.log(`%c[commentService] toggleLikeSubComment: Document ref: ${subCommentRef.path}`, "color: magenta;");
+
     try {
         await runTransaction(db, async (transaction) => {
+            console.log(`%c[commentService] toggleLikeSubComment: Transaction started for subComment '${subCommentId}'. Fetching document...`, "color: magenta;");
             const subCommentSnap = await transaction.get(subCommentRef);
             if (!subCommentSnap.exists()) {
+                console.error(`%c[commentService] toggleLikeSubComment: SubComment '${subCommentId}' does not exist!`, "color: red;");
                 throw new Error("Subcomment does not exist!");
             }
             const subCommentData = subCommentSnap.data();
+            console.log(`%c[commentService] toggleLikeSubComment: SubComment data fetched:`, "color: magenta;", subCommentData);
+
             const likedBy: string[] = subCommentData.likedBy || [];
+            const likeCount: number = typeof subCommentData.likeCount === 'number' ? subCommentData.likeCount : 0;
             const isLiked = likedBy.includes(userId);
+            console.log(`%c[commentService] toggleLikeSubComment: User '${userId}' ${isLiked ? 'has liked' : 'has NOT liked'} this subComment. Current likeCount: ${likeCount}`, "color: magenta;");
+
+            let newLikedBy: string[];
+            let newLikeCount: number;
+
             if (isLiked) {
-                transaction.update(subCommentRef, {
-                    likedBy: arrayRemove(userId),
-                    likeCount: increment(-1)
-                });
+                newLikedBy = likedBy.filter(uid => uid !== userId);
+                newLikeCount = Math.max(0, likeCount - 1);
+                console.log(`%c[commentService] toggleLikeSubComment: UNLIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             } else {
-                transaction.update(subCommentRef, {
-                    likedBy: arrayUnion(userId),
-                    likeCount: increment(1)
-                });
+                newLikedBy = [...likedBy, userId];
+                newLikeCount = likeCount + 1;
+                console.log(`%c[commentService] toggleLikeSubComment: LIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             }
+            
+            transaction.update(subCommentRef, {
+                likedBy: newLikedBy,
+                likeCount: newLikeCount
+            });
+            console.log(`%c[commentService] toggleLikeSubComment: Transaction update prepared for subComment '${subCommentId}'.`, "color: magenta;");
         });
+        console.log(`%c[commentService] toggleLikeSubComment: Transaction for subComment '${subCommentId}' SUCCEEDED.`, "color: green;");
     } catch (error: any) {
-        console.error(`[commentService] Error toggling like for subcomment ${subCommentId}:`, error);
+        console.error(`%c[commentService] toggleLikeSubComment: Error toggling like for subcomment ${subCommentId}:`, "color: red;", error);
         if (error.code === 'permission-denied') {
-            throw new Error('Permission denied. Check Firestore security rules.');
+            throw new Error('Permission denied to like/unlike subcomment. Check Firestore security rules.');
         }
         throw new Error(`Failed to toggle subcomment like: ${error.message}`);
     }
