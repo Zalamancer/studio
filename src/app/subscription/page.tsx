@@ -15,9 +15,9 @@ import Link from 'next/link'; // Added for linking to payment settings
 import { cn } from '@/lib/utils';
 
 // IMPORTANT: Replace these with your actual Stripe Price IDs
-const STRIPE_PRICE_ID_BASIC = 'YOUR_STRIPE_PRICE_ID_BASIC'; // e.g., price_1Pxxxxxxx...
-const STRIPE_PRICE_ID_PRO = 'YOUR_STRIPE_PRICE_ID_PRO';
-const STRIPE_PRICE_ID_ENTERPRISE = 'YOUR_STRIPE_PRICE_ID_ENTERPRISE'; // Usually handled via "Contact Sales"
+const STRIPE_PRICE_ID_BASIC = 'price_1RV7QGECOZ6g59IdgnVnLOrP'; // e.g., price_1Pxxxxxxx...
+const STRIPE_PRICE_ID_PRO = 'price_1RV7R8ECOZ6g59IdKXGKogOZ';
+const STRIPE_PRICE_ID_ENTERPRISE = 'price_1RV7RVECOZ6g59Idkhydnj0c'; // Usually handled via "Contact Sales"
 
 const plans = [
   {
