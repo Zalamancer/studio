@@ -25,9 +25,9 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // IMPORTANT: Replace these with your actual Stripe Price IDs
-const STRIPE_PRICE_ID_BASIC = 'price_1RV7QGECOZ6g59IdgnVnLOrP'; // Example for a free/default plan
-const STRIPE_PRICE_ID_PRO = 'price_1RV7R8ECOZ6g59IdKXGKogOZ';
-const STRIPE_PRICE_ID_ENTERPRISE = 'price_1RV7RVECOZ6g59Idkhydnj0c'; // Usually "Contact Sales" or a specific high-tier price
+const STRIPE_PRICE_ID_BASIC = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BASIC || 'YOUR_STRIPE_PRICE_ID_BASIC';
+const STRIPE_PRICE_ID_PRO = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO || 'YOUR_STRIPE_PRICE_ID_PRO';
+const STRIPE_PRICE_ID_ENTERPRISE = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE || 'YOUR_STRIPE_PRICE_ID_ENTERPRISE';
 
 const plans = [
   {
@@ -74,7 +74,7 @@ const plans = [
       "Team management tools",
     ],
     buttonText: "Contact Sales",
-    stripePriceId: STRIPE_PRICE_ID_ENTERPRISE, // Placeholder if contact sales
+    stripePriceId: STRIPE_PRICE_ID_ENTERPRISE,
   },
 ];
 
@@ -85,7 +85,6 @@ const SubscriptionPage = () => {
   
   const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
   const [confirmingPlan, setConfirmingPlan] = useState<(typeof plans[0]) | null>(null);
-  // Removed showCancelConfirmation state and related logic
 
   const { data: userPreferences, isLoading: isLoadingPreferences, error: preferencesError } = useQuery<UserPreference | null>({
     queryKey: ['userPreferences', user?.uid],
@@ -95,7 +94,7 @@ const SubscriptionPage = () => {
 
   const activeSubscriptionPriceId = userPreferences?.activeStripePriceId;
   const currentSubscriptionStatus = userPreferences?.stripeSubscriptionStatus;
-  const willCancelAtPeriodEnd = userPreferences?.stripeSubscriptionWillCancelAtPeriodEnd; // Used for display
+  const willCancelAtPeriodEnd = userPreferences?.stripeSubscriptionWillCancelAtPeriodEnd;
 
   const hasDefaultPaymentMethod = useMemo(() => {
     return userPreferences?.paymentMethods?.some(pm => pm.isDefault) ?? false;
@@ -129,15 +128,21 @@ const SubscriptionPage = () => {
     },
   });
 
-  // Removed cancelSubscriptionMutation logic from this page
-
   const handleOpenConfirmation = (plan: typeof plans[0]) => {
+    if (plan.stripePriceId.startsWith('YOUR_STRIPE_PRICE_ID_')) {
+        toast({
+            variant: "destructive",
+            title: "Configuration Needed",
+            description: `Stripe Price ID for "${plan.name}" plan is not set. Please contact support or administrator.`,
+            duration: 7000,
+        });
+        return;
+    }
     setConfirmingPlan(plan);
   };
 
   const handleSubscribeConfirmed = () => {
     if (!confirmingPlan || !user) return;
-    // Removed placeholder ID check for Enterprise as it's "Contact Sales"
     if (confirmingPlan.id !== 'basic' && confirmingPlan.id !== 'enterprise' && !hasDefaultPaymentMethod) {
       toast({ variant: "destructive", title: "Payment Method Required", description: (<span>Please add a default payment method in your <Link href="/settings/payment-method" className="underline text-primary hover:text-primary/80">payment settings</Link>.</span>), duration: 7000 });
       setConfirmingPlan(null);
@@ -162,29 +167,7 @@ const SubscriptionPage = () => {
       <div className="mb-8 text-center">
         <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">Choose Your Plan</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">Select the subscription plan that best fits your collaboration needs.</p>
-        {userPreferences?.stripeSubscriptionId && (
-          <div className={cn("mt-4 p-3 rounded-md text-sm max-w-lg mx-auto",
-            (currentSubscriptionStatus === 'active' || currentSubscriptionStatus === 'trialing') && !willCancelAtPeriodEnd && "bg-green-100 text-green-700 border border-green-200",
-            (currentSubscriptionStatus === 'active' || currentSubscriptionStatus === 'trialing') && willCancelAtPeriodEnd && "bg-yellow-100 text-yellow-700 border border-yellow-200",
-            (currentSubscriptionStatus === 'past_due' || currentSubscriptionStatus === 'unpaid') && "bg-red-100 text-red-700 border border-red-200",
-            currentSubscriptionStatus === 'canceled' && "bg-gray-100 text-gray-700 border border-gray-200"
-          )}>
-            Current Status: <strong className="font-semibold">{currentSubscriptionStatus?.replace('_', ' ')}</strong>
-            {userPreferences.stripeSubscriptionCurrentPeriodEnd && (
-              <span>
-                {willCancelAtPeriodEnd
-                  ? ` (Cancels on ${new Date(userPreferences.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString()})`
-                  : (currentSubscriptionStatus === 'active' || currentSubscriptionStatus === 'trialing')
-                  ? ` (Renews on ${new Date(userPreferences.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString()})`
-                  : (currentSubscriptionStatus === 'canceled'
-                    ? ` (Ended on ${new Date(userPreferences.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString()})`
-                    : ` (Valid until ${new Date(userPreferences.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString()})`)
-                }
-              </span>
-            )}
-             {/* Cancellation button removed from here */}
-          </div>
-        )}
+        {/* Removed the current subscription status display from here */}
       </div>
 
       {!user && (
@@ -204,25 +187,23 @@ const SubscriptionPage = () => {
           const isCurrentActivePlan = activeSubscriptionPriceId === plan.stripePriceId && isEffectivelySubscribed && !willCancelAtPeriodEnd;
           const isProcessingThisPlan = processingPlanId === plan.id;
           const isFreeBasicAndNoSub = plan.id === 'basic' && (!isEffectivelySubscribed || activeSubscriptionPriceId === STRIPE_PRICE_ID_BASIC || willCancelAtPeriodEnd);
-          
-          // Determine if the current plan is the one that will be cancelled
           const isPendingCancellation = activeSubscriptionPriceId === plan.stripePriceId && isEffectivelySubscribed && willCancelAtPeriodEnd;
-
 
           let buttonText = plan.buttonText;
           if (isCurrentActivePlan) {
             buttonText = "Current Plan";
           } else if (isPendingCancellation) {
-            buttonText = "Re-activate Plan"; // Or "Change Plan" if you want to switch from a pending cancellation state
+            buttonText = "Re-activate Plan";
           } else if (activeSubscriptionPriceId && activeSubscriptionPriceId !== STRIPE_PRICE_ID_BASIC && plan.id === 'basic') {
              buttonText = "Downgrade to Basic";
           } else if (activeSubscriptionPriceId && plan.id !== 'basic' && plan.stripePriceId !== activeSubscriptionPriceId) {
              const currentPlanIndex = plans.findIndex(p => p.stripePriceId === activeSubscriptionPriceId);
              const targetPlanIndex = plans.findIndex(p => p.stripePriceId === plan.stripePriceId);
-             if (targetPlanIndex > currentPlanIndex) buttonText = `Upgrade to ${plan.name}`;
-             else if (targetPlanIndex < currentPlanIndex) buttonText = `Downgrade to ${plan.name}`;
+             if (currentPlanIndex > -1 && targetPlanIndex > -1) { // Ensure both plans are found
+                 if (targetPlanIndex > currentPlanIndex) buttonText = `Upgrade to ${plan.name}`;
+                 else if (targetPlanIndex < currentPlanIndex) buttonText = `Downgrade to ${plan.name}`;
+             }
           }
-
 
           if (!user && plan.id !== 'basic') return null; 
 
@@ -305,11 +286,9 @@ const SubscriptionPage = () => {
           </AlertDialogContent>
         </AlertDialog>
       )}
-       {/* Cancel Confirmation Dialog removed from here */}
     </div>
   );
 };
 
 export default SubscriptionPage;
 
-    
