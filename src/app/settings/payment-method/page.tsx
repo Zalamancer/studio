@@ -96,7 +96,7 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
       type: 'card',
       card: cardNumberElement,
       billing_details: {
-        email: user.email || undefined, // Pass user's email if available
+        email: user.email || undefined,
       },
     });
 
@@ -109,21 +109,31 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
 
     if (paymentMethod) {
       console.log("Client: PaymentMethod created:", paymentMethod);
+      let responseBodyText = ""; // For debugging HTML responses
       try {
-        const idToken = await user.getIdToken(); // Get Firebase ID token
+        const idToken = await user.getIdToken();
         const response = await fetch('/api/stripe/save-payment-method', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${idToken}`, // Send token in Authorization header
+            'Authorization': `Bearer ${idToken}`,
           },
           body: JSON.stringify({ paymentMethodId: paymentMethod.id, userId: user.uid }),
         });
 
-        const result = await response.json();
+        let result;
+        const contentType = response.headers.get("content-type");
+        if (contentType && contentType.includes("application/json")) {
+          result = await response.json();
+        } else {
+          responseBodyText = await response.text();
+          console.error("Received non-JSON response from server. Content type:", contentType);
+          console.error("Response text (first 500 chars):", responseBodyText.substring(0, 500));
+          throw new Error(`Server returned non-JSON response. Status: ${response.status}. Check server logs.`);
+        }
 
         if (!response.ok) {
-          const errorText = result.error || `Failed to save payment method. Server responded with status ${response.status}.`;
+          const errorText = result.error || `Failed to save payment method. Server responded with status ${response.status}. Response: ${JSON.stringify(result).substring(0,200)}`;
           throw new Error(errorText);
         }
 
@@ -134,8 +144,12 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
         onPaymentMethodSaved();
       } catch (backendError: any) {
         console.error("Backend error saving PaymentMethod:", backendError);
-        setError(backendError.message || "Could not save payment method to your account.");
-        toast({ variant: "destructive", title: "Save Failed", description: backendError.message || "Could not save payment method." });
+        let displayError = backendError.message || "Could not save payment method to your account.";
+        if (responseBodyText && displayError.includes("non-JSON response")) {
+          displayError += ` Server Response Preview: ${responseBodyText.substring(0,100)}...`;
+        }
+        setError(displayError);
+        toast({ variant: "destructive", title: "Save Failed", description: displayError });
       }
     }
     setIsProcessing(false);
@@ -194,23 +208,13 @@ const PaymentMethodSettingsPage = () => {
   };
 
   const handleRemovePaymentMethod = async (paymentMethodId: string) => {
-    // Placeholder: Implement backend call to detach PaymentMethod from Stripe Customer
-    // and remove from userPreferences in Firestore
     toast({ title: "Placeholder", description: `Would remove payment method ${paymentMethodId}` });
      console.log(`Request to remove payment method: ${paymentMethodId}`);
-    // Example:
-    // await detachPaymentMethodApiCall(userId, paymentMethodId);
-    // queryClient.invalidateQueries(['userPreferences', user?.uid]);
   };
 
   const handleSetDefault = async (paymentMethodId: string) => {
-    // Placeholder: Implement backend call to set this PaymentMethod as default on Stripe Customer
-    // and update userPreferences in Firestore
     toast({ title: "Placeholder", description: `Would set ${paymentMethodId} as default` });
     console.log(`Request to set default payment method: ${paymentMethodId}`);
-    // Example:
-    // await setDefaultPaymentMethodApiCall(userId, paymentMethodId);
-    // queryClient.invalidateQueries(['userPreferences', user?.uid]);
   };
 
   if (authLoading || (isLoadingPreferences && user)) {
@@ -347,3 +351,4 @@ const PaymentMethodSettingsPage = () => {
 };
 
 export default PaymentMethodSettingsPage;
+    
