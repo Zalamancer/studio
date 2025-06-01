@@ -49,6 +49,30 @@ if (stripePublishableKey) {
   console.error("Stripe publishable key is not set in environment variables (NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY). Payment functionality will be disabled.");
 }
 
+// Define the plans array here
+const STRIPE_PRICE_ID_BASIC = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BASIC || 'YOUR_STRIPE_PRICE_ID_BASIC';
+const STRIPE_PRICE_ID_PRO = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO || 'YOUR_STRIPE_PRICE_ID_PRO';
+const STRIPE_PRICE_ID_ENTERPRISE = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE || 'YOUR_STRIPE_PRICE_ID_ENTERPRISE';
+
+const plans = [
+  {
+    id: 'basic',
+    name: "Basic",
+    stripePriceId: STRIPE_PRICE_ID_BASIC,
+  },
+  {
+    id: 'pro',
+    name: "Pro",
+    stripePriceId: STRIPE_PRICE_ID_PRO,
+  },
+  {
+    id: 'enterprise',
+    name: "Enterprise",
+    stripePriceId: STRIPE_PRICE_ID_ENTERPRISE,
+  },
+];
+
+
 const cardElementOptions = {
   style: {
     base: {
@@ -65,10 +89,10 @@ const cardElementOptions = {
     },
   },
   classes: {
-    base: 'stripe-element-base', 
-    focus: 'stripe-element-focus', 
-    invalid: 'stripe-element-invalid', 
-    complete: 'stripe-element-complete', 
+    base: 'stripe-element-base',
+    focus: 'stripe-element-focus',
+    invalid: 'stripe-element-invalid',
+    complete: 'stripe-element-complete',
   }
 };
 
@@ -122,7 +146,7 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void; onCancel?: () =>
     }
 
     if (paymentMethod) {
-      let responseBodyText = ""; 
+      let responseBodyText = "";
       try {
         const idToken = await user.getIdToken();
         const response = await fetch('/api/stripe/save-payment-method', {
@@ -308,7 +332,7 @@ const PaymentMethodSettingsPage = () => {
       </Card>
     );
   }
-  
+
   if (!stripePromise && stripePublishableKey) { // Only show if key was intended to be there
     return (
         <Card className="shadow-md border-border">
@@ -327,7 +351,7 @@ const PaymentMethodSettingsPage = () => {
 
   const savedMethods = userPreferences?.paymentMethods || [];
   const currentSub = userPreferences;
-  const isSubscribedToPaidPlan = currentSub?.stripeSubscriptionId && currentSub?.activeStripePriceId !== process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BASIC;
+  const isSubscribedToPaidPlan = currentSub?.stripeSubscriptionId && currentSub?.activeStripePriceId !== STRIPE_PRICE_ID_BASIC;
 
 
   return (
@@ -443,7 +467,7 @@ const PaymentMethodSettingsPage = () => {
                     <AlertDialogTitle>Cancel Subscription?</AlertDialogTitle>
                     <AlertDialogDescription>
                         Are you sure you want to cancel your current plan?
-                        It will remain active until the end of the current billing period 
+                        It will remain active until the end of the current billing period
                         ({userPreferences.stripeSubscriptionCurrentPeriodEnd ? new Date(userPreferences.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString() : 'N/A'}).
                     </AlertDialogDescription>
                 </AlertDialogHeader>
@@ -464,6 +488,3 @@ const PaymentMethodSettingsPage = () => {
 };
 
 export default PaymentMethodSettingsPage;
-    
-    
-    
