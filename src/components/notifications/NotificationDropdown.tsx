@@ -46,12 +46,6 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
     const timeAgo = formatDistanceToNow(new Date(notification.timestamp), { addSuffix: true });
     const senderDisplayName = notification.senderName || generateAnonymousName(notification.senderId);
 
-    const handleClick = () => {
-        if (!notification.isRead) {
-            onRead(notification.id);
-        }
-    };
-
     let title = '';
     let description = '';
     let linkHref: string = '/'; 
@@ -70,31 +64,39 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
         case 'connection_request':
             title = `${senderDisplayName} wants to connect`;
             description = 'Review the connection request.';
-            linkHref = '/messages?tab=requests'; // Corrected
+            linkHref = '/messages?tab=requests';
             break;
         case 'connection_accepted':
             title = `Connected with ${senderDisplayName}`;
             description = 'View their profile or start a chat.';
-            linkHref = notification.senderId ? `/profile/${notification.senderId}` : '/messages?tab=connections'; // Corrected fallback
+            linkHref = notification.senderId ? `/profile/${notification.senderId}` : '/messages?tab=connections';
             break;
         case 'new_message':
             title = `New message from ${senderDisplayName}`;
             description = notification.textSnippet || 'View message';
-            linkHref = notification.conversationId ? `/messages?conversationId=${notification.conversationId}` : '/messages'; // Corrected
+            linkHref = notification.conversationId ? `/messages?conversationId=${notification.conversationId}` : '/messages';
             break;
         default:
             title = 'New Notification';
             description = 'You have a new notification.';
     }
 
+    const handleSelect = (event: Event) => {
+      event.preventDefault(); // Prevent Radix default behavior (like closing menu)
+      if (!notification.isRead) {
+        onRead(notification.id); // Perform our action (mark as read)
+      }
+      // Navigation will be handled by the Link component due to asChild
+    };
+
      return (
        <DropdownMenuItem
           asChild
+          onSelect={handleSelect} // Use Radix's onSelect prop
           className={cn(
             "flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/50 rounded-md relative focus:bg-muted/60",
             !notification.isRead && "bg-primary/5 font-medium"
           )}
-          onClick={handleClick}
           aria-label={`Notification: ${title}`}
        >
           <Link href={linkHref}>
@@ -135,7 +137,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     queryKey: ['userPreferences', userId],
     queryFn: () => getUserPreferences(userId),
     enabled: !!userId,
-    staleTime: 1000 * 60 * 5, // Cache preferences for 5 minutes
+    staleTime: 1000 * 60 * 5, 
   });
 
   useEffect(() => {
@@ -149,8 +151,6 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
 
   const filteredNotifications = useMemo(() => {
     if (!userPreferences || isLoadingNotifications || isLoadingPreferences) {
-      // Return all if preferences not loaded yet, or if still loading notifications
-      // Or, return empty array if you want to wait for prefs: return [];
       return fetchedNotifications;
     }
     console.log("[NotificationDropdown] Filtering notifications based on preferences:", userPreferences);
@@ -166,7 +166,6 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
           return userPreferences.notifyOnNewConnectionRequest !== false;
         case 'connection_accepted':
           return userPreferences.notifyOnConnectionAccepted !== false;
-        // Assuming platform updates are not filtered here or handled differently
         default:
           return true;
       }
@@ -269,4 +268,3 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     </DropdownMenu>
   );
 };
-
