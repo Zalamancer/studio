@@ -8,31 +8,65 @@ let authAdminInstance: admin.auth.Auth | null = null;
 let dbAdminInstance: admin.firestore.Firestore | null = null;
 
 const SERVICE_ACCOUNT_LOG_PREFIX = "[auth-admin.ts]";
-const serviceAccountKeyFileName = 'serviceAccountKey.json'; // Standard name
+const serviceAccountKeyFileName = 'serviceAccountKey.json';
 
-console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Module loaded. Attempting to initialize Firebase Admin SDK... NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Module loaded. Attempting to initialize Firebase Admin SDK...`);
+console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} NODE_ENV: ${process.env.NODE_ENV}`);
+console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Current Working Directory (process.cwd()): ${process.cwd()}`);
+console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} __dirname: ${__dirname}`);
 
-function initializeWithServiceAccount(keyPath: string, sourceDescription: string): boolean {
+
+function initializeWithServiceAccount(keyPathOrJsonContent: string, sourceDescription: string): boolean {
   try {
-    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempting to initialize with service account key from ${sourceDescription} at: ${keyPath}`);
-    if (fs.existsSync(keyPath)) {
-      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account file FOUND at: ${keyPath}`);
-      const serviceAccountJson = fs.readFileSync(keyPath, 'utf8');
-      const serviceAccount = JSON.parse(serviceAccountJson);
-      admin.initializeApp({
-        credential: admin.credential.cert(serviceAccount),
-      });
-      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK initialized successfully using service account key from ${sourceDescription}.`);
-      return true;
+    let serviceAccount;
+    const trimmedContent = keyPathOrJsonContent.trim();
+
+    if (trimmedContent.startsWith('{') && trimmedContent.endsWith('}')) {
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempting to parse ${sourceDescription} as direct JSON content.`);
+      serviceAccount = JSON.parse(trimmedContent);
     } else {
-      console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account file NOT FOUND at: ${keyPath} (for ${sourceDescription}).`);
-      return false;
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempting to initialize with service account key from ${sourceDescription} at file path: ${keyPathOrJsonContent}`);
+      if (fs.existsSync(keyPathOrJsonContent)) {
+        console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account file FOUND at path: ${keyPathOrJsonContent}`);
+        const serviceAccountJson = fs.readFileSync(keyPathOrJsonContent, 'utf8');
+        serviceAccount = JSON.parse(serviceAccountJson);
+      } else {
+        console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account file NOT FOUND at path: ${keyPathOrJsonContent} (for ${sourceDescription}).`);
+        return false;
+      }
     }
+
+    // Check if apps are already initialized to avoid "duplicate app" error
+    if (admin.apps.length > 0) {
+        console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK already initialized. Using existing app.`);
+        const existingApp = admin.apps[0]; // Use the first initialized app
+        if (existingApp) {
+            authAdminInstance = existingApp.auth();
+            dbAdminInstance = existingApp.firestore();
+            return true;
+        } else {
+            // This case should ideally not happen if admin.apps.length > 0
+            console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} admin.apps array is populated but contains no valid app.`);
+            return false;
+        }
+    }
+
+    admin.initializeApp({
+      credential: admin.credential.cert(serviceAccount),
+    });
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK initialized successfully using service account from ${sourceDescription}.`);
+    return true;
+
   } catch (error: any) {
-    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error initializing with service account key from ${sourceDescription} (${keyPath}):`, error.message);
+    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error initializing with service account from ${sourceDescription} ('${keyPathOrJsonContent.substring(0,100)}...'):`, error.message);
     if (error.code === 'app/duplicate-app') {
       console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK was already initialized by another method.`);
-      return true; // Consider it successful if already initialized
+      // Attempt to get instances from the default app if it exists
+      if (admin.apps.length > 0 && admin.apps[0]) {
+        authAdminInstance = admin.apps[0].auth();
+        dbAdminInstance = admin.apps[0].firestore();
+        return true; // Consider it successful if already initialized and instances are retrieved
+      }
     }
     return false;
   }
@@ -43,26 +77,31 @@ if (!admin.apps.length) {
   const gacEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS;
 
   if (gacEnv) {
-    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS IS SET. Path: ${gacEnv}`);
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS IS SET.`);
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Value (first 100 chars): '${gacEnv.substring(0, 100)}...'`);
     initialized = initializeWithServiceAccount(gacEnv, "GOOGLE_APPLICATION_CREDENTIALS env var");
   }
 
-  if (!initialized && process.env.NODE_ENV === 'development') {
-    console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS is NOT SET. In DEVELOPMENT mode, trying local paths.`);
+  if (!initialized) {
+    console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS is NOT SET or initialization failed. Trying local paths.`);
+    const localKeyPath = path.resolve(process.cwd(), serviceAccountKeyFileName);
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempt (local): Checking for service account key at project root (resolved from process.cwd()): ${localKeyPath}`);
+    initialized = initializeWithServiceAccount(localKeyPath, `local path guess (relative to cwd): ${localKeyPath}`);
 
-    const devPathsToTry = [
-      path.resolve(process.cwd(), serviceAccountKeyFileName), // Relative to current working directory
-      path.resolve(process.cwd(), '..', serviceAccountKeyFileName), // One level up from cwd (if cwd is e.g. /functions)
-      path.resolve(__dirname, '..', '..', '..', serviceAccountKeyFileName), // Relative to this file's location (e.g. src/lib/firebase -> root)
-      path.resolve(serviceAccountKeyFileName) // Direct (less likely but for completeness)
-    ];
-    
-    const uniqueDevPaths = [...new Set(devPathsToTry)]; // Remove duplicates
-
-    for (const localKeyPath of uniqueDevPaths) {
-      if (initialized) break;
-      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempt (dev): Checking for service account key at: ${localKeyPath}`);
-      initialized = initializeWithServiceAccount(localKeyPath, `local path guess: ${localKeyPath}`);
+    if (!initialized) {
+        // Try path relative to this file's directory (__dirname) if the first local attempt fails
+        // This is more complex due to build steps in Next.js but might catch some edge cases.
+        // A common structure for compiled output in Next.js might place built files in .next/server/...
+        // Let's try a few levels up from __dirname.
+        const dirnamePathsToTry = [
+            path.resolve(__dirname, '../../..', serviceAccountKeyFileName), // Common for src/lib/firebase -> .next/server/app/chunks -> root
+            path.resolve(__dirname, '../../../..', serviceAccountKeyFileName), // Deeper nesting
+        ];
+        for (const dnPath of dirnamePathsToTry) {
+            if(initialized) break;
+            console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempt (local __dirname): Checking at: ${dnPath}`);
+            initialized = initializeWithServiceAccount(dnPath, `local path guess (relative to __dirname): ${dnPath}`);
+        }
     }
   }
 
@@ -76,40 +115,36 @@ if (!admin.apps.length) {
       console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} DEFAULT Firebase Admin SDK initialization FAILED:`, defaultInitError.message);
       if (defaultInitError.code === 'app/duplicate-app') {
         console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Default init: Firebase Admin SDK was already initialized by another method.`);
-        initialized = true; // Already initialized
+        initialized = true;
       } else {
         console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: ALL ATTEMPTS to initialize Firebase Admin SDK failed.`);
       }
     }
   }
 
-  // Assign instances if any initialization succeeded OR if it was already initialized (duplicate app error)
   if (initialized || admin.apps.length > 0) {
-    const appToUse = admin.apps.length > 0 ? admin.apps[0] : admin.app(); // admin.app() gets the default app if initializeApp was called without a name
-    if (appToUse) {
-        try {
-            authAdminInstance = appToUse.auth();
-            dbAdminInstance = appToUse.firestore();
-            console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK instances assigned from app: ${appToUse.name}.`);
-        } catch (instanceError: any) {
-             console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error assigning instances from app ${appToUse.name}:`, instanceError.message);
-        }
-    } else {
-        console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} SDK claimed initialized/apps exist, but no app instance found.`);
+    const appToUse = admin.app(); // Get the default app
+    try {
+        authAdminInstance = appToUse.auth();
+        dbAdminInstance = appToUse.firestore();
+        console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK instances (auth, db) assigned successfully from app: ${appToUse.name}.`);
+    } catch (instanceError: any) {
+         console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error assigning instances from app ${appToUse.name}:`, instanceError.message);
     }
   }
 
 } else {
-  console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK already has ${admin.apps.length} initialized app(s). Using the first app.`);
-  if (admin.apps.length > 0 && admin.apps[0]) {
-      authAdminInstance = admin.apps[0]!.auth();
-      dbAdminInstance = admin.apps[0]!.firestore();
-  } else {
-      console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} SDK already initialized, but no apps found in admin.apps array unexpectedly.`);
+  console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK already has ${admin.apps.length} initialized app(s). Using the default app.`);
+  const appToUse = admin.app(); // Get the default app
+  try {
+    authAdminInstance = appToUse.auth();
+    dbAdminInstance = appToUse.firestore();
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK instances (auth, db) RE-ASSIGNED from already initialized app: ${appToUse.name}.`);
+  } catch (instanceError: any) {
+    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error RE-ASSIGNING instances from existing app ${appToUse.name}:`, instanceError.message);
   }
 }
 
-// Final check and log for instance availability
 if (authAdminInstance) {
     console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} authAdmin (Firebase Admin Auth) IS INITIALIZED and available.`, "color: green;");
 } else {
@@ -124,3 +159,4 @@ if (dbAdminInstance) {
 
 export const authAdmin = authAdminInstance;
 export const dbAdmin = dbAdminInstance;
+    
