@@ -20,7 +20,8 @@ import { getNotificationsForUser, markNotificationAsRead, markAllNotificationsAs
 import type { ClientNotification, NotificationType } from '@/types/notification';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
-import Link from 'next/link';
+import Link from 'next/link'; // Keep Link for router type, but usage changes
+import { useRouter } from 'next/navigation'; // Import useRouter
 import { useToast } from '@/hooks/use-toast';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import { getUserPreferences } from '@/services/userPreferenceService'; // Import preference service
@@ -43,6 +44,7 @@ const NotificationIcon: React.FC<{ type: NotificationType }> = React.memo(({ typ
 NotificationIcon.displayName = 'NotificationIcon';
 
 const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id: string) => void }> = React.memo(({ notification, onRead }) => {
+    const router = useRouter(); // Initialize useRouter
     const timeAgo = formatDistanceToNow(new Date(notification.timestamp), { addSuffix: true });
     const senderDisplayName = notification.senderName || generateAnonymousName(notification.senderId);
 
@@ -82,19 +84,18 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
     }
 
     const handleSelect = (event: Event) => {
-      // Do NOT call event.preventDefault() here.
-      // Allow Radix to perform its default action (like closing the menu).
+      // Do not call event.preventDefault() to allow Radix to close the menu
       setTimeout(() => {
         if (!notification.isRead) {
           onRead(notification.id);
         }
-      }, 0);
-      // Navigation will be handled by the Link component due to asChild
+        router.push(linkHref); // Programmatic navigation
+      }, 50); // Small delay for Radix to finish processing
     };
 
      return (
        <DropdownMenuItem
-          asChild
+          // Remove asChild prop
           onSelect={handleSelect}
           className={cn(
             "flex items-start gap-3 p-3 cursor-pointer hover:bg-muted/50 rounded-md relative focus:bg-muted/60",
@@ -102,19 +103,18 @@ const NotificationItem: React.FC<{ notification: ClientNotification; onRead: (id
           )}
           aria-label={`Notification: ${title}`}
        >
-          <Link href={linkHref}>
-              {!notification.isRead && (
-                  <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />
-              )}
-              <div className="flex-shrink-0 pt-1">
-                 <NotificationIcon type={notification.type} />
-              </div>
-              <div className="flex-grow min-w-0">
-                 <p className="text-sm font-medium text-foreground truncate">{title}</p>
-                 <p className="text-xs text-muted-foreground truncate">{description}</p>
-                 <p className="text-xs text-muted-foreground/80 mt-1">{timeAgo}</p>
-              </div>
-          </Link>
+          {/* Content directly inside DropdownMenuItem */}
+          {!notification.isRead && (
+              <span className="absolute top-2 right-2 h-2 w-2 rounded-full bg-primary" />
+          )}
+          <div className="flex-shrink-0 pt-1">
+              <NotificationIcon type={notification.type} />
+          </div>
+          <div className="flex-grow min-w-0">
+              <p className="text-sm font-medium text-foreground truncate">{title}</p>
+              <p className="text-xs text-muted-foreground truncate">{description}</p>
+              <p className="text-xs text-muted-foreground/80 mt-1">{timeAgo}</p>
+          </div>
        </DropdownMenuItem>
     );
 });
@@ -178,10 +178,11 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
   const markReadMutation = useMutation({
     mutationFn: markNotificationAsRead,
     onSuccess: (data, variables) => {
+      // The timeout from previous attempt can remain here, it shouldn't hurt.
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
         console.log(`[NotificationDropdown] Marked notification ${variables} as read and invalidated query.`);
-      }, 100);
+      }, 100); 
     },
     onError: (error: Error, variables) => {
       console.error(`[NotificationDropdown] Failed to mark notification ${variables} as read:`, error);
@@ -273,3 +274,4 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     </DropdownMenu>
   );
 };
+
