@@ -6,7 +6,7 @@ import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle } from 'lucide-react';
+import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle, Star } from 'lucide-react'; // Added Star
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -25,8 +25,19 @@ import {
 } from '@stripe/react-stripe-js';
 import { cn } from '@/lib/utils';
 import { getUserPreferences, updateUserPreferences } from '@/services/userPreferenceService';
-import type { SavedPaymentMethod, UserPreference } from '@/types/userPreferences';
+import type { SavedPaymentMethod, UserPreference, UpdateUserPreferencesData } from '@/types/userPreferences';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
@@ -53,16 +64,17 @@ const cardElementOptions = {
     },
   },
   classes: {
-    base: 'stripe-element-base',
-    focus: 'stripe-element-focus',
-    invalid: 'stripe-element-invalid',
+    base: 'stripe-element-base', // Custom class for base styling
+    focus: 'stripe-element-focus', // Custom class for focus styling
+    invalid: 'stripe-element-invalid', // Custom class for invalid state
+    complete: 'stripe-element-complete', // Custom class for complete state
   }
 };
 
-const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPaymentMethodSaved }) => {
+const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void; onCancel?: () => void }> = ({ onPaymentMethodSaved, onCancel }) => {
   const stripe = useStripe();
   const elements = useElements();
-  const { user } = useAuth(); // Get current Firebase user
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +109,7 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
       card: cardNumberElement,
       billing_details: {
         email: user.email || undefined,
+        name: user.displayName || undefined, // Include user's name if available
       },
     });
 
@@ -109,7 +122,7 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
 
     if (paymentMethod) {
       console.log("Client: PaymentMethod created:", paymentMethod);
-      let responseBodyText = ""; // For debugging HTML responses
+      let responseBodyText = ""; 
       try {
         const idToken = await user.getIdToken();
         const response = await fetch('/api/stripe/save-payment-method', {
@@ -159,7 +172,7 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
     <form onSubmit={handleSubmit} className="space-y-6">
       <div className="space-y-2">
         <Label htmlFor="cardNumber">Card Number</Label>
-        <div className="p-3 border rounded-md bg-background stripe-element-container">
+        <div className="p-3 border border-input rounded-md bg-background stripe-element-container">
           <CardNumberElement id="cardNumber" options={cardElementOptions} />
         </div>
       </div>
@@ -167,24 +180,30 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void }> = ({ onPayment
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="cardExpiry">Expiration Date</Label>
-          <div className="p-3 border rounded-md bg-background stripe-element-container">
+          <div className="p-3 border border-input rounded-md bg-background stripe-element-container">
             <CardExpiryElement id="cardExpiry" options={cardElementOptions} />
           </div>
         </div>
         <div className="space-y-2">
           <Label htmlFor="cardCvc">CVC</Label>
-          <div className="p-3 border rounded-md bg-background stripe-element-container">
+          <div className="p-3 border border-input rounded-md bg-background stripe-element-container">
             <CardCvcElement id="cardCvc" options={cardElementOptions} />
           </div>
         </div>
       </div>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
-
-      <Button type="submit" disabled={!stripe || isProcessing} className="w-full sm:w-auto">
-        {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
-        Save Card
-      </Button>
+      <div className="flex flex-col sm:flex-row gap-2 pt-2">
+        <Button type="submit" disabled={!stripe || isProcessing} className="w-full sm:w-auto">
+          {isProcessing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <PlusCircle className="mr-2 h-4 w-4" />}
+          Save Card
+        </Button>
+        {onCancel && (
+          <Button type="button" variant="outline" onClick={onCancel} disabled={isProcessing} className="w-full sm:w-auto">
+            Cancel
+          </Button>
+        )}
+      </div>
     </form>
   );
 };
@@ -196,25 +215,57 @@ const PaymentMethodSettingsPage = () => {
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
 
-  const { data: userPreferences, isLoading: isLoadingPreferences } = useQuery<UserPreference | null>({
+  const { data: userPreferences, isLoading: isLoadingPreferences, refetch: refetchPreferences } = useQuery<UserPreference | null>({
     queryKey: ['userPreferences', user?.uid],
     queryFn: () => user ? getUserPreferences(user.uid) : Promise.resolve(null),
     enabled: !!user,
   });
 
+  const updatePreferencesMutation = useMutation({
+    mutationFn: ({ userIdToUpdate, dataToUpdate }: { userIdToUpdate: string, dataToUpdate: UpdateUserPreferencesData }) => {
+      return updateUserPreferences(userIdToUpdate, dataToUpdate);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['userPreferences', user?.uid] });
+      toast({ title: "Success", description: "Payment method settings updated." });
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Update Failed", description: error.message });
+    },
+  });
+
+
   const handlePaymentMethodSaved = () => {
     setShowAddForm(false);
-    queryClient.invalidateQueries({ queryKey: ['userPreferences', user?.uid] });
+    refetchPreferences();
   };
 
-  const handleRemovePaymentMethod = async (paymentMethodId: string) => {
-    toast({ title: "Placeholder", description: `Would remove payment method ${paymentMethodId}` });
-     console.log(`Request to remove payment method: ${paymentMethodId}`);
+  const handleRemovePaymentMethod = async (paymentMethodIdToRemove: string) => {
+    if (!user || !userPreferences) return;
+    const updatedPaymentMethods = (userPreferences.paymentMethods || []).filter(
+      pm => pm.stripePaymentMethodId !== paymentMethodIdToRemove
+    );
+    // If the removed card was default, and there are other cards, make the first one default.
+    const wasDefault = (userPreferences.paymentMethods || []).find(pm => pm.stripePaymentMethodId === paymentMethodIdToRemove)?.isDefault;
+    if (wasDefault && updatedPaymentMethods.length > 0 && !updatedPaymentMethods.some(pm => pm.isDefault)) {
+        updatedPaymentMethods[0].isDefault = true;
+    }
+    updatePreferencesMutation.mutate({
+        userIdToUpdate: user.uid,
+        dataToUpdate: { paymentMethods: updatedPaymentMethods }
+    });
   };
 
-  const handleSetDefault = async (paymentMethodId: string) => {
-    toast({ title: "Placeholder", description: `Would set ${paymentMethodId} as default` });
-    console.log(`Request to set default payment method: ${paymentMethodId}`);
+  const handleSetDefault = async (paymentMethodIdToSetDefault: string) => {
+     if (!user || !userPreferences) return;
+     const updatedPaymentMethods = (userPreferences.paymentMethods || []).map(pm => ({
+         ...pm,
+         isDefault: pm.stripePaymentMethodId === paymentMethodIdToSetDefault,
+     }));
+     updatePreferencesMutation.mutate({
+         userIdToUpdate: user.uid,
+         dataToUpdate: { paymentMethods: updatedPaymentMethods }
+     });
   };
 
   if (authLoading || (isLoadingPreferences && user)) {
@@ -223,6 +274,7 @@ const PaymentMethodSettingsPage = () => {
         <CardHeader><CardTitle>Payment Method Settings</CardTitle></CardHeader>
         <CardContent className="flex justify-center items-center py-12">
           <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="ml-2 text-muted-foreground">Loading settings...</p>
         </CardContent>
       </Card>
     );
@@ -232,7 +284,7 @@ const PaymentMethodSettingsPage = () => {
     return (
       <Card className="shadow-md border-border">
         <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
-        <CardContent><p>Please log in to manage payment methods.</p></CardContent>
+        <CardContent><p className="text-muted-foreground">Please log in to manage payment methods.</p></CardContent>
       </Card>
     );
   }
@@ -270,37 +322,66 @@ const PaymentMethodSettingsPage = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-6">
-          <div className="space-y-4">
-            {savedMethods.length > 0 ? (
-              savedMethods.map((method) => (
-                <Card key={method.stripePaymentMethodId} className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-muted/30 gap-2">
-                  <div className="flex items-center gap-3">
-                    <CreditCard className="h-6 w-6 text-primary flex-shrink-0" />
-                    <div>
-                      <p className="font-medium text-foreground">{method.brand} ending in {method.last4}</p>
-                      <p className="text-xs text-muted-foreground">Expires {String(method.expMonth).padStart(2, '0')}/{method.expYear}</p>
+          <div>
+            <h3 className="text-lg font-medium mb-3 text-foreground">Saved Payment Methods</h3>
+            {isLoadingPreferences ? (
+                <div className="flex items-center justify-center p-4"> <Loader2 className="h-6 w-6 animate-spin"/> </div>
+            ) : savedMethods.length > 0 ? (
+              <div className="space-y-4">
+                {savedMethods.map((method) => (
+                  <Card key={method.stripePaymentMethodId} className="p-4 flex flex-col sm:flex-row items-start sm:items-center justify-between bg-muted/20 border rounded-lg gap-3 sm:gap-4">
+                    <div className="flex items-center gap-3 flex-grow min-w-0">
+                      <CreditCard className="h-7 w-7 text-primary flex-shrink-0" />
+                      <div className="overflow-hidden">
+                        <p className="font-medium text-foreground truncate">{method.brand} ending in {method.last4}</p>
+                        <p className="text-xs text-muted-foreground">Expires {String(method.expMonth).padStart(2, '0')}/{method.expYear}</p>
+                      </div>
                     </div>
-                    {method.isDefault && (
-                      <span className="ml-2 text-xs bg-primary text-primary-foreground px-2 py-0.5 rounded-full self-center sm:self-auto">
-                        Default
-                      </span>
-                    )}
-                  </div>
-                  <div className="flex gap-2 self-end sm:self-center">
-                    {!method.isDefault && (
-                      <Button variant="outline" size="xs" onClick={() => handleSetDefault(method.stripePaymentMethodId)}>
-                        Set as Default
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive" onClick={() => handleRemovePaymentMethod(method.stripePaymentMethodId)}>
-                      <Trash2 className="h-3 w-3 sm:mr-1"/> <span className="hidden sm:inline">Remove</span>
-                    </Button>
-                  </div>
-                </Card>
-              ))
+                    <div className="flex items-center gap-2 self-start sm:self-center mt-2 sm:mt-0 flex-shrink-0">
+                      {method.isDefault && (
+                        <Badge variant="default" className="text-xs h-auto py-0.5 px-2 bg-primary/80">
+                          <Star className="h-3 w-3 mr-1 fill-current" /> Default
+                        </Badge>
+                      )}
+                      {!method.isDefault && (
+                        <Button variant="outline" size="xs" onClick={() => handleSetDefault(method.stripePaymentMethodId)} disabled={updatePreferencesMutation.isPending}>
+                          {updatePreferencesMutation.isPending && updatePreferencesMutation.variables?.dataToUpdate.paymentMethods?.find(pm => pm.stripePaymentMethodId === method.stripePaymentMethodId)?.isDefault ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : <Star className="h-3 w-3 mr-1"/>}
+                          Set Default
+                        </Button>
+                      )}
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button variant="ghost" size="xs" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={updatePreferencesMutation.isPending}>
+                             <Trash2 className="h-3 w-3 sm:mr-1"/> <span className="hidden sm:inline">Remove</span>
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>Remove Payment Method?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Are you sure you want to remove {method.brand} ending in {method.last4}?
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel disabled={updatePreferencesMutation.isPending}>Cancel</AlertDialogCancel>
+                            <AlertDialogAction
+                              onClick={() => handleRemovePaymentMethod(method.stripePaymentMethodId)}
+                              className="bg-destructive hover:bg-destructive/90"
+                              disabled={updatePreferencesMutation.isPending}
+                            >
+                             {updatePreferencesMutation.isPending && updatePreferencesMutation.variables?.dataToUpdate.paymentMethods?.every(pm => pm.stripePaymentMethodId !== method.stripePaymentMethodId) ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
+                              Remove
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </Card>
+                ))}
+              </div>
             ) : (
               !showAddForm && (
-                <p className="text-sm text-muted-foreground text-center py-4">
+                <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-md bg-muted/30">
                   You have no saved payment methods.
                 </p>
               )
@@ -308,42 +389,44 @@ const PaymentMethodSettingsPage = () => {
           </div>
 
           {showAddForm ? (
-            <div className="pt-6 border-t">
-              <h3 className="text-lg font-medium mb-4">Add New Card</h3>
-              <PaymentForm onPaymentMethodSaved={handlePaymentMethodSaved} />
-              <Button variant="outline" size="sm" onClick={() => setShowAddForm(false)} className="mt-4">
-                Cancel
-              </Button>
+            <div className="pt-6 border-t mt-6">
+              <h3 className="text-lg font-medium mb-4 text-foreground">Add New Card</h3>
+              <PaymentForm
+                onPaymentMethodSaved={handlePaymentMethodSaved}
+                onCancel={() => setShowAddForm(false)}
+              />
             </div>
           ) : (
-            <div className="flex justify-start">
-              <Button onClick={() => setShowAddForm(true)}>
+            <div className="flex justify-start pt-4">
+              <Button onClick={() => setShowAddForm(true)} variant="default">
                 <PlusCircle className="mr-2 h-4 w-4" /> Add New Payment Method
               </Button>
             </div>
           )}
 
-          <p className="text-xs text-muted-foreground pt-4">
-            Your payment information is handled securely by Stripe. We do not store your full card details.
+          <p className="text-xs text-muted-foreground pt-4 border-t mt-6">
+            Your payment information is handled securely by Stripe. We do not store your full card details on our servers.
           </p>
         </CardContent>
       </Card>
       <style jsx global>{`
         .stripe-element-container {
-          /* Add any specific container styling if needed */
+          // Base container styling
+          // background-color: hsl(var(--input)); // Example: match input background
         }
-        .StripeElement {
-          background-color: transparent;
-          padding: 10px 12px;
-          border-radius: var(--radius);
-          box-shadow: none;
-          transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+        .stripe-element-base {
+          // Style for the Stripe Element itself
         }
-        .StripeElement--focus {
-          /* ShadCN focus styles are usually applied by Tailwind focus-visible:ring classes on parent */
+        .stripe-element-focus {
+          // Style when the Stripe Element is focused
+          // box-shadow: 0 0 0 2px hsl(var(--ring)); // Example: match focus ring
         }
-        .StripeElement--invalid {
-          border-color: hsl(var(--destructive));
+        .stripe-element-invalid {
+          // Style for invalid input in Stripe Element
+          // border-color: hsl(var(--destructive));
+        }
+        .stripe-element-complete {
+          // Style when input is considered complete by Stripe
         }
       `}</style>
     </Elements>
@@ -351,4 +434,3 @@ const PaymentMethodSettingsPage = () => {
 };
 
 export default PaymentMethodSettingsPage;
-    
