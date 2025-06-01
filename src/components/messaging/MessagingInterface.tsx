@@ -391,26 +391,25 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     if (isMobile) {
       setTimeout(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-      }, 200); // Delay to allow keyboard to retract
+      }, 250); 
     }
   };
 
    useEffect(() => {
     if (isMobile && typeof window !== 'undefined' && window.visualViewport) {
       const vv = window.visualViewport;
-      visualViewportHeightRef.current = vv.height; // Initialize
+      visualViewportHeightRef.current = vv.height; 
 
       const handleViewportResize = () => {
         if (!vv) return;
         const newHeight = vv.height;
         const heightDiff = newHeight - visualViewportHeightRef.current;
 
-        // Heuristic: if viewport height increased significantly, keyboard likely hid
         if (heightDiff > 50) { 
           console.log(`[MSGI] VisualViewport resized. Height diff: ${heightDiff}. Scrolling to end.`);
           setTimeout(() => { 
             messagesEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
-          }, 250); // Increased delay
+          }, 250); 
         }
         visualViewportHeightRef.current = newHeight;
       };
@@ -424,12 +423,15 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
 
   return (
-    <div className="flex flex-col flex-1 h-full overflow-hidden">
+    <div className={cn(
+        "flex flex-1 h-full overflow-hidden",
+        isMobile ? "flex-col" : "md:flex-row"
+    )}>
       {(!isMobile || !activeConversationId) && (
         <div
           className={cn(
-            "flex flex-col border-r bg-background min-w-0 flex-1",
-            isMobile ? (activeConversationId ? "hidden" : "w-full") : "md:w-2/5 lg:w-1/3"
+            "flex flex-col border-r bg-background min-w-0",
+            isMobile ? (activeConversationId ? "hidden" : "w-full flex-1") : "md:w-2/5 lg:w-1/3 md:flex-shrink-0"
           )}
         >
           <div className={cn("border-b flex-shrink-0", isMobile ? "p-3" : "p-4")}>
@@ -484,7 +486,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         <div
           className={cn(
             "flex flex-1 flex-col overflow-hidden",
-            isMobile ? (activeConversationId ? "w-full flex" : "hidden") : "md:flex"
+            isMobile ? (activeConversationId ? "w-full flex" : "hidden") : (activeConversationId ? "md:flex" : "md:hidden")
           )}
         >
             <>
@@ -531,8 +533,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
 
               <ScrollArea
                 className="flex-1 overflow-y-auto bg-background min-h-0"
-                style={{ touchAction: 'none' }} // Prevent touch scroll
-                onWheel={(e) => e.preventDefault()} // Prevent mouse wheel scroll
+                style={{ touchAction: 'none' }} 
+                onWheel={(e) => e.preventDefault()} 
               >
                 <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
                   {isLoadingMessagesState ? (
@@ -606,7 +608,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         </div>
       )}
       {!activeConversationId && !isMobile && (
-          <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background">
+          <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background md:flex">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
               <p className="text-sm text-muted-foreground mt-1">Choose a conversation from the list or start a new one from a post.</p>
@@ -615,5 +617,6 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
 
     
