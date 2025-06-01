@@ -14,26 +14,22 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
   const clientAuthUid = auth.currentUser?.uid;
   console.log(`%c[userPreferenceService] getUserPreferences: Fetching for userId: '${userId}'. Current client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
-  console.log(`%c[userPreferenceService] Rule Check Debug: For this call, rule will effectively check if '${clientAuthUid || 'NULL'}' == '${userId}'`, "color: #FF8C00; font-weight: bold;");
-
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
     const docSnap = await getDoc(prefDocRef);
     if (docSnap.exists()) {
       const data = docSnap.data();
-      console.log(`%c[userPreferenceService] getUserPreferences: Raw data from Firestore for ${userId}:`, "color: green;", data);
       
       const paymentMethodsRaw = data.paymentMethods;
       let parsedPaymentMethods: SavedPaymentMethod[] = [];
       if (Array.isArray(paymentMethodsRaw)) {
         parsedPaymentMethods = paymentMethodsRaw as SavedPaymentMethod[];
       } else if (paymentMethodsRaw) {
-        console.warn(`[userPreferenceService] paymentMethods for user ${userId} is not an array, but: ${typeof paymentMethodsRaw}. Will default to empty array. Data:`, paymentMethodsRaw);
+        console.warn(`[userPreferenceService] paymentMethods for user ${userId} is not an array. Will default to empty array.`);
       }
-      console.log(`%c[userPreferenceService] getUserPreferences: Parsed paymentMethods for ${userId}:`, "color: green;", parsedPaymentMethods);
 
       const preferences: UserPreference = {
-        userId: data.userId || userId, // Fallback to param userId if missing
+        userId: data.userId || userId,
         favoriteSectorCodes: Array.isArray(data.favoriteSectorCodes) ? data.favoriteSectorCodes : [],
         notifyOnReply: data.notifyOnReply ?? true,
         notifyOnMention: data.notifyOnMention ?? true,
@@ -41,12 +37,18 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
         notifyOnConnectionAccepted: data.notifyOnConnectionAccepted ?? true,
         notifyOnNewMessage: data.notifyOnNewMessage ?? true,
         notifyOnPlatformUpdates: data.notifyOnPlatformUpdates ?? true,
-        stripeCustomerId: data.stripeCustomerId || undefined,
+        
+        stripeCustomerId: data.stripeCustomerId || null,
+        stripeSubscriptionId: data.stripeSubscriptionId || null,
+        activeStripePriceId: data.activeStripePriceId || null,
+        stripeSubscriptionStatus: data.stripeSubscriptionStatus || null,
+        stripeSubscriptionCurrentPeriodEnd: data.stripeSubscriptionCurrentPeriodEnd || null,
+        stripeSubscriptionWillCancelAtPeriodEnd: data.stripeSubscriptionWillCancelAtPeriodEnd || null,
+
         paymentMethods: parsedPaymentMethods,
         createdAt: data.createdAt,
         updatedAt: data.updatedAt
       };
-      console.log(`%c[userPreferenceService] getUserPreferences: Preferences object being returned for ${userId}:`, "color: green; font-weight:bold;", preferences);
       return preferences;
     }
     console.log(`%c[userPreferenceService] getUserPreferences: No preferences document found for ${userId}. Returning defaults.`, "color: orange;");
@@ -60,10 +62,15 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
         notifyOnConnectionAccepted: true,
         notifyOnNewMessage: true,
         notifyOnPlatformUpdates: true,
+        stripeCustomerId: null,
+        stripeSubscriptionId: null,
+        activeStripePriceId: null,
+        stripeSubscriptionStatus: null,
+        stripeSubscriptionCurrentPeriodEnd: null,
+        stripeSubscriptionWillCancelAtPeriodEnd: null,
     };
   } catch (error: any) {
     console.error(`%c[userPreferenceService] getUserPreferences: Error fetching preferences for ${userId}:`, "color: red;", error);
-    console.error(`%c  Auth state at error point: auth.currentUser?.uid = ${auth.currentUser?.uid || 'NULL'}`, "color: red;");
     return null;
   }
 };
@@ -74,15 +81,7 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
     throw new Error("User ID is required to update preferences.");
   }
   const currentUser = auth.currentUser;
-  console.log(`%c[userPreferenceService] updateUserPreferences:
-    Attempting to update preferences.
-    - userId param for doc path: ${userId}
-    - auth.currentUser?.uid (client check): ${currentUser?.uid}`, "color: blue; font-weight: bold;");
-
   if (!currentUser || currentUser.uid !== userId) {
-    console.error(`%c[userPreferenceService] updateUserPreferences: CRITICAL - Auth mismatch or no auth user.
-      - userId param: ${userId}
-      - auth.currentUser?.uid: ${currentUser?.uid}`, "color: red; font-weight: bold;");
     throw new Error("Authentication error or user ID mismatch trying to update preferences.");
   }
 
@@ -91,19 +90,23 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
     const docSnap = await getDoc(prefDocRef);
     const updatePayload: Partial<UserPreference> & { updatedAt: Timestamp, userId: string } = {
       ...dataToUpdate,
-      userId: userId, // Explicitly ensure userId is part of the update for rules on create
+      userId: userId, 
       updatedAt: Timestamp.now()
     };
     
-    // Ensure paymentMethods is an array, even if it's empty in dataToUpdate
     if (dataToUpdate.paymentMethods !== undefined) {
         updatePayload.paymentMethods = Array.isArray(dataToUpdate.paymentMethods) ? dataToUpdate.paymentMethods : [];
     }
+    // Ensure subscription fields are explicitly set to null if undefined in dataToUpdate, to clear them
+    if (dataToUpdate.stripeSubscriptionId === undefined) updatePayload.stripeSubscriptionId = null;
+    if (dataToUpdate.activeStripePriceId === undefined) updatePayload.activeStripePriceId = null;
+    if (dataToUpdate.stripeSubscriptionStatus === undefined) updatePayload.stripeSubscriptionStatus = null;
+    if (dataToUpdate.stripeSubscriptionCurrentPeriodEnd === undefined) updatePayload.stripeSubscriptionCurrentPeriodEnd = null;
+    if (dataToUpdate.stripeSubscriptionWillCancelAtPeriodEnd === undefined) updatePayload.stripeSubscriptionWillCancelAtPeriodEnd = null;
 
 
     if (docSnap.exists()) {
       await updateDoc(prefDocRef, updatePayload);
-      console.log(`%c[userPreferenceService] updateUserPreferences: Preferences updated for user ${userId}. Payload:`, "color: green;", updatePayload);
     } else {
       const createPayload: UserPreference = {
         userId: userId,
@@ -115,18 +118,19 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
         notifyOnConnectionAccepted: dataToUpdate.notifyOnConnectionAccepted ?? true,
         notifyOnNewMessage: dataToUpdate.notifyOnNewMessage ?? true,
         notifyOnPlatformUpdates: dataToUpdate.notifyOnPlatformUpdates ?? true,
-        stripeCustomerId: dataToUpdate.stripeCustomerId || undefined,
+        stripeCustomerId: dataToUpdate.stripeCustomerId || null,
+        stripeSubscriptionId: dataToUpdate.stripeSubscriptionId || null,
+        activeStripePriceId: dataToUpdate.activeStripePriceId || null,
+        stripeSubscriptionStatus: dataToUpdate.stripeSubscriptionStatus || null,
+        stripeSubscriptionCurrentPeriodEnd: dataToUpdate.stripeSubscriptionCurrentPeriodEnd || null,
+        stripeSubscriptionWillCancelAtPeriodEnd: dataToUpdate.stripeSubscriptionWillCancelAtPeriodEnd || null,
         createdAt: Timestamp.now(),
         updatedAt: Timestamp.now(),
       };
       await setDoc(prefDocRef, createPayload);
-      console.log(`%c[userPreferenceService] updateUserPreferences: Preferences doc created for user ${userId}. Payload:`, "color: green;", createPayload);
     }
   } catch (error: any) {
     console.error(`%c[userPreferenceService] updateUserPreferences: Firestore error for user ${userId}:`, "color: red;", error);
-    if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied. Rules check 'request.auth.uid == userId'.");
-    }
     throw new Error(error.message || "Could not update user preferences.");
   }
 };
@@ -152,12 +156,8 @@ export const addFavoriteSector = async (userId: string, sectorCode: string): Pro
       favoriteSectorCodes: arrayUnion(sectorCode),
       updatedAt: Timestamp.now()
     }, { merge: true });
-    console.log(`%c[userPreferenceService] addFavoriteSector: Sector ${sectorCode} added for user ${userId}.`, "color: green;");
   } catch (error: any) {
     console.error(`%c[userPreferenceService] addFavoriteSector: Firestore error for user ${userId}, sector ${sectorCode}:`, "color: red;", error);
-    if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied. Rules check 'request.auth.uid == userId'.");
-    }
     throw new Error(error.message || "Could not add favorite sector.");
   }
 };
@@ -178,17 +178,12 @@ export const removeFavoriteSector = async (userId: string, sectorCode: string): 
         favoriteSectorCodes: arrayRemove(sectorCode),
         updatedAt: Timestamp.now()
       });
-      console.log(`%c[userPreferenceService] removeFavoriteSector: Sector ${sectorCode} removed for user ${userId}.`, "color: green;");
     } else {
       console.log(`%c[userPreferenceService] removeFavoriteSector: No preferences doc found for user ${userId}. Nothing to remove.`, "color: orange;");
     }
   } catch (error: any) {
     console.error(`%c[userPreferenceService] removeFavoriteSector: Firestore error for user ${userId}, sector ${sectorCode}:`, "color: red;", error);
-    if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied. Rules check 'request.auth.uid == userId'.");
-    }
     throw new Error(error.message || "Could not remove favorite sector.");
   }
 };
-    
     

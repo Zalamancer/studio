@@ -20,8 +20,16 @@ export interface UserPreference {
   notifyOnConnectionAccepted?: boolean;
   notifyOnNewMessage?: boolean;
   notifyOnPlatformUpdates?: boolean;
-  stripeCustomerId?: string; // To store Stripe Customer ID
-  paymentMethods?: SavedPaymentMethod[]; // Array to store multiple saved payment methods
+
+  // Stripe Subscription Fields
+  stripeCustomerId?: string | null;
+  stripeSubscriptionId?: string | null;
+  activeStripePriceId?: string | null;
+  stripeSubscriptionStatus?: string | null; // e.g., 'active', 'trialing', 'past_due', 'canceled', 'incomplete'
+  stripeSubscriptionCurrentPeriodEnd?: number | null; // Unix timestamp (seconds)
+  stripeSubscriptionWillCancelAtPeriodEnd?: boolean | null; // Custom flag to indicate user requested cancellation
+
+  paymentMethods?: SavedPaymentMethod[];
   createdAt?: Timestamp;
   updatedAt?: Timestamp;
 }
@@ -29,3 +37,4 @@ export interface UserPreference {
 export type UpdateUserPreferencesData = Omit<Partial<UserPreference>, 'userId' | 'createdAt'> & {
   updatedAt?: Timestamp;
 };
+    

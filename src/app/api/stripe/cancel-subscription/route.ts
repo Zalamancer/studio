@@ -62,35 +62,51 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Subscription ID mismatch with user record.' }, { status: 400 });
     }
 
-    // Cancel the subscription in Stripe immediately
-    // To cancel at the end of the period, use:
-    // await stripe.subscriptions.update(subscriptionId, { cancel_at_period_end: true });
-    // and then handle the 'customer.subscription.updated' webhook.
-    // For immediate cancellation:
-    const canceledSubscription = await stripe.subscriptions.del(subscriptionId);
-    console.log(`[API Stripe Cancel Subscription] Stripe subscription ${subscriptionId} canceled. Status: ${canceledSubscription.status}`);
+    // Cancel the subscription at the end of the current billing period
+    const canceledSubscription = await stripe.subscriptions.update(subscriptionId, {
+        cancel_at_period_end: true,
+    });
+    console.log(`[API Stripe Cancel Subscription] Stripe subscription ${subscriptionId} marked to cancel at period end. Status: ${canceledSubscription.status}`);
 
-    // Update Firestore
+    // Update Firestore - status remains active until period end, but we reflect the pending cancellation.
+    // Stripe webhook 'customer.subscription.updated' or 'customer.subscription.deleted' should handle final update.
     const subscriptionUpdateData: Partial<UserPreference> = {
-      stripeSubscriptionId: null, // Or keep it for history, but set status
-      activeStripePriceId: null,
-      stripeSubscriptionStatus: 'canceled', // Use Stripe's status or your own 'canceled'
-      stripeSubscriptionCurrentPeriodEnd: canceledSubscription.ended_at || canceledSubscription.canceled_at || null, // Store when it actually ended or was marked for cancellation
+      // stripeSubscriptionId: null, // Keep ID for reference until fully canceled
+      // activeStripePriceId: null,  // Keep active price ID until fully canceled
+      stripeSubscriptionStatus: 'active', // Stripe status will still be 'active'
+      // Store 'cancel_at_period_end' from Stripe if needed, or just rely on period_end for display
+      stripeSubscriptionCancelAtPeriodEnd: canceledSubscription.cancel_at_period_end, // This field is a boolean.
+                                                                                        // The actual cancellation timestamp is current_period_end.
+      stripeSubscriptionCurrentPeriodEnd: canceledSubscription.current_period_end, // This is when it will actually end.
       updatedAt: FieldValue.serverTimestamp(),
     };
+    // To avoid confusion, it might be better to set a custom status like 'pending_cancellation'
+    // For now, we'll update Firestore with what Stripe gives us. The UI will need to interpret this.
+    // Let's be more direct for UI:
+    const firestoreUpdate: Partial<UserPreference> = {
+        stripeSubscriptionStatus: 'active', // It's still active
+        stripeSubscriptionCurrentPeriodEnd: canceledSubscription.current_period_end, // This is the key date for UI
+        stripeSubscriptionWillCancelAtPeriodEnd: true, // Add a custom flag
+        updatedAt: FieldValue.serverTimestamp(),
+    };
 
-    await userPreferencesRef.update(subscriptionUpdateData);
-    console.log(`[API Stripe Cancel Subscription] Updated userPreferences for ${userId} with canceled subscription data.`);
+
+    await userPreferencesRef.update(firestoreUpdate);
+    console.log(`[API Stripe Cancel Subscription] Updated userPreferences for ${userId} with subscription marked for cancellation at period end.`);
 
     return NextResponse.json({
       success: true,
-      message: `Subscription ${subscriptionId} has been canceled successfully.`,
-      canceledSubscriptionStatus: canceledSubscription.status,
+      message: `Subscription ${subscriptionId} is now set to cancel at the end of the current billing period (on ${new Date((canceledSubscription.current_period_end || 0) * 1000).toLocaleDateString()}).`,
+      canceledSubscriptionDetails: {
+        status: canceledSubscription.status,
+        cancel_at_period_end: canceledSubscription.cancel_at_period_end,
+        current_period_end: canceledSubscription.current_period_end,
+      }
     });
 
   } catch (error: any) {
     console.error('[API Stripe Cancel Subscription] General Error:', error);
-    let errorMessage = 'Failed to cancel subscription.';
+    let errorMessage = 'Failed to set subscription to cancel at period end.';
     let statusCode = 500;
 
     if (error instanceof Stripe.errors.StripeError) {
@@ -103,3 +119,4 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: errorMessage, stripeErrorCode: error.code, details: error.message }, { status: statusCode });
   }
 }
+    
