@@ -296,7 +296,7 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
     try {
       await toggleLikeComment(postId, comment.id, user.uid);
     } catch (err) {
-      toast({ variant: "destructive", title: "Like Failed", description: "Could not update like." });
+      toast({ variant: "destructive", title: "Like Failed", description: (err as Error).message || "Could not update like." });
       if (previousComments) queryClient.setQueryData(['comments', postId], previousComments);
     } finally {
       setIsLiking(false);
@@ -494,3 +494,4 @@ export const CommentItem: React.FC<CommentItemProps> = React.memo(({
   );
 });
 CommentItem.displayName = 'CommentItem';
+

@@ -99,7 +99,7 @@ export const SubCommentItem: React.FC<SubCommentItemProps> = React.memo(({
     try {
       await toggleLikeSubComment(postId, commentId, subComment.id, user.uid);
     } catch (err) {
-      toast({ variant: "destructive", title: "Like Failed", description: "Could not update like." });
+      toast({ variant: "destructive", title: "Like Failed", description: (err as Error).message || "Could not update like." });
       if (previousSubComments) {
         queryClient.setQueryData(['subComments', postId, commentId], previousSubComments);
       }
