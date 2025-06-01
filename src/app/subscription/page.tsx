@@ -25,9 +25,9 @@ import {
 } from "@/components/ui/alert-dialog";
 
 // IMPORTANT: Replace these with your actual Stripe Price IDs
-const STRIPE_PRICE_ID_BASIC = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BASIC || 'YOUR_STRIPE_PRICE_ID_BASIC';
-const STRIPE_PRICE_ID_PRO = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO || 'YOUR_STRIPE_PRICE_ID_PRO';
-const STRIPE_PRICE_ID_ENTERPRISE = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE || 'YOUR_STRIPE_PRICE_ID_ENTERPRISE';
+const STRIPE_PRICE_ID_BASIC = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BASIC || 'price_1RV7QGECOZ6g59IdgnVnLOrP';
+const STRIPE_PRICE_ID_PRO = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO || 'price_1RV7R8ECOZ6g59IdKXGKogOZ';
+const STRIPE_PRICE_ID_ENTERPRISE = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE || 'price_1RV7RVECOZ6g59Idkhydnj0c';
 
 const plans = [
   {
@@ -47,7 +47,7 @@ const plans = [
   {
     id: 'pro',
     name: "Pro",
-    price: "$15", // Example price
+    price: "$15", // Updated Price
     frequency: "/month",
     description: "Unlock advanced features for collaboration.",
     features: [
@@ -63,8 +63,8 @@ const plans = [
   {
     id: 'enterprise',
     name: "Enterprise",
-    price: "Custom",
-    frequency: "",
+    price: "$50", // Updated Price
+    frequency: "/month", // Updated Frequency
     description: "Tailored solutions for large teams.",
     features: [
       "All Pro features",
@@ -73,7 +73,7 @@ const plans = [
       "Enhanced security options",
       "Team management tools",
     ],
-    buttonText: "Contact Sales",
+    buttonText: "Get Enterprise", // Updated Button Text
     stripePriceId: STRIPE_PRICE_ID_ENTERPRISE,
   },
 ];
@@ -167,7 +167,6 @@ const SubscriptionPage = () => {
       <div className="mb-8 text-center">
         <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">Choose Your Plan</h1>
         <p className="text-lg text-muted-foreground max-w-2xl mx-auto">Select the subscription plan that best fits your collaboration needs.</p>
-        {/* Removed the current subscription status display from here */}
       </div>
 
       {!user && (
@@ -199,7 +198,7 @@ const SubscriptionPage = () => {
           } else if (activeSubscriptionPriceId && plan.id !== 'basic' && plan.stripePriceId !== activeSubscriptionPriceId) {
              const currentPlanIndex = plans.findIndex(p => p.stripePriceId === activeSubscriptionPriceId);
              const targetPlanIndex = plans.findIndex(p => p.stripePriceId === plan.stripePriceId);
-             if (currentPlanIndex > -1 && targetPlanIndex > -1) { // Ensure both plans are found
+             if (currentPlanIndex > -1 && targetPlanIndex > -1) { 
                  if (targetPlanIndex > currentPlanIndex) buttonText = `Upgrade to ${plan.name}`;
                  else if (targetPlanIndex < currentPlanIndex) buttonText = `Downgrade to ${plan.name}`;
              }
@@ -225,19 +224,21 @@ const SubscriptionPage = () => {
                 </ul>
               </CardContent>
               <CardFooter>
-                {plan.id === 'enterprise' ? (
-                  <Button className="w-full" asChild><a href="mailto:sales@anonycollab.com?subject=Enterprise Plan Inquiry">Contact Sales</a></Button>
-                ) : (
-                  <Button
+                 <Button
                     className="w-full"
                     variant={(isCurrentActivePlan || isFreeBasicAndNoSub) ? 'outline' : 'default'}
-                    disabled={isCurrentActivePlan || isFreeBasicAndNoSub || isProcessingThisPlan || !user || createOrUpdateSubscriptionMutation.isPending}
-                    onClick={() => handleOpenConfirmation(plan)}
+                    disabled={isCurrentActivePlan || isFreeBasicAndNoSub || isProcessingThisPlan || !user || createOrUpdateSubscriptionMutation.isPending || (plan.id === 'enterprise' && plan.buttonText === 'Contact Sales') /* Disable direct sub for contact sales variant */}
+                    onClick={() => {
+                        if (plan.id === 'enterprise' && plan.buttonText === 'Contact Sales') {
+                            window.location.href = 'mailto:sales@anonycollab.com?subject=Enterprise Plan Inquiry';
+                        } else {
+                            handleOpenConfirmation(plan);
+                        }
+                    }}
                   >
                     {isProcessingThisPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                     {buttonText}
                   </Button>
-                )}
               </CardFooter>
             </Card>
           );
@@ -255,7 +256,7 @@ const SubscriptionPage = () => {
            </p>
          </Card>
        )}
-       {user && (STRIPE_PRICE_ID_PRO.startsWith('YOUR_STRIPE_PRICE_ID_') || STRIPE_PRICE_ID_BASIC.startsWith('YOUR_STRIPE_PRICE_ID_')) && (
+       {user && (STRIPE_PRICE_ID_PRO.startsWith('YOUR_STRIPE_PRICE_ID_') || STRIPE_PRICE_ID_BASIC.startsWith('YOUR_STRIPE_PRICE_ID_') || STRIPE_PRICE_ID_ENTERPRISE.startsWith('YOUR_STRIPE_PRICE_ID_')) && (
           <div className="mt-6 text-center p-3 bg-orange-100 border border-orange-200 rounded-md max-w-xl mx-auto">
             <AlertTriangle className="mx-auto h-5 w-5 text-orange-600 mb-1" />
             <p className="text-xs text-orange-700 font-medium">Developer Notice:</p>

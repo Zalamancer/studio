@@ -49,10 +49,10 @@ if (stripePublishableKey) {
   console.error("Stripe publishable key is not set in environment variables (NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY). Payment functionality will be disabled.");
 }
 
-// Define the plans array here
-const STRIPE_PRICE_ID_BASIC = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BASIC || 'YOUR_STRIPE_PRICE_ID_BASIC';
-const STRIPE_PRICE_ID_PRO = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO || 'YOUR_STRIPE_PRICE_ID_PRO';
-const STRIPE_PRICE_ID_ENTERPRISE = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE || 'YOUR_STRIPE_PRICE_ID_ENTERPRISE';
+// Define the plans array here (consistent with subscription/page.tsx)
+const STRIPE_PRICE_ID_BASIC = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BASIC || 'price_1RV7QGECOZ6g59IdgnVnLOrP';
+const STRIPE_PRICE_ID_PRO = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_PRO || 'price_1RV7R8ECOZ6g59IdKXGKogOZ';
+const STRIPE_PRICE_ID_ENTERPRISE = process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_ENTERPRISE || 'price_1RV7RVECOZ6g59Idkhydnj0c';
 
 const plans = [
   {
@@ -333,7 +333,7 @@ const PaymentMethodSettingsPage = () => {
     );
   }
 
-  if (!stripePromise && stripePublishableKey) { // Only show if key was intended to be there
+  if (!stripePromise && stripePublishableKey) { 
     return (
         <Card className="shadow-md border-border">
             <CardHeader><CardTitle>Payment Settings Unavailable</CardTitle></CardHeader>
@@ -373,24 +373,30 @@ const PaymentMethodSettingsPage = () => {
                         <strong className="text-foreground">Current Plan:</strong> {plans.find(p => p.stripePriceId === currentSub.activeStripePriceId)?.name || currentSub.activeStripePriceId || 'Unknown'}
                     </p>
                     <p className="text-sm">
-                        <strong className="text-foreground">Status:</strong> <span className={cn(currentSub.stripeSubscriptionStatus === 'active' && !currentSub.stripeSubscriptionWillCancelAtPeriodEnd && "text-green-600", currentSub.stripeSubscriptionStatus === 'active' && currentSub.stripeSubscriptionWillCancelAtPeriodEnd && "text-yellow-600")}>{currentSub.stripeSubscriptionStatus?.replace('_', ' ')}</span>
+                        <strong className="text-foreground">Status:</strong> <span className={cn(currentSub.stripeSubscriptionStatus === 'active' && !currentSub.stripeSubscriptionWillCancelAtPeriodEnd && "text-green-600", currentSub.stripeSubscriptionStatus === 'active' && currentSub.stripeSubscriptionWillCancelAtPeriodEnd && "text-yellow-600", currentSub.stripeSubscriptionStatus !== 'active' && "text-muted-foreground")}>{currentSub.stripeSubscriptionStatus?.replace('_', ' ') || 'N/A'}</span>
                         {currentSub.stripeSubscriptionWillCancelAtPeriodEnd && currentSub.stripeSubscriptionCurrentPeriodEnd && (
-                            <span className="text-yellow-600"> (Cancels on {new Date(currentSub.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString()})</span>
+                            <span className="text-yellow-600"> (Cancels on {new Date((currentSub.stripeSubscriptionCurrentPeriodEnd || 0) * 1000).toLocaleDateString()})</span>
                         )}
                         {!currentSub.stripeSubscriptionWillCancelAtPeriodEnd && currentSub.stripeSubscriptionStatus === 'active' && currentSub.stripeSubscriptionCurrentPeriodEnd &&(
-                            <span className="text-muted-foreground"> (Renews on {new Date(currentSub.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString()})</span>
+                            <span className="text-muted-foreground"> (Renews on {new Date((currentSub.stripeSubscriptionCurrentPeriodEnd || 0) * 1000).toLocaleDateString()})</span>
                         )}
+                         {currentSub.stripeSubscriptionStatus === 'canceled' && currentSub.stripeSubscriptionCurrentPeriodEnd &&(
+                             <span className="text-muted-foreground"> (Ended on {new Date((currentSub.stripeSubscriptionCurrentPeriodEnd || 0) * 1000).toLocaleDateString()})</span>
+                         )}
                     </p>
                     <div className="flex flex-col sm:flex-row gap-2 pt-2">
                         <Button variant="outline" size="sm" asChild>
                             <Link href="/subscription">Change Plan</Link>
                         </Button>
-                        {isSubscribedToPaidPlan && !currentSub.stripeSubscriptionWillCancelAtPeriodEnd && (
+                        {isSubscribedToPaidPlan && currentSub.stripeSubscriptionStatus === 'active' && !currentSub.stripeSubscriptionWillCancelAtPeriodEnd && (
                             <Button variant="destructive" size="sm" onClick={() => setShowCancelConfirmation(true)} disabled={processingAction === 'cancel' || cancelSubscriptionMutation.isPending}>
                                 {processingAction === 'cancel' || cancelSubscriptionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5"/> : <XCircle className="h-4 w-4 mr-1.5"/>}
                                 Cancel Subscription
                             </Button>
                         )}
+                         {currentSub.stripeSubscriptionStatus === 'canceled' && (
+                             <p className="text-xs text-muted-foreground italic">Your subscription has ended. You can subscribe again from the Change Plan page.</p>
+                         )}
                     </div>
                 </div>
             ) : (
@@ -468,7 +474,7 @@ const PaymentMethodSettingsPage = () => {
                     <AlertDialogDescription>
                         Are you sure you want to cancel your current plan?
                         It will remain active until the end of the current billing period
-                        ({userPreferences.stripeSubscriptionCurrentPeriodEnd ? new Date(userPreferences.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString() : 'N/A'}).
+                        ({userPreferences.stripeSubscriptionCurrentPeriodEnd ? new Date((userPreferences.stripeSubscriptionCurrentPeriodEnd || 0) * 1000).toLocaleDateString() : 'N/A'}).
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 <AlertDialogFooter>
@@ -488,3 +494,4 @@ const PaymentMethodSettingsPage = () => {
 };
 
 export default PaymentMethodSettingsPage;
+
