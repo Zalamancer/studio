@@ -175,8 +175,11 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
   const markReadMutation = useMutation({
     mutationFn: markNotificationAsRead,
     onSuccess: (data, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
-       console.log(`[NotificationDropdown] Marked notification ${variables} as read`);
+      // Delay invalidation to allow Radix to finish its event processing
+      setTimeout(() => {
+        queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
+        console.log(`[NotificationDropdown] Marked notification ${variables} as read and invalidated query.`);
+      }, 100); // Small delay (e.g., 100ms)
     },
     onError: (error: Error, variables) => {
       console.error(`[NotificationDropdown] Failed to mark notification ${variables} as read:`, error);
@@ -268,3 +271,5 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     </DropdownMenu>
   );
 };
+
+    
