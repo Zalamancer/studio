@@ -60,12 +60,13 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
     console.log(`%c[commentService] addCommentToPost: Received resolvedMentionedUids from client:`, "color: blue;", resolvedMentionedUids);
 
 
-    const fullCommentData: NewCommentData & { timestamp: Timestamp } = {
+    const fullCommentData: NewCommentData & { timestamp: Timestamp; updatedAt: Timestamp; } = {
       ...commentData,
       likeCount: 0,
       likedBy: [],
       mentionedUserIds: resolvedMentionedUids,
       timestamp: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp,
     };
 
     const docRef = await addDoc(commentsCollectionRef, fullCommentData);
@@ -201,7 +202,7 @@ export const toggleLikeComment = async (postId: string, commentId: string, userI
 
             if (isLiked) {
                 newLikedBy = likedBy.filter(uid => uid !== userId);
-                newLikeCount = Math.max(0, likeCount - 1); // Ensure count doesn't go below 0
+                newLikeCount = Math.max(0, likeCount - 1); 
                 console.log(`%c[commentService] toggleLikeComment: UNLIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             } else {
                 newLikedBy = [...likedBy, userId];
@@ -211,7 +212,8 @@ export const toggleLikeComment = async (postId: string, commentId: string, userI
             
             transaction.update(commentRef, {
                 likedBy: newLikedBy,
-                likeCount: newLikeCount
+                likeCount: newLikeCount,
+                updatedAt: serverTimestamp() // Explicitly update timestamp
             });
             console.log(`%c[commentService] toggleLikeComment: Transaction update prepared for comment '${commentId}'.`, "color: magenta;");
         });
@@ -257,12 +259,13 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
     console.log(`%c[commentService] addSubCommentToComment: Received resolvedMentionedUids from client:`, "color: blue;", resolvedMentionedUids);
 
 
-    const fullSubCommentData: NewSubCommentData & { timestamp: Timestamp } = {
+    const fullSubCommentData: NewSubCommentData & { timestamp: Timestamp; updatedAt: Timestamp; } = {
         ...subCommentData,
         likeCount: 0,
         likedBy: [],
         mentionedUserIds: resolvedMentionedUids,
         timestamp: serverTimestamp() as Timestamp,
+        updatedAt: serverTimestamp() as Timestamp,
     };
 
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
@@ -451,7 +454,8 @@ export const toggleLikeSubComment = async (postId: string, commentId: string, su
             
             transaction.update(subCommentRef, {
                 likedBy: newLikedBy,
-                likeCount: newLikeCount
+                likeCount: newLikeCount,
+                updatedAt: serverTimestamp() // Explicitly update timestamp
             });
             console.log(`%c[commentService] toggleLikeSubComment: Transaction update prepared for subComment '${subCommentId}'.`, "color: magenta;");
         });
@@ -465,3 +469,5 @@ export const toggleLikeSubComment = async (postId: string, commentId: string, su
     }
 };
 
+
+    
