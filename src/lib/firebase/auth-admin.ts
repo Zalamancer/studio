@@ -1,103 +1,126 @@
 
 // src/lib/firebase/auth-admin.ts
 import * as admin from 'firebase-admin';
-import path from 'path'; // Import path for resolving file paths
-import fs from 'fs'; // Import fs for checking file existence
+import path from 'path';
+import fs from 'fs';
 
 let authAdminInstance: admin.auth.Auth | null = null;
 let dbAdminInstance: admin.firestore.Firestore | null = null;
 
 const SERVICE_ACCOUNT_LOG_PREFIX = "[auth-admin.ts]";
+const serviceAccountKeyFileName = 'serviceAccountKey.json'; // Standard name
 
 console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Module loaded. Attempting to initialize Firebase Admin SDK... NODE_ENV: ${process.env.NODE_ENV}`);
 
-if (!admin.apps.length) {
+function initializeWithServiceAccount(keyPath: string, sourceDescription: string): boolean {
   try {
-    const gacEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS;
-    const serviceAccountKeyFileName = 'serviceAccountKey.json'; // Standard name
-
-    if (gacEnv) {
-      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS environment variable IS SET. Path: ${gacEnv}`);
-      if (fs.existsSync(gacEnv)) {
-        console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account file at path from GOOGLE_APPLICATION_CREDENTIALS exists.`);
-        admin.initializeApp({
-          credential: admin.credential.applicationDefault(),
-        });
-        console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK initialized successfully using GOOGLE_APPLICATION_CREDENTIALS.`);
-      } else {
-        console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account file at path from GOOGLE_APPLICATION_CREDENTIALS DOES NOT EXIST: ${gacEnv}. Falling back to default init if possible.`);
-        admin.initializeApp(); // Attempt default, may fail
-      }
-    } else if (process.env.NODE_ENV === 'development') {
-      console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS environment variable IS NOT SET.`);
-      const localKeyPath = path.resolve(process.cwd(), serviceAccountKeyFileName);
-      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Running in development mode. Checking for service account key at resolved local path: ${localKeyPath}`);
-
-      if (fs.existsSync(localKeyPath)) {
-        console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Local service account key FOUND at: ${localKeyPath}`);
-        const serviceAccountJson = fs.readFileSync(localKeyPath, 'utf8');
-        const serviceAccount = JSON.parse(serviceAccountJson);
-        
-        admin.initializeApp({
-          credential: admin.credential.cert(serviceAccount),
-        });
-        console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK initialized successfully using local service account key: ${localKeyPath}`);
-      } else {
-        console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Local service account key NOT FOUND at: ${localKeyPath}. Firebase Admin SDK cannot initialize with a local key this way.`);
-        console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Falling back to default initialization attempt, which may fail if not in a managed environment...`);
-        admin.initializeApp(); // Attempt default, may fail
-      }
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempting to initialize with service account key from ${sourceDescription} at: ${keyPath}`);
+    if (fs.existsSync(keyPath)) {
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account file FOUND at: ${keyPath}`);
+      const serviceAccountJson = fs.readFileSync(keyPath, 'utf8');
+      const serviceAccount = JSON.parse(serviceAccountJson);
+      admin.initializeApp({
+        credential: admin.credential.cert(serviceAccount),
+      });
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK initialized successfully using service account key from ${sourceDescription}.`);
+      return true;
     } else {
-      // Not development and GAC_ENV not set
-      console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS environment variable IS NOT SET and not in development mode.`);
-      console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Default Firebase Admin SDK initialization will occur, which is suitable for managed Google Cloud environments (e.g., Cloud Run, Cloud Functions with an associated service account). If this is a different environment, it might fail.`);
-      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempting default Firebase Admin SDK initialization...`);
-      admin.initializeApp();
+      console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Service account file NOT FOUND at: ${keyPath} (for ${sourceDescription}).`);
+      return false;
     }
-
-    authAdminInstance = admin.auth();
-    dbAdminInstance = admin.firestore();
-    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK initialization sequence completed. Auth and DB instances assigned.`, "color: green; font-weight: bold;");
-
   } catch (error: any) {
-    console.error(`%c${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK initialization error:`, "color: red; font-weight:bold;", error.message);
-    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Stack trace for initialization error:`, error.stack);
+    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error initializing with service account key from ${sourceDescription} (${keyPath}):`, error.message);
     if (error.code === 'app/duplicate-app') {
-        console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK was already initialized (likely in another module or a hot-reload scenario). Using existing instance.`);
-        if (admin.apps[0]) {
-            authAdminInstance = admin.apps[0]!.auth();
-            dbAdminInstance = admin.apps[0]!.firestore();
+      console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK was already initialized by another method.`);
+      return true; // Consider it successful if already initialized
+    }
+    return false;
+  }
+}
+
+if (!admin.apps.length) {
+  let initialized = false;
+  const gacEnv = process.env.GOOGLE_APPLICATION_CREDENTIALS;
+
+  if (gacEnv) {
+    console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS IS SET. Path: ${gacEnv}`);
+    initialized = initializeWithServiceAccount(gacEnv, "GOOGLE_APPLICATION_CREDENTIALS env var");
+  }
+
+  if (!initialized && process.env.NODE_ENV === 'development') {
+    console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} GOOGLE_APPLICATION_CREDENTIALS is NOT SET. In DEVELOPMENT mode, trying local paths.`);
+
+    const devPathsToTry = [
+      path.resolve(process.cwd(), serviceAccountKeyFileName), // Relative to current working directory
+      path.resolve(process.cwd(), '..', serviceAccountKeyFileName), // One level up from cwd (if cwd is e.g. /functions)
+      path.resolve(__dirname, '..', '..', '..', serviceAccountKeyFileName), // Relative to this file's location (e.g. src/lib/firebase -> root)
+      path.resolve(serviceAccountKeyFileName) // Direct (less likely but for completeness)
+    ];
+    
+    const uniqueDevPaths = [...new Set(devPathsToTry)]; // Remove duplicates
+
+    for (const localKeyPath of uniqueDevPaths) {
+      if (initialized) break;
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Attempt (dev): Checking for service account key at: ${localKeyPath}`);
+      initialized = initializeWithServiceAccount(localKeyPath, `local path guess: ${localKeyPath}`);
+    }
+  }
+
+  if (!initialized) {
+    console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} No service account key found or initialization failed with key. Attempting default initialization (for managed environments like Cloud Run/Functions).`);
+    try {
+      admin.initializeApp();
+      console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK initialized successfully using DEFAULT (managed environment) credentials.`);
+      initialized = true;
+    } catch (defaultInitError: any) {
+      console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} DEFAULT Firebase Admin SDK initialization FAILED:`, defaultInitError.message);
+      if (defaultInitError.code === 'app/duplicate-app') {
+        console.warn(`${SERVICE_ACCOUNT_LOG_PREFIX} Default init: Firebase Admin SDK was already initialized by another method.`);
+        initialized = true; // Already initialized
+      } else {
+        console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: ALL ATTEMPTS to initialize Firebase Admin SDK failed.`);
+      }
+    }
+  }
+
+  // Assign instances if any initialization succeeded OR if it was already initialized (duplicate app error)
+  if (initialized || admin.apps.length > 0) {
+    const appToUse = admin.apps.length > 0 ? admin.apps[0] : admin.app(); // admin.app() gets the default app if initializeApp was called without a name
+    if (appToUse) {
+        try {
+            authAdminInstance = appToUse.auth();
+            dbAdminInstance = appToUse.firestore();
+            console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK instances assigned from app: ${appToUse.name}.`);
+        } catch (instanceError: any) {
+             console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Error assigning instances from app ${appToUse.name}:`, instanceError.message);
         }
     } else {
-        console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} Initialization failed. For deployed environments, ensure GOOGLE_APPLICATION_CREDENTIALS is set OR the environment is a managed Google Cloud service with an identity. For local development, ensure '${serviceAccountKeyFileName}' is in your project root if GAC_ENV is not set.`);
+        console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} SDK claimed initialized/apps exist, but no app instance found.`);
     }
   }
+
 } else {
-  console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK already has ${admin.apps.length} initialized app(s). Re-assigning authAdmin and dbAdmin from the first app.`);
-  if (admin.apps[0]) {
-    authAdminInstance = admin.apps[0]!.auth();
-    dbAdminInstance = admin.apps[0]!.firestore();
+  console.log(`${SERVICE_ACCOUNT_LOG_PREFIX} Firebase Admin SDK already has ${admin.apps.length} initialized app(s). Using the first app.`);
+  if (admin.apps.length > 0 && admin.apps[0]) {
+      authAdminInstance = admin.apps[0]!.auth();
+      dbAdminInstance = admin.apps[0]!.firestore();
   } else {
-    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} SDK already initialized, but no apps found in admin.apps array unexpectedly.`);
+      console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} SDK already initialized, but no apps found in admin.apps array unexpectedly.`);
   }
 }
 
-if (!admin.apps.length && !authAdminInstance && !dbAdminInstance) {
-    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: Firebase Admin SDK has NO initialized apps after attempt. Initialization failed or was skipped.`);
+// Final check and log for instance availability
+if (authAdminInstance) {
+    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} authAdmin (Firebase Admin Auth) IS INITIALIZED and available.`, "color: green;");
+} else {
+    console.error(`%c${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: authAdmin (Firebase Admin Auth) IS NULL after all attempts. API routes requiring admin auth WILL FAIL.`, "color: red; font-weight: bold;");
 }
 
-if (!authAdminInstance) {
-    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: authAdmin (Firebase Admin Auth) is NULL. API routes requiring admin auth will fail.`);
-} else if (admin.apps.length > 0 && admin.apps[0]) {
-    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} authAdmin (Firebase Admin Auth) is INITIALIZED and available.`, "color: green;");
-}
-
-if (!dbAdminInstance) {
-    console.error(`${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: dbAdmin (Firebase Admin Firestore) is NULL. API routes requiring admin Firestore access will fail.`);
-} else if (admin.apps.length > 0 && admin.apps[0]) {
-    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} dbAdmin (Firebase Admin Firestore) is INITIALIZED and available.`, "color: green;");
+if (dbAdminInstance) {
+    console.log(`%c${SERVICE_ACCOUNT_LOG_PREFIX} dbAdmin (Firebase Admin Firestore) IS INITIALIZED and available.`, "color: green;");
+} else {
+    console.error(`%c${SERVICE_ACCOUNT_LOG_PREFIX} CRITICAL: dbAdmin (Firebase Admin Firestore) IS NULL after all attempts. API routes requiring admin Firestore WILL FAIL.`, "color: red; font-weight: bold;");
 }
 
 export const authAdmin = authAdminInstance;
 export const dbAdmin = dbAdminInstance;
-    
