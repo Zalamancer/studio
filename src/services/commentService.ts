@@ -74,11 +74,12 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
     const newCommentId = docRef.id;
     console.log(`%c[commentService] addCommentToPost: Comment added successfully to post ${postId} with ID: ${newCommentId}`, "color: green;");
 
-    // Atomically increment commentCount on the post
+    // Atomically increment commentCount on the post and update its updatedAt timestamp
     await updateDoc(postDocRef, {
-      commentCount: increment(1)
+      commentCount: increment(1),
+      updatedAt: serverTimestamp() // Ensure post's updatedAt is also updated
     });
-    console.log(`%c[commentService] addCommentToPost: Incremented commentCount for post ${postId}`, "color: green;");
+    console.log(`%c[commentService] addCommentToPost: Incremented commentCount and updated updatedAt for post ${postId}`, "color: green;");
 
     const postDetails = await getPostDetails(postId);
 
@@ -242,14 +243,11 @@ export const deleteCommentFromPost = async (postId: string, commentId: string): 
     const postDocRef = doc(db, 'posts', postId);
     const commentDocRef = doc(postDocRef, 'comments', commentId);
 
-    // Atomically decrement commentCount on the post
-    // Ensure commentCount doesn't go below 0, though increment(-1) should handle this well.
-    // If the field might not exist, it's safer to use a transaction to read and then write.
-    // For simplicity here, we assume commentCount is always initialized to 0 or more.
     await updateDoc(postDocRef, {
-      commentCount: increment(-1)
+      commentCount: increment(-1),
+      updatedAt: serverTimestamp() // Ensure post's updatedAt is also updated
     });
-    console.log(`%c[commentService] deleteCommentFromPost: Decremented commentCount for post ${postId}`, "color: orange;");
+    console.log(`%c[commentService] deleteCommentFromPost: Decremented commentCount and updated updatedAt for post ${postId}`, "color: orange;");
 
     await deleteDoc(commentDocRef);
     console.log(`%c[commentService] Comment ${commentId} deleted successfully from post ${postId}`, "color: green;");
@@ -291,9 +289,6 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
     const newSubCommentId = docRef.id;
     console.log(`%c[commentService] addSubCommentToComment: Subcomment added successfully to comment ${commentId} with ID: ${newSubCommentId}`, "color: green;");
-
-    // Note: Sub-comments do not typically update the main post's commentCount.
-    // That count usually refers to top-level comments only.
 
     const postDetails = await getPostDetails(postId);
     const commentSnap = await getDoc(commentDocRef);
