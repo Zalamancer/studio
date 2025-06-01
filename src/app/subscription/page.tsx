@@ -22,7 +22,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from "@/components/ui/alert-dialog"; // Removed AlertDialogTrigger as it will be manually controlled
+} from "@/components/ui/alert-dialog";
 
 // IMPORTANT: Replace these with your actual Stripe Price IDs
 const STRIPE_PRICE_ID_BASIC = 'price_1RV7QGECOZ6g59IdgnVnLOrP'; // Example for a free/default plan
@@ -85,7 +85,7 @@ const SubscriptionPage = () => {
   
   const [processingPlanId, setProcessingPlanId] = useState<string | null>(null);
   const [confirmingPlan, setConfirmingPlan] = useState<(typeof plans[0]) | null>(null);
-  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
+  // Removed showCancelConfirmation state and related logic
 
   const { data: userPreferences, isLoading: isLoadingPreferences, error: preferencesError } = useQuery<UserPreference | null>({
     queryKey: ['userPreferences', user?.uid],
@@ -94,9 +94,8 @@ const SubscriptionPage = () => {
   });
 
   const activeSubscriptionPriceId = userPreferences?.activeStripePriceId;
-  const currentActiveSubscriptionId = userPreferences?.stripeSubscriptionId;
   const currentSubscriptionStatus = userPreferences?.stripeSubscriptionStatus;
-  const willCancelAtPeriodEnd = userPreferences?.stripeSubscriptionWillCancelAtPeriodEnd;
+  const willCancelAtPeriodEnd = userPreferences?.stripeSubscriptionWillCancelAtPeriodEnd; // Used for display
 
   const hasDefaultPaymentMethod = useMemo(() => {
     return userPreferences?.paymentMethods?.some(pm => pm.isDefault) ?? false;
@@ -110,7 +109,7 @@ const SubscriptionPage = () => {
       }
 
       const idToken = await user.getIdToken();
-      const response = await fetch('/api/stripe/create-subscription', { // Endpoint handles both create and update
+      const response = await fetch('/api/stripe/create-subscription', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
         body: JSON.stringify({ userId: user.uid, priceId }),
@@ -130,29 +129,7 @@ const SubscriptionPage = () => {
     },
   });
 
-  const cancelSubscriptionMutation = useMutation({
-    mutationFn: async (subscriptionIdToCancel: string) => {
-      if (!user || !subscriptionIdToCancel) throw new Error("User or subscription ID missing.");
-      const idToken = await user.getIdToken();
-      const response = await fetch('/api/stripe/cancel-subscription', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
-        body: JSON.stringify({ userId: user.uid, subscriptionId: subscriptionIdToCancel }),
-      });
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || `Failed to cancel subscription (status: ${response.status})`);
-      return result;
-    },
-    onSuccess: (data) => {
-      toast({ title: "Subscription Cancellation", description: data.message || "Your subscription cancellation has been processed." });
-      queryClient.invalidateQueries({ queryKey: ['userPreferences', user?.uid] });
-    },
-    onError: (error: Error) => toast({ variant: "destructive", title: "Cancellation Failed", description: error.message }),
-    onSettled: () => {
-      setProcessingPlanId(null);
-      setShowCancelConfirmation(false);
-    }
-  });
+  // Removed cancelSubscriptionMutation logic from this page
 
   const handleOpenConfirmation = (plan: typeof plans[0]) => {
     setConfirmingPlan(plan);
@@ -160,12 +137,8 @@ const SubscriptionPage = () => {
 
   const handleSubscribeConfirmed = () => {
     if (!confirmingPlan || !user) return;
-    if (confirmingPlan.stripePriceId.startsWith('YOUR_STRIPE_PRICE_ID_') && confirmingPlan.id !== 'basic') {
-      toast({ variant: "destructive", title: "Configuration Needed", description: `Stripe Price ID for plan "${confirmingPlan.name}" is not configured.` });
-      setConfirmingPlan(null);
-      return;
-    }
-    if (confirmingPlan.id !== 'basic' && !hasDefaultPaymentMethod) {
+    // Removed placeholder ID check for Enterprise as it's "Contact Sales"
+    if (confirmingPlan.id !== 'basic' && confirmingPlan.id !== 'enterprise' && !hasDefaultPaymentMethod) {
       toast({ variant: "destructive", title: "Payment Method Required", description: (<span>Please add a default payment method in your <Link href="/settings/payment-method" className="underline text-primary hover:text-primary/80">payment settings</Link>.</span>), duration: 7000 });
       setConfirmingPlan(null);
       return;
@@ -174,15 +147,6 @@ const SubscriptionPage = () => {
     createOrUpdateSubscriptionMutation.mutate(confirmingPlan.stripePriceId);
   };
 
-  const handleCancelSubscriptionConfirmed = () => {
-    if (!currentActiveSubscriptionId) {
-        toast({ variant: "destructive", title: "Error", description: "No active subscription ID found to cancel." });
-        setShowCancelConfirmation(false);
-        return;
-    }
-    setProcessingPlanId('cancel_current');
-    cancelSubscriptionMutation.mutate(currentActiveSubscriptionId);
-  };
 
   if (authLoading || (isLoadingPreferences && user)) {
     return <div className="container mx-auto p-8 flex justify-center"><Loader2 className="h-10 w-10 animate-spin text-primary" /></div>;
@@ -203,7 +167,7 @@ const SubscriptionPage = () => {
             (currentSubscriptionStatus === 'active' || currentSubscriptionStatus === 'trialing') && !willCancelAtPeriodEnd && "bg-green-100 text-green-700 border border-green-200",
             (currentSubscriptionStatus === 'active' || currentSubscriptionStatus === 'trialing') && willCancelAtPeriodEnd && "bg-yellow-100 text-yellow-700 border border-yellow-200",
             (currentSubscriptionStatus === 'past_due' || currentSubscriptionStatus === 'unpaid') && "bg-red-100 text-red-700 border border-red-200",
-            currentSubscriptionStatus === 'canceled' && "bg-gray-100 text-gray-700 border border-gray-200" // For fully canceled
+            currentSubscriptionStatus === 'canceled' && "bg-gray-100 text-gray-700 border border-gray-200"
           )}>
             Current Status: <strong className="font-semibold">{currentSubscriptionStatus?.replace('_', ' ')}</strong>
             {userPreferences.stripeSubscriptionCurrentPeriodEnd && (
@@ -218,18 +182,7 @@ const SubscriptionPage = () => {
                 }
               </span>
             )}
-             {isEffectivelySubscribed && currentActiveSubscriptionId && userPreferences.activeStripePriceId !== STRIPE_PRICE_ID_BASIC && !willCancelAtPeriodEnd && (
-              <Button 
-                variant="link" 
-                size="sm" 
-                className="text-xs text-destructive hover:text-destructive/80 h-auto p-0 ml-2 align-baseline"
-                onClick={() => setShowCancelConfirmation(true)}
-                disabled={processingPlanId === 'cancel_current' || cancelSubscriptionMutation.isPending}
-              >
-                {processingPlanId === 'cancel_current' || cancelSubscriptionMutation.isPending ? <Loader2 className="h-3 w-3 animate-spin mr-1"/> : <XCircle className="h-3 w-3 mr-1"/>}
-                Cancel Subscription
-              </Button>
-            )}
+             {/* Cancellation button removed from here */}
           </div>
         )}
       </div>
@@ -251,11 +204,17 @@ const SubscriptionPage = () => {
           const isCurrentActivePlan = activeSubscriptionPriceId === plan.stripePriceId && isEffectivelySubscribed && !willCancelAtPeriodEnd;
           const isProcessingThisPlan = processingPlanId === plan.id;
           const isFreeBasicAndNoSub = plan.id === 'basic' && (!isEffectivelySubscribed || activeSubscriptionPriceId === STRIPE_PRICE_ID_BASIC || willCancelAtPeriodEnd);
+          
+          // Determine if the current plan is the one that will be cancelled
+          const isPendingCancellation = activeSubscriptionPriceId === plan.stripePriceId && isEffectivelySubscribed && willCancelAtPeriodEnd;
 
 
           let buttonText = plan.buttonText;
-          if (isCurrentActivePlan) buttonText = "Current Plan";
-          else if (activeSubscriptionPriceId && activeSubscriptionPriceId !== STRIPE_PRICE_ID_BASIC && plan.id === 'basic') {
+          if (isCurrentActivePlan) {
+            buttonText = "Current Plan";
+          } else if (isPendingCancellation) {
+            buttonText = "Re-activate Plan"; // Or "Change Plan" if you want to switch from a pending cancellation state
+          } else if (activeSubscriptionPriceId && activeSubscriptionPriceId !== STRIPE_PRICE_ID_BASIC && plan.id === 'basic') {
              buttonText = "Downgrade to Basic";
           } else if (activeSubscriptionPriceId && plan.id !== 'basic' && plan.stripePriceId !== activeSubscriptionPriceId) {
              const currentPlanIndex = plans.findIndex(p => p.stripePriceId === activeSubscriptionPriceId);
@@ -268,7 +227,10 @@ const SubscriptionPage = () => {
           if (!user && plan.id !== 'basic') return null; 
 
           return (
-            <Card key={plan.id} className={cn("flex flex-col shadow-lg rounded-lg border", isCurrentActivePlan ? 'border-primary ring-2 ring-primary' : 'border-border')}>
+            <Card key={plan.id} className={cn("flex flex-col shadow-lg rounded-lg border", 
+                isCurrentActivePlan ? 'border-primary ring-2 ring-primary' : 
+                isPendingCancellation ? 'border-yellow-500 ring-2 ring-yellow-500 opacity-80' : 'border-border'
+            )}>
               <CardHeader className="pb-4 bg-muted/30 rounded-t-lg">
                 <CardTitle className="text-xl font-semibold text-foreground">{plan.name}</CardTitle>
                 <CardDescription className="text-muted-foreground h-10">{plan.description}</CardDescription>
@@ -288,7 +250,7 @@ const SubscriptionPage = () => {
                   <Button
                     className="w-full"
                     variant={(isCurrentActivePlan || isFreeBasicAndNoSub) ? 'outline' : 'default'}
-                    disabled={isCurrentActivePlan || isFreeBasicAndNoSub || isProcessingThisPlan || !user || createOrUpdateSubscriptionMutation.isPending || cancelSubscriptionMutation.isPending || willCancelAtPeriodEnd}
+                    disabled={isCurrentActivePlan || isFreeBasicAndNoSub || isProcessingThisPlan || !user || createOrUpdateSubscriptionMutation.isPending}
                     onClick={() => handleOpenConfirmation(plan)}
                   >
                     {isProcessingThisPlan ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
@@ -326,11 +288,11 @@ const SubscriptionPage = () => {
         <AlertDialog open={!!confirmingPlan} onOpenChange={(open) => !open && setConfirmingPlan(null)}>
           <AlertDialogContent>
             <AlertDialogHeader>
-              <AlertDialogTitle>Confirm Subscription: {confirmingPlan.name}</AlertDialogTitle>
+              <AlertDialogTitle>Confirm Plan Change: {confirmingPlan.name}</AlertDialogTitle>
               <AlertDialogDescription>
                 You are about to {activeSubscriptionPriceId && activeSubscriptionPriceId !== STRIPE_PRICE_ID_BASIC && activeSubscriptionPriceId !== confirmingPlan.stripePriceId ? (plans.findIndex(p => p.stripePriceId === confirmingPlan.stripePriceId) > plans.findIndex(p => p.stripePriceId === activeSubscriptionPriceId) ? 'upgrade' : 'downgrade') : 'subscribe'} to the <strong>{confirmingPlan.name}</strong> plan
                 at <strong>{confirmingPlan.price}{confirmingPlan.frequency}</strong>.
-                {confirmingPlan.id !== 'basic' && ' Your default payment method will be charged.'}
+                {confirmingPlan.id !== 'basic' && confirmingPlan.id !== 'enterprise' && ' Your default payment method will be charged.'}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
@@ -343,35 +305,11 @@ const SubscriptionPage = () => {
           </AlertDialogContent>
         </AlertDialog>
       )}
-
-      {showCancelConfirmation && (
-        <AlertDialog open={showCancelConfirmation} onOpenChange={setShowCancelConfirmation}>
-            <AlertDialogContent>
-                <AlertDialogHeader>
-                    <AlertDialogTitle>Cancel Subscription?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                        Are you sure you want to cancel your current subscription?
-                        It will remain active until the end of the current billing period
-                        (<strong>{userPreferences?.stripeSubscriptionCurrentPeriodEnd ? new Date(userPreferences.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString() : 'N/A'}</strong>).
-                    </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                    <AlertDialogCancel onClick={() => setShowCancelConfirmation(false)} disabled={cancelSubscriptionMutation.isPending}>Keep Subscription</AlertDialogCancel>
-                    <AlertDialogAction 
-                        onClick={handleCancelSubscriptionConfirmed} 
-                        disabled={cancelSubscriptionMutation.isPending}
-                        className="bg-destructive hover:bg-destructive/90"
-                    >
-                        {cancelSubscriptionMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
-                        Yes, Cancel at Period End
-                    </AlertDialogAction>
-                </AlertDialogFooter>
-            </AlertDialogContent>
-        </AlertDialog>
-      )}
+       {/* Cancel Confirmation Dialog removed from here */}
     </div>
   );
 };
 
 export default SubscriptionPage;
+
     

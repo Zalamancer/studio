@@ -2,11 +2,11 @@
 // src/app/settings/payment-method/page.tsx
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle, Star, CheckCircle } from 'lucide-react';
+import { PlusCircle, CreditCard, Loader2, Trash2, AlertTriangle, Star, CheckCircle, XCircle, Info } from 'lucide-react'; // Added Info icon
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import {
@@ -38,6 +38,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import Link from 'next/link'; // For linking to subscription page
 
 const stripePublishableKey = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY;
 let stripePromise: ReturnType<typeof loadStripe> | null = null;
@@ -121,7 +122,6 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void; onCancel?: () =>
     }
 
     if (paymentMethod) {
-      console.log("Client: PaymentMethod created:", paymentMethod);
       let responseBodyText = ""; 
       try {
         const idToken = await user.getIdToken();
@@ -140,13 +140,11 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void; onCancel?: () =>
           result = await response.json();
         } else {
           responseBodyText = await response.text();
-          console.error("Received non-JSON response from server. Content type:", contentType);
-          console.error("Response text (first 500 chars):", responseBodyText.substring(0, 500));
-          throw new Error(`Server returned non-JSON response. Status: ${response.status}. Check server logs.`);
+          throw new Error(`Server returned non-JSON response. Status: ${response.status}.`);
         }
 
         if (!response.ok) {
-          const errorText = result.error || `Failed to save payment method. Server responded with status ${response.status}. Response: ${JSON.stringify(result).substring(0,200)}`;
+          const errorText = result.error || `Failed to save payment method. Server responded with status ${response.status}.`;
           throw new Error(errorText);
         }
 
@@ -156,11 +154,7 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void; onCancel?: () =>
         elements.getElement(CardCvcElement)?.clear();
         onPaymentMethodSaved();
       } catch (backendError: any) {
-        console.error("Backend error saving PaymentMethod:", backendError);
         let displayError = backendError.message || "Could not save payment method to your account.";
-        if (responseBodyText && displayError.includes("non-JSON response")) {
-          displayError += ` Server Response Preview: ${responseBodyText.substring(0,100)}...`;
-        }
         setError(displayError);
         toast({ variant: "destructive", title: "Save Failed", description: displayError });
       }
@@ -176,7 +170,6 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void; onCancel?: () =>
           <CardNumberElement id="cardNumber" options={cardElementOptions} />
         </div>
       </div>
-
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-2">
           <Label htmlFor="cardExpiry">Expiration Date</Label>
@@ -191,7 +184,6 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void; onCancel?: () =>
           </div>
         </div>
       </div>
-
       {error && <p className="text-sm text-destructive">{error}</p>}
       <div className="flex flex-col sm:flex-row gap-2 pt-2">
         <Button type="submit" disabled={!stripe || isProcessing} className="w-full sm:w-auto">
@@ -208,24 +200,19 @@ const PaymentForm: React.FC<{ onPaymentMethodSaved: () => void; onCancel?: () =>
   );
 };
 
-
 const PaymentMethodSettingsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showCancelConfirmation, setShowCancelConfirmation] = useState(false);
+  const [processingAction, setProcessingAction] = useState<string | null>(null); // 'cancel', 'setDefault', 'remove'
 
   const { data: userPreferences, isLoading: isLoadingPreferences, refetch: refetchPreferences } = useQuery<UserPreference | null>({
     queryKey: ['userPreferences', user?.uid],
     queryFn: () => user ? getUserPreferences(user.uid) : Promise.resolve(null),
     enabled: !!user,
   });
-
-  useEffect(() => {
-    if(userPreferences) {
-      console.log("[PaymentMethodSettingsPage] User preferences updated/fetched:", userPreferences);
-    }
-  }, [userPreferences]);
 
   const updatePreferencesMutation = useMutation({
     mutationFn: ({ userIdToUpdate, dataToUpdate }: { userIdToUpdate: string, dataToUpdate: UpdateUserPreferencesData }) => {
@@ -235,11 +222,33 @@ const PaymentMethodSettingsPage = () => {
       queryClient.invalidateQueries({ queryKey: ['userPreferences', user?.uid] });
       toast({ title: "Success", description: "Payment method settings updated." });
     },
-    onError: (error: Error) => {
-      toast({ variant: "destructive", title: "Update Failed", description: error.message });
-    },
+    onError: (error: Error) => toast({ variant: "destructive", title: "Update Failed", description: error.message }),
+    onSettled: () => setProcessingAction(null),
   });
 
+  const cancelSubscriptionMutation = useMutation({
+    mutationFn: async (subscriptionIdToCancel: string) => {
+      if (!user || !subscriptionIdToCancel) throw new Error("User or subscription ID missing.");
+      const idToken = await user.getIdToken();
+      const response = await fetch('/api/stripe/cancel-subscription', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${idToken}` },
+        body: JSON.stringify({ userId: user.uid, subscriptionId: subscriptionIdToCancel }),
+      });
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || `Failed to cancel subscription (status: ${response.status})`);
+      return result;
+    },
+    onSuccess: (data) => {
+      toast({ title: "Subscription Cancellation", description: data.message || "Your subscription is set to cancel at the end of the current period." });
+      queryClient.invalidateQueries({ queryKey: ['userPreferences', user?.uid] });
+    },
+    onError: (error: Error) => toast({ variant: "destructive", title: "Cancellation Failed", description: error.message }),
+    onSettled: () => {
+      setProcessingAction(null);
+      setShowCancelConfirmation(false);
+    }
+  });
 
   const handlePaymentMethodSaved = () => {
     setShowAddForm(false);
@@ -248,47 +257,44 @@ const PaymentMethodSettingsPage = () => {
 
   const handleRemovePaymentMethod = async (paymentMethodIdToRemove: string) => {
     if (!user || !userPreferences) return;
+    setProcessingAction(`remove-${paymentMethodIdToRemove}`);
     let updatedPaymentMethods = (userPreferences.paymentMethods || []).filter(
       pm => pm.stripePaymentMethodId !== paymentMethodIdToRemove
     );
-    
-    // If the default card was removed and there are other cards left, set the first remaining one as default
     const removedCardWasDefault = userPreferences.paymentMethods?.find(pm => pm.stripePaymentMethodId === paymentMethodIdToRemove)?.isDefault;
     if (removedCardWasDefault && updatedPaymentMethods.length > 0) {
       const isAnyDefaultRemaining = updatedPaymentMethods.some(pm => pm.isDefault);
       if (!isAnyDefaultRemaining) {
-        updatedPaymentMethods = updatedPaymentMethods.map((pm, index) => ({
-          ...pm,
-          isDefault: index === 0, // Set the first one as default
-        }));
+        updatedPaymentMethods = updatedPaymentMethods.map((pm, index) => ({ ...pm, isDefault: index === 0 }));
       }
     }
-
-    updatePreferencesMutation.mutate({
-        userIdToUpdate: user.uid,
-        dataToUpdate: { paymentMethods: updatedPaymentMethods }
-    });
+    updatePreferencesMutation.mutate({ userIdToUpdate: user.uid, dataToUpdate: { paymentMethods: updatedPaymentMethods } });
   };
 
   const handleSetDefault = async (paymentMethodIdToSetDefault: string) => {
      if (!user || !userPreferences) return;
+     setProcessingAction(`setDefault-${paymentMethodIdToSetDefault}`);
      const updatedPaymentMethods = (userPreferences.paymentMethods || []).map(pm => ({
-         ...pm,
-         isDefault: pm.stripePaymentMethodId === paymentMethodIdToSetDefault,
+         ...pm, isDefault: pm.stripePaymentMethodId === paymentMethodIdToSetDefault,
      }));
-     updatePreferencesMutation.mutate({
-         userIdToUpdate: user.uid,
-         dataToUpdate: { paymentMethods: updatedPaymentMethods }
-     });
+     updatePreferencesMutation.mutate({ userIdToUpdate: user.uid, dataToUpdate: { paymentMethods: updatedPaymentMethods } });
+  };
+
+  const handleCancelSubscriptionConfirmed = () => {
+    if (!userPreferences?.stripeSubscriptionId) {
+        toast({ variant: "destructive", title: "Error", description: "No active subscription ID found." });
+        return;
+    }
+    setProcessingAction('cancel');
+    cancelSubscriptionMutation.mutate(userPreferences.stripeSubscriptionId);
   };
 
   if (authLoading || (isLoadingPreferences && user)) {
     return (
       <Card className="shadow-md border-border">
-        <CardHeader><CardTitle>Payment Method Settings</CardTitle></CardHeader>
+        <CardHeader><CardTitle>Payment & Subscription</CardTitle></CardHeader>
         <CardContent className="flex justify-center items-center py-12">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="ml-2 text-muted-foreground">Loading settings...</p>
+          <Loader2 className="h-8 w-8 animate-spin text-primary" /><p className="ml-2 text-muted-foreground">Loading settings...</p>
         </CardContent>
       </Card>
     );
@@ -298,46 +304,82 @@ const PaymentMethodSettingsPage = () => {
     return (
       <Card className="shadow-md border-border">
         <CardHeader><CardTitle>Access Denied</CardTitle></CardHeader>
-        <CardContent><p className="text-muted-foreground">Please log in to manage payment methods.</p></CardContent>
+        <CardContent><p className="text-muted-foreground">Please log in to manage payment methods and subscriptions.</p></CardContent>
       </Card>
+    );
+  }
+  
+  if (!stripePromise && stripePublishableKey) { // Only show if key was intended to be there
+    return (
+        <Card className="shadow-md border-border">
+            <CardHeader><CardTitle>Payment Settings Unavailable</CardTitle></CardHeader>
+            <CardContent>
+                <div className="flex flex-col items-center justify-center text-center p-6 bg-destructive/10 border border-destructive/30 rounded-lg">
+                    <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
+                    <p className="font-semibold text-destructive-foreground">Stripe.js failed to load.</p>
+                    <p className="text-sm text-muted-foreground mt-1">Please check your internet connection or browser console for errors.</p>
+                </div>
+            </CardContent>
+        </Card>
     );
   }
 
-  if (!stripePublishableKey || !stripePromise) {
-    return (
-      <Card className="shadow-md border-border">
-        <CardHeader>
-          <CardTitle>Payment Settings Unavailable</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center text-center p-6 bg-destructive/10 border border-destructive/30 rounded-lg">
-            <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
-            <p className="font-semibold text-destructive-foreground">Stripe configuration is missing.</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              The Stripe publishable key is not set in the application environment.
-              Please contact support or ensure your `.env.local` file is correctly configured
-              with `NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY`.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
 
   const savedMethods = userPreferences?.paymentMethods || [];
-  console.log("[PaymentMethodSettingsPage] Rendering with savedMethods:", savedMethods);
+  const currentSub = userPreferences;
+  const isSubscribedToPaidPlan = currentSub?.stripeSubscriptionId && currentSub?.activeStripePriceId !== process.env.NEXT_PUBLIC_STRIPE_PRICE_ID_BASIC;
 
 
   return (
     <Elements stripe={stripePromise}>
       <Card className="shadow-md border-border">
         <CardHeader>
-          <CardTitle>Payment Method Settings</CardTitle>
-          <CardDescription>
-            Manage your saved payment methods. Add, remove, or update your payment details here.
-          </CardDescription>
+          <CardTitle>Payment & Subscription</CardTitle>
+          <CardDescription>Manage payment methods and your current subscription plan.</CardDescription>
         </CardHeader>
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-8">
+          {/* Subscription Management Section */}
+          <div>
+            <h3 className="text-lg font-medium mb-4 text-foreground">Your Subscription</h3>
+            {isLoadingPreferences ? (
+                <div className="flex items-center justify-center p-4"> <Loader2 className="h-6 w-6 animate-spin"/> </div>
+            ) : currentSub && currentSub.stripeSubscriptionId ? (
+                <div className="p-4 border rounded-lg bg-muted/30 space-y-2">
+                    <p className="text-sm">
+                        <strong className="text-foreground">Current Plan:</strong> {plans.find(p => p.stripePriceId === currentSub.activeStripePriceId)?.name || currentSub.activeStripePriceId || 'Unknown'}
+                    </p>
+                    <p className="text-sm">
+                        <strong className="text-foreground">Status:</strong> <span className={cn(currentSub.stripeSubscriptionStatus === 'active' && !currentSub.stripeSubscriptionWillCancelAtPeriodEnd && "text-green-600", currentSub.stripeSubscriptionStatus === 'active' && currentSub.stripeSubscriptionWillCancelAtPeriodEnd && "text-yellow-600")}>{currentSub.stripeSubscriptionStatus?.replace('_', ' ')}</span>
+                        {currentSub.stripeSubscriptionWillCancelAtPeriodEnd && currentSub.stripeSubscriptionCurrentPeriodEnd && (
+                            <span className="text-yellow-600"> (Cancels on {new Date(currentSub.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString()})</span>
+                        )}
+                        {!currentSub.stripeSubscriptionWillCancelAtPeriodEnd && currentSub.stripeSubscriptionStatus === 'active' && currentSub.stripeSubscriptionCurrentPeriodEnd &&(
+                            <span className="text-muted-foreground"> (Renews on {new Date(currentSub.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString()})</span>
+                        )}
+                    </p>
+                    <div className="flex flex-col sm:flex-row gap-2 pt-2">
+                        <Button variant="outline" size="sm" asChild>
+                            <Link href="/subscription">Change Plan</Link>
+                        </Button>
+                        {isSubscribedToPaidPlan && !currentSub.stripeSubscriptionWillCancelAtPeriodEnd && (
+                            <Button variant="destructive" size="sm" onClick={() => setShowCancelConfirmation(true)} disabled={processingAction === 'cancel' || cancelSubscriptionMutation.isPending}>
+                                {processingAction === 'cancel' || cancelSubscriptionMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1.5"/> : <XCircle className="h-4 w-4 mr-1.5"/>}
+                                Cancel Subscription
+                            </Button>
+                        )}
+                    </div>
+                </div>
+            ) : (
+                <div className="p-4 border rounded-lg bg-muted/30 text-center">
+                    <p className="text-sm text-muted-foreground">You are currently on the Basic (Free) plan.</p>
+                    <Button variant="link" asChild className="text-sm p-0 h-auto mt-1"><Link href="/subscription">View Plans & Upgrade</Link></Button>
+                </div>
+            )}
+          </div>
+
+          <hr className="border-border" />
+
+          {/* Payment Methods Section */}
           <div>
             <h3 className="text-lg font-medium mb-4 text-foreground">Saved Payment Methods</h3>
             {isLoadingPreferences ? (
@@ -347,58 +389,23 @@ const PaymentMethodSettingsPage = () => {
                 {savedMethods.map((method) => (
                   <div key={method.stripePaymentMethodId} className="border rounded-lg p-4 shadow-sm bg-card hover:shadow-md transition-shadow">
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-                      {/* Card Visual */}
                       <div className="w-full sm:w-auto sm:max-w-xs flex-shrink-0 bg-gradient-to-br from-primary/80 to-primary/60 text-primary-foreground p-4 rounded-md shadow-lg aspect-[1.586/1] flex flex-col justify-between">
-                        <div className="flex justify-between items-start">
-                          <p className="font-semibold text-sm opacity-90">{method.brand.toUpperCase()}</p>
-                          {/* Placeholder for bank logo or chip */}
-                          <div className="h-6 w-8 bg-gray-300/50 rounded-sm"></div>
-                        </div>
-                        <div className="mt-auto">
-                          <p className="text-lg tracking-wider font-mono opacity-90">•••• •••• •••• {method.last4}</p>
-                          <div className="flex justify-between text-xs opacity-80 mt-1">
-                            <span>EXPIRES</span>
-                            <span>{String(method.expMonth).padStart(2, '0')}/{String(method.expYear).slice(-2)}</span>
-                          </div>
-                        </div>
+                        <div className="flex justify-between items-start"><p className="font-semibold text-sm opacity-90">{method.brand.toUpperCase()}</p><div className="h-6 w-8 bg-gray-300/50 rounded-sm"></div></div>
+                        <div className="mt-auto"><p className="text-lg tracking-wider font-mono opacity-90">•••• •••• •••• {method.last4}</p><div className="flex justify-between text-xs opacity-80 mt-1"><span>EXPIRES</span><span>{String(method.expMonth).padStart(2, '0')}/{String(method.expYear).slice(-2)}</span></div></div>
                       </div>
-
-                      {/* Actions */}
                       <div className="flex flex-col items-start sm:items-end gap-2 mt-3 sm:mt-0 flex-grow">
                         {method.isDefault ? (
-                          <div className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600 bg-green-100 px-2.5 py-1 rounded-full">
-                            <CheckCircle className="h-4 w-4" /> Default
-                          </div>
+                          <div className="inline-flex items-center gap-1.5 text-sm font-medium text-green-600 bg-green-100 px-2.5 py-1 rounded-full"><CheckCircle className="h-4 w-4" /> Default</div>
                         ) : (
-                          <Button variant="outline" size="sm" onClick={() => handleSetDefault(method.stripePaymentMethodId)} disabled={updatePreferencesMutation.isPending}>
-                            {updatePreferencesMutation.isPending && updatePreferencesMutation.variables?.dataToUpdate.paymentMethods?.find(pm => pm.stripePaymentMethodId === method.stripePaymentMethodId)?.isDefault ? <Loader2 className="h-4 w-4 animate-spin mr-1.5"/> : <Star className="h-4 w-4 mr-1.5"/>}
-                            Set as Default
+                          <Button variant="outline" size="sm" onClick={() => handleSetDefault(method.stripePaymentMethodId)} disabled={processingAction === `setDefault-${method.stripePaymentMethodId}` || updatePreferencesMutation.isPending}>
+                            {processingAction === `setDefault-${method.stripePaymentMethodId}` ? <Loader2 className="h-4 w-4 animate-spin mr-1.5"/> : <Star className="h-4 w-4 mr-1.5"/>}Set as Default
                           </Button>
                         )}
                         <AlertDialog>
-                          <AlertDialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={updatePreferencesMutation.isPending}>
-                               <Trash2 className="h-4 w-4 mr-1.5"/> Remove Card
-                            </Button>
-                          </AlertDialogTrigger>
+                          <AlertDialogTrigger asChild><Button variant="ghost" size="sm" className="text-destructive hover:text-destructive hover:bg-destructive/10" disabled={processingAction === `remove-${method.stripePaymentMethodId}` || updatePreferencesMutation.isPending}><Trash2 className="h-4 w-4 mr-1.5"/>Remove Card</Button></AlertDialogTrigger>
                           <AlertDialogContent>
-                            <AlertDialogHeader>
-                              <AlertDialogTitle>Remove Payment Method?</AlertDialogTitle>
-                              <AlertDialogDescription>
-                                Are you sure you want to remove {method.brand} ending in {method.last4}?
-                              </AlertDialogDescription>
-                            </AlertDialogHeader>
-                            <AlertDialogFooter>
-                              <AlertDialogCancel disabled={updatePreferencesMutation.isPending}>Cancel</AlertDialogCancel>
-                              <AlertDialogAction
-                                onClick={() => handleRemovePaymentMethod(method.stripePaymentMethodId)}
-                                className="bg-destructive hover:bg-destructive/90"
-                                disabled={updatePreferencesMutation.isPending}
-                              >
-                               {updatePreferencesMutation.isPending && updatePreferencesMutation.variables?.dataToUpdate.paymentMethods?.every(pm => pm.stripePaymentMethodId !== method.stripePaymentMethodId) ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}
-                                Remove
-                              </AlertDialogAction>
-                            </AlertDialogFooter>
+                            <AlertDialogHeader><AlertDialogTitle>Remove Payment Method?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to remove {method.brand} ending in {method.last4}?</AlertDialogDescription></AlertDialogHeader>
+                            <AlertDialogFooter><AlertDialogCancel disabled={processingAction === `remove-${method.stripePaymentMethodId}`}>Cancel</AlertDialogCancel><AlertDialogAction onClick={() => handleRemovePaymentMethod(method.stripePaymentMethodId)} className="bg-destructive hover:bg-destructive/90" disabled={processingAction === `remove-${method.stripePaymentMethodId}`}>{processingAction === `remove-${method.stripePaymentMethodId}` ? <Loader2 className="h-4 w-4 animate-spin mr-2"/> : null}Remove</AlertDialogAction></AlertDialogFooter>
                           </AlertDialogContent>
                         </AlertDialog>
                       </div>
@@ -407,27 +414,18 @@ const PaymentMethodSettingsPage = () => {
                 ))}
               </div>
             ) : (
-              !showAddForm && (
-                <p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-md bg-muted/30">
-                  You have no saved payment methods.
-                </p>
-              )
+              !showAddForm && (<p className="text-sm text-muted-foreground text-center py-4 border border-dashed rounded-md bg-muted/30">You have no saved payment methods.</p>)
             )}
           </div>
 
           {showAddForm ? (
             <div className="pt-6 border-t mt-6">
               <h3 className="text-lg font-medium mb-4 text-foreground">Add New Card</h3>
-              <PaymentForm
-                onPaymentMethodSaved={handlePaymentMethodSaved}
-                onCancel={() => setShowAddForm(false)}
-              />
+              <PaymentForm onPaymentMethodSaved={handlePaymentMethodSaved} onCancel={() => setShowAddForm(false)} />
             </div>
           ) : (
             <div className="flex justify-start pt-4">
-              <Button onClick={() => setShowAddForm(true)} variant="default">
-                <PlusCircle className="mr-2 h-4 w-4" /> Add New Payment Method
-              </Button>
+              <Button onClick={() => setShowAddForm(true)} variant="default"><PlusCircle className="mr-2 h-4 w-4" /> Add New Payment Method</Button>
             </div>
           )}
 
@@ -436,25 +434,36 @@ const PaymentMethodSettingsPage = () => {
           </p>
         </CardContent>
       </Card>
-      <style jsx global>{`
-        .stripe-element-container {
-          /* background-color: hsl(var(--input)); */
-        }
-        .stripe-element-base {
-        }
-        .stripe-element-focus {
-          /* box-shadow: 0 0 0 2px hsl(var(--ring)); */
-        }
-        .stripe-element-invalid {
-          /* border-color: hsl(var(--destructive)); */
-        }
-        .stripe-element-complete {
-        }
-      `}</style>
+
+      {/* Cancel Subscription Confirmation Dialog */}
+      {showCancelConfirmation && userPreferences?.stripeSubscriptionId && (
+        <AlertDialog open={showCancelConfirmation} onOpenChange={setShowCancelConfirmation}>
+            <AlertDialogContent>
+                <AlertDialogHeader>
+                    <AlertDialogTitle>Cancel Subscription?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                        Are you sure you want to cancel your current plan?
+                        It will remain active until the end of the current billing period 
+                        ({userPreferences.stripeSubscriptionCurrentPeriodEnd ? new Date(userPreferences.stripeSubscriptionCurrentPeriodEnd * 1000).toLocaleDateString() : 'N/A'}).
+                    </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                    <AlertDialogCancel onClick={() => setShowCancelConfirmation(false)} disabled={processingAction === 'cancel'}>Keep Subscription</AlertDialogCancel>
+                    <AlertDialogAction onClick={handleCancelSubscriptionConfirmed} disabled={processingAction === 'cancel'} className="bg-destructive hover:bg-destructive/90">
+                        {processingAction === 'cancel' ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : null}
+                        Yes, Cancel at Period End
+                    </AlertDialogAction>
+                </AlertDialogFooter>
+            </AlertDialogContent>
+        </AlertDialog>
+      )}
+
+      <style jsx global>{`.stripe-element-container{/* styles as needed */} .stripe-element-base{} .stripe-element-focus{} .stripe-element-invalid{} .stripe-element-complete{}`}</style>
     </Elements>
   );
 };
 
 export default PaymentMethodSettingsPage;
+    
     
     
