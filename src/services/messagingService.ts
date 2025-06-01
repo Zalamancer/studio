@@ -1,4 +1,3 @@
-
 // src/services/messagingService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -61,6 +60,10 @@ export const createGroupConversation = async (
     return docRef.id;
   } catch (error: any) {
     console.error(`%c[messagingService] Error creating GROUP conversation:`, "color: red;", error);
+    if (error.code === 'permission-denied') { // Specific check for permission denied
+        console.error("[messagingService] createGroupConversation: Firestore permission denied. Check Firestore Rules. Authenticated user:", auth.currentUser?.uid);
+        throw new Error("Permission denied to create group. Check Firestore security rules.");
+    }
     throw new Error(`Failed to create group conversation: ${error.message}`);
   }
 };
@@ -324,7 +327,7 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
                         senderId: messageData.senderId,
                         conversationId: messageData.conversationId,
                         textSnippet: messageData.text.substring(0, 100),
-                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined,
+                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined, // Use group name for group chats
                     });
                 } catch (notificationError) {
                     console.error(`[messagingService] Failed to create notification for participant ${participantId} in conv ${messageData.conversationId}:`, notificationError);

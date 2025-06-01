@@ -1,4 +1,3 @@
-
 // src/components/messaging/MessagingInterface.tsx
 "use client";
 
@@ -10,7 +9,7 @@ import {
   sendMessage,
   getPostDetails,
   getUserDetails,
-  getGroupChatDetails, // Import getGroupChatDetails
+  getGroupChatDetails,
 } from '@/services/messagingService';
 import type { ClientConversation, SerializableMessage, NewMessageData, Message } from '@/types/messaging';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -19,13 +18,14 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDownLeft, ArrowLeft, Users, PlusCircle } from 'lucide-react'; // Added Users, PlusCircle
+import { Loader2, Send, MessageSquare, AlertTriangle, Eye, Building, X, CornerDownLeft, ArrowLeft, Users, PlusCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { Timestamp } from 'firebase/firestore';
-import { CreateGroupChatDialog } from './CreateGroupChatDialog'; // Import the new dialog
+import { CreateGroupChatDialog } from './CreateGroupChatDialog';
+import { GroupInfoSheet } from './GroupInfoSheet'; // Import GroupInfoSheet
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -226,6 +226,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const [isInitialMessagesLoad, setIsInitialMessagesLoad] = useState(true);
   const visualViewportHeightRef = useRef<number>(0);
   const [isCreateGroupOpen, setIsCreateGroupOpen] = useState(false);
+  const [isGroupInfoSheetOpen, setIsGroupInfoSheetOpen] = useState(false);
 
   const [messages, setMessages] = useState<SerializableMessage[]>([]);
   const [isLoadingMessagesState, setIsLoadingMessagesState] = useState(true);
@@ -553,7 +554,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                  <div className="flex-grow min-w-0">
                     <h3 className="text-lg font-semibold text-foreground truncate">{headerDisplayName}</h3>
                     {isGroupChatActive && headerParticipantCount && (
-                      <p className="text-xs text-muted-foreground mt-0.5">{headerParticipantCount} members</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">{headerParticipantCount} {headerParticipantCount === 1 ? 'member' : 'members'}</p>
                     )}
                     {!isGroupChatActive && selectedPostQuestion && (
                         <p className="text-xs text-muted-foreground mt-0.5 truncate">
@@ -569,8 +570,8 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                           </Link>
                       )}
                  </div>
-                 {isGroupChatActive && (
-                    <Button variant="ghost" size="icon" className="ml-auto" title="Group Info (Coming Soon)" disabled>
+                 {isGroupChatActive && selectedConversation && (
+                    <Button variant="ghost" size="icon" className="ml-auto" title="Group Info" onClick={() => setIsGroupInfoSheetOpen(true)}>
                         <Users className="h-5 w-5" />
                     </Button>
                  )}
@@ -675,6 +676,14 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             isOpen={isCreateGroupOpen}
             onOpenChange={setIsCreateGroupOpen}
             onGroupCreated={handleGroupCreated}
+        />
+      )}
+      {selectedConversation && selectedConversation.type === 'group' && (
+        <GroupInfoSheet
+            isOpen={isGroupInfoSheetOpen}
+            onOpenChange={setIsGroupInfoSheetOpen}
+            conversation={selectedConversation}
+            currentUserId={currentUserId}
         />
       )}
     </div>

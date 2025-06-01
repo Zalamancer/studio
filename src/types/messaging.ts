@@ -1,4 +1,3 @@
-
 // src/types/messaging.ts
 import type { Timestamp } from 'firebase/firestore';
 
@@ -24,12 +23,12 @@ export interface Conversation {
 export interface ClientConversation extends Omit<Conversation, 'lastMessageTimestamp' | 'createdAt'> {
   lastMessageTimestamp: number | null; // Milliseconds since epoch
   createdAt: number; // Milliseconds since epoch
-  // Ensure group fields are here
+  // Ensure group fields are here and consistently optional
   groupName?: string | null;
   groupAvatarUrl?: string | null;
   ownerId?: string | null;
   adminIds?: string[];
-  type: 'direct' | 'group';
+  type: 'direct' | 'group'; // Make type non-optional on client
 }
 
 
