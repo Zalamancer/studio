@@ -132,8 +132,8 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
         return getNotificationsForUser(userId, 20);
     },
     enabled: !!userId,
-    refetchInterval: 1000 * 60, 
-    staleTime: 1000 * 30,
+    refetchInterval: 1000 * 60 * 5, // Changed from 1 minute to 5 minutes
+    staleTime: 1000 * 60 * 2, // Changed from 30 seconds to 2 minutes
   });
 
   const { data: userPreferences, isLoading: isLoadingPreferences, error: preferencesError } = useQuery<UserPreference | null>({
