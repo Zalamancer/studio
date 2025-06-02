@@ -21,7 +21,7 @@ import {
   arrayRemove, // For removing from arrays
   FieldValue, // IMPORT FieldValue for arrayRemove and serverTimestamp
 } from 'firebase/firestore';
-import type { ClientConversation, SerializableMessage, NewMessageData, Message, Conversation } from '@/types/messaging';
+import type { ClientConversation, SerializableMessage, NewMessageData, Message, Conversation, NewConversationData } from '@/types/messaging';
 import { fetchUserProfileBasic } from './connectionService';
 import { createNotification } from './notificationService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
@@ -47,7 +47,7 @@ export const createGroupConversation = async (
 
   const ts = serverTimestamp();
 
-  const newConversationDoc: Omit<Conversation, 'id'> = {
+  const newConversationDoc: NewConversationData = { // Use NewConversationData type
     participants: allParticipants,
     type: 'group',
     groupName: groupName.trim(),
@@ -56,9 +56,10 @@ export const createGroupConversation = async (
     adminIds: [creatorId],
     postId: null,
     lastMessage: `Group created by ${generateAnonymousName(creatorId)}`,
-    lastMessageTimestamp: ts as Timestamp,
-    createdAt: ts as Timestamp,
-    updatedAt: ts,
+    lastMessageTimestamp: ts as FieldValue,
+    createdAt: ts as FieldValue,
+    updatedAt: ts as FieldValue,
+    formerParticipants: {}, // Initialize new field
   };
 
   try {
@@ -86,7 +87,7 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
 
   try {
     const constraints: QueryConstraint[] = [
-        where('participants', 'array-contains', userId),
+        where('participants', 'array-contains', userId), // User is still in participants
         orderBy('lastMessageTimestamp', 'desc'),
         limit(50)
     ];
@@ -96,42 +97,64 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
     const querySnapshot = await getDocs(q);
     console.log(`%c  [messagingService] Query snapshot received. Found ${querySnapshot.docs.length} documents.`, "color: dodgerblue;");
 
-    const conversations = querySnapshot.docs.map((docSnap) => {
-      const data = docSnap.data() as Conversation;
-      if (!data.participants || !Array.isArray(data.participants)) {
-          console.warn(`%c  [messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`, "color: orange;");
+    const conversations = querySnapshot.docs
+      .map((docSnap) => {
+        const data = docSnap.data() as Conversation;
+        if (!data.participants || !Array.isArray(data.participants)) {
+            console.warn(`%c  [messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`, "color: orange;");
+            return null;
+        }
+
+        // Filter out conversations where the current user is in formerParticipants
+        // This logic is to ensure "left" groups don't show up in the main list.
+        // The security rule handles read access to messages for left groups.
+        if (data.formerParticipants && data.formerParticipants[userId]) {
+          console.log(`%c  [messagingService] User ${userId} is in formerParticipants for conv ${docSnap.id}. Filtering out from main list.`, "color: #DAA520;");
           return null;
-      }
+        }
 
-      const lastTimestampMillis = data.lastMessageTimestamp instanceof Timestamp
-            ? data.lastMessageTimestamp.toMillis()
-            : (typeof data.lastMessageTimestamp === 'number' ? data.lastMessageTimestamp : null);
+        const lastTimestampMillis = data.lastMessageTimestamp instanceof Timestamp
+              ? data.lastMessageTimestamp.toMillis()
+              : (typeof data.lastMessageTimestamp === 'number' ? data.lastMessageTimestamp : null);
 
-       const createdAtTimestampMillis = data.createdAt instanceof Timestamp
-            ? data.createdAt.toMillis()
-            : (typeof data.createdAt === 'number' ? data.createdAt : Date.now());
-            
-      const updatedAtTimestampMillis = data.updatedAt instanceof Timestamp
-            ? (data.updatedAt as Timestamp).toMillis()
-            : (typeof data.updatedAt === 'number' ? data.updatedAt : null);
+        const createdAtTimestampMillis = data.createdAt instanceof Timestamp
+              ? data.createdAt.toMillis()
+              : (typeof data.createdAt === 'number' ? data.createdAt : Date.now());
+              
+        const updatedAtTimestampMillis = data.updatedAt instanceof Timestamp
+              ? (data.updatedAt as Timestamp).toMillis()
+              : (typeof data.updatedAt === 'number' ? data.updatedAt : null);
+        
+        const formerParticipantsMillis: { [userId: string]: number } = {};
+        if (data.formerParticipants) {
+          for (const key in data.formerParticipants) {
+            const tsValue = data.formerParticipants[key];
+            if (tsValue instanceof Timestamp) {
+              formerParticipantsMillis[key] = tsValue.toMillis();
+            }
+          }
+        }
 
 
-      return {
-        id: docSnap.id,
-        participants: data.participants,
-        type: data.type || 'direct',
-        postId: data.postId || null,
-        groupName: data.groupName || null,
-        groupAvatarUrl: data.groupAvatarUrl || null,
-        ownerId: data.ownerId || null,
-        adminIds: data.adminIds || [],
-        lastMessage: data.lastMessage || null,
-        lastMessageTimestamp: lastTimestampMillis,
-        createdAt: createdAtTimestampMillis,
-        updatedAt: updatedAtTimestampMillis,
-      } as ClientConversation;
-    }).filter((conv): conv is ClientConversation => conv !== null);
-    console.log(`%c[messagingService] Successfully mapped ${conversations.length} client conversations for user ${userId}`, "color: green;");
+        return {
+          id: docSnap.id,
+          participants: data.participants,
+          type: data.type || 'direct',
+          postId: data.postId || null,
+          groupName: data.groupName || null,
+          groupAvatarUrl: data.groupAvatarUrl || null,
+          ownerId: data.ownerId || null,
+          adminIds: data.adminIds || [],
+          lastMessage: data.lastMessage || null,
+          lastMessageTimestamp: lastTimestampMillis,
+          createdAt: createdAtTimestampMillis,
+          updatedAt: updatedAtTimestampMillis,
+          formerParticipants: formerParticipantsMillis, // Add to client type
+        } as ClientConversation;
+      })
+      .filter((conv): conv is ClientConversation => conv !== null);
+
+    console.log(`%c[messagingService] Successfully mapped ${conversations.length} active client conversations for user ${userId}`, "color: green;");
     return conversations;
 
   } catch (error: any) {
@@ -187,18 +210,19 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
     }
 
     console.log(`%c[messagingService] No existing DIRECT conversation found for ${contextDescription}. Creating new one.`, "color: orange;");
-    const newConversationData: Omit<Conversation, 'id'> = {
+    const newConversationData: NewConversationData = { // Use NewConversationData type
         participants: participants,
         type: 'direct',
         postId: postIdForQuery,
-        createdAt: ts as Timestamp,
-        updatedAt: ts,
+        createdAt: ts as FieldValue,
+        updatedAt: ts as FieldValue,
         lastMessage: null,
-        lastMessageTimestamp: ts as Timestamp,
+        lastMessageTimestamp: ts as FieldValue,
         groupName: null,
         groupAvatarUrl: null,
         ownerId: null,
         adminIds: [],
+        formerParticipants: {}, // Initialize new field
     };
 
     console.log(`%c[messagingService] Pre-Create DIRECT Firestore Rule Check Values:
@@ -245,7 +269,7 @@ export const getMessagesForConversation = (
   const q = query(
     messagesRef,
     orderBy('timestamp', 'asc'),
-    limit(100)
+    limit(100) // Keep limit reasonable for real-time
   );
 
   const unsubscribe = onSnapshot(q,
@@ -294,9 +318,9 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
   if (!messageData.text || !messageData.senderId || !messageData.conversationId) {
     throw new Error("Message text, senderId, and conversationId are required.");
   }
-  const dbInstance = db; // Assuming db is your initialized Firestore instance
+  const dbInstance = db;
   const batch = writeBatch(dbInstance);
-  const ts = serverTimestamp(); // Single server-generated timestamp for consistency
+  const ts = serverTimestamp(); // Single server-generated timestamp
 
   const msgRef = doc(collection(dbInstance, 'conversations', messageData.conversationId, 'messages'));
   batch.set(msgRef, {
@@ -337,7 +361,7 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
                         senderId: messageData.senderId,
                         conversationId: messageData.conversationId,
                         textSnippet: messageData.text.substring(0, 100),
-                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined, // Use groupName for postQuestion in group context
+                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined,
                     });
                 } catch (notificationError) {
                     console.error(`[messagingService] Failed to create notification for participant ${participantId} in conv ${messageData.conversationId}:`, notificationError);
@@ -427,10 +451,10 @@ export const updateGroupDetails = async (
   }
   
   if (updates.groupAvatarUrl !== undefined) {
-    payload.groupAvatarUrl = updates.groupAvatarUrl; // This can be null to clear avatar
+    payload.groupAvatarUrl = updates.groupAvatarUrl; 
   }
 
-  if (Object.keys(payload).length > 1) { // Check if there's more than just updatedAt
+  if (Object.keys(payload).length > 1) { 
     await updateDoc(convRef, payload);
   }
 };
@@ -467,7 +491,7 @@ export const addMembersToGroup = async (
 
 export const removeMemberFromGroup = async (
   conversationId: string,
-  currentUserId: string, // User performing the action
+  currentUserId: string, 
   memberIdToRemove: string
 ): Promise<void> => {
   if (!conversationId || !currentUserId || !memberIdToRemove) {
@@ -489,53 +513,37 @@ export const removeMemberFromGroup = async (
     console.log("User to remove is not a participant.");
     return;
   }
-  if (groupData.participants.length <= 2) {
-    throw new Error("Cannot remove member; group must have at least two participants after removal (or consider deleting the group).");
+  if (groupData.participants.length <= 2) { // Ensure at least one member remains after owner
+    throw new Error("Cannot remove member; group must have at least the owner and one other participant, or consider deleting the group.");
   }
 
   await updateDoc(convRef, {
     participants: arrayRemove(memberIdToRemove),
-    adminIds: arrayRemove(memberIdToRemove), // Also remove from admins if they were one
+    adminIds: arrayRemove(memberIdToRemove), 
     updatedAt: serverTimestamp()
   });
 };
 
-// Reverted leaveGroup:
-export const leaveGroup = async (conversationId: string, userId: string): Promise<void> => {
-  if (!conversationId || !userId) {
-    throw new Error("Conversation ID and User ID are required to leave a group.");
-  }
+// Updated leaveGroup function as per user's provided snippet
+export async function leaveGroup(
+  dbInstance: typeof db, // Expecting the initialized Firestore instance
+  convId: string,
+  currentUid: string
+): Promise<void> {
+  const batch = writeBatch(dbInstance);
+  const ts = serverTimestamp();
 
-  const convRef = doc(db, 'conversations', conversationId);
-  const conversationSnap = await getDoc(convRef);
+  const convRef = doc(dbInstance, 'conversations', convId);
 
-  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') {
-    throw new Error("Group conversation not found or not a group type.");
-  }
+  batch.update(convRef, {
+    participants: arrayRemove(currentUid), // Use imported arrayRemove
+    adminIds: arrayRemove(currentUid),     // Use imported arrayRemove
+    [`formerParticipants.${currentUid}`]: ts,
+    updatedAt: ts
+  });
 
-  const groupData = conversationSnap.data() as Conversation;
-
-  if (!groupData.participants.includes(userId)) {
-    throw new Error("User is not a participant of this group.");
-  }
-
-  const updates: any = {
-    participants: arrayRemove(userId),
-    updatedAt: serverTimestamp()
-  };
-
-  // If the leaving user is an admin, remove them from adminIds too
-  if (groupData.adminIds.includes(userId)) {
-    updates.adminIds = arrayRemove(userId);
-  }
-
-  // Safety check: Prevent owner from leaving if they are the last admin and other participants exist
-  if (userId === groupData.ownerId && groupData.adminIds.length === 1 && groupData.adminIds[0] === userId && groupData.participants.length > 1) {
-    throw new Error("Group owner cannot leave if they are the only admin and other members exist. Promote another admin first.");
-  }
-
-  await updateDoc(convRef, updates);
-};
+  await batch.commit();
+}
 
 
 export const promoteToAdmin = async (
@@ -550,7 +558,7 @@ export const promoteToAdmin = async (
   const groupData = conversationSnap.data() as Conversation;
   if (groupData.ownerId !== currentUserId) throw new Error("Only the group owner can promote admins.");
   if (!groupData.participants.includes(memberIdToPromote)) throw new Error("User to promote is not a member of this group.");
-  if (groupData.adminIds.includes(memberIdToPromote)) return; // Already an admin
+  if (groupData.adminIds.includes(memberIdToPromote)) return; 
 
   await updateDoc(convRef, {
     adminIds: arrayUnion(memberIdToPromote),
@@ -570,7 +578,7 @@ export const demoteAdmin = async (
   const groupData = conversationSnap.data() as Conversation;
   if (groupData.ownerId !== currentUserId) throw new Error("Only the group owner can demote admins.");
   if (adminIdToDemote === groupData.ownerId) throw new Error("The group owner cannot be demoted from admin status.");
-  if (!groupData.adminIds.includes(adminIdToDemote)) return; // Not an admin
+  if (!groupData.adminIds.includes(adminIdToDemote)) return; 
 
   await updateDoc(convRef, {
     adminIds: arrayRemove(adminIdToDemote),
