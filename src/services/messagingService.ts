@@ -19,6 +19,7 @@ import {
   updateDoc, // For updating documents
   arrayUnion, // For adding to arrays
   arrayRemove, // For removing from arrays
+  FieldValue, // IMPORT FieldValue for arrayRemove and serverTimestamp
 } from 'firebase/firestore';
 import type { ClientConversation, SerializableMessage, NewMessageData, Message, Conversation } from '@/types/messaging';
 import { fetchUserProfileBasic } from './connectionService';
@@ -55,8 +56,10 @@ export const createGroupConversation = async (
     adminIds: [creatorId],
     postId: null,
     lastMessage: `Group created by ${generateAnonymousName(creatorId)}`,
-    lastMessageTimestamp: ts as Timestamp,
-    createdAt: ts as Timestamp,
+    lastMessageTimestamp: ts as Timestamp, // Cast for type, will be serverTimestamp
+    createdAt: ts as Timestamp, // Cast for type
+    updatedAt: ts, // Add updatedAt
+    formerParticipants: {}, // Initialize formerParticipants as empty object
   };
 
   try {
@@ -85,6 +88,10 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
   try {
     const constraints: QueryConstraint[] = [
         where('participants', 'array-contains', userId),
+        // Filter out conversations where the user is only a formerParticipant
+        // This specific direct query on a map key might not be supported or efficient.
+        // Security rules will handle read access, client can filter if needed.
+        // where(`formerParticipants.${userId}`, '==', null), // This might not work as expected
         orderBy('lastMessageTimestamp', 'desc'),
         limit(50)
     ];
@@ -100,6 +107,12 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
           console.warn(`%c  [messagingService] Document ${docSnap.id} is missing or has invalid 'participants' field.`, "color: orange;");
           return null;
       }
+       // If user is in formerParticipants, effectively they have left, don't show in active list unless explicitly queried.
+      if (data.formerParticipants && data.formerParticipants[userId]) {
+        console.log(`%c  [messagingService] User ${userId} is a former participant of conv ${docSnap.id}. Filtering out from active list.`, "color: orange;");
+        return null;
+      }
+
       const lastTimestampMillis = data.lastMessageTimestamp instanceof Timestamp
             ? data.lastMessageTimestamp.toMillis()
             : (typeof data.lastMessageTimestamp === 'number' ? data.lastMessageTimestamp : null);
@@ -107,6 +120,11 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
        const createdAtTimestampMillis = data.createdAt instanceof Timestamp
             ? data.createdAt.toMillis()
             : (typeof data.createdAt === 'number' ? data.createdAt : Date.now());
+            
+      const updatedAtTimestampMillis = data.updatedAt instanceof Timestamp
+            ? (data.updatedAt as Timestamp).toMillis()
+            : (typeof data.updatedAt === 'number' ? data.updatedAt : null);
+
 
       return {
         id: docSnap.id,
@@ -120,6 +138,13 @@ export const getConversationsForUser = async (userId: string): Promise<ClientCon
         lastMessage: data.lastMessage || null,
         lastMessageTimestamp: lastTimestampMillis,
         createdAt: createdAtTimestampMillis,
+        updatedAt: updatedAtTimestampMillis,
+        formerParticipants: data.formerParticipants ? 
+            Object.entries(data.formerParticipants).reduce((acc, [key, value]) => {
+                acc[key] = (value instanceof Timestamp) ? value.toMillis() : (typeof value === 'number' ? value : Date.now());
+                return acc;
+            }, {} as {[userId: string]: number}) 
+            : {},
       } as ClientConversation;
     }).filter((conv): conv is ClientConversation => conv !== null);
     console.log(`%c[messagingService] Successfully mapped ${conversations.length} client conversations for user ${userId}`, "color: green;");
@@ -157,7 +182,7 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
   }
 
   const participants = [userId1, userId2].sort();
-  const ts = serverTimestamp(); // Use a single timestamp instance
+  const ts = serverTimestamp(); // Use a single serverTimestamp instance
 
   try {
     const queryConstraints: QueryConstraint[] = [
@@ -182,13 +207,15 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
         participants: participants,
         type: 'direct',
         postId: postIdForQuery,
-        createdAt: ts as Timestamp,
+        createdAt: ts as Timestamp, // Cast for type
+        updatedAt: ts, // Add updatedAt
         lastMessage: null,
-        lastMessageTimestamp: ts as Timestamp, // Consistent timestamp
+        lastMessageTimestamp: ts as Timestamp, // Cast for type
         groupName: null,
         groupAvatarUrl: null,
         ownerId: null,
         adminIds: [],
+        formerParticipants: {}, // Initialize formerParticipants as empty object
     };
 
     console.log(`%c[messagingService] Pre-Create DIRECT Firestore Rule Check Values:
@@ -245,7 +272,7 @@ export const getMessagesForConversation = (
         const data = docSnap.data() as Message;
         const timestampMillis = data.timestamp instanceof Timestamp
             ? data.timestamp.toMillis()
-            : (typeof data.timestamp === 'number' ? data.timestamp : Date.now());
+            : (typeof data.timestamp === 'number' ? data.timestamp : Date.now()); // Fallback if not a Timestamp
 
         const serializableMsg: SerializableMessage = {
           id: docSnap.id,
@@ -284,39 +311,36 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
   if (!messageData.text || !messageData.senderId || !messageData.conversationId) {
     throw new Error("Message text, senderId, and conversationId are required.");
   }
+  const dbInstance = db; // Assuming db is your initialized Firestore instance
+  const batch = writeBatch(dbInstance);
+  const ts = serverTimestamp(); // Single server-generated timestamp
+
+  const msgRef = doc(collection(dbInstance, 'conversations', messageData.conversationId, 'messages'));
+  batch.set(msgRef, {
+    senderId: messageData.senderId,
+    text: messageData.text,
+    timestamp: ts, // == request.time in the rule
+    isBotMessage: messageData.isBotMessage === true ? true : false, // Ensure boolean or null
+    replyToMessageId: messageData.replyToMessageId || null,
+    repliedToTextSnippet: messageData.repliedToTextSnippet || null,
+    read: false, // Default read to false
+    conversationId: messageData.conversationId, // Store conversationId with message for easier querying if needed
+  });
+
+  const convRef = doc(dbInstance, 'conversations', messageData.conversationId);
+  batch.update(convRef, {
+    lastMessage: messageData.text,
+    lastMessageSenderId: messageData.senderId,
+    lastMessageTimestamp: ts,    // == request.time
+    updatedAt: ts               // == request.time
+  });
+
   try {
-    const batch = writeBatch(db);
-    const ts = serverTimestamp(); // Single serverTimestamp instance
-
-    const conversationDocRef = doc(db, 'conversations', messageData.conversationId);
-    const messagesRef = messagesSubcollectionRef(messageData.conversationId);
-    const newMessageRef = doc(messagesRef); // Create new doc ref for message
-
-    const messagePayload: Partial<Omit<Message, 'id'>> = {
-        conversationId: messageData.conversationId,
-        senderId: messageData.senderId,
-        text: messageData.text,
-        read: false,
-        isBotMessage: messageData.isBotMessage === true ? true : false, // Ensure boolean or null
-        replyToMessageId: messageData.replyToMessageId || null,
-        repliedToTextSnippet: messageData.repliedToTextSnippet || null,
-        timestamp: ts, // Use shared ts
-    };
-
-    batch.set(newMessageRef, messagePayload);
-
-    batch.update(conversationDocRef, {
-        lastMessage: messageData.text,
-        lastMessageSenderId: messageData.senderId,
-        lastMessageTimestamp: ts, // Use shared ts
-        updatedAt: ts, // Use shared ts
-    });
-
     await batch.commit();
-    console.log(`%c[messagingService] Message sent by ${messageData.senderId} in conv ${messageData.conversationId}. New msg ID: ${newMessageRef.id}`, "color: green;");
+    console.log(`%c[messagingService] Message sent by ${messageData.senderId} in conv ${messageData.conversationId}. New msg ID: ${msgRef.id}`, "color: green;");
 
-    // Notification logic (can remain as is)
-    const conversationSnap = await getDoc(conversationDocRef);
+    // Notification logic
+    const conversationSnap = await getDoc(convRef);
     if (conversationSnap.exists()) {
         const conversationData = conversationSnap.data() as Conversation;
         const participantsArray = Array.isArray(conversationData?.participants) ? conversationData.participants : [];
@@ -330,7 +354,7 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
                         senderId: messageData.senderId,
                         conversationId: messageData.conversationId,
                         textSnippet: messageData.text.substring(0, 100),
-                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined,
+                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined, // Use groupName for postQuestion in group context
                     });
                 } catch (notificationError) {
                     console.error(`[messagingService] Failed to create notification for participant ${participantId} in conv ${messageData.conversationId}:`, notificationError);
@@ -338,10 +362,9 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
             }
         }
     }
-    return newMessageRef.id;
-
+    return msgRef.id;
   } catch (error: any) {
-    console.error('[messagingService] Error sending message:', error);
+    console.error('[messagingService] Error sending message (batch commit):', error);
     throw new Error(`Failed to send message: ${error.message}`);
   }
 };
@@ -421,10 +444,10 @@ export const updateGroupDetails = async (
   }
   
   if (updates.groupAvatarUrl !== undefined) {
-    payload.groupAvatarUrl = updates.groupAvatarUrl;
+    payload.groupAvatarUrl = updates.groupAvatarUrl; // This can be null to clear avatar
   }
 
-  if (Object.keys(payload).length > 1) {
+  if (Object.keys(payload).length > 1) { // Check if there's more than just updatedAt
     await updateDoc(convRef, payload);
   }
 };
@@ -461,7 +484,7 @@ export const addMembersToGroup = async (
 
 export const removeMemberFromGroup = async (
   conversationId: string,
-  currentUserId: string,
+  currentUserId: string, // User performing the action
   memberIdToRemove: string
 ): Promise<void> => {
   if (!conversationId || !currentUserId || !memberIdToRemove) {
@@ -489,37 +512,35 @@ export const removeMemberFromGroup = async (
 
   await updateDoc(convRef, {
     participants: arrayRemove(memberIdToRemove),
-    adminIds: arrayRemove(memberIdToRemove),
+    adminIds: arrayRemove(memberIdToRemove), // Also remove from admins if they were one
     updatedAt: serverTimestamp()
   });
 };
 
-export const leaveGroup = async (conversationId: string, userId: string): Promise<void> => {
-  if (!conversationId || !userId) throw new Error("Conversation ID and User ID are required.");
-  const convRef = doc(conversationsCollectionRef, conversationId);
-  const conversationSnap = await getDoc(convRef);
-  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') {
-    throw new Error("Group conversation not found.");
-  }
-  const groupData = conversationSnap.data() as Conversation;
-  if (!groupData.participants.includes(userId)) {
-    throw new Error("User is not a member of this group.");
-  }
-  
-  if (userId === groupData.ownerId && groupData.adminIds.length === 1 && groupData.adminIds[0] === userId && groupData.participants.length > 1) {
-    throw new Error("Owner cannot leave if they are the sole admin and other members exist. Promote another admin first or ensure other admins can manage the group.");
-  }
-  
-  if (groupData.participants.length === 1 && groupData.participants[0] === userId) {
-      console.warn(`User ${userId} is the last participant leaving group ${conversationId}. The group will now be empty. Consider cleanup logic.`);
-  }
+// Updated leaveGroup as per user's request
+export async function leaveGroup(
+  dbInstance: typeof db, // Explicitly type dbInstance
+  convId: string,
+  currentUid: string
+): Promise<void> {
+  const batch = writeBatch(dbInstance);
+  const ts = serverTimestamp();
 
-  await updateDoc(convRef, {
-    participants: arrayRemove(userId),
-    adminIds: arrayRemove(userId),
-    updatedAt: serverTimestamp()
+  const convRef = doc(dbInstance, 'conversations', convId);
+
+  // FieldValue needs to be accessed from the firestore namespace.
+  // This is tricky in client-side code if not directly imported.
+  // Using dot notation for formerParticipants map update.
+  batch.update(convRef, {
+    participants: arrayRemove(currentUid),
+    adminIds: arrayRemove(currentUid),
+    [`formerParticipants.${currentUid}`]: ts,
+    updatedAt: ts
   });
-};
+
+  await batch.commit();
+}
+
 
 export const promoteToAdmin = async (
   conversationId: string,
@@ -533,7 +554,7 @@ export const promoteToAdmin = async (
   const groupData = conversationSnap.data() as Conversation;
   if (groupData.ownerId !== currentUserId) throw new Error("Only the group owner can promote admins.");
   if (!groupData.participants.includes(memberIdToPromote)) throw new Error("User to promote is not a member of this group.");
-  if (groupData.adminIds.includes(memberIdToPromote)) return;
+  if (groupData.adminIds.includes(memberIdToPromote)) return; // Already an admin
 
   await updateDoc(convRef, {
     adminIds: arrayUnion(memberIdToPromote),
@@ -553,7 +574,7 @@ export const demoteAdmin = async (
   const groupData = conversationSnap.data() as Conversation;
   if (groupData.ownerId !== currentUserId) throw new Error("Only the group owner can demote admins.");
   if (adminIdToDemote === groupData.ownerId) throw new Error("The group owner cannot be demoted from admin status.");
-  if (!groupData.adminIds.includes(adminIdToDemote)) return;
+  if (!groupData.adminIds.includes(adminIdToDemote)) return; // Not an admin
 
   await updateDoc(convRef, {
     adminIds: arrayRemove(adminIdToDemote),

@@ -1,5 +1,5 @@
 // src/types/messaging.ts
-import type { Timestamp } from 'firebase/firestore';
+import type { Timestamp, FieldValue } from 'firebase/firestore'; // Added FieldValue
 
 // Represents a conversation between two or more users (as stored in Firestore)
 export interface Conversation {
@@ -13,16 +13,20 @@ export interface Conversation {
   groupAvatarUrl?: string | null;
   ownerId: string | null; // UID of the group creator/owner, MUST be set for groups
   adminIds: string[];   // UIDs of group administrators, MUST include owner for groups
+  formerParticipants?: { [userId: string]: Timestamp | FieldValue }; // NEW: Map of userId to their leave timestamp
 
   lastMessage: string | null; // Text of the last message sent
   lastMessageTimestamp: Timestamp | null; // Timestamp of the last message (Firestore Timestamp)
   createdAt: Timestamp; // When the conversation was created (Firestore Timestamp)
+  updatedAt?: Timestamp | FieldValue; // Added for tracking updates
 }
 
 // Represents a conversation object safe to pass to Client Components (uses number for timestamps)
-export interface ClientConversation extends Omit<Conversation, 'lastMessageTimestamp' | 'createdAt' | 'adminIds'> {
+export interface ClientConversation extends Omit<Conversation, 'lastMessageTimestamp' | 'createdAt' | 'updatedAt' | 'formerParticipants' | 'adminIds'> {
   lastMessageTimestamp: number | null; // Milliseconds since epoch
   createdAt: number; // Milliseconds since epoch
+  updatedAt?: number | null; // Milliseconds since epoch
+  formerParticipants?: { [userId: string]: number }; // Milliseconds since epoch for leave time
   adminIds: string[]; // Ensure adminIds is present
   // Ensure group fields are here and consistently optional or required
   groupName?: string | null;
@@ -38,7 +42,7 @@ export interface Message {
   conversationId: string; // ID of the parent conversation
   senderId: string; // ID of the user who sent the message
   text: string; // The content of the message
-  timestamp: Timestamp; // When the message was sent (Firestore Timestamp)
+  timestamp: Timestamp | FieldValue; // When the message was sent (Firestore Timestamp or serverTimestamp for new)
   read: boolean; // Indicates if the message has been read (by the recipient)
   isBotMessage?: boolean; // Optional: Indicates if the message is from a bot
   replyToMessageId?: string; // Optional: ID of the message this is a reply to
@@ -57,10 +61,12 @@ export type NewMessageData = Omit<Message, 'id' | 'timestamp' | 'read'>;
 
 // Type for data needed to create a new conversation
 // Updated to include group-specific fields for group creation
-export interface NewConversationData extends Omit<Conversation, 'id' | 'createdAt' | 'lastMessage' | 'lastMessageTimestamp'> {
-  createdAt: Timestamp; // Always set by server
+export interface NewConversationData extends Omit<Conversation, 'id' | 'createdAt' | 'lastMessage' | 'lastMessageTimestamp' | 'updatedAt' | 'formerParticipants'> {
+  createdAt: FieldValue; // Always set by server
   lastMessage: string | null; // Initialized to null
-  lastMessageTimestamp: Timestamp | null; // Initialized to null
+  lastMessageTimestamp: FieldValue | null; // Initialized to null
+  updatedAt: FieldValue; // Always set by server
+  formerParticipants: Record<string, never>; // Initialize as empty object
   // Type will be set based on creation logic
   type: 'direct' | 'group';
   // Group specific fields are required for group type during creation
