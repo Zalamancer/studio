@@ -20,6 +20,7 @@ import {
   arrayUnion, // For adding to arrays
   arrayRemove, // For removing from arrays
   FieldValue, // IMPORT FieldValue for arrayRemove and serverTimestamp
+  DocumentSnapshot, // Added for DocumentSnapshot type
 } from 'firebase/firestore';
 import type { ClientConversation, SerializableMessage, NewMessageData, Message, Conversation, NewConversationData } from '@/types/messaging';
 import { fetchUserProfileBasic } from './connectionService';
@@ -47,6 +48,13 @@ export const createGroupConversation = async (
 
   const ts = serverTimestamp();
 
+  // Log the timestamp type and value
+  console.log(`%c[messagingService] Server timestamp type:`, "color: #20B2AA;", {
+    timestampType: typeof ts,
+    timestampValue: ts,
+    isFieldValue: ts instanceof FieldValue
+  });
+
   const newConversationDoc: NewConversationData = { // Use NewConversationData type
     participants: allParticipants,
     type: 'group',
@@ -56,14 +64,94 @@ export const createGroupConversation = async (
     adminIds: [creatorId],
     postId: null,
     lastMessage: `Group created by ${generateAnonymousName(creatorId)}`,
-    lastMessageTimestamp: ts as FieldValue,
-    createdAt: ts as FieldValue,
-    updatedAt: ts as FieldValue,
-    formerParticipants: {}, // Initialize new field
+    lastMessageTimestamp: ts,
+    createdAt: ts,
+    updatedAt: ts  // Add updatedAt here
   };
+
+  // Validate the document before sending
+  const validationErrors = [];
+  if (!Array.isArray(newConversationDoc.participants)) validationErrors.push('participants must be an array');
+  if (newConversationDoc.type !== 'group') validationErrors.push('type must be "group"');
+  if (!newConversationDoc.groupName || typeof newConversationDoc.groupName !== 'string') validationErrors.push('groupName must be a non-empty string');
+  if (newConversationDoc.groupAvatarUrl !== null && typeof newConversationDoc.groupAvatarUrl !== 'string') validationErrors.push('groupAvatarUrl must be null or string');
+  if (newConversationDoc.ownerId !== creatorId) validationErrors.push('ownerId must match creatorId');
+  if (!Array.isArray(newConversationDoc.adminIds) || !newConversationDoc.adminIds.includes(creatorId)) validationErrors.push('adminIds must be array containing creatorId');
+  if (newConversationDoc.postId !== null) validationErrors.push('postId must be null');
+  if (typeof newConversationDoc.lastMessage !== 'string') validationErrors.push('lastMessage must be string');
+  if (!(newConversationDoc.lastMessageTimestamp instanceof FieldValue)) validationErrors.push('lastMessageTimestamp must be FieldValue');
+  if (!(newConversationDoc.createdAt instanceof FieldValue)) validationErrors.push('createdAt must be FieldValue');
+  if (!(newConversationDoc.updatedAt instanceof FieldValue)) validationErrors.push('updatedAt must be FieldValue');
+
+  if (validationErrors.length > 0) {
+    console.error(`%c[messagingService] Validation errors:`, "color: red;", validationErrors);
+    throw new Error(`Invalid conversation data: ${validationErrors.join(', ')}`);
+  }
+
+  // Add detailed logging for debugging security rules
+  const actualFields = Object.keys(newConversationDoc).sort();
+  const requiredFields = [
+    'participants',
+    'type',
+    'createdAt',
+    'lastMessage',
+    'lastMessageTimestamp',
+    'postId',
+    'groupName',
+    'groupAvatarUrl',
+    'ownerId',
+    'adminIds',
+    'updatedAt'  // Add updatedAt to required fields
+  ].sort();
+
+  console.log(`%c[messagingService] Attempting to create group with data:`, "color: #20B2AA;", {
+    authUid: auth.currentUser?.uid,
+    creatorId,
+    authMatchesCreator: auth.currentUser?.uid === creatorId,
+    data: {
+      participants: newConversationDoc.participants,
+      type: newConversationDoc.type,
+      groupName: newConversationDoc.groupName,
+      groupAvatarUrl: newConversationDoc.groupAvatarUrl,
+      ownerId: newConversationDoc.ownerId,
+      adminIds: newConversationDoc.adminIds,
+      postId: newConversationDoc.postId,
+      lastMessage: newConversationDoc.lastMessage,
+      lastMessageTimestamp: 'serverTimestamp()',
+      createdAt: 'serverTimestamp()',
+      updatedAt: 'serverTimestamp()'  // Add updatedAt to logged data
+    },
+    securityRulesCheck: {
+      isAuthenticated: !!auth.currentUser,
+      creatorInParticipants: allParticipants.includes(creatorId),
+      hasEnoughParticipants: allParticipants.length >= 2,
+      creatorIsOwner: newConversationDoc.ownerId === creatorId,
+      creatorIsAdmin: newConversationDoc.adminIds.includes(creatorId),
+      hasGroupName: !!newConversationDoc.groupName && newConversationDoc.groupName.length > 0,
+      hasValidAvatarUrl: newConversationDoc.groupAvatarUrl === null || typeof newConversationDoc.groupAvatarUrl === 'string',
+      postIdIsNull: newConversationDoc.postId === null,
+      fieldValidation: {
+        hasAllRequiredFields: requiredFields.every(field => field in newConversationDoc),
+        hasNoExtraFields: actualFields.length === requiredFields.length,
+        actualFields,
+        requiredFields,
+        missingFields: requiredFields.filter(field => !actualFields.includes(field)),
+        extraFields: actualFields.filter(field => !requiredFields.includes(field))
+      }
+    }
+  });
+
+  // Double check the field names match exactly what the security rules expect
+  if (actualFields.length !== requiredFields.length) {
+    console.error(`%c[messagingService] Field count mismatch. Expected ${requiredFields.length}, got ${actualFields.length}`, "color: red;");
+    console.error("Missing fields:", requiredFields.filter(field => !actualFields.includes(field)));
+    console.error("Extra fields:", actualFields.filter(field => !requiredFields.includes(field)));
+    throw new Error(`Invalid field count. Expected ${requiredFields.length}, got ${actualFields.length}`);
+  }
 
   try {
     const docRef = await addDoc(conversationsCollectionRef, newConversationDoc);
+    // Remove the separate update for updatedAt since it's now included in initial creation
     console.log(`%c[messagingService] New GROUP conversation CREATED with ID: ${docRef.id}`, "color: green;");
     return docRef.id;
   } catch (error: any) {
@@ -222,7 +310,6 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
         groupAvatarUrl: null,
         ownerId: null,
         adminIds: [],
-        formerParticipants: {}, // Initialize new field
     };
 
     console.log(`%c[messagingService] Pre-Create DIRECT Firestore Rule Check Values:
@@ -279,7 +366,7 @@ export const getMessagesForConversation = (
         const data = docSnap.data() as Message;
         const timestampMillis = data.timestamp instanceof Timestamp
             ? data.timestamp.toMillis()
-            : (typeof data.timestamp === 'number' ? data.timestamp : Date.now()); // Fallback if not a Timestamp
+            : (typeof data.timestamp === 'number' ? data.timestamp : Date.now());
 
         const serializableMsg: SerializableMessage = {
           id: docSnap.id,
@@ -294,18 +381,30 @@ export const getMessagesForConversation = (
         };
         return serializableMsg;
       });
-      const botMessageCount = messages.filter(m => m.isBotMessage).length;
-      console.log(`%c[Service] getMessagesForConversation - onUpdate: Calling with ${messages.length} total messages. BOT MESSAGES IN THIS BATCH: ${botMessageCount}`, "color: dodgerblue; font-weight: bold;");
       onUpdate(messages);
     },
     (error) => {
-      console.error(`%c[Service] Error in real-time messages listener for ${conversationId}:`, "color: red;", error);
+      console.error(`%c[Service] Error in messages listener for ${conversationId}:`, "color: red;", error);
       if (error.code === 'permission-denied') {
-          onError(new Error(`Permission denied fetching messages. Check Firestore Rules.`));
-      } else if (error.code === 'failed-precondition' && error.message.includes('index')) {
-          onError(new Error("Firestore query for messages requires an index on 'timestamp' (asc). Please create it in the Firebase console."));
+        // Check if this is a group conversation that the user has left
+        const convRef = doc(db, 'conversations', conversationId);
+        getDoc(convRef).then((convSnap: DocumentSnapshot) => {
+          if (convSnap.exists()) {
+            const convData = convSnap.data() as Conversation;
+            if (convData.type === 'group' && !convData.participants.includes(auth.currentUser?.uid || '')) {
+              // User has left the group, silently clear messages without error
+              onUpdate([]);
+              return;
+            }
+          }
+          // For other permission denied cases, still show error
+          onError(new Error("You don't have permission to view these messages."));
+        }).catch(() => {
+          // Silently handle any errors checking conversation access
+          onUpdate([]);
+        });
       } else {
-          onError(new Error(`Failed to fetch messages: ${error.message}`));
+        onError(error);
       }
     }
   );
@@ -526,23 +625,56 @@ export const removeMemberFromGroup = async (
 
 // Updated leaveGroup function as per user's provided snippet
 export async function leaveGroup(
-  dbInstance: typeof db, // Expecting the initialized Firestore instance
-  convId: string,
-  currentUid: string
+  conversationId: string,
+  currentUserId: string
 ): Promise<void> {
-  const batch = writeBatch(dbInstance);
-  const ts = serverTimestamp();
+  if (!conversationId || !currentUserId) {
+    throw new Error("Conversation ID and User ID are required.");
+  }
 
-  const convRef = doc(dbInstance, 'conversations', convId);
+  // Validate authentication state
+  const authUser = auth.currentUser;
+  if (!authUser) {
+    throw new Error("You must be authenticated to leave a group.");
+  }
+  if (authUser.uid !== currentUserId) {
+    console.error("Authentication mismatch:", {
+      providedUserId: currentUserId,
+      authUserId: authUser.uid
+    });
+    throw new Error("The provided user ID does not match your authentication.");
+  }
 
-  batch.update(convRef, {
-    participants: arrayRemove(currentUid), // Use imported arrayRemove
-    adminIds: arrayRemove(currentUid),     // Use imported arrayRemove
-    [`formerParticipants.${currentUid}`]: ts,
-    updatedAt: ts
-  });
+  const convRef = doc(db, 'conversations', conversationId);
+  const conversationSnap = await getDoc(convRef);
+  
+  if (!conversationSnap.exists()) {
+    throw new Error("Conversation not found.");
+  }
 
-  await batch.commit();
+  const conversationData = conversationSnap.data() as Conversation;
+  
+  if (conversationData.type !== 'group') {
+    throw new Error("This is not a group conversation.");
+  }
+
+  if (!conversationData.participants.includes(currentUserId)) {
+    throw new Error("You are not a member of this group.");
+  }
+
+  // Simple update to remove user from participants
+  const updateData = {
+    participants: arrayRemove(currentUserId),
+    updatedAt: serverTimestamp()
+  };
+
+  try {
+    await updateDoc(convRef, updateData);
+    console.log(`%c[messagingService] User ${currentUserId} successfully left group ${conversationId}`, "color: green;");
+  } catch (error: any) {
+    console.error(`%c[messagingService] Error leaving group:`, "color: red;", error);
+    throw new Error(`Failed to leave group: ${error.message}`);
+  }
 }
 
 
@@ -584,4 +716,64 @@ export const demoteAdmin = async (
     adminIds: arrayRemove(adminIdToDemote),
     updatedAt: serverTimestamp()
   });
+};
+
+export const transferGroupOwnership = async (
+  conversationId: string,
+  currentUserId: string,
+  newOwnerId: string
+): Promise<void> => {
+  if (!conversationId || !currentUserId || !newOwnerId) {
+    throw new Error("Required parameters missing.");
+  }
+
+  const convRef = doc(conversationsCollectionRef, conversationId);
+  const conversationSnap = await getDoc(convRef);
+  
+  if (!conversationSnap.exists() || conversationSnap.data()?.type !== 'group') {
+    throw new Error("Group conversation not found.");
+  }
+
+  const conversationData = conversationSnap.data() as Conversation;
+  
+  // Validate current user is owner
+  if (conversationData.ownerId !== currentUserId) {
+    throw new Error("Only the group owner can transfer ownership.");
+  }
+
+  // Validate new owner is a participant
+  if (!conversationData.participants.includes(newOwnerId)) {
+    throw new Error("New owner must be a group member.");
+  }
+
+  // Validate new owner is not the current owner
+  if (newOwnerId === currentUserId) {
+    throw new Error("Cannot transfer ownership to yourself.");
+  }
+
+  // Create new adminIds array that includes both current owner and new owner
+  const newAdminIds = Array.from(new Set([...conversationData.adminIds, newOwnerId]));
+
+  // Update the conversation document with explicit adminIds array
+  try {
+    await updateDoc(convRef, {
+      ownerId: newOwnerId,
+      adminIds: newAdminIds, // Set explicit array instead of using arrayUnion
+      updatedAt: serverTimestamp()
+    });
+    console.log(`%c[messagingService] Group ownership transferred from ${currentUserId} to ${newOwnerId} in group ${conversationId}`, "color: green;");
+  } catch (error: any) {
+    console.error(`%c[messagingService] Error transferring group ownership:`, "color: red;", error);
+    if (error.code === 'permission-denied') {
+      console.error("Security rules validation failed. Check that:", {
+        isOwner: conversationData.ownerId === currentUserId,
+        newOwnerIsParticipant: conversationData.participants.includes(newOwnerId),
+        affectedFields: ['ownerId', 'adminIds', 'updatedAt'],
+        newAdminIds,
+        currentAdminIds: conversationData.adminIds
+      });
+      throw new Error("Permission denied to transfer ownership. Check Firestore Rules.");
+    }
+    throw new Error(`Failed to transfer ownership: ${error.message}`);
+  }
 };

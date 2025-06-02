@@ -28,6 +28,7 @@ import {
   leaveGroup,
   promoteToAdmin,
   demoteAdmin,
+  transferGroupOwnership,
 } from '@/services/messagingService';
 import { EditGroupDialog } from './EditGroupDialog';
 import { AddMembersDialog } from './AddMembersDialog';
@@ -63,7 +64,8 @@ const MemberListItem: React.FC<{
 }> = ({ memberId, isOwner, isAdmin, isCurrentUserAdmin, isCurrentUserManager, isCurrentUserOwner, conversationId, onAction }) => {
   const { user: currentUser } = useAuth();
   const { toast } = useToast();
-  const [isProcessing, setIsProcessing] = useState<string | null>(null); // 'remove', 'promote', 'demote'
+  const [isProcessing, setIsProcessing] = useState<string | null>(null); // 'remove', 'promote', 'demote', 'transfer'
+  const [showTransferConfirm, setShowTransferConfirm] = useState(false);
 
   const { data: memberProfile, isLoading } = useQuery<UserProfileBasic | null>({
     queryKey: ['userProfileBasic', memberId, 'groupInfoSheetMember'],
@@ -114,6 +116,20 @@ const MemberListItem: React.FC<{
     }
   };
 
+  const handleTransferOwnership = async () => {
+    if (!currentUser || !isCurrentUserOwner || isOwner) return;
+    setIsProcessing('transfer');
+    try {
+      await transferGroupOwnership(conversationId, currentUser.uid, memberId);
+      toast({ title: "Ownership Transferred", description: "You are now a regular admin." });
+      onAction();
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Error Transferring Ownership", description: error.message });
+    } finally {
+      setIsProcessing(null);
+      setShowTransferConfirm(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -139,44 +155,82 @@ const MemberListItem: React.FC<{
   const displayName = memberProfile.displayName || generateAnonymousName(memberId);
 
   return (
-    <div className="flex items-center justify-between gap-3 p-2 hover:bg-muted/50 rounded-md group/memberitem">
-      <Link href={`/profile/${memberId}`} passHref className="flex items-center gap-3 flex-grow min-w-0">
-        <Avatar className="h-8 w-8 cursor-pointer">
-          <AvatarImage src={memberProfile.avatarUrl} alt={displayName} />
-          <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
-            {getInitials(displayName)}
-          </AvatarFallback>
-        </Avatar>
-        <div className="flex-grow min-w-0">
-          <p className="text-sm font-medium text-foreground truncate cursor-pointer hover:underline">{displayName}</p>
-          {memberProfile.companyName && memberProfile.companyName.toLowerCase() !== displayName.toLowerCase() && (
-            <p className="text-xs text-muted-foreground truncate">{memberProfile.companyName}</p>
-          )}
-        </div>
-      </Link>
-      <div className="flex items-center gap-1 flex-shrink-0 text-xs">
+    <>
+      <div className="flex items-center justify-between gap-3 p-2 hover:bg-muted/50 rounded-md group/memberitem">
+        <Link href={`/profile/${memberId}`} passHref className="flex items-center gap-3 flex-grow min-w-0">
+          <Avatar className="h-8 w-8 cursor-pointer">
+            <AvatarImage src={memberProfile.avatarUrl} alt={displayName} />
+            <AvatarFallback className="text-xs bg-secondary text-secondary-foreground">
+              {getInitials(displayName)}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex-grow min-w-0">
+            <p className="text-sm font-medium text-foreground truncate cursor-pointer hover:underline">{displayName}</p>
+            {memberProfile.companyName && memberProfile.companyName.toLowerCase() !== displayName.toLowerCase() && (
+              <p className="text-xs text-muted-foreground truncate">{memberProfile.companyName}</p>
+            )}
+          </div>
+        </Link>
+        
         {isOwner && <span className="px-1.5 py-0.5 rounded-full bg-amber-500 text-white text-[10px] font-semibold">Owner</span>}
         {isAdmin && !isOwner && <span className="px-1.5 py-0.5 rounded-full bg-primary/70 text-primary-foreground text-[10px] font-semibold">Admin</span>}
 
         {/* Management Actions */}
-        {currentUser && currentUser.uid !== memberId && isCurrentUserManager && !isOwner && (
-             <Button variant="ghost" size="icon" className="h-6 w-6 p-1 opacity-0 group-hover/memberitem:opacity-100 focus-visible:opacity-100 text-destructive hover:text-destructive" onClick={handleRemoveMember} disabled={!!isProcessing} title="Remove Member">
+        {currentUser && currentUser.uid !== memberId && (
+          <>
+            {/* Only show remove button for non-admin members when current user is admin */}
+            {isCurrentUserManager && !isOwner && !isAdmin && (
+              <Button variant="ghost" size="icon" className="h-6 w-6 p-1 opacity-0 group-hover/memberitem:opacity-100 focus-visible:opacity-100 text-destructive hover:text-destructive" onClick={handleRemoveMember} disabled={!!isProcessing} title="Remove Member">
                 {isProcessing === 'remove' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <Trash2 className="h-3.5 w-3.5"/>}
-             </Button>
-        )}
-        {currentUser && currentUser.uid !== memberId && isCurrentUserOwner && !isOwner && (
-            isAdmin ? (
-                <Button variant="ghost" size="icon" className="h-6 w-6 p-1 opacity-0 group-hover/memberitem:opacity-100 focus-visible:opacity-100 text-orange-600 hover:text-orange-700" onClick={handleDemote} disabled={!!isProcessing} title="Demote Admin">
-                     {isProcessing === 'demote' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <ShieldAlert className="h-3.5 w-3.5"/>}
-                </Button>
-            ) : (
-                <Button variant="ghost" size="icon" className="h-6 w-6 p-1 opacity-0 group-hover/memberitem:opacity-100 focus-visible:opacity-100 text-green-600 hover:text-green-700" onClick={handlePromote} disabled={!!isProcessing} title="Promote to Admin">
+              </Button>
+            )}
+            
+            {/* Admin management actions (only for owner) */}
+            {isCurrentUserOwner && !isOwner && (
+              <>
+                {isAdmin ? (
+                  <>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 p-1 opacity-0 group-hover/memberitem:opacity-100 focus-visible:opacity-100 text-orange-600 hover:text-orange-700" onClick={handleDemote} disabled={!!isProcessing} title="Demote Admin">
+                      {isProcessing === 'demote' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <ShieldAlert className="h-3.5 w-3.5"/>}
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-6 w-6 p-1 opacity-0 group-hover/memberitem:opacity-100 focus-visible:opacity-100 text-purple-600 hover:text-purple-700" onClick={() => setShowTransferConfirm(true)} disabled={!!isProcessing} title="Transfer Ownership">
+                      {isProcessing === 'transfer' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <ShieldQuestion className="h-3.5 w-3.5"/>}
+                    </Button>
+                  </>
+                ) : (
+                  <Button variant="ghost" size="icon" className="h-6 w-6 p-1 opacity-0 group-hover/memberitem:opacity-100 focus-visible:opacity-100 text-green-600 hover:text-green-700" onClick={handlePromote} disabled={!!isProcessing} title="Promote to Admin">
                     {isProcessing === 'promote' ? <Loader2 className="h-3.5 w-3.5 animate-spin"/> : <ShieldCheck className="h-3.5 w-3.5"/>}
-                </Button>
-            )
+                  </Button>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
-    </div>
+
+      <AlertDialog open={showTransferConfirm} onOpenChange={setShowTransferConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogPrimitiveTitle>Transfer Group Ownership?</AlertDialogPrimitiveTitle>
+            <AlertDialogDescription>
+              Are you sure you want to transfer ownership to {memberProfile?.displayName || generateAnonymousName(memberId)}? 
+              You will become a regular admin and no longer have owner privileges.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setShowTransferConfirm(false)} disabled={!!isProcessing}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleTransferOwnership}
+              disabled={!!isProcessing}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              {isProcessing === 'transfer' ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Transfer Ownership
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   );
 };
 

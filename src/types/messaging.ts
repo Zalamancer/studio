@@ -72,5 +72,5 @@ export interface NewConversationData extends Omit<Conversation, 'id' | 'createdA
   groupAvatarUrl: string | null;
   ownerId: string | null; // Required for group, null for direct
   adminIds: string[]; // Required for group, empty for direct
-  formerParticipants: {}; // Initialize as empty object
+  formerParticipants?: { [userId: string]: Timestamp | FieldValue }; // Make optional since not required by security rules
 }

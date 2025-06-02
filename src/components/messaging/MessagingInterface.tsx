@@ -1,3 +1,4 @@
+
 // src/components/messaging/MessagingInterface.tsx
 "use client";
 
@@ -11,7 +12,7 @@ import {
   getUserDetails,
   getGroupChatDetails,
 } from '@/services/messagingService';
-import type { ClientConversation, SerializableMessage, NewMessageData, Message } from '@/types/messaging';
+import type { ClientConversation, SerializableMessage, NewMessageData, Message, Conversation } from '@/types/messaging';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -26,6 +27,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { Timestamp } from 'firebase/firestore';
 import { CreateGroupChatDialog } from './CreateGroupChatDialog';
 import { GroupInfoSheet } from './GroupInfoSheet'; // Import GroupInfoSheet
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/config'; // Corrected import path
 
 interface MessagingInterfaceProps {
   currentUserId: string;
@@ -232,6 +235,9 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   const [isLoadingMessagesState, setIsLoadingMessagesState] = useState(true);
   const [messagesErrorState, setMessagesErrorState] = useState<Error | null>(null);
 
+  // Add new state to track if user has left the group
+  const [hasLeftGroup, setHasLeftGroup] = useState(false);
+
   useEffect(() => {
     if (initialMessageText && activeConversationId && newMessage === '') {
       setNewMessage(initialMessageText);
@@ -285,6 +291,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
   useEffect(() => {
     if (activeConversationId !== prevActiveConversationIdRef.current) {
       setIsInitialMessagesLoad(true);
+      setHasLeftGroup(false); // Reset when changing conversations
       prevActiveConversationIdRef.current = activeConversationId;
     }
 
@@ -305,19 +312,35 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         setIsLoadingMessagesState(false);
       },
       (error) => {
-        setMessagesErrorState(error);
-        setIsLoadingMessagesState(false);
-        toast({
-            variant: "destructive",
-            title: "Error Loading Messages",
-            description: error.message || "Could not load messages in real-time.",
-        });
+        if (error.code === 'permission-denied') {
+          // Check if this is a group conversation that the user has left
+          const convRef = doc(db, 'conversations', activeConversationId);
+          getDoc(convRef).then((convSnap) => {
+            if (convSnap.exists()) {
+              const convData = convSnap.data() as Conversation;
+              if (convData.type === 'group' && !convData.participants.includes(currentUserId)) {
+                setHasLeftGroup(true);
+                setMessages([]);
+                setIsLoadingMessagesState(false);
+                return;
+              }
+            }
+            setMessagesErrorState(error);
+            setIsLoadingMessagesState(false);
+          }).catch(() => {
+            setMessagesErrorState(error);
+            setIsLoadingMessagesState(false);
+          });
+        } else {
+          setMessagesErrorState(error);
+          setIsLoadingMessagesState(false);
+        }
       }
     );
     return () => {
-        if (unsubscribe) unsubscribe();
+      if (unsubscribe) unsubscribe();
     };
-  }, [activeConversationId, toast]);
+  }, [activeConversationId, currentUserId, toast]);
 
   const sendMessageMutation = useMutation({
     mutationFn: sendMessage,
@@ -531,7 +554,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         </div>
       )}
 
-      {activeConversationId && (
+      {activeConversationId && !hasLeftGroup && (
         <div
           className={cn(
             "flex flex-1 flex-col overflow-hidden",
@@ -594,30 +617,33 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
                 className="flex-1 overflow-y-auto bg-background min-h-0"
                 style={{ touchAction: 'none' }}
               >
-                <div className={cn(isMobile ? "px-2 py-3" : "p-4")}>
+                <div className={cn(
+                  isMobile ? "px-2 py-3" : "p-4",
+                  messages.length === 0 && "flex-1 flex flex-col items-center justify-center text-center bg-background md:flex"
+                )}>
                   {isLoadingMessagesState ? (
-                       <div className="flex justify-center items-center h-full">
-                           <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                       </div>
-                   ) : messagesErrorState ? (
-                       <p className="text-sm text-destructive text-center">{messagesErrorState.message || "Error loading messages."}</p>
-                   ) : messages.length === 0 ? (
-                       <p className="text-sm text-muted-foreground text-center h-full flex items-center justify-center">
-                            Start the conversation!
-                       </p>
-                   ) : (
-                     messages.map((msg) => {
-                       return (
-                         <MessageBubble
-                           key={msg.id}
-                           message={msg}
-                           currentUserId={currentUserId}
-                           onStartReply={handleStartReply}
-                         />
-                       );
-                     })
-                   )}
-                   <div ref={messagesEndRef} />
+                    <div className="flex justify-center items-center h-full">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    </div>
+                  ) : messagesErrorState ? (
+                    <p className="text-sm text-destructive text-center">{messagesErrorState.message || "Error loading messages."}</p>
+                  ) : messages.length === 0 ? (
+                    <p className="text-sm text-muted-foreground text-center">
+                      Start the conversation!
+                    </p>
+                  ) : (
+                    messages.map((msg) => {
+                      return (
+                        <MessageBubble
+                          key={msg.id}
+                          message={msg}
+                          currentUserId={currentUserId}
+                          onStartReply={handleStartReply}
+                        />
+                      );
+                    })
+                  )}
+                  <div ref={messagesEndRef} />
                 </div>
               </ScrollArea>
 
@@ -664,7 +690,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
             </>
         </div>
       )}
-      {!activeConversationId && !isMobile && (
+      {(!activeConversationId || hasLeftGroup) && !isMobile && (
           <div className="flex-1 flex flex-col items-center justify-center text-center p-4 bg-background md:flex">
               <MessageSquare className="h-12 w-12 text-muted-foreground mb-4" />
               <h3 className="text-lg font-medium text-foreground">Select or Start a Conversation</h3>
@@ -689,3 +715,5 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
     </div>
   );
 };
+
+    
