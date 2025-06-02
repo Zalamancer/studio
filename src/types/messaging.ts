@@ -1,5 +1,5 @@
 // src/types/messaging.ts
-import type { Timestamp, FieldValue } from 'firebase/firestore'; // Added FieldValue
+import type { Timestamp, FieldValue } from 'firebase/firestore';
 
 // Represents a conversation between two or more users (as stored in Firestore)
 export interface Conversation {
@@ -13,7 +13,6 @@ export interface Conversation {
   groupAvatarUrl?: string | null;
   ownerId: string | null; // UID of the group creator/owner, MUST be set for groups
   adminIds: string[];   // UIDs of group administrators, MUST include owner for groups
-  formerParticipants?: { [userId: string]: Timestamp | FieldValue }; // NEW: Map of userId to their leave timestamp
 
   lastMessage: string | null; // Text of the last message sent
   lastMessageTimestamp: Timestamp | null; // Timestamp of the last message (Firestore Timestamp)
@@ -22,11 +21,10 @@ export interface Conversation {
 }
 
 // Represents a conversation object safe to pass to Client Components (uses number for timestamps)
-export interface ClientConversation extends Omit<Conversation, 'lastMessageTimestamp' | 'createdAt' | 'updatedAt' | 'formerParticipants' | 'adminIds'> {
+export interface ClientConversation extends Omit<Conversation, 'lastMessageTimestamp' | 'createdAt' | 'updatedAt' | 'adminIds'> {
   lastMessageTimestamp: number | null; // Milliseconds since epoch
   createdAt: number; // Milliseconds since epoch
   updatedAt?: number | null; // Milliseconds since epoch
-  formerParticipants?: { [userId: string]: number }; // Milliseconds since epoch for leave time
   adminIds: string[]; // Ensure adminIds is present
   // Ensure group fields are here and consistently optional or required
   groupName?: string | null;
@@ -61,12 +59,11 @@ export type NewMessageData = Omit<Message, 'id' | 'timestamp' | 'read'>;
 
 // Type for data needed to create a new conversation
 // Updated to include group-specific fields for group creation
-export interface NewConversationData extends Omit<Conversation, 'id' | 'createdAt' | 'lastMessage' | 'lastMessageTimestamp' | 'updatedAt' | 'formerParticipants'> {
+export interface NewConversationData extends Omit<Conversation, 'id' | 'createdAt' | 'lastMessage' | 'lastMessageTimestamp' | 'updatedAt'> {
   createdAt: FieldValue; // Always set by server
   lastMessage: string | null; // Initialized to null
   lastMessageTimestamp: FieldValue | null; // Initialized to null
   updatedAt: FieldValue; // Always set by server
-  formerParticipants: Record<string, never>; // Initialize as empty object
   // Type will be set based on creation logic
   type: 'direct' | 'group';
   // Group specific fields are required for group type during creation
