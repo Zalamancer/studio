@@ -20,7 +20,7 @@ import {
   arrayUnion, // For adding to arrays
   arrayRemove, // For removing from arrays
 } from 'firebase/firestore';
-import type { ClientConversation, SerializableMessage, NewMessageData, NewConversationData, Message, Conversation } from '@/types/messaging';
+import type { ClientConversation, SerializableMessage, NewMessageData, Message, Conversation } from '@/types/messaging';
 import { fetchUserProfileBasic } from './connectionService';
 import { createNotification } from './notificationService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
@@ -44,17 +44,19 @@ export const createGroupConversation = async (
       throw new Error("A group chat needs at least two unique participants (including the creator).");
   }
 
+  const ts = serverTimestamp(); // Use a single timestamp for creation and last update
+
   const newConversationDoc: Omit<Conversation, 'id'> = {
     participants: allParticipants,
     type: 'group',
     groupName: groupName.trim(),
     groupAvatarUrl: groupAvatarUrl || null,
     ownerId: creatorId,
-    adminIds: [creatorId], // Creator is the first admin
+    adminIds: [creatorId],
     postId: null,
     lastMessage: `Group created by ${generateAnonymousName(creatorId)}`,
-    lastMessageTimestamp: serverTimestamp() as Timestamp,
-    createdAt: serverTimestamp() as Timestamp,
+    lastMessageTimestamp: ts as Timestamp,
+    createdAt: ts as Timestamp,
   };
 
   try {
@@ -155,6 +157,7 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
   }
 
   const participants = [userId1, userId2].sort();
+  const ts = serverTimestamp(); // Use a single timestamp instance
 
   try {
     const queryConstraints: QueryConstraint[] = [
@@ -175,13 +178,13 @@ export const findOrCreateConversation = async (userId1: string, userId2: string,
     }
 
     console.log(`%c[messagingService] No existing DIRECT conversation found for ${contextDescription}. Creating new one.`, "color: orange;");
-    const newConversationData: NewConversationData = {
+    const newConversationData: Omit<Conversation, 'id'> = {
         participants: participants,
         type: 'direct',
         postId: postIdForQuery,
-        createdAt: serverTimestamp() as Timestamp,
+        createdAt: ts as Timestamp,
         lastMessage: null,
-        lastMessageTimestamp: serverTimestamp() as Timestamp,
+        lastMessageTimestamp: ts as Timestamp, // Consistent timestamp
         groupName: null,
         groupAvatarUrl: null,
         ownerId: null,
@@ -282,40 +285,37 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
     throw new Error("Message text, senderId, and conversationId are required.");
   }
   try {
+    const batch = writeBatch(db);
+    const ts = serverTimestamp(); // Single serverTimestamp instance
+
     const conversationDocRef = doc(db, 'conversations', messageData.conversationId);
     const messagesRef = messagesSubcollectionRef(messageData.conversationId);
-    const batch = writeBatch(db);
-    const newMessageRef = doc(messagesRef);
+    const newMessageRef = doc(messagesRef); // Create new doc ref for message
 
-    const messagePayload: Partial<Message> & { timestamp: any } = {
+    const messagePayload: Partial<Omit<Message, 'id'>> = {
         conversationId: messageData.conversationId,
         senderId: messageData.senderId,
         text: messageData.text,
         read: false,
-        isBotMessage: messageData.isBotMessage === true ? true : false,
+        isBotMessage: messageData.isBotMessage === true ? true : false, // Ensure boolean or null
         replyToMessageId: messageData.replyToMessageId || null,
         repliedToTextSnippet: messageData.repliedToTextSnippet || null,
-        timestamp: serverTimestamp(),
+        timestamp: ts, // Use shared ts
     };
-
-    Object.keys(messagePayload).forEach(key => {
-        if (messagePayload[key as keyof typeof messagePayload] === undefined) {
-            messagePayload[key as keyof typeof messagePayload] = null;
-        }
-    });
-
 
     batch.set(newMessageRef, messagePayload);
 
     batch.update(conversationDocRef, {
         lastMessage: messageData.text,
         lastMessageSenderId: messageData.senderId,
-        lastMessageTimestamp: serverTimestamp(),
+        lastMessageTimestamp: ts, // Use shared ts
+        updatedAt: ts, // Use shared ts
     });
 
     await batch.commit();
     console.log(`%c[messagingService] Message sent by ${messageData.senderId} in conv ${messageData.conversationId}. New msg ID: ${newMessageRef.id}`, "color: green;");
 
+    // Notification logic (can remain as is)
     const conversationSnap = await getDoc(conversationDocRef);
     if (conversationSnap.exists()) {
         const conversationData = conversationSnap.data() as Conversation;
@@ -330,7 +330,7 @@ export const sendMessage = async (messageData: NewMessageData): Promise<string> 
                         senderId: messageData.senderId,
                         conversationId: messageData.conversationId,
                         textSnippet: messageData.text.substring(0, 100),
-                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined, // Use group name for group chats
+                        postQuestion: conversationData.type === 'group' ? conversationData.groupName : undefined,
                     });
                 } catch (notificationError) {
                     console.error(`[messagingService] Failed to create notification for participant ${participantId} in conv ${messageData.conversationId}:`, notificationError);
@@ -420,11 +420,11 @@ export const updateGroupDetails = async (
     throw new Error("Group name cannot be empty.");
   }
   
-  if (updates.groupAvatarUrl !== undefined) { // Allow setting to null to remove avatar
+  if (updates.groupAvatarUrl !== undefined) {
     payload.groupAvatarUrl = updates.groupAvatarUrl;
   }
 
-  if (Object.keys(payload).length > 1) { // ensure there's more than just updatedAt
+  if (Object.keys(payload).length > 1) {
     await updateDoc(convRef, payload);
   }
 };
@@ -481,15 +481,15 @@ export const removeMemberFromGroup = async (
   }
   if (!groupData.participants.includes(memberIdToRemove)) {
     console.log("User to remove is not a participant.");
-    return; // User already not in group
+    return;
   }
-  if (groupData.participants.length <= 2) { // Check before removal
+  if (groupData.participants.length <= 2) {
     throw new Error("Cannot remove member; group must have at least two participants after removal (or consider deleting the group).");
   }
 
   await updateDoc(convRef, {
     participants: arrayRemove(memberIdToRemove),
-    adminIds: arrayRemove(memberIdToRemove), // Also remove from admins if they were one
+    adminIds: arrayRemove(memberIdToRemove),
     updatedAt: serverTimestamp()
   });
 };
@@ -506,28 +506,24 @@ export const leaveGroup = async (conversationId: string, userId: string): Promis
     throw new Error("User is not a member of this group.");
   }
   
-  // Prevent owner from leaving if they are the sole admin AND there are other participants
   if (userId === groupData.ownerId && groupData.adminIds.length === 1 && groupData.adminIds[0] === userId && groupData.participants.length > 1) {
     throw new Error("Owner cannot leave if they are the sole admin and other members exist. Promote another admin first or ensure other admins can manage the group.");
   }
   
-  // If the user is the last participant, the group will become empty.
-  // Consider if group should be deleted or marked inactive in such cases (outside scope of this function for now).
   if (groupData.participants.length === 1 && groupData.participants[0] === userId) {
       console.warn(`User ${userId} is the last participant leaving group ${conversationId}. The group will now be empty. Consider cleanup logic.`);
-      // Potentially, delete the group document here or in a Cloud Function triggered by this state.
   }
 
   await updateDoc(convRef, {
     participants: arrayRemove(userId),
-    adminIds: arrayRemove(userId), // Also remove from admins if they were one
+    adminIds: arrayRemove(userId),
     updatedAt: serverTimestamp()
   });
 };
 
 export const promoteToAdmin = async (
   conversationId: string,
-  currentUserId: string, // User performing the action
+  currentUserId: string,
   memberIdToPromote: string
 ): Promise<void> => {
   if (!conversationId || !currentUserId || !memberIdToPromote) throw new Error("Required parameters missing.");
@@ -537,7 +533,7 @@ export const promoteToAdmin = async (
   const groupData = conversationSnap.data() as Conversation;
   if (groupData.ownerId !== currentUserId) throw new Error("Only the group owner can promote admins.");
   if (!groupData.participants.includes(memberIdToPromote)) throw new Error("User to promote is not a member of this group.");
-  if (groupData.adminIds.includes(memberIdToPromote)) return; // Already an admin
+  if (groupData.adminIds.includes(memberIdToPromote)) return;
 
   await updateDoc(convRef, {
     adminIds: arrayUnion(memberIdToPromote),
@@ -547,7 +543,7 @@ export const promoteToAdmin = async (
 
 export const demoteAdmin = async (
   conversationId: string,
-  currentUserId: string, // User performing the action
+  currentUserId: string,
   adminIdToDemote: string
 ): Promise<void> => {
   if (!conversationId || !currentUserId || !adminIdToDemote) throw new Error("Required parameters missing.");
@@ -557,7 +553,7 @@ export const demoteAdmin = async (
   const groupData = conversationSnap.data() as Conversation;
   if (groupData.ownerId !== currentUserId) throw new Error("Only the group owner can demote admins.");
   if (adminIdToDemote === groupData.ownerId) throw new Error("The group owner cannot be demoted from admin status.");
-  if (!groupData.adminIds.includes(adminIdToDemote)) return; // Not an admin, nothing to demote
+  if (!groupData.adminIds.includes(adminIdToDemote)) return;
 
   await updateDoc(convRef, {
     adminIds: arrayRemove(adminIdToDemote),
