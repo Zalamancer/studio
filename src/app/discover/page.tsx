@@ -3,18 +3,18 @@
 "use client";
 
 import React, { useState, useMemo } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, Star, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion, Info, Loader2 } from 'lucide-react';
+import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, Star, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion, Info, Loader2, Newspaper } from 'lucide-react'; // Added Newspaper
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { getUserFavoriteSectors } from '@/services/userPreferenceService';
-import { detailedSectorsData as allSectorsData } from '@/components/layout/MainLayout'; // Use the detailed data source
+import { detailedSectorsData as allSectorsData } from '@/components/layout/MainLayout';
 
 const filterCategories = [
   { name: "All", icon: LayoutGrid },
@@ -27,12 +27,56 @@ const filterCategories = [
   { name: "Healthcare", icon: Stethoscope },
 ];
 
+// Placeholder news data
+const placeholderNewsItems = [
+  {
+    id: 'news-1',
+    title: "Tech Sector Sees Record Growth in Q3",
+    summary: "Innovation in AI and cloud computing continues to drive significant expansion across the technology landscape...",
+    source: "Tech News Daily",
+    date: "Oct 26, 2023",
+    imageUrl: "https://placehold.co/600x400.png",
+    aiHint: "technology abstract",
+    link: "#",
+  },
+  {
+    id: 'news-2',
+    title: "Retail Trends: The Shift to Hybrid Experiences",
+    summary: "Retailers are increasingly blending online and offline strategies to meet evolving consumer demands for convenience and engagement.",
+    source: "Retail Insights",
+    date: "Oct 25, 2023",
+    imageUrl: "https://placehold.co/600x400.png",
+    aiHint: "retail shopping",
+    link: "#",
+  },
+  {
+    id: 'news-3',
+    title: "Logistics Challenges in the Post-Pandemic Era",
+    summary: "Supply chain resilience and last-mile delivery innovations are key focus areas for logistics companies globally.",
+    source: "Supply Chain Magazine",
+    date: "Oct 24, 2023",
+    imageUrl: "https://placehold.co/600x400.png",
+    aiHint: "logistics cargo",
+    link: "#",
+  },
+  {
+    id: 'news-4',
+    title: "Healthcare Innovation: Telemedicine on the Rise",
+    summary: "The adoption of telemedicine services has surged, offering new avenues for patient care and medical consultations.",
+    source: "Global Health Times",
+    date: "Oct 23, 2023",
+    imageUrl: "https://placehold.co/600x400.png",
+    aiHint: "healthcare medicine",
+    link: "#",
+  },
+];
+
+
 const DiscoverPage = () => {
   const router = useRouter();
   const { user } = useAuth();
   const [activeFilter, setActiveFilter] = useState("All");
 
-  // Fetch user's favorite sectors
   const { data: favoriteSectorCodes = [], isLoading: isLoadingFavorites } = useQuery<string[]>({
     queryKey: ['userFavoriteSectorsOnDiscoverPage', user?.uid],
     queryFn: () => user ? getUserFavoriteSectors(user.uid) : Promise.resolve([]),
@@ -43,17 +87,15 @@ const DiscoverPage = () => {
     return allSectorsData.filter(sector => favoriteSectorCodes.includes(sector.code));
   }, [favoriteSectorCodes]);
 
-  // Simplified sectors for display on this page
   const displaySectors = useMemo(() => {
     return allSectorsData.map(sector => ({
       code: sector.code,
       title: sector.name,
-      hint: sector.subSectors?.[0]?.industries?.[0]?.name.toLowerCase().replace(/\s+/g, ' ') || sector.name.toLowerCase().replace(/\s+/g, ' ') || "industry", // Use first industry of first subsector or sector name as hint
+      hint: sector.subSectors?.[0]?.industries?.[0]?.name.toLowerCase().replace(/\s+/g, ' ') || sector.name.toLowerCase().replace(/\s+/g, ' ') || "industry",
       description: sector.description || `Explore opportunities in the ${sector.name} sector.`,
-      icon: Factory, // Placeholder - ideally map icons based on sector.code or title
+      icon: Factory,
     }));
   }, []);
-
 
   const filteredDisplaySectors = activeFilter === "All"
     ? displaySectors
@@ -74,6 +116,44 @@ const DiscoverPage = () => {
           Dive into various industries to find collaboration opportunities and insights.
         </p>
       </header>
+
+      {/* News Section */}
+      <section className="mb-10">
+        <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center">
+          <Newspaper className="mr-2 h-6 w-6 text-primary" /> Industry News & Insights
+        </h2>
+        <ScrollArea className="w-full whitespace-nowrap rounded-md pb-3">
+          <div className="flex space-x-4">
+            {placeholderNewsItems.map((news) => (
+              <Card key={news.id} className="w-[300px] md:w-[320px] flex-shrink-0 shadow-md hover:shadow-lg transition-shadow">
+                <a href={news.link} target="_blank" rel="noopener noreferrer" className="block">
+                  <div className="relative h-40 w-full">
+                    <Image
+                      src={news.imageUrl}
+                      alt={news.title}
+                      fill
+                      style={{objectFit:"cover"}}
+                      className="rounded-t-lg"
+                      data-ai-hint={news.aiHint}
+                    />
+                  </div>
+                  <CardHeader className="p-3">
+                    <CardTitle className="text-base font-semibold line-clamp-2 leading-tight">{news.title}</CardTitle>
+                  </CardHeader>
+                  <CardContent className="p-3 pt-0">
+                    <p className="text-xs text-muted-foreground line-clamp-3 mb-2">{news.summary}</p>
+                    <div className="flex justify-between items-center text-xs text-muted-foreground/80">
+                      <span>{news.source}</span>
+                      <span>{news.date}</span>
+                    </div>
+                  </CardContent>
+                </a>
+              </Card>
+            ))}
+          </div>
+          <ScrollBar orientation="horizontal" />
+        </ScrollArea>
+      </section>
 
       <div className="mb-8">
         <ScrollArea className="w-full whitespace-nowrap rounded-md">
@@ -198,3 +278,5 @@ const DiscoverPage = () => {
 };
 
 export default DiscoverPage;
+
+    
