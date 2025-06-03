@@ -499,7 +499,7 @@ export const MessagingInterface: React.FC<MessagingInterfaceProps> = ({
         <div
           className={cn(
             "flex flex-col border-r bg-background min-w-0",
-            isMobile ? (activeConversationId ? "hidden" : "w-full flex-1") : "md:w-2/5 lg:w-1/3 md:flex-shrink-0"
+            isMobile ? (activeConversationId ? "hidden" : "w-full flex-1 overflow-hidden") : "md:w-2/5 lg:w-1/3 md:flex-shrink-0"
           )}
         >
           <div className={cn("border-b flex-shrink-0 flex items-center justify-between", isMobile ? "p-3" : "p-4")}>
