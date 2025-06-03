@@ -45,7 +45,7 @@ export const PostList: React.FC<PostListProps> = ({
   detailedSectorsData,
 }) => {
   const isMobile = useIsMobile();
-  const [isMobileFiltersOpen, setIsMobileFiltersOpen] = useState(false);
+  const [isFilterContainerOpen, setIsFilterContainerOpen] = useState(false); // Unified state for Popover/Dialog
 
   const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -94,11 +94,15 @@ export const PostList: React.FC<PostListProps> = ({
     setSelectedPostType("all");
     setSelectedTags([]);
     setSelectedSectorFilter(undefined);
-    // Sub-sector and industry will be reset by the useEffect hooks
+    // Sub-sector and industry will be reset by the useEffect hooks above
   }, []);
 
-  const isAnyFilterActive = useMemo(() => {
-    return selectedPostType !== "all" || selectedTags.length > 0 || !!selectedSectorFilter;
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedPostType !== "all") count++;
+    if (selectedTags.length > 0) count++;
+    if (selectedSectorFilter) count++; // Counting sector as one filter group
+    return count;
   }, [selectedPostType, selectedTags, selectedSectorFilter]);
 
   const filteredPosts = useMemo(() => {
@@ -152,10 +156,10 @@ export const PostList: React.FC<PostListProps> = ({
     );
   }
 
-  const FilterControls = () => (
-    <>
-      <div className={cn("space-y-3", isMobile ? "w-full" : "md:w-[180px]")}>
-        <Label className={cn(isMobile && "text-sm font-medium")}>Post Type</Label>
+  const FilterContent = () => (
+    <div className={cn("space-y-4", isMobile ? "p-4" : "p-3 w-72")}>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">Post Type</Label>
         <Select value={selectedPostType} onValueChange={(value) => setSelectedPostType(value as PostTypeFilter)}>
           <SelectTrigger className="w-full h-9 text-xs">
             <SelectValue placeholder="Filter by Post Type" />
@@ -168,9 +172,9 @@ export const PostList: React.FC<PostListProps> = ({
         </Select>
       </div>
 
-      <div className={cn("space-y-3", isMobile && "w-full")}>
-        <Label className={cn(isMobile && "text-sm font-medium")}>Tags {isMobile && selectedTags.length > 0 && `(${selectedTags.length})`}</Label>
-        <ScrollArea className={cn("h-[150px] rounded-md border p-3", isMobile ? "w-full" : "w-64")}>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">Tags {selectedTags.length > 0 && `(${selectedTags.length})`}</Label>
+        <ScrollArea className="h-[120px] rounded-md border p-2.5">
           <div className="space-y-1.5">
             {availableTags.map((tag) => (
               <div key={tag} className="flex items-center space-x-2">
@@ -186,8 +190,8 @@ export const PostList: React.FC<PostListProps> = ({
         </ScrollArea>
       </div>
 
-      <div className={cn("space-y-3", isMobile && "w-full")}>
-        <Label className={cn(isMobile && "text-sm font-medium")}>Industry</Label>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">Industry</Label>
         <Select value={selectedSectorFilter} onValueChange={setSelectedSectorFilter}>
           <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select Sector" /></SelectTrigger>
           <SelectContent>
@@ -207,64 +211,61 @@ export const PostList: React.FC<PostListProps> = ({
           </SelectContent>
         </Select>
       </div>
-    </>
+    </div>
   );
 
   return (
     <div className="flex flex-col h-full">
-      {/* Filter Bar */}
-      {!isMobile ? (
-        <div className="mb-4 p-1 space-y-2 md:flex md:items-start md:gap-2 border-b pb-3">
-          <FilterControls />
-          {isAnyFilterActive && (
-            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="w-full md:w-auto h-9 text-xs text-primary hover:underline mt-2 md:mt-5">
-              <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div className="flex items-center gap-2 mb-4 p-1 border-b pb-3">
-          <Dialog open={isMobileFiltersOpen} onOpenChange={setIsMobileFiltersOpen}>
+      {/* Unified Filter Bar for Desktop and Mobile */}
+      <div className="mb-4 p-1 flex items-center gap-2 border-b pb-3">
+        {isMobile ? (
+          <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
             <DialogTrigger asChild>
               <Button variant="outline" size="sm" className="flex-grow h-9 text-xs">
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
                 Filters
-                {isAnyFilterActive && (
-                  <span className="ml-1.5 h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+                {activeFilterCount > 0 && (
+                  <span className="ml-1.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
                 )}
               </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
               <DialogHeader className="p-4 border-b">
                 <DialogTitle>Filter Posts</DialogTitle>
-                <DialogDescription>
-                  Refine posts by type, tags, or industry.
-                </DialogDescription>
+                <DialogDescription>Refine posts by type, tags, or industry.</DialogDescription>
               </DialogHeader>
-              <ScrollArea className="flex-grow min-h-0">
-                <div className="p-4 space-y-6">
-                  <FilterControls />
-                </div>
-              </ScrollArea>
+              <ScrollArea className="flex-grow min-h-0"><FilterContent /></ScrollArea>
               <DialogFooter className="p-4 border-t">
-                {isAnyFilterActive && (
-                  <Button variant="ghost" size="sm" onClick={() => { clearAllFilters(); setIsMobileFiltersOpen(false); }} className="text-xs text-destructive hover:underline">
-                    Clear All Filters
-                  </Button>
-                )}
                 <DialogClose asChild>
                   <Button type="button" variant="default" size="sm">Done</Button>
                 </DialogClose>
               </DialogFooter>
             </DialogContent>
           </Dialog>
-          {isAnyFilterActive && !isMobileFiltersOpen && ( // Show clear button outside dialog only if dialog is closed
-            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0">
-              <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear
-            </Button>
-          )}
-        </div>
-      )}
+        ) : (
+          <Popover open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 text-xs">
+                <Filter className="h-3.5 w-3.5 mr-1.5" />
+                Filters
+                {activeFilterCount > 0 && (
+                  <span className="ml-1.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
+          </Popover>
+        )}
+        {activeFilterCount > 0 && (
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0">
+            <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All
+          </Button>
+        )}
+      </div>
 
       <ScrollArea className="flex-grow overflow-y-auto min-h-0 pr-2">
         <div className="columns-1 md:columns-2 gap-4 space-y-4">
@@ -275,13 +276,13 @@ export const PostList: React.FC<PostListProps> = ({
                 post={post}
                 onOpen={onPostSelect}
                 isSelected={selectedPostId === post.id}
-                isPriority={index < 2}
+                isPriority={index < 2} // Prioritize first few images
               />
             ))
           ) : (
             <div className="col-span-full text-center py-10">
               <p className="text-muted-foreground">
-                {isLoading ? "Loading..." : (isAnyFilterActive ? "No posts found matching your filters." : "No posts available yet.")}
+                {isLoading ? "Loading..." : (activeFilterCount > 0 ? "No posts found matching your filters." : "No posts available yet.")}
               </p>
             </div>
           )}
