@@ -103,10 +103,13 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
               <Card key={post.id} className="shadow-sm hover:shadow-md transition-shadow bg-muted/30">
                 <CardHeader className="p-3 pb-2">
                   <div className="flex justify-between items-start">
-                    <Link href={`/?postId=${post.id}`} passHref legacyBehavior>
-                      <a className="text-sm font-semibold text-foreground hover:text-primary line-clamp-2 flex-grow" target="_blank" rel="noopener noreferrer">
-                        {post.question}
-                      </a>
+                    <Link 
+                      href={`/?postId=${post.id}`} 
+                      className="text-sm font-semibold text-foreground hover:text-primary line-clamp-2 flex-grow" 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                    >
+                      {post.question}
                     </Link>
                     <Button
                       variant="ghost"
