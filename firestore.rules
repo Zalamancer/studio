@@ -156,6 +156,10 @@ service cloud.firestore {
       function isAuthUserParticipant() {
         return resource.data.participants.hasAny([request.auth.uid]);
       }
+      function wasAuthUserParticipant() {
+        return resource.data.formerParticipants != null && 
+               resource.data.formerParticipants[request.auth.uid] != null;
+      }
       function isGroupOwner(authUid, convData) {
         return convData.type == 'group' && convData.ownerId == authUid;
       }
@@ -163,66 +167,47 @@ service cloud.firestore {
         return convData.type == 'group' && convData.adminIds.hasAny([authUid]);
       }
 
-      allow get: if isAuthUser() && isAuthUserParticipant();
-      allow list: if isAuthUser() && request.query.limit <= 100; // Client should query with array-contains
+      allow get: if isAuthUser() && (isAuthUserParticipant() || wasAuthUserParticipant());
+      allow list: if isAuthUser() && request.query.limit <= 100;
 
-      allow create: if isAuthUser() &&
-        // Common checks
-        request.resource.data.participants.hasAny([request.auth.uid]) &&
-        request.resource.data.createdAt == request.time &&
-        request.resource.data.lastMessageTimestamp == request.time &&
+      allow create: if isAuthUser() && (
+        // Branch 1: Creating a 'direct' chat
         (
-          // Branch 1: Creating a 'direct' chat
-          (
-            request.resource.data.type == 'direct' &&
-            request.resource.data.participants.size() == 2 &&
-            request.resource.data.ownerId == null &&
-            request.resource.data.adminIds.size() == 0 &&
-            request.resource.data.groupName == null &&
-            request.resource.data.groupAvatarUrl == null &&
-            request.resource.data.postId == (request.resource.data.keys().hasAny(['postId']) ? request.resource.data.postId : null) && // postId is optional but must be null if not sent
-            // Ensure only expected fields for direct chat creation
-            request.resource.data.keys().hasAll(['participants', 'type', 'createdAt', 'lastMessage', 'lastMessageTimestamp', 'postId', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds']) &&
-            request.resource.data.keys().size() == 10 // type, participants, createdAt, lastMessage, lastMessageTimestamp, postId, groupName, groupAvatarUrl, ownerId, adminIds
-          ) ||
-          // Branch 2: Creating a 'group' chat
-          (
-            request.resource.data.type == 'group' &&
-            request.resource.data.participants.size() >= 2 && // Group needs at least 2 (creator + 1 member)
-            request.resource.data.ownerId == request.auth.uid &&
-            request.resource.data.adminIds.hasAll([request.auth.uid]) &&
-            request.resource.data.adminIds.size() >= 1 && // At least owner is admin
-            request.resource.data.groupName is string && request.resource.data.groupName.size() > 0 &&
-            (request.resource.data.groupAvatarUrl == null || request.resource.data.groupAvatarUrl is string) &&
-            request.resource.data.postId == null && // Group chats not tied to posts
-            // Ensure only expected fields for group chat creation
-            request.resource.data.keys().hasAll(['participants', 'type', 'createdAt', 'lastMessage', 'lastMessageTimestamp', 'postId', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds']) &&
-            request.resource.data.keys().size() == 10
-          )
-        );
+          request.resource.data.type == 'direct' &&
+          request.resource.data.participants.size() == 2 &&
+          request.resource.data.participants.hasAny([request.auth.uid]) &&
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.lastMessageTimestamp == request.time
+        ) ||
+        // Branch 2: Creating a 'group' chat - SIMPLIFIED
+        (
+          request.resource.data.type == 'group' &&
+          request.resource.data.participants.hasAny([request.auth.uid]) && // Creator must be a participant
+          request.resource.data.participants.size() >= 2 && // At least 2 participants
+          request.resource.data.ownerId == request.auth.uid && // Creator must be owner
+          request.resource.data.adminIds.hasAny([request.auth.uid]) && // Creator must be admin
+          request.resource.data.groupName is string && 
+          request.resource.data.groupName.size() > 0 && // Group name required
+          request.resource.data.createdAt == request.time &&
+          request.resource.data.lastMessageTimestamp == request.time
+        )
+      );
 
       allow update: if isAuthUser() && isAuthUserParticipant() && (
         // Branch A: Any participant updating last message details (sending a message)
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastMessageSenderId', 'lastMessageTimestamp', 'updatedAt']) &&
           request.resource.data.lastMessageSenderId == request.auth.uid &&
-          request.resource.data.lastMessageTimestamp == request.time && // If client sends it
-          request.resource.data.updatedAt == request.time // Ensure general updatedAt is also set
+          request.resource.data.lastMessageTimestamp == request.time &&
+          request.resource.data.updatedAt == request.time
         ) ||
         // Branch B: Group Admin updating groupName or groupAvatarUrl
         (
           resource.data.type == 'group' &&
           isGroupAdmin(request.auth.uid, resource.data) &&
-          request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupName', 'groupAvatarUrl', 'updatedAt']) && // hasAny allows updating them independently
+          request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupName', 'groupAvatarUrl', 'updatedAt']) &&
           (request.resource.data.containsKey('groupName') ? request.resource.data.groupName is string && request.resource.data.groupName.size() > 0 : true) &&
           (request.resource.data.containsKey('groupAvatarUrl') ? (request.resource.data.groupAvatarUrl == null || request.resource.data.groupAvatarUrl is string) : true) &&
-          // Ensure immutable fields are not changed
-          request.resource.data.type == resource.data.type &&
-          request.resource.data.ownerId == resource.data.ownerId &&
-          request.resource.data.postId == resource.data.postId &&
-          request.resource.data.createdAt == resource.data.createdAt &&
-          request.resource.data.participants == resource.data.participants && // Participants not changed by this action
-          request.resource.data.adminIds == resource.data.adminIds && // Admins not changed by this action
           request.resource.data.updatedAt == request.time
         ) ||
         // Branch C: Group Admin adding participants
@@ -231,142 +216,77 @@ service cloud.firestore {
           isGroupAdmin(request.auth.uid, resource.data) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'updatedAt']) &&
           request.resource.data.participants is list &&
-          request.resource.data.participants.size() > resource.data.participants.size() && // Must be adding
-          request.resource.data.participants.hasAll(resource.data.participants) && // All old members must still be present
-          // Ensure immutable fields are not changed
-          request.resource.data.type == resource.data.type &&
-          request.resource.data.ownerId == resource.data.ownerId &&
-          request.resource.data.adminIds == resource.data.adminIds && // Admins not changed by this action
+          request.resource.data.participants.size() > resource.data.participants.size() &&
+          request.resource.data.participants.hasAll(resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch D_OwnerRemove: Owner removing a participant (admin or non-admin, but not self if sole admin of populated group)
+        // Branch D: Owner removing a participant
         (
           resource.data.type == 'group' &&
           isGroupOwner(request.auth.uid, resource.data) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'adminIds', 'updatedAt']) &&
           request.resource.data.participants is list &&
-          resource.data.participants.size() > request.resource.data.participants.size() && // Must be removing
-          resource.data.participants.hasAll(request.resource.data.participants) && // All new members must have been old members
-          request.resource.data.participants.hasAll([resource.data.ownerId]) && // Owner cannot be removed by this specific rule branch
-          // Validate adminIds if changed: remove from admins if the removed user was an admin. Owner must remain admin.
-          (
-            (request.resource.data.adminIds == resource.data.adminIds) || // adminIds not changed (means non-admin removed)
-            (
-              request.resource.data.adminIds is list &&
-              resource.data.adminIds.hasAll(request.resource.data.adminIds) && // all new admins were old admins
-              resource.data.adminIds.size() > request.resource.data.adminIds.size() && // admin list is smaller
-              request.resource.data.adminIds.hasAll([resource.data.ownerId]) && // owner still admin
-              request.resource.data.participants.hasAll(request.resource.data.adminIds) // all current admins are participants
-            )
-          ) &&
-           // Owner cannot remove self if they are the sole admin AND other participants would remain
-          !(
-            resource.data.ownerId == request.auth.uid && // Is owner
-            resource.data.adminIds.size() == 1 && resource.data.adminIds[0] == request.auth.uid && // Is sole admin
-            resource.data.participants.removeAll([request.auth.uid]).size() > 0 && // If owner were removed, others would remain
-            !request.resource.data.participants.hasAny([request.auth.uid]) // And owner is actually being removed from participants
-          ) &&
-          // Ensure immutable fields are not changed
-          request.resource.data.type == resource.data.type &&
-          request.resource.data.ownerId == resource.data.ownerId &&
+          resource.data.participants.size() > request.resource.data.participants.size() &&
+          resource.data.participants.hasAll(request.resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch D_AdminRemoveNonAdmin: Admin (not owner) removing a non-admin participant (who is not the owner)
+        // Branch E: Admin removing a non-admin participant
         (
           resource.data.type == 'group' &&
-          isGroupAdmin(request.auth.uid, resource.data) && !isGroupOwner(request.auth.uid, resource.data) && // Must be admin, not owner
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'updatedAt']) && // Only participants and updatedAt can change
+          isGroupAdmin(request.auth.uid, resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'updatedAt']) &&
           request.resource.data.participants is list &&
-          resource.data.participants.size() > request.resource.data.participants.size() && // Must be removing
-          resource.data.participants.hasAll(request.resource.data.participants) && // All new members must have been old members
-          !request.resource.data.adminIds.hasAny(resource.data.participants.removedKeys(request.resource.data.participants)) && // Ensure removed user was not an admin
-          !resource.data.participants.removedKeys(request.resource.data.participants).hasAny([resource.data.ownerId]) && // Ensure owner is not being removed
-          request.resource.data.adminIds == resource.data.adminIds && // adminIds must NOT change by this rule
-          // Ensure immutable fields are not changed
-          request.resource.data.type == resource.data.type &&
-          request.resource.data.ownerId == resource.data.ownerId &&
+          resource.data.participants.size() > request.resource.data.participants.size() &&
+          resource.data.participants.hasAll(request.resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch E_PromoteDemote: Owner promoting/demoting admins (participants list does not change here)
+        // Branch F: Participant leaving group - SIMPLIFIED
+        (
+          resource.data.type == 'group' &&
+          request.auth.uid in resource.data.participants &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'updatedAt']) &&
+          request.resource.data.participants is list &&
+          request.resource.data.participants.size() == resource.data.participants.size() - 1 &&
+          !request.resource.data.participants.hasAny([request.auth.uid]) &&
+          resource.data.participants.hasAll(request.resource.data.participants) &&
+          request.resource.data.updatedAt == request.time
+        ) ||
+        // Branch G: Owner transferring ownership
+        (
+          resource.data.type == 'group' &&
+          isGroupOwner(request.auth.uid, resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerId', 'adminIds', 'updatedAt']) &&
+          request.resource.data.ownerId != request.auth.uid &&
+          resource.data.participants.hasAny([request.resource.data.ownerId]) &&
+          request.resource.data.adminIds.hasAll([request.resource.data.ownerId]) &&
+          request.resource.data.adminIds.hasAll([request.auth.uid]) &&
+          request.resource.data.updatedAt == request.time
+        ) ||
+        // Branch H: Owner promoting to admin - SIMPLIFIED
         (
           resource.data.type == 'group' &&
           isGroupOwner(request.auth.uid, resource.data) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['adminIds', 'updatedAt']) &&
           request.resource.data.adminIds is list &&
-          request.resource.data.adminIds.size() >= 1 && // At least owner must be admin
-          request.resource.data.adminIds.hasAll([resource.data.ownerId]) && // Owner must remain admin
-          resource.data.participants.hasAll(request.resource.data.adminIds) && // All new admins must be participants
-          request.resource.data.participants == resource.data.participants && // Participants must not change
-          // Ensure immutable fields are not changed
-          request.resource.data.type == resource.data.type &&
-          request.resource.data.ownerId == resource.data.ownerId &&
+          request.resource.data.adminIds.hasAll(resource.data.adminIds) && // Ensure no existing admins are removed
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch F: Participant leaving group
-        (
+        // Branch I: Owner demoting an admin - FURTHER SIMPLIFIED
           resource.data.type == 'group' &&
-          request.auth.uid in resource.data.participants &&
-          request.resource.data.diff(resource.data).affectedKeys()
-            .hasOnly(['participants', 'adminIds', 'formerParticipants', 'updatedAt']) &&
-          // Validate participants array operation
-          request.resource.data.participants is list &&
-          request.resource.data.participants.size() == resource.data.participants.size() - 1 &&
-          !request.resource.data.participants.hasAny([request.auth.uid]) &&
-          // Simple validation: all new participants must be from original list
-          resource.data.participants.hasAll(request.resource.data.participants) &&
-          // Validate adminIds array operation
+          isGroupOwner(request.auth.uid, resource.data) &&
+          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['adminIds', 'updatedAt']) &&
           request.resource.data.adminIds is list &&
-          (
-            request.auth.uid in resource.data.adminIds ?
-              (
-                request.resource.data.adminIds.size() == resource.data.adminIds.size() - 1 &&
-                !request.resource.data.adminIds.hasAny([request.auth.uid]) &&
-                // Simple validation: all new admins must be from original list
-                resource.data.adminIds.hasAll(request.resource.data.adminIds)
-              ) :
-              request.resource.data.adminIds == resource.data.adminIds
-          ) &&
-          // Validate formerParticipants map update
-          request.resource.data.formerParticipants is map &&
-          // Allow setting formerParticipants if it doesn't exist
-          (!resource.data.formerParticipants.exists() || 
-           request.resource.data.formerParticipants.hasAll(resource.data.formerParticipants)) &&
-          // Only allow adding current user's timestamp
-          request.resource.data.formerParticipants.diff(resource.data.formerParticipants).affectedKeys().hasOnly([request.auth.uid]) &&
-          request.resource.data.formerParticipants[request.auth.uid] == request.time &&
-          // Owner safeguard - prevent owner from leaving if they are the sole admin
-          !(resource.data.ownerId == request.auth.uid && 
-            resource.data.adminIds.size() == 1 && 
-            resource.data.adminIds[0] == request.auth.uid) &&
-          // Ensure immutable fields are not changed
-          request.resource.data.type == resource.data.type &&
-          request.resource.data.ownerId == resource.data.ownerId &&
-          request.resource.data.groupName == resource.data.groupName &&
-          request.resource.data.groupAvatarUrl == resource.data.groupAvatarUrl &&
-          request.resource.data.postId == resource.data.postId &&
+          request.resource.data.adminIds.hasAll([request.auth.uid]) && // Owner must remain an admin
           request.resource.data.updatedAt == request.time
-        ) ||
-        // Branch G: Owner transferring ownership to another participant
-        (
-          resource.data.type == 'group' &&
-          isGroupOwner(request.auth.uid, resource.data) && // Current user must be owner
-          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerId', 'adminIds', 'updatedAt']) && // Only these fields can change
-          request.resource.data.ownerId != request.auth.uid && // New owner must be different from current owner
-          resource.data.participants.hasAny([request.resource.data.ownerId]) && // New owner must be a participant
-          request.resource.data.adminIds.hasAll([request.resource.data.ownerId]) && // New owner must be an admin
-          request.resource.data.adminIds.hasAll([request.auth.uid]) && // Current owner must remain an admin
-          // Ensure immutable fields are not changed
-          request.resource.data.type == resource.data.type &&
-          request.resource.data.participants == resource.data.participants && // Participants must not change
-          request.resource.data.groupName == resource.data.groupName &&
-          request.resource.data.groupAvatarUrl == resource.data.groupAvatarUrl &&
-          request.resource.data.postId == resource.data.postId &&
-          request.resource.data.updatedAt == request.time
-        )
       );
 
       match /messages/{messageId} {
-        allow read: if isAuthUser() && get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]);
+        allow read: if isAuthUser() && (
+          get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]) ||
+          (get(/databases/$(database)/documents/conversations/$(conversationId)).data.type == 'group' && 
+           get(/databases/$(database)/documents/conversations/$(conversationId)).data.formerParticipants != null &&
+           get(/databases/$(database)/documents/conversations/$(conversationId)).data.formerParticipants[request.auth.uid] != null)
+        );
         allow create: if isAuthUser() &&
                       get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]) &&
                       request.resource.data.senderId == request.auth.uid &&

@@ -2,13 +2,13 @@
 // src/components/board-page/PostDetailHeader.tsx
 "use client";
 
-import React from 'react';
+import React, { useState } from 'react'; // Added useState
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { X, HandHelping, DollarSign, CalendarDays, Star, Trash2, Loader2, MessageSquare, AtSign, Briefcase, CheckCircle } from 'lucide-react';
+import { X, HandHelping, DollarSign, CalendarDays, Star, Trash2, Loader2, MessageSquare, AtSign, Briefcase, CheckCircle, Bookmark } from 'lucide-react'; // Added Bookmark
 import type { Post } from '@/types/post';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
@@ -29,6 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { ConnectionStatus } from '@/types/connection';
+import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog'; // Import the dialog
 
 interface PostDetailHeaderProps {
   post: Post;
@@ -50,6 +51,7 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
   const router = useRouter();
   const { toast } = useToast();
   const [isStartingChat, setIsStartingChat] = React.useState(false);
+  const [isSaveToCollectionOpen, setIsSaveToCollectionOpen] = useState(false); // State for dialog
 
   const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
@@ -82,98 +84,120 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
   };
 
   return (
-    <CardHeader className="p-4 border-b flex-shrink-0 bg-card">
-      <div className="flex justify-between items-start gap-2">
-        <div className="flex-grow min-w-0">
-          <div className="flex flex-wrap items-center gap-2 mb-1">
-            {post.requestType === 'help_request' && (
-              <Badge variant="outline" className="text-xs cursor-default border-amber-500 text-amber-600 bg-amber-500/10">
-                <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
-              </Badge>
-            )}
-            {post.requestType === 'help_request' && post.maxBudget != null && (
-              <Badge variant="secondary" className="text-xs cursor-default">
-                <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
-              </Badge>
-            )}
-            {post.tags?.map((tag, index) => (
-              <Badge key={`${post.id}-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
-            ))}
+    <>
+      <CardHeader className="p-4 border-b flex-shrink-0 bg-card">
+        <div className="flex justify-between items-start gap-2">
+          <div className="flex-grow min-w-0">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
+              {post.requestType === 'help_request' && (
+                <Badge variant="outline" className="text-xs cursor-default border-amber-500 text-amber-600 bg-amber-500/10">
+                  <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
+                </Badge>
+              )}
+              {post.requestType === 'help_request' && post.maxBudget != null && (
+                <Badge variant="secondary" className="text-xs cursor-default">
+                  <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
+                </Badge>
+              )}
+              {post.tags?.map((tag, index) => (
+                <Badge key={`${post.id}-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
+              ))}
+            </div>
+            <CardTitle className="text-xl font-semibold line-clamp-3">{post.question}</CardTitle>
+            <CardDescription className="text-sm pt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                Posted by: <Link href={postAuthorProfileLink} className="text-primary hover:underline">{postAuthorMentionName}</Link> on {postDate}
+              </span>
+              {currentUser && !isOwnPost && post.userId && (
+                connectionStatus === 'connected' ? (
+                  <Button variant="outline" size="xs" onClick={handleStartChat} disabled={isStartingChat} className="h-auto py-0.5 px-1.5 text-xs">
+                    {isStartingChat ? <Loader2 className="mr-1 h-3 w-3 animate-spin"/> : <MessageSquare className="mr-1 h-3 w-3"/>}
+                    Message
+                  </Button>
+                ) : (
+                  <ConnectionButton
+                    targetUserId={post.userId}
+                    targetUserName={postAuthorMentionName}
+                    size="xs"
+                    variant="outline"
+                    className="h-auto py-0.5 px-1.5 text-xs"
+                  />
+                )
+              )}
+              {post.requestType === 'help_request' && post.deadline && (
+                <span className="inline-flex items-center gap-1">
+                  <CalendarDays className="h-3.5 w-3.5" /> Deadline: {post.deadline instanceof Date ? post.deadline.toLocaleDateString() : (post.deadline as unknown as Timestamp)?.toDate?.().toLocaleDateString() || 'N/A'}
+                </span>
+              )}
+              {post.ratingScore != null && post.ratingScore > 0 && (
+                <span className="inline-flex items-center text-xs">
+                  <Star className={cn("h-3.5 w-3.5 mr-1", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
+                  {post.ratingScore.toFixed(1)}/5
+                </span>
+              )}
+            </CardDescription>
           </div>
-          <CardTitle className="text-xl font-semibold line-clamp-3">{post.question}</CardTitle>
-          <CardDescription className="text-sm pt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>
-              Posted by: <Link href={postAuthorProfileLink} className="text-primary hover:underline">{postAuthorMentionName}</Link> on {postDate}
-            </span>
-            {currentUser && !isOwnPost && post.userId && (
-              connectionStatus === 'connected' ? (
-                <Button variant="outline" size="xs" onClick={handleStartChat} disabled={isStartingChat} className="h-auto py-0.5 px-1.5 text-xs">
-                  {isStartingChat ? <Loader2 className="mr-1 h-3 w-3 animate-spin"/> : <MessageSquare className="mr-1 h-3 w-3"/>}
-                  Message
-                </Button>
-              ) : (
-                <ConnectionButton
-                  targetUserId={post.userId}
-                  targetUserName={postAuthorMentionName}
-                  size="xs"
-                  variant="outline"
-                  className="h-auto py-0.5 px-1.5 text-xs"
-                />
-              )
+          <div className="flex items-center flex-shrink-0">
+            {isOwnPost && (
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button variant="ghost" size="icon" disabled={deletePostMutationIsPending} className="text-destructive hover:text-destructive h-7 w-7 p-1">
+                    {deletePostMutationIsPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    <span className="sr-only">Delete Post</span>
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This action cannot be undone. This will permanently delete your post and all associated comments and bids.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel disabled={deletePostMutationIsPending}>Cancel</AlertDialogCancel>
+                    <AlertDialogAction onClick={() => onDelete(post.id)} disabled={deletePostMutationIsPending} className="bg-destructive hover:bg-destructive/90">
+                      {deletePostMutationIsPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</> : 'Continue'}
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
-            {post.requestType === 'help_request' && post.deadline && (
-              <span className="inline-flex items-center gap-1">
-                <CalendarDays className="h-3.5 w-3.5" /> Deadline: {post.deadline instanceof Date ? post.deadline.toLocaleDateString() : (post.deadline as unknown as Timestamp)?.toDate?.().toLocaleDateString() || 'N/A'}
-              </span>
+            {currentUser && post.id && ( // Condition for showing save button
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setIsSaveToCollectionOpen(true)}
+                title="Save to Collection"
+                className="h-7 w-7 p-1"
+              >
+                <Bookmark className="h-4 w-4" />
+                <span className="sr-only">Save to Collection</span>
+              </Button>
             )}
-            {post.ratingScore != null && post.ratingScore > 0 && (
-              <span className="inline-flex items-center text-xs">
-                <Star className={cn("h-3.5 w-3.5 mr-1", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
-                {post.ratingScore.toFixed(1)}/5
-              </span>
-            )}
-          </CardDescription>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={(e) => {
+                e.stopPropagation(); // Prevent event from bubbling up
+                onClose();
+              }}
+              aria-label="Close post details"
+              className="h-7 w-7 p-1"
+            >
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
-        <div className="flex items-center flex-shrink-0">
-          {isOwnPost && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" disabled={deletePostMutationIsPending} className="text-destructive hover:text-destructive h-7 w-7 p-1">
-                  {deletePostMutationIsPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  <span className="sr-only">Delete Post</span>
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete your post and all associated comments and bids.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={deletePostMutationIsPending}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => onDelete(post.id)} disabled={deletePostMutationIsPending} className="bg-destructive hover:bg-destructive/90">
-                    {deletePostMutationIsPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</> : 'Continue'}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation(); // Prevent event from bubbling up
-              onClose();
-            }}
-            aria-label="Close post details"
-            className="h-7 w-7 p-1"
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
-      </div>
-    </CardHeader>
+      </CardHeader>
+      {currentUser && post.id && ( // Conditionally render the dialog
+        <SaveToCollectionDialog
+            isOpen={isSaveToCollectionOpen}
+            onOpenChange={setIsSaveToCollectionOpen}
+            postId={post.id}
+            postTitle={post.question}
+        />
+      )}
+    </>
   );
 });
 
