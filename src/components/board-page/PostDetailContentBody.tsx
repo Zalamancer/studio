@@ -31,19 +31,28 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
             <CarouselContent>
               {post.imageUrls.map((url, index) => (
                 <CarouselItem key={index}>
-                  <div className="aspect-video relative">
+                  <div className="relative"> {/* Simplified parent div */}
                     <Image
-                      src={url} alt={`Post image ${index + 1}`} fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                      style={{ objectFit: 'contain' }} className="rounded-md"
+                      src={url} alt={`Post image ${index + 1}`}
+                      width={0} // Required for Next.js Image if not using fill
+                      height={0} // Required for Next.js Image if not using fill
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Responsive sizing
+                      style={{
+                        width: '100%',
+                        height: 'auto',    // Crucial for maintaining aspect ratio
+                        objectFit: 'contain', // Ensures entire image is visible
+                        maxHeight: '500px'  // Constraint for very tall images
+                      }}
+                      className="rounded-md"
                       data-ai-hint={post.tags && post.tags.length > 0 ? post.tags.slice(0,2).join(' ') : 'abstract'}
+                      priority={index === 0} // Prioritize loading the first image
                     />
                   </div>
                 </CarouselItem>
               ))}
             </CarouselContent>
             {post.imageUrls.length > 1 && (
-              <> <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2" /> <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2" /> </>
+              <> <CarouselPrevious className="absolute left-2 top-1/2 -translate-y-1/2 z-10" /> <CarouselNext className="absolute right-2 top-1/2 -translate-y-1/2 z-10" /> </>
             )}
           </Carousel>
         </div>
