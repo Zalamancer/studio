@@ -557,6 +557,7 @@ export default function MainLayout({
       {!hideAppChrome && (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
           <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+            {/* Desktop Logo/Nav */}
             <div className="mr-4 hidden md:flex">
               <Link href="/" className="mr-6 flex items-center space-x-2">
                 <Handshake className="h-6 w-6 text-primary" />
@@ -580,6 +581,15 @@ export default function MainLayout({
                 ))}
               </nav>
             </div>
+
+            {/* Mobile Logo/Icon (NEW) */}
+            <div className="flex items-center md:hidden">
+              <Link href="/" className="flex items-center space-x-2" aria-label="Go to homepage">
+                <Handshake className="h-6 w-6 text-primary" />
+              </Link>
+            </div>
+
+            {/* Right-aligned items (Create Post, Notifications, User Menu) */}
             <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
               {authLoading ? (
                 <div className="flex items-center space-x-2">
@@ -597,7 +607,8 @@ export default function MainLayout({
                       <DialogTrigger asChild>
                         <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
                           <PlusCircle className="mr-2 h-4 w-4" />
-                          Create Post
+                          <span className="hidden sm:inline">Create Post</span>
+                          <span className="sm:hidden">Post</span>
                         </Button>
                       </DialogTrigger>
                     <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
