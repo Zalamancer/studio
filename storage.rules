@@ -1,0 +1,27 @@
+
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Rules for images uploaded for posts.
+    // The path structure used by storageService.ts is `posts/${userId}/${fileName}`.
+    match /posts/{userId}/{fileName} {
+      // Allow anyone to read post images (e.g., to display them in the app).
+      allow read: if true;
+
+      // Allow authenticated users to write (create, update, delete)
+      // files only if the {userId} in the path matches their own UID.
+      allow write: if request.auth != null && request.auth.uid == userId;
+
+      // Optional: You can add more granular checks here, for example, on file size or content type.
+      // Example:
+      // allow write: if request.auth != null && request.auth.uid == userId
+      //               && request.resource.size < 5 * 1024 * 1024 // 5MB limit
+      //               && request.resource.contentType.matches('image/.*'); // Only image types
+    }
+
+    // Note: Access to any path not explicitly matched by a rule above will be denied by default.
+    // This is a secure default. If you need to allow access to other paths (e.g., user avatars),
+    // you would add additional `match` blocks similar to the one for `/posts`.
+  }
+}
