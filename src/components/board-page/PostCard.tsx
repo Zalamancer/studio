@@ -1,3 +1,4 @@
+
 // src/components/board-page/PostCard.tsx
 "use client";
 
@@ -15,9 +16,10 @@ interface PostCardProps {
   post: Post;
   onOpen: (post: Post) => void;
   isSelected?: boolean;
+  isPriority?: boolean; // New prop
 }
 
-export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isSelected }) => {
+export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isSelected, isPriority = false }) => {
   const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
     : typeof (post.createdAt as any)?.seconds === 'number'
@@ -70,6 +72,8 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
               sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
               className="object-cover"
               data-ai-hint={post.tags && post.tags.length > 0 ? post.tags.slice(0, 2).join(' ') : 'abstract'}
+              priority={isPriority} // Apply priority prop
+              loading={isPriority ? undefined : "lazy"} // Conditionally set loading
             />
           </div>
         )}

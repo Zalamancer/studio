@@ -32,7 +32,7 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
 
   const filteredPostsByTags = useMemo(() => {
     if (!Array.isArray(posts)) return [];
-    let filtered = selectedTags.length === 0 ? posts : posts.filter(post => 
+    let filtered = selectedTags.length === 0 ? posts : posts.filter(post =>
         Array.isArray(post.tags) && selectedTags.every(tag => post.tags.includes(tag))
     );
     return filtered.sort((a, b) => {
@@ -42,24 +42,26 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
     });
   }, [posts, selectedTags]);
 
-  const helpRequestPosts = useMemo(() => 
-    filteredPostsByTags.filter(post => post.requestType === 'help_request'), 
+  const helpRequestPosts = useMemo(() =>
+    filteredPostsByTags.filter(post => post.requestType === 'help_request'),
     [filteredPostsByTags]
   );
-  const opportunitiesPosts = useMemo(() => 
-    filteredPostsByTags.filter(post => post.requestType === 'post' || !post.requestType), 
+  const opportunitiesPosts = useMemo(() =>
+    filteredPostsByTags.filter(post => post.requestType === 'post' || !post.requestType),
     [filteredPostsByTags]
   );
 
-  const renderPostsGrid = useCallback((postsToRender: Post[]) => (
+  const renderPostsGrid = useCallback((postsToRender: Post[], tabName: string) => (
     <div className="columns-1 md:columns-2 gap-4 space-y-4">
       {postsToRender.length > 0 ? (
-        postsToRender.map((post) => (
-          <PostCard 
-            key={post.id} 
-            post={post} 
-            onOpen={onPostSelect} 
-            isSelected={selectedPostId === post.id} 
+        postsToRender.map((post, index) => (
+          <PostCard
+            key={post.id}
+            post={post}
+            onOpen={onPostSelect}
+            isSelected={selectedPostId === post.id}
+            // Prioritize the first image in the "Recommended" tab or the first image if no specific tab logic is needed across all
+            isPriority={index === 0 && activeTab === 'recommended'}
           />
         ))
       ) : (
@@ -70,7 +72,7 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
         </div>
       )}
     </div>
-  ), [isLoading, selectedTags, onPostSelect, selectedPostId]);
+  ), [isLoading, selectedTags, onPostSelect, selectedPostId, activeTab]);
 
   if (isLoading && posts.length === 0) {
     return (
@@ -121,13 +123,13 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
           <TabsTrigger value="opportunities" className="flex items-center gap-1.5 text-xs sm:text-sm"><Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Opportunities</TabsTrigger>
         </TabsList>
         <TabsContent value="recommended" className="mt-0 flex-grow overflow-hidden">
-          <ScrollArea className="h-full pr-2"> {renderPostsGrid(filteredPostsByTags)} </ScrollArea>
+          <ScrollArea className="h-full pr-2"> {renderPostsGrid(filteredPostsByTags, "recommended")} </ScrollArea>
         </TabsContent>
         <TabsContent value="help_requests" className="mt-0 flex-grow overflow-hidden">
-          <ScrollArea className="h-full pr-2"> {renderPostsGrid(helpRequestPosts)} </ScrollArea>
+          <ScrollArea className="h-full pr-2"> {renderPostsGrid(helpRequestPosts, "help_requests")} </ScrollArea>
         </TabsContent>
         <TabsContent value="opportunities" className="mt-0 flex-grow overflow-hidden">
-          <ScrollArea className="h-full pr-2"> {renderPostsGrid(opportunitiesPosts)} </ScrollArea>
+          <ScrollArea className="h-full pr-2"> {renderPostsGrid(opportunitiesPosts, "opportunities")} </ScrollArea>
         </TabsContent>
       </Tabs>
     </div>

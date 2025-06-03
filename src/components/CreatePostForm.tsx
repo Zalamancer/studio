@@ -52,25 +52,28 @@ import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 
-const MAX_FILE_SIZE_MB = 2;
-const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
+const MAX_OUTPUT_FILE_SIZE_MB = 1; // Max size for the *output* compressed file
+const MAX_UPLOAD_DIMENSION = 1600; // Max width or height for uploaded images
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 const MAX_IMAGE_FILES = 5;
 
-const baseFileSchema = z.instanceof(File)
-  .refine(file => file.size <= MAX_FILE_SIZE_BYTES, {
-    message: `Max image size is ${MAX_FILE_SIZE_MB}MB.`
-  })
+// Schema for individual file, checking type and initial size (before our compression)
+const preCompressionFileSchema = z.instanceof(File)
   .refine(file => ACCEPTED_IMAGE_TYPES.includes(file.type), {
     message: "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported."
   });
+  // Initial size check can be less strict as we'll compress.
+  // .refine(file => file.size <= 10 * 1024 * 1024, { // e.g. 10MB initial limit
+  //   message: `Max initial image size is 10MB. Images will be compressed.`
+  // });
+
 
 const postFormSchema = z.object({
   requestType: z.enum(['post', 'help_request'], {
     required_error: "You must select a post type.",
   }),
   question: z.string().min(10, "Question must be at least 10 characters.").max(200, "Question cannot exceed 200 characters."),
-  
+
   descriptionDetails: z.string().min(10, "Details are required (min 10 characters)."),
   descriptionTried: z.string().optional(),
   descriptionOutcome: z.string().optional(),
@@ -79,9 +82,9 @@ const postFormSchema = z.object({
   sector: z.string().min(1, "Please select a sector."),
   subSector: z.string().optional(),
   industry: z.string().optional(),
-  
-  imageFiles: z.array(baseFileSchema).max(MAX_IMAGE_FILES, `You can upload a maximum of ${MAX_IMAGE_FILES} images.`).optional(),
-  
+
+  imageFiles: z.array(preCompressionFileSchema).max(MAX_IMAGE_FILES, `You can upload a maximum of ${MAX_IMAGE_FILES} images.`).optional(),
+
   maxBudget: z.string().transform(val => val === '' ? undefined : val)
     .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
     .optional(),
@@ -145,14 +148,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
   const [currentSubSectors, setCurrentSubSectors] = useState<SubSector[]>([]);
   const [currentIndustries, setCurrentIndustries] = useState<Industry[]>([]);
-  
+
   // State for multiple image previews
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
   // State for a single file being processed for compression
   const [fileForCompression, setFileForCompression] = useState<File | null>(null);
-  const [showCompressionDialog, setShowCompressionDialog] = useState(false);
+  const [showCompressionDialog, setShowCompressionDialog] = useState(false); // Not used if auto-compressing
   const [isCompressing, setIsCompressing] = useState(false);
-  
+
   const [problemDetailsValue, setProblemDetailsValue] = useState('');
   const [problemDetailsMentionQuery, setProblemDetailsMentionQuery] = useState('');
   const [debouncedProblemDetailsQuery, setDebouncedProblemDetailsQuery] = useState('');
@@ -196,8 +199,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (form.formState.isSubmitSuccessful && onDialogClose) {
       const timer = setTimeout(() => {
         resetFormValues();
-        onDialogClose(); 
-      }, 100); 
+        onDialogClose();
+      }, 100);
       return () => clearTimeout(timer);
     }
   }, [form.formState.isSubmitSuccessful, onDialogClose, resetFormValues]);
@@ -233,7 +236,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     }, 300);
     return () => clearTimeout(handler);
   }, [problemDetailsMentionQuery]);
-  
+
   const { data: suggestibleUsers = [], isLoading: isLoadingSuggestibleUsers } = useQuery<UserProfileBasic[]>({
     queryKey: ['suggestibleUsersForCreatePost', debouncedProblemDetailsQuery, currentUserId],
     queryFn: () => getSuggestibleUsers(debouncedProblemDetailsQuery, debouncedProblemDetailsQuery ? 10 : 25),
@@ -257,7 +260,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
   const handleProblemDetailsChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const value = e.target.value;
-    setProblemDetailsValue(value); 
+    setProblemDetailsValue(value);
     if (problemDetailsTextareaRef.current) {
         evaluateMentionState(value, problemDetailsTextareaRef.current.selectionStart || 0, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions);
     }
@@ -268,9 +271,9 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         evaluateMentionState(e.target.value, problemDetailsTextareaRef.current.selectionStart || 0, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions);
     }
   }, [evaluateMentionState, problemDetailsTextareaRef, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions]);
-  
-  const handleSelectSuggestion = useCallback((profile: UserProfileBasic, 
-    currentTextValue: string, 
+
+  const handleSelectSuggestion = useCallback((profile: UserProfileBasic,
+    currentTextValue: string,
     setTextValue: React.Dispatch<React.SetStateAction<string>>,
     inputRef: React.RefObject<HTMLTextAreaElement | HTMLInputElement>,
     setMentionQueryFn: React.Dispatch<React.SetStateAction<string>>,
@@ -285,12 +288,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (lastAtIndex > -1) {
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
-        const mentionToInsert = profile.mentionName; 
+        const mentionToInsert = profile.mentionName;
         const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
-        
+
         setTextValue(newText);
         setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId));
-        
+
         const newCursorPosition = textBeforeMention.length + ("@" + mentionToInsert + " ").length;
         setTimeout(() => {
             inputRef.current?.focus();
@@ -300,7 +303,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     setShowSuggestionsFn(false);
     setMentionQueryFn('');
   }, [setSelectedMentionedUserIds]);
-  
+
   useEffect(() => {
     if (problemDetailsValue !== form.getValues('descriptionDetails')) {
       form.setValue('descriptionDetails', problemDetailsValue, { shouldValidate: true, shouldDirty: true });
@@ -328,14 +331,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   const filteredDescriptionSuggestions = useMemo(() => {
     if (!showProblemDetailsSuggestions) return [];
     if (isLoadingSuggestibleUsers) return [{ userId: 'loading-desc', displayName: 'Loading users...', mentionName: 'loading-desc' } as UserProfileBasic];
-    
+
     let source = suggestibleUsers.filter(p => p.userId !== currentUserId && !!p.mentionName);
 
     if (debouncedProblemDetailsQuery.trim() === '') {
       source = source.slice(0, 25);
     } else {
       const queryLower = debouncedProblemDetailsQuery.toLowerCase();
-      source = source.filter(p => 
+      source = source.filter(p =>
         p.mentionName.toLowerCase().includes(queryLower) ||
         (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
         (p.companyName && p.companyName.toLowerCase().includes(queryLower))
@@ -353,88 +356,78 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
-    if (!files || files.length === 0) {
-      // If no files selected (e.g., user cancels dialog), do nothing or clear existing if needed
-      return;
-    }
+    if (!files || files.length === 0) return;
 
     const currentSelectedFiles = form.getValues("imageFiles") || [];
     const currentPreviewUrls = [...imagePreviewUrls];
-    const newFilesToProcess: File[] = [];
+    const newlyProcessedFiles: File[] = [];
+    const newlyGeneratedPreviewUrls: string[] = [];
 
-    for (let i = 0; i < files.length; i++) {
-      if (currentSelectedFiles.length + newFilesToProcess.length >= MAX_IMAGE_FILES) {
+    setIsCompressing(true);
+    toast({ title: "Processing images...", description: "Please wait.", duration: newFilesToProcess.length * 1500 });
+
+    const newFilesToProcess = Array.from(files);
+
+    for (const file of newFilesToProcess) {
+      if (currentSelectedFiles.length + newlyProcessedFiles.length >= MAX_IMAGE_FILES) {
         toast({ variant: "destructive", title: "Limit Reached", description: `You can only upload up to ${MAX_IMAGE_FILES} images.` });
         break;
       }
-      const file = files[i];
       if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
         toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not a supported image type.` });
         continue;
       }
-      newFilesToProcess.push(file);
-    }
 
-    if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input to allow re-selection of same file
+      try {
+        const compressionOptions = {
+          maxSizeMB: MAX_OUTPUT_FILE_SIZE_MB,
+          maxWidthOrHeight: MAX_UPLOAD_DIMENSION,
+          useWebWorker: true,
+          mimeType: 'image/webp', // Output WebP
+          quality: 0.75, // WebP quality (0 to 1)
+        };
+        console.log(`Compressing ${file.name} with options:`, compressionOptions);
+        const compressedFile = await imageCompression(file, compressionOptions);
+        console.log(`Compressed ${file.name} from ${(file.size / 1024).toFixed(2)}KB to ${(compressedFile.size / 1024).toFixed(2)}KB`);
 
-    if (newFilesToProcess.length === 0) return;
+        newlyProcessedFiles.push(compressedFile);
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          newlyGeneratedPreviewUrls.push(reader.result as string);
+          // Defer state updates until all files are processed if batching
+        };
+        reader.readAsDataURL(compressedFile);
 
-    // Process files one by one, potentially showing compression dialog
-    for (const file of newFilesToProcess) {
-        if (file.size > MAX_FILE_SIZE_BYTES) {
-            setFileForCompression(file); // Set the specific file needing compression
-            setShowCompressionDialog(true);
-            // Wait for user interaction with dialog (compress or cancel)
-            // This loop will effectively pause here until dialog resolves.
-            // A more complex solution might use a queue and promises.
-            // For now, this means user handles one oversized file at a time.
-            return; // Stop processing further files until this one is handled
-        } else {
-            // File is okay, add to list and generate preview
-            currentSelectedFiles.push(file);
-            const reader = new FileReader();
-            reader.onloadend = () => {
-                currentPreviewUrls.push(reader.result as string);
-                setImagePreviewUrls([...currentPreviewUrls]); // Update preview state
-            };
-            reader.readAsDataURL(file);
-        }
-    }
-    form.setValue("imageFiles", currentSelectedFiles, { shouldValidate: true });
-  };
-
-  const handleCompressAndSetImage = async () => {
-    if (!fileForCompression) return;
-    setIsCompressing(true);
-    setShowCompressionDialog(false);
-    toast({ title: "Compressing image...", description: "Please wait." });
-    try {
-      const compressedResult = await imageCompression(fileForCompression, { maxSizeMB: MAX_FILE_SIZE_MB, maxWidthOrHeight: 1920, useWebWorker: true });
-      let fileToSet: File;
-      if (compressedResult instanceof Blob && !(compressedResult instanceof File)) {
-        fileToSet = new File([compressedResult], fileForCompression.name, { type: compressedResult.type, lastModified: fileForCompression.lastModified });
-      } else {
-        fileToSet = compressedResult as File;
+      } catch (error) {
+        console.error(`Error compressing ${file.name}:`, error);
+        toast({ variant: "destructive", title: `Compression Failed for ${file.name}`, description: "Could not process this image. Please try another." });
       }
-
-      const currentFiles = form.getValues("imageFiles") || [];
-      const updatedFiles = [...currentFiles, fileToSet];
-      form.setValue("imageFiles", updatedFiles, { shouldValidate: true });
-
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setImagePreviewUrls(prev => [...prev, reader.result as string]);
-      };
-      reader.readAsDataURL(fileToSet);
-      toast({ title: "Image Compressed & Added" });
-    } catch (error) {
-      console.error("[CreatePostForm] Image compression error:", error);
-      toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress. Try a smaller file." });
-    } finally {
-      setIsCompressing(false);
-      setFileForCompression(null); // Clear the file for compression
     }
+    setIsCompressing(false);
+
+    // Batch update form state and previews after loop
+    if (newlyProcessedFiles.length > 0) {
+        form.setValue("imageFiles", [...currentSelectedFiles, ...newlyProcessedFiles], { shouldValidate: true });
+        // This requires waiting for all readers to finish. A bit more complex.
+        // For simplicity, let's assume readers finish quickly or use a Promise.all for readers
+        // For now, directly update with whatever has been read so far and hope it catches up
+        const updatePreviews = async () => {
+            const previews = await Promise.all(newlyProcessedFiles.map(f => {
+                return new Promise<string>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.onerror = reject;
+                    reader.readAsDataURL(f);
+                });
+            }));
+            setImagePreviewUrls(prev => [...prev, ...previews]);
+        };
+        updatePreviews();
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
+
 
   const handleRemoveImage = (indexToRemove: number) => {
     const currentFiles = form.getValues("imageFiles") || [];
@@ -445,7 +438,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
   const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
     const finalMentionedUserIds = Array.from(selectedMentionedUserIds);
-    
+
     const submitData: CreatePostFormData = {
       requestType: values.requestType,
       question: values.question,
@@ -463,7 +456,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     };
     onSubmit(submitData);
   };
-  
+
   const localGetInitials = (name: string | undefined | null): string => {
       if (!name || typeof name !== 'string' || name.trim() === '') return '?';
       const nameToProcess = name.startsWith('@') ? name.substring(1) : name;
@@ -537,7 +530,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 </FormItem>
               )}
             />
-            
+
             <div className="flex-grow flex flex-col space-y-0">
               <Label className="text-base font-semibold text-foreground mb-2">
                 Details <span className="text-destructive">*</span>
@@ -556,7 +549,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 </TabsList>
 
                 <TabsContent value="details" className="mt-2 rounded-md border p-4 bg-background flex-grow">
-                  <FormField control={form.control} name="descriptionDetails" render={({ field }) => ( 
+                  <FormField control={form.control} name="descriptionDetails" render={({ field }) => (
                     <FormItem className="h-full flex flex-col">
                       <FormLabel className="sr-only">Problem Details</FormLabel>
                       <Popover
@@ -611,7 +604,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                           placeholder="Solutions or approaches you&apos;ve already attempted (optional)..."
                           className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
                           {...field}
-                          value={field.value || ''} 
+                          value={field.value || ''}
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -628,7 +621,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                           placeholder="Ideal result or solution you&apos;re looking for (optional)?"
                           className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
                           {...field}
-                           value={field.value || ''} 
+                           value={field.value || ''}
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -686,7 +679,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               </>
             )}
 
-            <FormField control={form.control} name="imageFiles" render={({ field }) => ( 
+            <FormField control={form.control} name="imageFiles" render={({ field }) => (
               <FormItem>
                 <FormLabel>Images (Optional, up to {MAX_IMAGE_FILES})</FormLabel>
                 <FormControl>
@@ -701,9 +694,9 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     />
                 </FormControl>
                 <div className="mt-2 flex items-center gap-4">
-                  <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isCompressing || (form.getValues("imageFiles")?.length || 0) >= MAX_IMAGE_FILES}> 
-                    {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />} 
-                    Add Image(s) 
+                  <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isCompressing || (form.getValues("imageFiles")?.length || 0) >= MAX_IMAGE_FILES}>
+                    {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />}
+                    Add Image(s)
                   </Button>
                 </div>
                 {imagePreviewUrls.length > 0 && (
@@ -726,7 +719,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                         ))}
                     </div>
                 )}
-                <FormDescription>Max {MAX_IMAGE_FILES} images, {MAX_FILE_SIZE_MB}MB each. JPG, PNG, GIF, WebP accepted.</FormDescription>
+                <FormDescription>Max {MAX_IMAGE_FILES} images. Output will be optimized to WebP, ~{MAX_OUTPUT_FILE_SIZE_MB}MB, max {MAX_UPLOAD_DIMENSION}px.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
@@ -811,13 +804,40 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             <AlertDialogHeader>
               <AlertDialogTitle>Image Too Large</AlertDialogTitle>
               <AlertDialogDescription>
-                The selected image ({fileForCompression?.name}) exceeds {MAX_FILE_SIZE_MB}MB.
-                Would you like to compress it? Compression may slightly reduce quality.
+                The selected image ({fileForCompression?.name}) exceeds the initial size limit.
+                It will be compressed to fit within {MAX_OUTPUT_FILE_SIZE_MB}MB and {MAX_UPLOAD_DIMENSION}px. This may slightly reduce quality.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel onClick={() => { setFileForCompression(null); setShowCompressionDialog(false); }}>Cancel</AlertDialogCancel>
-              <AlertDialogAction onClick={handleCompressAndSetImage} className="bg-primary hover:bg-primary/90"><ImageDown className="mr-2 h-4 w-4" /> Compress Image</AlertDialogAction>
+              <AlertDialogAction onClick={async () => {
+                  if (!fileForCompression) return;
+                  setIsCompressing(true);
+                  setShowCompressionDialog(false);
+                  toast({ title: "Compressing image...", description: "Please wait." });
+                  try {
+                      const compressionOptions = {
+                          maxSizeMB: MAX_OUTPUT_FILE_SIZE_MB,
+                          maxWidthOrHeight: MAX_UPLOAD_DIMENSION,
+                          useWebWorker: true,
+                          mimeType: 'image/webp',
+                          quality: 0.75,
+                      };
+                      const compressedFile = await imageCompression(fileForCompression, compressionOptions);
+                      const currentFiles = form.getValues("imageFiles") || [];
+                      form.setValue("imageFiles", [...currentFiles, compressedFile], { shouldValidate: true });
+                      const reader = new FileReader();
+                      reader.onloadend = () => setImagePreviewUrls(prev => [...prev, reader.result as string]);
+                      reader.readAsDataURL(compressedFile);
+                      toast({ title: "Image Compressed & Added" });
+                  } catch (error) {
+                      console.error("Error compressing image:", error);
+                      toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress the image." });
+                  } finally {
+                      setIsCompressing(false);
+                      setFileForCompression(null);
+                  }
+              }} className="bg-primary hover:bg-primary/90"><ImageDown className="mr-2 h-4 w-4" /> Compress and Add</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>

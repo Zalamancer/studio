@@ -10,6 +10,7 @@ const nextConfig: NextConfig = {
     ignoreDuringBuilds: true,
   },
   images: {
+    formats: ['image/avif', 'image/webp'], // Explicitly define desired output formats
     remotePatterns: [
       {
         protocol: 'https',
