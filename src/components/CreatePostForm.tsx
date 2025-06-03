@@ -1,3 +1,4 @@
+
 // src/components/CreatePostForm.tsx
 "use client";
 
@@ -51,8 +52,6 @@ import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 
-// Tip: This component is getting large. Consider splitting tab content or complex fields (like @mentions) into sub-components.
-
 const MAX_FILE_SIZE_MB = 2;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
@@ -87,9 +86,6 @@ const postFormSchema = z.object({
   deadline: z.date().optional().nullable(),
 }).superRefine((data, ctx) => {
   // No conditional validation needed for description fields anymore as tabs are always present
-  // MaxBudget and Deadline are only relevant if requestType is 'help_request',
-  // but their optionality is handled at the field level.
-  // If requestType is 'post', these fields will be undefined/null and handled by the service.
 });
 
 export interface CreatePostFormData {
@@ -286,12 +282,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
         const mentionToInsert = profile.mentionName; 
-        const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
+        const newText = \`\${textBeforeMention}@\${mentionToInsert} \${textAfterCursor}\`;
         
         setTextValue(newText);
         setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId));
         
-        const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
+        const newCursorPosition = textBeforeMention.length + \`@\${mentionToInsert} \`.length;
         setTimeout(() => {
             inputRef.current?.focus();
             inputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
@@ -299,7 +295,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     }
     setShowSuggestionsFn(false);
     setMentionQueryFn('');
-  }, [setSelectedMentionedUserIds]); // Added setSelectedMentionedUserIds
+  }, [setSelectedMentionedUserIds]);
   
   useEffect(() => {
     if (problemDetailsValue !== form.getValues('descriptionDetails')) {
@@ -343,7 +339,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     }
 
     if (source.length === 0 && debouncedProblemDetailsQuery.trim() !== '') {
-      return [{ userId: 'no-match-desc', displayName: `No users matching "@${debouncedProblemDetailsQuery}"`, mentionName: 'no-match-desc' } as UserProfileBasic];
+      return [{ userId: 'no-match-desc', displayName: \`No users matching "@\${debouncedProblemDetailsQuery}"\`, mentionName: 'no-match-desc' } as UserProfileBasic];
     }
     if (source.length === 0) {
       return [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
@@ -374,6 +370,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       const reader = new FileReader();
       reader.onloadend = () => setImagePreviewUrl(reader.result as string);
       reader.readAsDataURL(file);
+    } else {
+         form.setValue("imageFile", null, { shouldValidate: true });
     }
   };
 
@@ -383,11 +381,20 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     setShowCompressionDialog(false);
     toast({ title: "Compressing image...", description: "Please wait." });
     try {
-      const compressedFile = await imageCompression(originalTooLargeFile, { maxSizeMB: MAX_FILE_SIZE_MB, maxWidthOrHeight: 1920, useWebWorker: true });
-      form.setValue("imageFile", compressedFile, { shouldValidate: true });
+      let compressedResult = await imageCompression(originalTooLargeFile, { maxSizeMB: MAX_FILE_SIZE_MB, maxWidthOrHeight: 1920, useWebWorker: true });
+      
+      // Ensure compressedResult is a File object
+      let fileToSet: File;
+      if (compressedResult instanceof Blob && !(compressedResult instanceof File)) {
+        fileToSet = new File([compressedResult], originalTooLargeFile.name, { type: compressedResult.type, lastModified: originalTooLargeFile.lastModified });
+      } else {
+        fileToSet = compressedResult as File;
+      }
+
+      form.setValue("imageFile", fileToSet, { shouldValidate: true });
       const reader = new FileReader();
       reader.onloadend = () => setImagePreviewUrl(reader.result as string);
-      reader.readAsDataURL(compressedFile);
+      reader.readAsDataURL(fileToSet);
       toast({ title: "Image Compressed", description: "Proceed with upload." });
     } catch (error) {
       console.error("[CreatePostForm] Image compression error:", error);
@@ -404,6 +411,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     setImagePreviewUrl(null);
     form.setValue("imageFile", null, { shouldValidate: true });
     if (fileInputRef.current) fileInputRef.current.value = "";
+    setOriginalTooLargeFile(null);
   };
 
   const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
@@ -501,8 +509,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               )}
             />
             
-            <div className="flex-grow flex flex-col space-y-0"> {/* Reduced space-y-2 to space-y-0 */}
-              <Label className="text-base font-semibold text-foreground mb-2"> {/* Added mb-2 here */}
+            <div className="flex-grow flex flex-col space-y-0">
+              <Label className="text-base font-semibold text-foreground mb-2">
                 Details <span className="text-destructive">*</span>
               </Label>
               <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full flex-grow flex flex-col">
@@ -574,7 +582,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                           placeholder="Solutions or approaches you&apos;ve already attempted (optional)..."
                           className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
                           {...field}
-                          value={field.value || ''} // Ensure value is controlled
+                          value={field.value || ''} 
                           disabled={isSubmitting}
                         />
                       </FormControl>
@@ -591,7 +599,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                           placeholder="Ideal result or solution you&apos;re looking for (optional)?"
                           className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
                           {...field}
-                           value={field.value || ''} // Ensure value is controlled
+                           value={field.value || ''} 
                           disabled={isSubmitting}
                         />
                       </FormControl>

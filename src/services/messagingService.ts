@@ -21,6 +21,7 @@ import {
   arrayRemove, // For removing from arrays
   FieldValue, // IMPORT FieldValue for arrayRemove and serverTimestamp
   DocumentSnapshot, // Added for DocumentSnapshot type
+  QuerySnapshot,
 } from 'firebase/firestore';
 import type { ClientConversation, SerializableMessage, NewMessageData, Message, Conversation, NewConversationData } from '@/types/messaging';
 import { fetchUserProfileBasic } from './connectionService';
@@ -352,64 +353,87 @@ export const getMessagesForConversation = (
   }
   console.log(`%c[Service] getMessagesForConversation: Setting up listener for conversationId: ${conversationId}`, "color: cyan;");
 
-  const messagesRef = messagesSubcollectionRef(conversationId);
-  const q = query(
-    messagesRef,
-    orderBy('timestamp', 'asc'),
-    limit(100) // Keep limit reasonable for real-time
-  );
-
-  const unsubscribe = onSnapshot(q,
-    (querySnapshot) => {
-      console.log(`%c[Service] onSnapshot fired for ${conversationId}. Docs count: ${querySnapshot.docs.length}`, "color: cyan;");
-      const messages = querySnapshot.docs.map((docSnap) => {
-        const data = docSnap.data() as Message;
-        const timestampMillis = data.timestamp instanceof Timestamp
-            ? data.timestamp.toMillis()
-            : (typeof data.timestamp === 'number' ? data.timestamp : Date.now());
-
-        const serializableMsg: SerializableMessage = {
-          id: docSnap.id,
-          conversationId: conversationId,
-          senderId: data.senderId,
-          text: data.text || "",
-          timestamp: timestampMillis,
-          read: data.read || false,
-          isBotMessage: data.isBotMessage === true,
-          replyToMessageId: data.replyToMessageId || undefined,
-          repliedToTextSnippet: data.repliedToTextSnippet || undefined,
-        };
-        return serializableMsg;
-      });
-      onUpdate(messages);
-    },
-    (error) => {
-      console.error(`%c[Service] Error in messages listener for ${conversationId}:`, "color: red;", error);
-      if (error.code === 'permission-denied') {
-        // Check if this is a group conversation that the user has left
-        const convRef = doc(db, 'conversations', conversationId);
-        getDoc(convRef).then((convSnap: DocumentSnapshot) => {
-          if (convSnap.exists()) {
-            const convData = convSnap.data() as Conversation;
-            if (convData.type === 'group' && !convData.participants.includes(auth.currentUser?.uid || '')) {
-              // User has left the group, silently clear messages without error
-              onUpdate([]);
-              return;
-            }
-          }
-          // For other permission denied cases, still show error
-          onError(new Error("You don't have permission to view these messages."));
-        }).catch(() => {
-          // Silently handle any errors checking conversation access
+  // First check if user has left the group
+  const checkUserStatus = async () => {
+    try {
+      const convRef = doc(db, 'conversations', conversationId);
+      const convSnap = await getDoc(convRef);
+      if (convSnap.exists()) {
+        const convData = convSnap.data() as Conversation;
+        if (convData.type === 'group' && !convData.participants.includes(auth.currentUser?.uid || '')) {
+          // User has left the group, silently return empty messages
           onUpdate([]);
-        });
-      } else {
-        onError(error);
+          return true; // Indicate user has left
+        }
       }
+      return false; // User hasn't left
+    } catch (error) {
+      console.warn(`%c[Service] Error checking user status for ${conversationId}:`, "color: orange;", error);
+      return false; // On error, proceed with normal listener
     }
-  );
+  };
 
-  return unsubscribe;
+  // Check status before setting up listener
+  checkUserStatus().then(hasLeft => {
+    if (hasLeft) {
+      return; // Don't set up listener if user has left
+    }
+
+    const messagesRef = messagesSubcollectionRef(conversationId);
+    const q = query(
+      messagesRef,
+      orderBy('timestamp', 'asc'),
+      limit(100)
+    );
+
+    const unsubscribe = onSnapshot(q,
+      (querySnapshot: QuerySnapshot) => {
+        console.log(`%c[Service] onSnapshot fired for ${conversationId}. Docs count: ${querySnapshot.docs.length}`, "color: cyan;");
+        const messages = querySnapshot.docs.map((docSnap: DocumentSnapshot) => {
+          const data = docSnap.data() as Message;
+          const timestampMillis = data.timestamp instanceof Timestamp
+              ? data.timestamp.toMillis()
+              : (typeof data.timestamp === 'number' ? data.timestamp : Date.now());
+
+          const serializableMsg: SerializableMessage = {
+            id: docSnap.id,
+            conversationId: conversationId,
+            senderId: data.senderId,
+            text: data.text || "",
+            timestamp: timestampMillis,
+            read: data.read || false,
+            isBotMessage: data.isBotMessage === true,
+            replyToMessageId: data.replyToMessageId || undefined,
+            repliedToTextSnippet: data.repliedToTextSnippet || undefined,
+          };
+          return serializableMsg;
+        });
+        onUpdate(messages);
+      },
+      (error: Error & { code?: string }) => {
+        // Only log non-permission-denied errors
+        if (error.code !== 'permission-denied') {
+          console.error(`%c[Service] Error in messages listener for ${conversationId}:`, "color: red;", error);
+          onError(error);
+        } else {
+          // For permission denied, silently check if user has left
+          checkUserStatus().then(hasLeft => {
+            if (!hasLeft) {
+              // If user hasn't left, then it's a real permission error
+              console.error(`%c[Service] Permission denied for ${conversationId} but user hasn't left group:`, "color: red;", error);
+              onError(error);
+            }
+            // If user has left, we already handled it in checkUserStatus
+          });
+        }
+      }
+    );
+
+    return unsubscribe;
+  });
+
+  // Return a no-op unsubscribe function initially
+  return () => {};
 };
 
 
