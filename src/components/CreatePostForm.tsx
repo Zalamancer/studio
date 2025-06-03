@@ -25,7 +25,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
 import {
     Loader2, Upload, XCircle, ImageDown, FileText, HandHelping, DollarSign, CalendarDays,
-    AtSign, Briefcase, Info, Sparkles, User, Lightbulb, HelpingHand, FileQuestion, Brain, Target, Type, MessageCircle, AlignLeft, CalendarIcon, Handshake, Tag
+    AtSign, Briefcase, Info, Sparkles, User, Lightbulb, HelpingHand, FileQuestion, Brain, Target, Type, MessageCircle, AlignLeft, CalendarIcon, Handshake, Tag, Trash2
 } from 'lucide-react';
 import Image from 'next/image';
 import { useToast } from '@/hooks/use-toast';
@@ -55,6 +55,7 @@ import type { SectorWithSubSectors, SubSector, Industry } from '@/components/lay
 const MAX_FILE_SIZE_MB = 2;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
+const MAX_IMAGE_FILES = 5;
 
 const baseFileSchema = z.instanceof(File)
   .refine(file => file.size <= MAX_FILE_SIZE_BYTES, {
@@ -79,14 +80,14 @@ const postFormSchema = z.object({
   subSector: z.string().optional(),
   industry: z.string().optional(),
   
-  imageFile: baseFileSchema.optional().nullable(),
+  imageFiles: z.array(baseFileSchema).max(MAX_IMAGE_FILES, `You can upload a maximum of ${MAX_IMAGE_FILES} images.`).optional(),
   
   maxBudget: z.string().transform(val => val === '' ? undefined : val)
     .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
     .optional(),
   deadline: z.date().optional().nullable(),
 }).superRefine((data, ctx) => {
-  // No conditional validation needed for description fields anymore as tabs are always present
+  // Conditional validation moved here if needed, but description fields are always present in tabs
 });
 
 export interface CreatePostFormData {
@@ -99,7 +100,7 @@ export interface CreatePostFormData {
   sector: string;
   subSector?: string | undefined;
   industry?: string | undefined;
-  imageFile?: File | null | undefined;
+  imageFiles?: File[]; // Changed from imageFile to imageFiles
   mentionedUserIds?: string[];
   maxBudget?: number | undefined;
   deadline?: Date | null | undefined;
@@ -134,7 +135,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       sector: "",
       subSector: "",
       industry: "",
-      imageFile: null,
+      imageFiles: [], // Initialize as empty array
       maxBudget: undefined,
       deadline: undefined,
     },
@@ -144,11 +145,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
   const [currentSubSectors, setCurrentSubSectors] = useState<SubSector[]>([]);
   const [currentIndustries, setCurrentIndustries] = useState<Industry[]>([]);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | null>(null);
-
-  const [isCompressing, setIsCompressing] = useState(false);
-  const [originalTooLargeFile, setOriginalTooLargeFile] = useState<File | null>(null);
+  
+  // State for multiple image previews
+  const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
+  // State for a single file being processed for compression
+  const [fileForCompression, setFileForCompression] = useState<File | null>(null);
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
+  const [isCompressing, setIsCompressing] = useState(false);
   
   const [problemDetailsValue, setProblemDetailsValue] = useState('');
   const [problemDetailsMentionQuery, setProblemDetailsMentionQuery] = useState('');
@@ -161,7 +164,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   const requestType = form.watch("requestType");
   const [activeDescriptionTab, setActiveDescriptionTab] = useState("details");
 
-
   const resetFormValues = useCallback(() => {
     form.reset({
       requestType: 'post',
@@ -173,13 +175,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       sector: "",
       subSector: "",
       industry: "",
-      imageFile: null,
+      imageFiles: [],
       maxBudget: undefined,
       deadline: undefined,
     });
     setProblemDetailsValue('');
-    setImagePreviewUrl(null);
-    setOriginalTooLargeFile(null);
+    setImagePreviewUrls([]);
+    setFileForCompression(null);
     setShowCompressionDialog(false);
     setCurrentSubSectors([]);
     setCurrentIndustries([]);
@@ -187,6 +189,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     setProblemDetailsMentionQuery('');
     setShowProblemDetailsSuggestions(false);
     setSelectedMentionedUserIds(new Set());
+    if (fileInputRef.current) fileInputRef.current.value = "";
   }, [form]);
 
   useEffect(() => {
@@ -283,7 +286,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
         const mentionToInsert = profile.mentionName; 
-        const newText = textBeforeMention + "@" + mentionToInsert + " " + textAfterCursor;
+        const newText = `${textBeforeMention}@${mentionToInsert} ${textAfterCursor}`;
         
         setTextValue(newText);
         setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId));
@@ -348,71 +351,97 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     return source;
   }, [suggestibleUsers, isLoadingSuggestibleUsers, showProblemDetailsSuggestions, debouncedProblemDetailsQuery, currentUserId]);
 
-  const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    form.setValue("imageFile", null, { shouldValidate: true });
-    setOriginalTooLargeFile(null);
-    setImagePreviewUrl(null);
-    if (fileInputRef.current) fileInputRef.current.value = "";
-
-    if (file) {
-      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        toast({ variant: "destructive", title: "Invalid File Type", description: "Please select a JPG, PNG, GIF, or WebP image." });
-        form.setValue("imageFile", null, { shouldValidate: true });
-        return;
-      }
-      if (file.size > MAX_FILE_SIZE_BYTES) {
-        setOriginalTooLargeFile(file);
-        setShowCompressionDialog(true);
-        form.setValue("imageFile", null, { shouldValidate: true });
-        return;
-      }
-      form.setValue("imageFile", file, { shouldValidate: true });
-      const reader = new FileReader();
-      reader.onloadend = () => setImagePreviewUrl(reader.result as string);
-      reader.readAsDataURL(file);
-    } else {
-         form.setValue("imageFile", null, { shouldValidate: true });
+  const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = event.target.files;
+    if (!files || files.length === 0) {
+      // If no files selected (e.g., user cancels dialog), do nothing or clear existing if needed
+      return;
     }
+
+    const currentSelectedFiles = form.getValues("imageFiles") || [];
+    const currentPreviewUrls = [...imagePreviewUrls];
+    const newFilesToProcess: File[] = [];
+
+    for (let i = 0; i < files.length; i++) {
+      if (currentSelectedFiles.length + newFilesToProcess.length >= MAX_IMAGE_FILES) {
+        toast({ variant: "destructive", title: "Limit Reached", description: `You can only upload up to ${MAX_IMAGE_FILES} images.` });
+        break;
+      }
+      const file = files[i];
+      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not a supported image type.` });
+        continue;
+      }
+      newFilesToProcess.push(file);
+    }
+
+    if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input to allow re-selection of same file
+
+    if (newFilesToProcess.length === 0) return;
+
+    // Process files one by one, potentially showing compression dialog
+    for (const file of newFilesToProcess) {
+        if (file.size > MAX_FILE_SIZE_BYTES) {
+            setFileForCompression(file); // Set the specific file needing compression
+            setShowCompressionDialog(true);
+            // Wait for user interaction with dialog (compress or cancel)
+            // This loop will effectively pause here until dialog resolves.
+            // A more complex solution might use a queue and promises.
+            // For now, this means user handles one oversized file at a time.
+            return; // Stop processing further files until this one is handled
+        } else {
+            // File is okay, add to list and generate preview
+            currentSelectedFiles.push(file);
+            const reader = new FileReader();
+            reader.onloadend = () => {
+                currentPreviewUrls.push(reader.result as string);
+                setImagePreviewUrls([...currentPreviewUrls]); // Update preview state
+            };
+            reader.readAsDataURL(file);
+        }
+    }
+    form.setValue("imageFiles", currentSelectedFiles, { shouldValidate: true });
   };
 
   const handleCompressAndSetImage = async () => {
-    if (!originalTooLargeFile) return;
+    if (!fileForCompression) return;
     setIsCompressing(true);
     setShowCompressionDialog(false);
     toast({ title: "Compressing image...", description: "Please wait." });
     try {
-      const compressedResult = await imageCompression(originalTooLargeFile, { maxSizeMB: MAX_FILE_SIZE_MB, maxWidthOrHeight: 1920, useWebWorker: true });
-      
+      const compressedResult = await imageCompression(fileForCompression, { maxSizeMB: MAX_FILE_SIZE_MB, maxWidthOrHeight: 1920, useWebWorker: true });
       let fileToSet: File;
       if (compressedResult instanceof Blob && !(compressedResult instanceof File)) {
-        fileToSet = new File([compressedResult], originalTooLargeFile.name, { type: compressedResult.type, lastModified: originalTooLargeFile.lastModified });
+        fileToSet = new File([compressedResult], fileForCompression.name, { type: compressedResult.type, lastModified: fileForCompression.lastModified });
       } else {
         fileToSet = compressedResult as File;
       }
 
-      form.setValue("imageFile", fileToSet, { shouldValidate: true });
+      const currentFiles = form.getValues("imageFiles") || [];
+      const updatedFiles = [...currentFiles, fileToSet];
+      form.setValue("imageFiles", updatedFiles, { shouldValidate: true });
+
       const reader = new FileReader();
-      reader.onloadend = () => setImagePreviewUrl(reader.result as string);
+      reader.onloadend = () => {
+        setImagePreviewUrls(prev => [...prev, reader.result as string]);
+      };
       reader.readAsDataURL(fileToSet);
-      toast({ title: "Image Compressed", description: "Proceed with upload." });
+      toast({ title: "Image Compressed & Added" });
     } catch (error) {
       console.error("[CreatePostForm] Image compression error:", error);
       toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress. Try a smaller file." });
-      form.setValue("imageFile", null, { shouldValidate: true }); // Set to null on failure
-      setImagePreviewUrl(null);
     } finally {
       setIsCompressing(false);
-      setOriginalTooLargeFile(null);
+      setFileForCompression(null); // Clear the file for compression
     }
   };
 
-  const handleRemoveImage = () => {
-    setImagePreviewUrl(null);
-    form.setValue("imageFile", null, { shouldValidate: true }); // Explicitly set to null
-    if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the native input
-    setOriginalTooLargeFile(null); // Also clear this
-};
+  const handleRemoveImage = (indexToRemove: number) => {
+    const currentFiles = form.getValues("imageFiles") || [];
+    const updatedFiles = currentFiles.filter((_, index) => index !== indexToRemove);
+    form.setValue("imageFiles", updatedFiles, { shouldValidate: true });
+    setImagePreviewUrls(prev => prev.filter((_, index) => index !== indexToRemove));
+  };
 
   const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
     const finalMentionedUserIds = Array.from(selectedMentionedUserIds);
@@ -421,13 +450,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       requestType: values.requestType,
       question: values.question,
       descriptionDetails: values.descriptionDetails,
-      descriptionTried: values.descriptionTried || undefined,
-      descriptionOutcome: values.descriptionOutcome || undefined,
+      descriptionTried: values.descriptionTried?.trim() ? values.descriptionTried.trim() : undefined,
+      descriptionOutcome: values.descriptionOutcome?.trim() ? values.descriptionOutcome.trim() : undefined,
       tags: values.tags || [],
       sector: values.sector,
       subSector: values.subSector || undefined,
       industry: values.industry || undefined,
-      imageFile: values.imageFile || undefined,
+      imageFiles: values.imageFiles || [],
       mentionedUserIds: finalMentionedUserIds,
       maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? Number(values.maxBudget) : undefined,
       deadline: values.requestType === 'help_request' && values.deadline ? values.deadline : undefined,
@@ -657,16 +686,47 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               </>
             )}
 
-            <FormField control={form.control} name="imageFile" render={() => ( 
+            <FormField control={form.control} name="imageFiles" render={({ field }) => ( 
               <FormItem>
-                <FormLabel>Image (Optional)</FormLabel>
-                <FormControl><Input type="file" accept={ACCEPTED_IMAGE_TYPES.join(",")} ref={fileInputRef} onChange={handleImageChange} className="hidden" disabled={isSubmitting || isCompressing} /></FormControl>
+                <FormLabel>Images (Optional, up to {MAX_IMAGE_FILES})</FormLabel>
+                <FormControl>
+                    <Input
+                        type="file"
+                        accept={ACCEPTED_IMAGE_TYPES.join(",")}
+                        multiple // Allow multiple file selection
+                        ref={fileInputRef}
+                        onChange={handleImageChange}
+                        className="hidden"
+                        disabled={isSubmitting || isCompressing || (form.getValues("imageFiles")?.length || 0) >= MAX_IMAGE_FILES}
+                    />
+                </FormControl>
                 <div className="mt-2 flex items-center gap-4">
-                  <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isCompressing}> {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />} {imagePreviewUrl ? "Change Image" : "Upload Image"} </Button>
-                  {imagePreviewUrl && (<Button type="button" variant="ghost" size="sm" onClick={handleRemoveImage} disabled={isSubmitting || isCompressing}><XCircle className="mr-2 h-4 w-4 text-destructive" /> Remove</Button>)}
+                  <Button type="button" variant="outline" onClick={() => fileInputRef.current?.click()} disabled={isSubmitting || isCompressing || (form.getValues("imageFiles")?.length || 0) >= MAX_IMAGE_FILES}> 
+                    {isCompressing ? <Loader2 className="mr-2 h-4 w-4 animate-spin"/> : <Upload className="mr-2 h-4 w-4" />} 
+                    Add Image(s) 
+                  </Button>
                 </div>
-                {imagePreviewUrl && (<div className="mt-4 border rounded-md p-2 relative aspect-video max-w-sm mx-auto"><Image src={imagePreviewUrl} alt="Preview" fill style={{objectFit:"contain"}} className="rounded-md" data-ai-hint="user upload"/></div>)}
-                <FormDescription>Max {MAX_FILE_SIZE_MB}MB. JPG, PNG, GIF, WebP accepted.</FormDescription>
+                {imagePreviewUrls.length > 0 && (
+                    <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+                        {imagePreviewUrls.map((url, index) => (
+                            <div key={url} className="relative group aspect-square border rounded-md overflow-hidden">
+                                <Image src={url} alt={`Preview ${index + 1}`} fill style={{objectFit:"cover"}} className="rounded-md" data-ai-hint="user upload preview"/>
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    size="icon"
+                                    className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity p-1"
+                                    onClick={() => handleRemoveImage(index)}
+                                    disabled={isSubmitting || isCompressing}
+                                >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    <span className="sr-only">Remove image {index + 1}</span>
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                )}
+                <FormDescription>Max {MAX_IMAGE_FILES} images, {MAX_FILE_SIZE_MB}MB each. JPG, PNG, GIF, WebP accepted.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
@@ -751,12 +811,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             <AlertDialogHeader>
               <AlertDialogTitle>Image Too Large</AlertDialogTitle>
               <AlertDialogDescription>
-                The selected image exceeds {MAX_FILE_SIZE_MB}MB ({(originalTooLargeFile?.size ? originalTooLargeFile.size / (1024 * 1024) : 0).toFixed(2)}MB).
-                Would you like to compress it to fit? Compression may slightly reduce quality.
+                The selected image ({fileForCompression?.name}) exceeds {MAX_FILE_SIZE_MB}MB.
+                Would you like to compress it? Compression may slightly reduce quality.
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
-              <AlertDialogCancel onClick={() => { form.setValue("imageFile", null, { shouldValidate: true }); setOriginalTooLargeFile(null); setImagePreviewUrl(null); if (fileInputRef.current) fileInputRef.current.value = ''; setShowCompressionDialog(false); }}>Cancel</AlertDialogCancel>
+              <AlertDialogCancel onClick={() => { setFileForCompression(null); setShowCompressionDialog(false); }}>Cancel</AlertDialogCancel>
               <AlertDialogAction onClick={handleCompressAndSetImage} className="bg-primary hover:bg-primary/90"><ImageDown className="mr-2 h-4 w-4" /> Compress Image</AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
@@ -764,4 +824,3 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     </Form>
   );
 };
-

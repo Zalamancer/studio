@@ -1,3 +1,4 @@
+
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -29,32 +30,30 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import type {
   CreatePostFormData,
-  CreatePostFormProps // Ensure this is exported from CreatePostForm
+  CreatePostFormProps 
 } from '@/components/CreatePostForm';
 import type {
   NewPostData,
   SectorWithSubSectors as SectorWithSubSectorsType,
   SubSector as SubSectorType,
   Industry as IndustryType
-} from '@/types/post'; // Ensure types are correctly defined/exported
+} from '@/types/post'; 
 import { addPostToFirestore, getPostsByUserId } from '@/services/postService';
 import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
-import { useIsMobile } from "@/hooks/use-mobile"; // Corrected import path
+import { useIsMobile } from "@/hooks/use-mobile"; 
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
 import { getReviewsForProfile } from '@/services/reviewService';
-import { fetchFullUserProfile } from '@/services/connectionService'; // Ensure this is correctly exported
+import { fetchFullUserProfile } from '@/services/connectionService'; 
 
-// Moved from page.tsx as it's used by CreatePostForm via MainLayout
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
 ];
 
-// Canonical source for detailed sector data
 export const detailedSectorsData: SectorWithSubSectorsType[] = [
     {
         name: "Agriculture, Forestry, Fishing and Hunting", code: "11",
@@ -133,9 +132,9 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
         name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21",
         description: "Extracting naturally occurring mineral solids, liquids, and gases.",
         subSectors: [
-            { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "211111" }] }, // More specific
+            { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "211111" }] }, 
             { name: "Coal Mining", code: "2121", industries: [{ name: "Coal Mining", code: "212110" }] },
-            { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold Ore and Silver Ore Mining", code: "212220" }] }, // Combined Gold & Silver
+            { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold Ore and Silver Ore Mining", code: "212220" }] }, 
             { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Stone Mining and Quarrying", code: "212310" }, { name: "Sand, Gravel, Clay, and Ceramic and Refractory Minerals Mining and Quarrying", code: "212320" }] },
             { name: "Support Activities for Mining", code: "213", industries: [{ name: "Support Activities for Oil and Gas Operations", code: "213111" }, { name: "Support Activities for Coal Mining", code: "213113" }] },
         ],
@@ -189,7 +188,7 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
         name: "Wholesale Trade", code: "42",
         description: "Wholesaling merchandise, generally without transformation.",
         subSectors: [
-            { name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{ name: "Motor Vehicle and Parts Wholesalers", code: "4231" }, { name: "Commercial Equipment Wholesalers", code: "423440" }] }, // Example specific industries
+            { name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{ name: "Motor Vehicle and Parts Wholesalers", code: "4231" }, { name: "Commercial Equipment Wholesalers", code: "423440" }] }, 
             { name: "Merchant Wholesalers, Nondurable Goods", code: "424", industries: [{ name: "Grocery and Related Product Wholesalers", code: "4244" }, { name: "Petroleum and Petroleum Products Wholesalers", code: "4247" }] },
         ],
     },
@@ -219,8 +218,8 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
         name: "Information", code: "51",
         description: "Producing and distributing information and cultural products.",
         subSectors: [
-            { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper Publishers", code: "513110" }, { name: "Software Publishers", code: "513210" }] }, // NAICS 2022 uses 513 for Publishing
-            { name: "Telecommunications", code: "517", industries: [{ name: "Wired Telecommunications Carriers", code: "5171" }, { name: "Wireless Telecommunications Carriers (except Satellite)", code: "5172" }] }, // Codes simplified
+            { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper Publishers", code: "513110" }, { name: "Software Publishers", code: "513210" }] }, 
+            { name: "Telecommunications", code: "517", industries: [{ name: "Wired Telecommunications Carriers", code: "5171" }, { name: "Wireless Telecommunications Carriers (except Satellite)", code: "5172" }] }, 
             { name: "Data Processing, Hosting, and Related Services", code: "518", industries: [{ name: "Data Processing, Hosting, and Related Services", code: "5182" }] },
         ],
     },
@@ -320,12 +319,10 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
     },
 ];
 
-
 export type SectorWithSubSectors = typeof detailedSectorsData[0];
 export type SubSector = SectorWithSubSectors['subSectors'][0];
 export type Industry = SubSector['industries'][0];
 
-// Export as a regular function, not using React.useCallback at module level
 export const findIndustryByName = (
     industryName: string
   ): { industry: IndustryType; subSector: SubSectorType; sector: SectorWithSubSectorsType } | null => {
@@ -343,8 +340,6 @@ export const findIndustryByName = (
     return null;
 };
 
-
-// Dynamically import CreatePostForm and RequestHelpForm if they are large
 const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
   {
@@ -368,7 +363,6 @@ const DynamicThemeToggle = dynamic(() =>
     ssr: false
   }
 );
-
 
 export default function MainLayout({
   children
@@ -418,7 +412,6 @@ export default function MainLayout({
     }
   }, [user, authLoading, isCreatePostOpen]);
 
-
   const addPostMutation = useMutation({
     mutationFn: async (formData: CreatePostFormData) => {
       if (!user) throw new Error("User not authenticated to create post.");
@@ -442,13 +435,22 @@ export default function MainLayout({
       console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score for new post: ${currentRatingScore}`, "color: magenta; font-weight: bold;");
 
       let uploadedImageUrls: string[] = [];
-      if (formData.imageFile && user) {
-        try {
-          const singleUploadedUrl = await uploadPostImage(formData.imageFile, user.uid);
-          if (singleUploadedUrl) uploadedImageUrls.push(singleUploadedUrl);
-        } catch (uploadError: any) {
-          toast({ variant: "destructive", title: "Image Upload Failed", description: uploadError.message || "Could not upload image." });
-          throw new Error(`Image upload failed: ${uploadError.message}`);
+      if (formData.imageFiles && formData.imageFiles.length > 0 && user) {
+        const uploadPromises = formData.imageFiles.map(file => 
+          uploadPostImage(file, user.uid).catch(uploadError => {
+            toast({ variant: "destructive", title: `Image Upload Failed for ${file.name}`, description: (uploadError as Error).message || "Could not upload image." });
+            return null; // Return null for failed uploads
+          })
+        );
+        const results = await Promise.all(uploadPromises);
+        uploadedImageUrls = results.filter((url): url is string => url !== null);
+
+        if (uploadedImageUrls.length !== formData.imageFiles.length) {
+          // Partial success, or all failed
+          if (uploadedImageUrls.length === 0 && formData.imageFiles.length > 0) {
+            throw new Error("All image uploads failed. Post not created.");
+          }
+          toast({ variant: "warning", title: "Partial Image Upload", description: "Some images could not be uploaded. The post will be created with the successfully uploaded images."});
         }
       }
 
@@ -462,8 +464,8 @@ export default function MainLayout({
         requestType: formData.requestType,
 
         descriptionDetails: formData.descriptionDetails,
-        descriptionTried: formData.requestType === 'help_request' ? (formData.descriptionTried || null) : null,
-        descriptionOutcome: formData.requestType === 'help_request' ? (formData.descriptionOutcome || null) : null,
+        descriptionTried: formData.descriptionTried?.trim() ? formData.descriptionTried.trim() : null,
+        descriptionOutcome: formData.descriptionOutcome?.trim() ? formData.descriptionOutcome.trim() : null,
 
         tags: formData.tags || [],
         sector: mainSectorDetails?.name || formData.sector,
@@ -489,7 +491,7 @@ export default function MainLayout({
       setIsCreatePostOpen(false);
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        const descriptionSource = variables.descriptionDetails; // Always use descriptionDetails for mentions
+        const descriptionSource = variables.descriptionDetails; 
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
           if (mentionedUid !== user.uid) {
             try {
@@ -522,7 +524,7 @@ export default function MainLayout({
       console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       addPostMutation.mutate(formData);
     },
-    [user, toast, addPostMutation, queryClient]
+    [user, toast, addPostMutation] 
   );
 
   const handleLogout = async () => {
@@ -547,9 +549,7 @@ export default function MainLayout({
     isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
   );
 
-  // Determine if header/footer/mobile nav should be hidden
   const hideAppChrome = false; 
-
 
   return (
     <div className={rootLayoutClasses}>
@@ -589,7 +589,7 @@ export default function MainLayout({
                 <>
                   <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
                       if (!open && addPostMutation.isSuccess) {
-                        // Form reset is handled internally by CreatePostForm via onDialogClose
+                        // Reset logic is in CreatePostForm's useEffect
                       }
                       setIsCreatePostOpen(open);
                     }}>
