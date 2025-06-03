@@ -1,14 +1,17 @@
 
 "use client";
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Button } from '@/components/ui/button';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ScrollArea } from "@/components/ui/scroll-area"; // ScrollBar removed as we'll hide it with CSS
-import { Loader2, Sparkles, HandHelping, Briefcase } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping } from "lucide-react";
 import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
-import { availableTags } from '@/components/layout/MainLayout';
+import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout'; // For sector data types
 import { cn } from '@/lib/utils';
 
 interface PostListProps {
@@ -16,13 +19,58 @@ interface PostListProps {
   isLoading: boolean;
   onPostSelect: (post: Post) => void;
   selectedPostId?: string | null;
+  availableTags: string[]; // Added prop
+  detailedSectorsData: SectorWithSubSectors[]; // Added prop
 }
 
-export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSelect, selectedPostId }) => {
-  const [activeTab, setActiveTab] = useState<string>("recommended");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+type PostTypeFilter = 'all' | 'help_request' | 'post';
 
-  const handleTagClick = useCallback((tag: string) => {
+export const PostList: React.FC<PostListProps> = ({
+  posts,
+  isLoading,
+  onPostSelect,
+  selectedPostId,
+  availableTags,
+  detailedSectorsData,
+}) => {
+  const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedSectorFilter, setSelectedSectorFilter] = useState<string | undefined>(undefined);
+  const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string | undefined>(undefined);
+  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
+
+  const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
+  const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
+
+  // Populate sub-sectors when a sector is selected
+  useEffect(() => {
+    if (selectedSectorFilter) {
+      const sector = detailedSectorsData.find(s => s.code === selectedSectorFilter);
+      setAvailableSubSectors(sector?.subSectors || []);
+      setSelectedSubSectorFilter(undefined); // Reset sub-sector
+      setAvailableIndustries([]); // Reset industries
+      setSelectedIndustryFilter(undefined); // Reset industry
+    } else {
+      setAvailableSubSectors([]);
+      setAvailableIndustries([]);
+      setSelectedSubSectorFilter(undefined);
+      setSelectedIndustryFilter(undefined);
+    }
+  }, [selectedSectorFilter, detailedSectorsData]);
+
+  // Populate industries when a sub-sector is selected
+  useEffect(() => {
+    if (selectedSubSectorFilter) {
+      const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorFilter);
+      setAvailableIndustries(subSector?.industries || []);
+      setSelectedIndustryFilter(undefined); // Reset industry
+    } else {
+      setAvailableIndustries([]);
+      setSelectedIndustryFilter(undefined);
+    }
+  }, [selectedSubSectorFilter, availableSubSectors]);
+
+  const handleTagToggle = useCallback((tag: string) => {
     setSelectedTags(prevTags =>
       prevTags.includes(tag)
         ? prevTags.filter(t => t !== tag)
@@ -30,49 +78,61 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
     );
   }, []);
 
-  const filteredPostsByTags = useMemo(() => {
+  const clearAllFilters = useCallback(() => {
+    setSelectedPostType("all");
+    setSelectedTags([]);
+    setSelectedSectorFilter(undefined);
+    // Sub-sector and industry will be reset by the useEffect hooks above
+  }, []);
+
+  const isAnyFilterActive = useMemo(() => {
+    return selectedPostType !== "all" || selectedTags.length > 0 || !!selectedSectorFilter;
+  }, [selectedPostType, selectedTags, selectedSectorFilter]);
+
+  const filteredPosts = useMemo(() => {
     if (!Array.isArray(posts)) return [];
-    let filtered = selectedTags.length === 0 ? posts : posts.filter(post =>
+    let filtered = posts;
+
+    // Filter by Post Type
+    if (selectedPostType !== "all") {
+      filtered = filtered.filter(post => post.requestType === selectedPostType);
+    }
+
+    // Filter by Tags
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(post =>
         Array.isArray(post.tags) && selectedTags.every(tag => post.tags.includes(tag))
-    );
+      );
+    }
+
+    // Filter by Sector/Sub-Sector/Industry
+    if (selectedIndustryFilter) {
+      filtered = filtered.filter(post => post.naicsCode === selectedIndustryFilter);
+    } else if (selectedSubSectorFilter) {
+        const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorFilter);
+        const industryCodesInSubSector = subSector?.industries.map(ind => ind.code) || [];
+        filtered = filtered.filter(post =>
+            post.naicsCode === selectedSubSectorFilter ||
+            (post.naicsCode && industryCodesInSubSector.includes(post.naicsCode))
+        );
+    } else if (selectedSectorFilter) {
+        const sector = detailedSectorsData.find(s => s.code === selectedSectorFilter);
+        const subSectorCodesInSector = sector?.subSectors.map(ss => ss.code) || [];
+        const industryCodesInSector = sector?.subSectors.flatMap(ss => ss.industries.map(ind => ind.code)) || [];
+        filtered = filtered.filter(post =>
+            post.naicsCode === selectedSectorFilter ||
+            (post.naicsCode && subSectorCodesInSector.includes(post.naicsCode)) ||
+            (post.naicsCode && industryCodesInSector.includes(post.naicsCode))
+        );
+    }
+
     return filtered.sort((a, b) => {
-        const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : (typeof a.createdAt === 'number' ? a.createdAt : 0);
-        const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : 0);
-        return timeB - timeA;
+      const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : (typeof a.createdAt === 'number' ? a.createdAt : (a.createdAt as any)?.toMillis?.() || 0);
+      const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() || 0);
+      return timeB - timeA;
     });
-  }, [posts, selectedTags]);
+  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, detailedSectorsData, availableSubSectors]);
 
-  const helpRequestPosts = useMemo(() =>
-    filteredPostsByTags.filter(post => post.requestType === 'help_request'),
-    [filteredPostsByTags]
-  );
-  const opportunitiesPosts = useMemo(() =>
-    filteredPostsByTags.filter(post => post.requestType === 'post' || !post.requestType),
-    [filteredPostsByTags]
-  );
-
-  const renderPostsGrid = useCallback((postsToRender: Post[], tabName: string) => (
-    <div className="columns-1 md:columns-2 gap-4 space-y-4">
-      {postsToRender.length > 0 ? (
-        postsToRender.map((post, index) => (
-          <PostCard
-            key={post.id}
-            post={post}
-            onOpen={onPostSelect}
-            isSelected={selectedPostId === post.id}
-            // Prioritize the first image in the "Recommended" tab or the first image if no specific tab logic is needed across all
-            isPriority={index === 0 && activeTab === 'recommended'}
-          />
-        ))
-      ) : (
-        <div className="col-span-full text-center py-10">
-          <p className="text-muted-foreground">
-            {isLoading ? "Loading..." : (selectedTags.length > 0 ? "No posts found matching the selected tags." : "No posts available in this category yet.")}
-          </p>
-        </div>
-      )}
-    </div>
-  ), [isLoading, selectedTags, onPostSelect, selectedPostId, activeTab]);
 
   if (isLoading && posts.length === 0) {
     return (
@@ -85,55 +145,111 @@ export const PostList: React.FC<PostListProps> = ({ posts, isLoading, onPostSele
 
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-4 px-1">
-        {/* Added horizontal-scroll-with-fade class here for mobile fade */}
-        <ScrollArea className="w-full whitespace-nowrap rounded-md horizontal-scroll-with-fade">
-          {/* This div ensures content is laid out horizontally and can overflow */}
-          <div className="flex items-center space-x-2 pb-2 min-w-[max-content]">
-            <span className="text-sm font-medium text-muted-foreground mr-2 flex-shrink-0">Filter by Tag:</span>
-            {availableTags.map((tag) => (
-              <Button
-                key={tag}
-                variant={selectedTags.includes(tag) ? "default" : "outline"}
-                size="sm"
-                onClick={() => handleTagClick(tag)}
-                className={cn(
-                  "rounded-full px-3 py-1 text-xs transition-colors duration-150 flex-shrink-0", // Added flex-shrink-0
-                  selectedTags.includes(tag) ? "bg-primary text-primary-foreground hover:bg-primary/90" : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
-                )}
-                aria-pressed={selectedTags.includes(tag)}
-              >
-                {tag}
-              </Button>
-            ))}
-            {selectedTags.length > 0 && (
-              <Button variant="ghost" size="sm" onClick={() => setSelectedTags([])} className="text-xs text-primary hover:underline p-1 h-auto flex-shrink-0">
-                Clear Filters
-              </Button>
-            )}
-          </div>
-          {/* ScrollBar component is removed to hide it completely, CSS will handle hiding native scrollbar */}
-        </ScrollArea>
+      {/* Consolidated Filter Bar */}
+      <div className="mb-4 p-1 space-y-2 md:space-y-0 md:flex md:items-center md:gap-2 border-b pb-3">
+        <Select value={selectedPostType} onValueChange={(value) => setSelectedPostType(value as PostTypeFilter)}>
+          <SelectTrigger className="w-full md:w-[180px] h-9 text-xs">
+            <SelectValue placeholder="Filter by Post Type" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs"><LayoutGrid className="h-3.5 w-3.5 mr-1.5 inline-block" />All Posts</SelectItem>
+            <SelectItem value="help_request" className="text-xs"><HandHelping className="h-3.5 w-3.5 mr-1.5 inline-block" />Help Requests</SelectItem>
+            <SelectItem value="post" className="text-xs"><Briefcase className="h-3.5 w-3.5 mr-1.5 inline-block" />Opportunities</SelectItem>
+          </SelectContent>
+        </Select>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full md:w-auto h-9 text-xs">
+              <Tag className="h-3.5 w-3.5 mr-1.5" />
+              Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-64 p-0" align="start">
+            <div className="p-3">
+              <p className="text-sm font-medium mb-2">Filter by Tags</p>
+              <ScrollArea className="h-[150px]">
+                <div className="space-y-1.5">
+                  {availableTags.map((tag) => (
+                    <div key={tag} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`tag-${tag}`}
+                        checked={selectedTags.includes(tag)}
+                        onCheckedChange={() => handleTagToggle(tag)}
+                      />
+                      <Label htmlFor={`tag-${tag}`} className="text-xs font-normal">{tag}</Label>
+                    </div>
+                  ))}
+                </div>
+              </ScrollArea>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="w-full md:w-auto h-9 text-xs">
+              <Briefcase className="h-3.5 w-3.5 mr-1.5" />
+              Industry {selectedSectorFilter && `(${detailedSectorsData.find(s => s.code === selectedSectorFilter)?.name.substring(0,10)}...)`}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-0" align="start">
+            <div className="p-3 space-y-2">
+              <p className="text-sm font-medium mb-1">Filter by Industry</p>
+              <Select value={selectedSectorFilter} onValueChange={setSelectedSectorFilter}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select Sector" /></SelectTrigger>
+                <SelectContent>
+                  {detailedSectorsData.map(sector => <SelectItem key={sector.code} value={sector.code} className="text-xs">{sector.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={selectedSubSectorFilter} onValueChange={setSelectedSubSectorFilter} disabled={availableSubSectors.length === 0}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={availableSubSectors.length > 0 ? "Select Sub-Sector" : "N/A"} /></SelectTrigger>
+                <SelectContent>
+                  {availableSubSectors.map(sub => <SelectItem key={sub.code} value={sub.code} className="text-xs">{sub.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Select value={selectedIndustryFilter} onValueChange={setSelectedIndustryFilter} disabled={availableIndustries.length === 0}>
+                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder={availableIndustries.length > 0 ? "Select Industry" : "N/A"} /></SelectTrigger>
+                <SelectContent>
+                  {availableIndustries.map(ind => <SelectItem key={ind.code} value={ind.code} className="text-xs">{ind.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </PopoverContent>
+        </Popover>
+
+        {isAnyFilterActive && (
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="w-full md:w-auto h-9 text-xs text-primary hover:underline">
+            <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All
+          </Button>
+        )}
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full flex flex-col flex-grow">
-        <TabsList className="grid w-full grid-cols-3 mb-4">
-          <TabsTrigger value="recommended" className="flex items-center gap-1.5 text-xs sm:text-sm"><Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Recommended</TabsTrigger>
-          <TabsTrigger value="help_requests" className="flex items-center gap-1.5 text-xs sm:text-sm"><HandHelping className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Help Requests</TabsTrigger>
-          <TabsTrigger value="opportunities" className="flex items-center gap-1.5 text-xs sm:text-sm"><Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4" /> Opportunities</TabsTrigger>
-        </TabsList>
-        <TabsContent value="recommended" className="mt-0 flex-grow overflow-hidden">
-          <ScrollArea className="h-full pr-2"> {renderPostsGrid(filteredPostsByTags, "recommended")} </ScrollArea>
-        </TabsContent>
-        <TabsContent value="help_requests" className="mt-0 flex-grow overflow-hidden">
-          <ScrollArea className="h-full pr-2"> {renderPostsGrid(helpRequestPosts, "help_requests")} </ScrollArea>
-        </TabsContent>
-        <TabsContent value="opportunities" className="mt-0 flex-grow overflow-hidden">
-          <ScrollArea className="h-full pr-2"> {renderPostsGrid(opportunitiesPosts, "opportunities")} </ScrollArea>
-        </TabsContent>
-      </Tabs>
+      <ScrollArea className="flex-grow overflow-y-auto min-h-0 pr-2"> {/* Added pr-2 for scrollbar */}
+        <div className="columns-1 md:columns-2 gap-4 space-y-4">
+          {filteredPosts.length > 0 ? (
+            filteredPosts.map((post, index) => (
+              <PostCard
+                key={post.id}
+                post={post}
+                onOpen={onPostSelect}
+                isSelected={selectedPostId === post.id}
+                isPriority={index < 2} // Prioritize loading first 2 images in the current view
+              />
+            ))
+          ) : (
+            <div className="col-span-full text-center py-10">
+              <p className="text-muted-foreground">
+                {isLoading ? "Loading..." : (isAnyFilterActive ? "No posts found matching your filters." : "No posts available yet.")}
+              </p>
+            </div>
+          )}
+        </div>
+      </ScrollArea>
     </div>
   );
 };
 
 PostList.displayName = "PostList";
+
+    

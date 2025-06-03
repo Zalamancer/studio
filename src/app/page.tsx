@@ -57,11 +57,11 @@ import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubComm
 import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
 import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { availableTags } from '@/components/layout/MainLayout';
+import { availableTags, detailedSectorsData } from '@/components/layout/MainLayout'; // Import filter data
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_PAGE } from '@/lib/utils';
 import dynamic from 'next/dynamic';
-import { PostCard } from '@/components/board-page/PostCard';
+// Removed PostCard import as it's used within PostList
 import { PostList } from '@/components/board-page/PostList';
 
 
@@ -209,6 +209,8 @@ const BoardPageContent = () => {
             isLoading={isLoadingPosts}
             onPostSelect={openPostCallback}
             selectedPostId={selectedPost?.id}
+            availableTags={availableTags}
+            detailedSectorsData={detailedSectorsData}
           />
         </div>
 
@@ -225,7 +227,7 @@ const BoardPageContent = () => {
             <SheetContent
               side="right"
               className="w-full h-full p-0 flex flex-col sm:max-w-full"
-              showCloseButton={false} 
+              showCloseButton={false}
             >
               <SheetTitle className="sr-only">
                 {selectedPost ? `Details for post: ${selectedPost.question.substring(0, 50)}${selectedPost.question.length > 50 ? '...' : ''}` : "Post Details"}
