@@ -32,17 +32,21 @@ export const createCollection = async (
   description?: string,
   initialPostId?: string
 ): Promise<string> => {
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[collectionService] createCollection: Called by auth UID: '${clientAuthUid || 'NULL'}'. Target ownerId: '${ownerId}', Name: '${name}'`, "color: #007bff; font-weight: bold;");
+
   if (!ownerId || !name) {
+    console.error("[collectionService] createCollection: Owner ID and Collection Name are required.");
     throw new Error("Owner ID and Collection Name are required.");
   }
-  const currentUser = auth.currentUser;
-  if (!currentUser || currentUser.uid !== ownerId) {
-    throw new Error("Authentication error or user ID mismatch.");
+  if (!clientAuthUid || clientAuthUid !== ownerId) {
+    console.error(`[collectionService] createCollection: Auth mismatch or not authenticated. Client UID: ${clientAuthUid}, ownerId param: ${ownerId}`);
+    throw new Error("Authentication error or user ID mismatch. Cannot create collection.");
   }
 
   const newCollectionData: Omit<Collection, 'id'> = {
-    name,
-    description: description || '',
+    name: name.trim(),
+    description: description?.trim() || '',
     ownerId,
     postIds: initialPostId ? [initialPostId] : [],
     sharedWithUserIds: [],
@@ -50,14 +54,18 @@ export const createCollection = async (
     updatedAt: serverTimestamp() as Timestamp,
   };
 
+  console.log('%c[collectionService] createCollection: Data to be written to Firestore:', "color: #007bff;", newCollectionData);
+  console.log('%c  Rule check reminder: `isAuthenticated() && request.resource.data.ownerId == request.auth.uid && isNotEmpty(request.resource.data.name) && request.resource.data.createdAt == request.time && ...`', "color: #6c757d;");
+
   try {
     const docRef = await addDoc(collectionsCollectionRef, newCollectionData);
-    console.log(`[collectionService] Collection created by ${ownerId} with ID: ${docRef.id}`);
+    console.log(`%c[collectionService] Collection created successfully by ${ownerId} with ID: ${docRef.id}`, "color: green;");
     return docRef.id;
   } catch (error: any) {
-    console.error("[collectionService] Error creating collection:", error);
+    console.error(`%c[collectionService] Error creating collection for owner ${ownerId}:`, "color: red; font-weight: bold;", error);
+    console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
     if (error.code === 'permission-denied') {
-      throw new Error('Permission denied to create collection. Check Firestore rules.');
+      console.error("  Ensure Firestore rules allow `create` on `/collections/{collectionId}` with conditions: authenticated user, ownerId matches auth.uid, required fields present (name, timestamps, postIds list, sharedWithUserIds list), and no extra fields.");
     }
     throw new Error(error.message || "Could not create collection.");
   }
@@ -72,7 +80,6 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
   console.log(`%c[collectionService] getUserCollections: Fetching for userId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
   try {
-    // Query for collections owned by the user OR shared with the user
     const qOwned = query(
       collectionsCollectionRef,
       where('ownerId', '==', userId),
@@ -93,7 +100,7 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
 
     const processSnapshot = (snapshot: typeof ownedSnapshot, isSharedCollection: boolean) => {
       snapshot.forEach((docSnap) => {
-        if (collectionsMap.has(docSnap.id)) return; // Avoid duplicates if a collection is owned AND shared (shouldn't happen)
+        if (collectionsMap.has(docSnap.id)) return; 
 
         const data = docSnap.data() as Collection;
         const clientCollection: ClientCollection = {
@@ -114,18 +121,19 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
     processSnapshot(ownedSnapshot, false);
     processSnapshot(sharedSnapshot, true);
 
-    // Sort combined collections by createdAt descending
     const combinedCollections = Array.from(collectionsMap.values()).sort((a, b) => b.createdAt - a.createdAt);
 
     console.log(`%c[collectionService] getUserCollections: Fetched ${combinedCollections.length} total collections for ${userId}.`, "color: green;");
     return combinedCollections;
   } catch (error: any) {
-    console.error(`[collectionService] Error fetching collections for ${userId}:`, error);
+    console.error(`[collectionService] Error fetching collections for ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
+      console.error("  Ensure Firestore rules allow `list` on `/collections` where `ownerId == request.auth.uid` OR `request.auth.uid in resource.data.sharedWithUserIds`.");
       throw new Error('Permission denied fetching collections. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      throw new Error("Firestore query for collections requires an index. Please create it.");
+      console.error("  Firestore query for collections requires an index. Create relevant composite indexes in the Firebase console.");
+      throw new Error("Firestore query requires an index for collections. Please create it.");
     }
     throw new Error(error.message || "Could not fetch collections.");
   }
@@ -137,13 +145,13 @@ export const getCollectionDetails = async (collectionId: string): Promise<Client
     console.warn("[collectionService] getCollectionDetails: No collectionId provided.");
     return null;
   }
-  console.log(`%c[collectionService] getCollectionDetails: Fetching for collectionId: '${collectionId}'`, "color: dodgerblue;");
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[collectionService] getCollectionDetails: Fetching for collectionId: '${collectionId}'. Client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
   const collectionDocRef = doc(collectionsCollectionRef, collectionId);
   try {
     const docSnap = await getDoc(collectionDocRef);
     if (docSnap.exists()) {
       const data = docSnap.data() as Collection;
-      const clientAuthUid = auth.currentUser?.uid;
       const clientCollection: ClientCollection = {
         id: docSnap.id,
         name: data.name,
@@ -161,8 +169,9 @@ export const getCollectionDetails = async (collectionId: string): Promise<Client
     console.warn(`%c[collectionService] getCollectionDetails: No collection found with ID ${collectionId}`, "color: orange;");
     return null;
   } catch (error: any) {
-    console.error(`[collectionService] Error fetching collection details for ${collectionId}:`, error);
+    console.error(`[collectionService] Error fetching collection details for ${collectionId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
+      console.error("  Ensure Firestore rules allow `get` on `/collections/{collectionId}` where `request.auth.uid == resource.data.ownerId` OR `request.auth.uid in resource.data.sharedWithUserIds`.");
       throw new Error('Permission denied fetching collection details. Check Firestore rules.');
     }
     throw new Error(error.message || "Could not fetch collection details.");
@@ -170,65 +179,96 @@ export const getCollectionDetails = async (collectionId: string): Promise<Client
 };
 
 export const addPostToCollection = async (collectionId: string, postId: string, currentUserId: string): Promise<void> => {
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[collectionService] addPostToCollection: Called by auth UID: '${clientAuthUid || 'NULL'}'. CurrentUserId param: '${currentUserId}'. CollectionID: '${collectionId}', PostID: '${postId}'`, "color: #007bff; font-weight: bold;");
+
   if (!collectionId || !postId || !currentUserId) {
+    console.error("[collectionService] addPostToCollection: Collection ID, Post ID, and User ID are required.");
     throw new Error("Collection ID, Post ID, and User ID are required.");
   }
+  if (!clientAuthUid || clientAuthUid !== currentUserId) {
+    console.error(`[collectionService] addPostToCollection: Auth mismatch or not authenticated. Client UID: ${clientAuthUid}, currentUserId param: ${currentUserId}`);
+    throw new Error("Authentication error. Cannot add post to collection.");
+  }
+
   const collectionDocRef = doc(collectionsCollectionRef, collectionId);
   const collectionSnap = await getDoc(collectionDocRef);
   if (!collectionSnap.exists()) {
+    console.error(`[collectionService] addPostToCollection: Collection ${collectionId} not found.`);
     throw new Error("Collection not found.");
   }
   const collectionData = collectionSnap.data() as Collection;
   if (collectionData.ownerId !== currentUserId) {
+    console.error(`[collectionService] addPostToCollection: User ${currentUserId} is not the owner of collection ${collectionId}. Owner is ${collectionData.ownerId}.`);
     throw new Error("Only the collection owner can add posts.");
   }
 
+  const updatePayload = {
+    postIds: arrayUnion(postId),
+    updatedAt: serverTimestamp()
+  };
+  console.log('%c[collectionService] addPostToCollection: Data to be updated in Firestore:', "color: #007bff;", updatePayload);
+  console.log('%c  Rule check reminder: `isAuthenticated() && isCollectionOwner() && request.resource.data.updatedAt == request.time && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["postIds", "updatedAt"])`', "color: #6c757d;");
+
+
   try {
-    await updateDoc(collectionDocRef, {
-      postIds: arrayUnion(postId),
-      updatedAt: serverTimestamp()
-    });
-    console.log(`[collectionService] Post ${postId} added to collection ${collectionId}`);
+    await updateDoc(collectionDocRef, updatePayload);
+    console.log(`%c[collectionService] Post ${postId} added to collection ${collectionId}`, "color: green;");
   } catch (error: any) {
-    console.error("[collectionService] Error adding post to collection:", error);
+    console.error(`%c[collectionService] Error adding post to collection ${collectionId}:`, "color: red; font-weight: bold;", error);
+    console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
     if (error.code === 'permission-denied') {
-      throw new Error('Permission denied. Check Firestore rules.');
+      console.error("  Ensure Firestore rules allow `update` on `/collections/{collectionId}` where `request.auth.uid == resource.data.ownerId`, `updatedAt` is server time, and only `postIds` or `sharedWithUserIds` fields are being changed (plus `name` and `description`).");
     }
     throw new Error(error.message || "Could not add post to collection.");
   }
 };
 
 export const removePostFromCollection = async (collectionId: string, postId: string, currentUserId: string): Promise<void> => {
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[collectionService] removePostFromCollection: Called by auth UID: '${clientAuthUid || 'NULL'}'. CurrentUserId param: '${currentUserId}'. CollectionID: '${collectionId}', PostID: '${postId}'`, "color: #007bff; font-weight: bold;");
+
   if (!collectionId || !postId || !currentUserId) {
+    console.error("[collectionService] removePostFromCollection: Collection ID, Post ID, and User ID are required.");
     throw new Error("Collection ID, Post ID, and User ID are required.");
   }
+   if (!clientAuthUid || clientAuthUid !== currentUserId) {
+    console.error(`[collectionService] removePostFromCollection: Auth mismatch or not authenticated. Client UID: ${clientAuthUid}, currentUserId param: ${currentUserId}`);
+    throw new Error("Authentication error. Cannot remove post from collection.");
+  }
+
   const collectionDocRef = doc(collectionsCollectionRef, collectionId);
   const collectionSnap = await getDoc(collectionDocRef);
   if (!collectionSnap.exists()) {
+    console.error(`[collectionService] removePostFromCollection: Collection ${collectionId} not found.`);
     throw new Error("Collection not found.");
   }
   const collectionData = collectionSnap.data() as Collection;
   if (collectionData.ownerId !== currentUserId) {
+    console.error(`[collectionService] removePostFromCollection: User ${currentUserId} is not the owner of collection ${collectionId}. Owner is ${collectionData.ownerId}.`);
     throw new Error("Only the collection owner can remove posts.");
   }
 
+  const updatePayload = {
+    postIds: arrayRemove(postId),
+    updatedAt: serverTimestamp()
+  };
+  console.log('%c[collectionService] removePostFromCollection: Data to be updated in Firestore:', "color: #007bff;", updatePayload);
+  console.log('%c  Rule check reminder: (Similar to addPostToCollection, ensuring ownership and allowed fields for update)', "color: #6c757d;");
+
   try {
-    await updateDoc(collectionDocRef, {
-      postIds: arrayRemove(postId),
-      updatedAt: serverTimestamp()
-    });
-    console.log(`[collectionService] Post ${postId} removed from collection ${collectionId}`);
+    await updateDoc(collectionDocRef, updatePayload);
+    console.log(`%c[collectionService] Post ${postId} removed from collection ${collectionId}`, "color: green;");
   } catch (error: any) {
-    console.error("[collectionService] Error removing post from collection:", error);
+    console.error(`%c[collectionService] Error removing post from collection ${collectionId}:`, "color: red; font-weight: bold;", error);
+    console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
     if (error.code === 'permission-denied') {
-      throw new Error('Permission denied. Check Firestore rules.');
+      console.error("  Ensure Firestore rules allow `update` on `/collections/{collectionId}` with correct ownership and field checks.");
     }
     throw new Error(error.message || "Could not remove post from collection.");
   }
 };
 
-// Placeholder for fetching full post details - assumes you have a postService
-// For now, it's a simplified version, you might want to use your existing postService.
 export const getPostsForCollectionPage = async (collectionId: string): Promise<any[]> => {
     if (!collectionId) return [];
     const collectionDetails = await getCollectionDetails(collectionId);
@@ -260,80 +300,180 @@ export const getPostsForCollectionPage = async (collectionId: string): Promise<a
     return posts;
 };
 
-// --- Advanced Collection Management (Placeholders - To be implemented later) ---
-
 export const updateCollectionDetails = async (
   collectionId: string,
-  ownerId: string,
+  ownerId: string, // ownerId is the current authenticated user's ID performing the action
   updates: { name?: string; description?: string }
 ): Promise<void> => {
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[collectionService] updateCollectionDetails: Called by auth UID: '${clientAuthUid || 'NULL'}'. OwnerId param: '${ownerId}'. CollectionID: '${collectionId}', Updates:`, "color: #007bff; font-weight: bold;", updates);
+
   if (!collectionId || !ownerId || Object.keys(updates).length === 0) {
+    console.error("[collectionService] updateCollectionDetails: Collection ID, Owner ID, and updates are required.");
     throw new Error("Collection ID, Owner ID, and updates are required.");
   }
+  if (!clientAuthUid || clientAuthUid !== ownerId) {
+    console.error(`[collectionService] updateCollectionDetails: Auth mismatch or not authenticated. Client UID: ${clientAuthUid}, ownerId param: ${ownerId}`);
+    throw new Error("Authentication error. Cannot update collection details.");
+  }
+
   const collectionDocRef = doc(collectionsCollectionRef, collectionId);
   const docSnap = await getDoc(collectionDocRef);
   if (!docSnap.exists() || docSnap.data()?.ownerId !== ownerId) {
-    throw new Error("Collection not found or permission denied.");
+    console.error(`[collectionService] updateCollectionDetails: Collection ${collectionId} not found or user ${ownerId} is not the owner. Actual owner: ${docSnap.data()?.ownerId}`);
+    throw new Error("Collection not found or permission denied to update details.");
   }
+
   const payload: any = { ...updates, updatedAt: serverTimestamp() };
-  await updateDoc(collectionDocRef, payload);
-  console.log(`[collectionService] Collection ${collectionId} details updated by owner ${ownerId}`);
+  // Ensure empty strings become null for description if that's desired behavior
+  if (updates.description === '') payload.description = null;
+  if (updates.name !== undefined && updates.name.trim() === '') {
+    console.error("[collectionService] updateCollectionDetails: Collection name cannot be empty.");
+    throw new Error("Collection name cannot be empty.");
+  }
+
+
+  console.log('%c[collectionService] updateCollectionDetails: Data to be updated in Firestore:', "color: #007bff;", payload);
+  console.log('%c  Rule check reminder: `isAuthenticated() && isCollectionOwner() && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.createdAt == resource.data.createdAt && request.resource.data.updatedAt == request.time && request.resource.data.diff(resource.data).affectedKeys().hasOnly(["name", "description", "postIds", "sharedWithUserIds", "updatedAt"])`', "color: #6c757d;");
+
+  try {
+    await updateDoc(collectionDocRef, payload);
+    console.log(`%c[collectionService] Collection ${collectionId} details updated successfully by owner ${ownerId}`, "color: green;");
+  } catch (error: any) {
+    console.error(`%c[collectionService] Error updating collection ${collectionId} details:`, "color: red; font-weight: bold;", error);
+    console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
+    if (error.code === 'permission-denied') {
+      console.error("  Ensure Firestore rules allow `update` on `/collections/{collectionId}` with correct ownership, immutable field checks (ownerId, createdAt), and whitelisted fields for changes (name, description, postIds, sharedWithUserIds, updatedAt).");
+    }
+    throw new Error(error.message || "Could not update collection details.");
+  }
 };
 
 export const deleteCollection = async (collectionId: string, ownerId: string): Promise<void> => {
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[collectionService] deleteCollection: Called by auth UID: '${clientAuthUid || 'NULL'}'. OwnerId param: '${ownerId}'. CollectionID: '${collectionId}'`, "color: #007bff; font-weight: bold;");
+
   if (!collectionId || !ownerId) {
+    console.error("[collectionService] deleteCollection: Collection ID and Owner ID are required.");
     throw new Error("Collection ID and Owner ID are required.");
   }
+  if (!clientAuthUid || clientAuthUid !== ownerId) {
+    console.error(`[collectionService] deleteCollection: Auth mismatch or not authenticated. Client UID: ${clientAuthUid}, ownerId param: ${ownerId}`);
+    throw new Error("Authentication error. Cannot delete collection.");
+  }
+
   const collectionDocRef = doc(collectionsCollectionRef, collectionId);
   const docSnap = await getDoc(collectionDocRef);
   if (!docSnap.exists() || docSnap.data()?.ownerId !== ownerId) {
-    throw new Error("Collection not found or permission denied.");
+    console.error(`[collectionService] deleteCollection: Collection ${collectionId} not found or user ${ownerId} is not the owner. Actual owner: ${docSnap.data()?.ownerId}`);
+    throw new Error("Collection not found or permission denied to delete.");
   }
-  await deleteDoc(collectionDocRef);
-  console.log(`[collectionService] Collection ${collectionId} deleted by owner ${ownerId}`);
+
+  console.log('%c[collectionService] deleteCollection: Preparing to delete collection from Firestore.', "color: #007bff;");
+  console.log('%c  Rule check reminder: `isAuthenticated() && isCollectionOwner()`', "color: #6c757d;");
+
+
+  try {
+    await deleteDoc(collectionDocRef);
+    console.log(`%c[collectionService] Collection ${collectionId} deleted successfully by owner ${ownerId}`, "color: green;");
+  } catch (error: any) {
+    console.error(`%c[collectionService] Error deleting collection ${collectionId}:`, "color: red; font-weight: bold;", error);
+    console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
+    if (error.code === 'permission-denied') {
+      console.error("  Ensure Firestore rules allow `delete` on `/collections/{collectionId}` where `request.auth.uid == resource.data.ownerId`.");
+    }
+    throw new Error(error.message || "Could not delete collection.");
+  }
 };
 
 export const shareCollectionWithUser = async (
   collectionId: string,
-  ownerId: string,
+  ownerId: string, // Current authenticated user who owns the collection
   userIdToShareWith: string
 ): Promise<void> => {
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[collectionService] shareCollectionWithUser: Called by auth UID: '${clientAuthUid || 'NULL'}'. OwnerId param: '${ownerId}'. CollectionID: '${collectionId}', UserToShareWith: '${userIdToShareWith}'`, "color: #007bff; font-weight: bold;");
+
   if (!collectionId || !ownerId || !userIdToShareWith) {
+    console.error("[collectionService] shareCollectionWithUser: All IDs are required.");
     throw new Error("All IDs are required.");
   }
+  if (!clientAuthUid || clientAuthUid !== ownerId) {
+    console.error(`[collectionService] shareCollectionWithUser: Auth mismatch or not authenticated. Client UID: ${clientAuthUid}, ownerId param: ${ownerId}`);
+    throw new Error("Authentication error. Cannot share collection.");
+  }
   if (ownerId === userIdToShareWith) {
+    console.warn("[collectionService] shareCollectionWithUser: Cannot share a collection with its owner.");
     throw new Error("Cannot share a collection with its owner.");
   }
+
   const collectionDocRef = doc(collectionsCollectionRef, collectionId);
   const docSnap = await getDoc(collectionDocRef);
   if (!docSnap.exists() || docSnap.data()?.ownerId !== ownerId) {
+    console.error(`[collectionService] shareCollectionWithUser: Collection ${collectionId} not found or user ${ownerId} is not the owner. Actual owner: ${docSnap.data()?.ownerId}`);
     throw new Error("Collection not found or permission denied to share.");
   }
-  await updateDoc(collectionDocRef, {
+
+  const updatePayload = {
     sharedWithUserIds: arrayUnion(userIdToShareWith),
     updatedAt: serverTimestamp()
-  });
-  console.log(`[collectionService] Collection ${collectionId} shared with user ${userIdToShareWith} by owner ${ownerId}`);
+  };
+  console.log('%c[collectionService] shareCollectionWithUser: Data to be updated in Firestore:', "color: #007bff;", updatePayload);
+  console.log('%c  Rule check reminder: (Similar to addPostToCollection, ensuring ownership and allowed fields for update, specifically `sharedWithUserIds`)', "color: #6c757d;");
+
+  try {
+    await updateDoc(collectionDocRef, updatePayload);
+    console.log(`%c[collectionService] Collection ${collectionId} shared successfully with user ${userIdToShareWith} by owner ${ownerId}`, "color: green;");
+  } catch (error: any) {
+    console.error(`%c[collectionService] Error sharing collection ${collectionId} with user ${userIdToShareWith}:`, "color: red; font-weight: bold;", error);
+    console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
+     if (error.code === 'permission-denied') {
+      console.error("  Ensure Firestore rules allow `update` on `/collections/{collectionId}` with correct ownership and that `sharedWithUserIds` is an allowed field for modification.");
+    }
+    throw new Error(error.message || "Could not share collection.");
+  }
 };
 
 export const unshareCollectionFromUser = async (
   collectionId: string,
-  ownerId: string,
+  ownerId: string, // Current authenticated user who owns the collection
   userIdToUnshare: string
 ): Promise<void> => {
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[collectionService] unshareCollectionFromUser: Called by auth UID: '${clientAuthUid || 'NULL'}'. OwnerId param: '${ownerId}'. CollectionID: '${collectionId}', UserToUnshare: '${userIdToUnshare}'`, "color: #007bff; font-weight: bold;");
+
   if (!collectionId || !ownerId || !userIdToUnshare) {
+    console.error("[collectionService] unshareCollectionFromUser: All IDs are required.");
     throw new Error("All IDs are required.");
   }
+  if (!clientAuthUid || clientAuthUid !== ownerId) {
+    console.error(`[collectionService] unshareCollectionFromUser: Auth mismatch or not authenticated. Client UID: ${clientAuthUid}, ownerId param: ${ownerId}`);
+    throw new Error("Authentication error. Cannot unshare collection.");
+  }
+
   const collectionDocRef = doc(collectionsCollectionRef, collectionId);
   const docSnap = await getDoc(collectionDocRef);
   if (!docSnap.exists() || docSnap.data()?.ownerId !== ownerId) {
+    console.error(`[collectionService] unshareCollectionFromUser: Collection ${collectionId} not found or user ${ownerId} is not the owner. Actual owner: ${docSnap.data()?.ownerId}`);
     throw new Error("Collection not found or permission denied to unshare.");
   }
-  await updateDoc(collectionDocRef, {
+
+  const updatePayload = {
     sharedWithUserIds: arrayRemove(userIdToUnshare),
     updatedAt: serverTimestamp()
-  });
-  console.log(`[collectionService] Collection ${collectionId} unshared from user ${userIdToUnshare} by owner ${ownerId}`);
-};
+  };
+  console.log('%c[collectionService] unshareCollectionFromUser: Data to be updated in Firestore:', "color: #007bff;", updatePayload);
+  console.log('%c  Rule check reminder: (Similar to shareCollectionWithUser)', "color: #6c757d;");
 
-    
+  try {
+    await updateDoc(collectionDocRef, updatePayload);
+    console.log(`%c[collectionService] Collection ${collectionId} unshared successfully from user ${userIdToUnshare} by owner ${ownerId}`, "color: green;");
+  } catch (error: any) {
+    console.error(`%c[collectionService] Error unsharing collection ${collectionId} from user ${userIdToUnshare}:`, "color: red; font-weight: bold;", error);
+    console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
+    if (error.code === 'permission-denied') {
+      console.error("  Ensure Firestore rules allow `update` on `/collections/{collectionId}` with correct ownership and that `sharedWithUserIds` is an allowed field for modification.");
+    }
+    throw new Error(error.message || "Could not unshare collection.");
+  }
+};
