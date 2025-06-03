@@ -2,7 +2,7 @@
 // src/components/collections/SaveToCollectionDialog.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react'; // Added useRef
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -31,6 +31,7 @@ import {
   removePostFromCollection,
 } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
+import { cn } from '@/lib/utils';
 
 interface SaveToCollectionDialogProps {
   isOpen: boolean;
@@ -57,11 +58,12 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showCreateNewCollection, setShowCreateNewCollection] = useState(false);
+  const prevIsOpenRef = useRef<boolean>(isOpen); // Ref to track previous isOpen state
 
-  const { data: collections = [], isLoading: isLoadingCollections } = useQuery<ClientCollection[]>({
+  const { data: collectionsDataFromQuery = [], isLoading: isLoadingCollections } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
-    enabled: !!user && isOpen, // Only fetch when dialog is open and user is logged in
+    enabled: !!user && isOpen,
   });
 
   const form = useForm<SaveToCollectionFormData>({
@@ -74,26 +76,35 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
   });
 
   useEffect(() => {
-    if (isOpen && collections.length > 0) {
-      const preselectedIds = collections
+    // Only reset the form when the dialog *opens* (isOpen becomes true from false)
+    if (isOpen && !prevIsOpenRef.current && user) {
+      const cachedCollections = queryClient.getQueryData<ClientCollection[]>(['userCollections', user.uid]);
+      const currentCollections = cachedCollections || collectionsDataFromQuery || [];
+
+      const preselectedIds = currentCollections
         .filter(c => c.postIds?.includes(postId))
         .map(c => c.id);
+
       form.reset({
         selectedCollectionIds: preselectedIds,
         newCollectionName: '',
         newCollectionDescription: '',
       });
-    } else if (isOpen) {
-        form.reset({
-            selectedCollectionIds: [],
-            newCollectionName: '',
-            newCollectionDescription: '',
-        });
+      setShowCreateNewCollection(false); // Reset create new form visibility
     }
-    if (!isOpen) {
-      setShowCreateNewCollection(false); // Reset create form visibility when dialog closes
+
+    // When dialog closes, ensure create new form section is hidden
+    // and optionally reset form fields if needed (though opening reset is often primary)
+    if (!isOpen && prevIsOpenRef.current) {
+      setShowCreateNewCollection(false);
+      // Consider if a full form.reset() is needed on every close, or if open is sufficient.
+      // For now, keeping it simple: reset create form visibility.
+      // If form state needs to be pristine on every open regardless of cache, add form.reset here too.
     }
-  }, [isOpen, collections, postId, form]);
+
+    prevIsOpenRef.current = isOpen; // Update the ref after logic has run
+  }, [isOpen, user, postId, queryClient, form, collectionsDataFromQuery]);
+
 
   const manageCollectionsMutation = useMutation({
     mutationFn: async (data: SaveToCollectionFormData) => {
@@ -105,19 +116,17 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
           user.uid,
           data.newCollectionName.trim(),
           data.newCollectionDescription?.trim() || undefined,
-          postId // Pass postId to create collection and add post in one go
+          postId
         );
-        // If a new collection was created and the post added, no need to add it again below
       }
 
-      // Handle existing collections
       const currentSelections = data.selectedCollectionIds;
-      const initialSelections = collections.filter(c => c.postIds?.includes(postId)).map(c => c.id);
+      const initialSelections = collectionsDataFromQuery.filter(c => c.postIds?.includes(postId)).map(c => c.id);
 
       const collectionsToAddPostTo = currentSelections.filter(id => !initialSelections.includes(id));
       const collectionsToRemovePostFrom = initialSelections.filter(id => !currentSelections.includes(id));
 
-      if (newCollectionId) { // If a new collection was created and post added, remove it from collectionsToAddPostTo
+      if (newCollectionId) {
         const idx = collectionsToAddPostTo.indexOf(newCollectionId);
         if (idx > -1) collectionsToAddPostTo.splice(idx, 1);
       }
@@ -128,20 +137,18 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
       for (const collectionId of collectionsToRemovePostFrom) {
         await removePostFromCollection(collectionId, postId, user.uid);
       }
-
       return { newCollectionId, added: collectionsToAddPostTo.length, removed: collectionsToRemovePostFrom.length };
     },
     onSuccess: ({ newCollectionId, added, removed }) => {
       queryClient.invalidateQueries({ queryKey: ['userCollections', user?.uid] });
-      queryClient.invalidateQueries({ queryKey: ['collectionDetails'] }); // For individual collection pages
+      queryClient.invalidateQueries({ queryKey: ['collectionDetails'] });
       let message = "Post saved to collections.";
       if (newCollectionId) message = `Post saved to new collection and updated in others.`;
       else if (added > 0 && removed > 0) message = "Collection selections updated.";
       else if (added > 0) message = "Post added to selected collections.";
       else if (removed > 0) message = "Post removed from deselected collections.";
-
       toast({ title: "Success", description: message });
-      onOpenChange(false); // Close dialog
+      onOpenChange(false);
     },
     onError: (error: Error) => {
       toast({ variant: "destructive", title: "Error", description: error.message || "Could not update collections." });
@@ -150,7 +157,7 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
 
   const onSubmit = (data: SaveToCollectionFormData) => {
     if (showCreateNewCollection && !data.newCollectionName?.trim()) {
-        form.setError("newCollectionName", { type: "manual", message: "New collection name is required if 'Create New' is active."});
+        form.setError("newCollectionName", { type: "manual", message: "New collection name is required."});
         return;
     }
     manageCollectionsMutation.mutate(data);
@@ -174,14 +181,14 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
               <div className="flex justify-center items-center py-4">
                 <Loader2 className="h-5 w-5 animate-spin text-primary" />
               </div>
-            ) : collections.length === 0 && !showCreateNewCollection ? (
+            ) : collectionsDataFromQuery.length === 0 && !showCreateNewCollection ? (
               <p className="text-sm text-muted-foreground text-center py-2">
                 You have no collections yet. Create one below!
               </p>
             ) : (
-              <ScrollArea className={cn("max-h-40 pr-3", collections.length > 0 ? "border rounded-md p-3" : "")}>
+              <ScrollArea className={cn("max-h-40 pr-3", collectionsDataFromQuery.length > 0 ? "border rounded-md p-3" : "")}>
                 <div className="space-y-2">
-                  {collections.map((collection) => (
+                  {collectionsDataFromQuery.map((collection) => (
                     <Controller
                       key={collection.id}
                       name="selectedCollectionIds"
@@ -306,5 +313,3 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
     </Dialog>
   );
 };
-
-    
