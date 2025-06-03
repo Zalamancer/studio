@@ -2,13 +2,13 @@
 // src/components/board-page/PostDetailHeader.tsx
 "use client";
 
-import React, { useState } from 'react'; // Added useState
+import React, { useState, useMemo } from 'react'; // Added useMemo
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { X, HandHelping, DollarSign, CalendarDays, Star, Trash2, Loader2, MessageSquare, AtSign, Briefcase, CheckCircle, Bookmark } from 'lucide-react'; // Added Bookmark
+import { X, HandHelping, DollarSign, CalendarDays, Star, Trash2, Loader2, MessageSquare, AtSign, Briefcase, CheckCircle, Bookmark } from 'lucide-react';
 import type { Post } from '@/types/post';
 import type { User as FirebaseUser } from 'firebase/auth';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
@@ -29,7 +29,10 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { ConnectionStatus } from '@/types/connection';
-import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog'; // Import the dialog
+import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
+import { useQuery } from '@tanstack/react-query'; // Added
+import { getUserCollections } from '@/services/collectionService'; // Added
+import type { ClientCollection } from '@/types/collection'; // Added
 
 interface PostDetailHeaderProps {
   post: Post;
@@ -51,11 +54,25 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
   const router = useRouter();
   const { toast } = useToast();
   const [isStartingChat, setIsStartingChat] = React.useState(false);
-  const [isSaveToCollectionOpen, setIsSaveToCollectionOpen] = useState(false); // State for dialog
+  const [isSaveToCollectionOpen, setIsSaveToCollectionOpen] = useState(false);
+
+  const { data: userCollections = [], isLoading: isLoadingCollections } = useQuery<ClientCollection[]>({
+    queryKey: ['userCollections', currentUser?.uid, 'forPostDetailHeader'], // Unique key part for this specific use
+    queryFn: () => currentUser ? getUserCollections(currentUser.uid) : Promise.resolve([]),
+    enabled: !!currentUser && !!post?.id, // Fetch only if user and post are available
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
+
+  const isPostSaved = useMemo(() => {
+    if (isLoadingCollections || !post?.id || userCollections.length === 0) {
+      return false;
+    }
+    return userCollections.some(collection => collection.postIds?.includes(post.id));
+  }, [userCollections, post?.id, isLoadingCollections]);
 
   const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
-    : typeof (post.createdAt as any)?.seconds === 'number' // Handle unconverted Timestamps
+    : typeof (post.createdAt as any)?.seconds === 'number'
     ? new Timestamp((post.createdAt as any).seconds, (post.createdAt as any).nanoseconds).toDate().toLocaleDateString()
     : 'Date unavailable';
 
@@ -70,9 +87,8 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
     try {
       const conversationId = await findOrCreateConversation(currentUser.uid, post.userId, post.id);
       if (conversationId) {
-        // Redirect to the new /messages page with conversationId and postId
         router.push(`/messages?conversationId=${conversationId}&postId=${post.id}`);
-        onClose(); // Close panel after navigating
+        onClose();
       } else {
         throw new Error("Failed to initiate conversation.");
       }
@@ -162,23 +178,24 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {currentUser && post.id && ( // Condition for showing save button
+            {currentUser && post.id && (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={() => setIsSaveToCollectionOpen(true)}
-                title="Save to Collection"
-                className="h-7 w-7 p-1"
+                title={isPostSaved ? "Manage Collections" : "Save to Collection"}
+                className={cn("h-7 w-7 p-1", isPostSaved && "text-primary")}
+                disabled={isLoadingCollections}
               >
-                <Bookmark className="h-4 w-4" />
-                <span className="sr-only">Save to Collection</span>
+                <Bookmark className={cn("h-4 w-4", isPostSaved && "fill-current")} />
+                <span className="sr-only">{isPostSaved ? "Manage Collections" : "Save to Collection"}</span>
               </Button>
             )}
             <Button
               variant="ghost"
               size="icon"
               onClick={(e) => {
-                e.stopPropagation(); // Prevent event from bubbling up
+                e.stopPropagation();
                 onClose();
               }}
               aria-label="Close post details"
@@ -189,7 +206,7 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
           </div>
         </div>
       </CardHeader>
-      {currentUser && post.id && ( // Conditionally render the dialog
+      {currentUser && post.id && (
         <SaveToCollectionDialog
             isOpen={isSaveToCollectionOpen}
             onOpenChange={setIsSaveToCollectionOpen}
