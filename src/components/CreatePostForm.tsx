@@ -56,6 +56,14 @@ const MAX_FILE_SIZE_MB = 2;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 
+const baseFileSchema = z.instanceof(File)
+  .refine(file => file.size <= MAX_FILE_SIZE_BYTES, {
+    message: `Max image size is ${MAX_FILE_SIZE_MB}MB.`
+  })
+  .refine(file => ACCEPTED_IMAGE_TYPES.includes(file.type), {
+    message: "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported."
+  });
+
 const postFormSchema = z.object({
   requestType: z.enum(['post', 'help_request'], {
     required_error: "You must select a post type.",
@@ -71,14 +79,7 @@ const postFormSchema = z.object({
   subSector: z.string().optional(),
   industry: z.string().optional(),
   
-  imageFile: z.instanceof(File).optional().nullable()
-    .refine(file => !file || file.size <= MAX_FILE_SIZE_BYTES, {
-        message: "Max image size is " + (MAX_FILE_SIZE_BYTES / 1024 / 1024) + "MB."
-    })
-    .refine(
-      file => !file || ACCEPTED_IMAGE_TYPES.includes(file.type),
-      { message: "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported." }
-    ),
+  imageFile: baseFileSchema.optional().nullable(),
   
   maxBudget: z.string().transform(val => val === '' ? undefined : val)
     .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
@@ -282,12 +283,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         const textBeforeMention = currentValue.substring(0, lastAtIndex);
         const textAfterCursor = currentValue.substring(cursorPosition);
         const mentionToInsert = profile.mentionName; 
-        const newText = \`\${textBeforeMention}@\${mentionToInsert} \${textAfterCursor}\`;
+        const newText = textBeforeMention + "@" + mentionToInsert + " " + textAfterCursor;
         
         setTextValue(newText);
         setSelectedMentionedUserIds(prev => new Set(prev).add(profile.userId));
         
-        const newCursorPosition = textBeforeMention.length + \`@\${mentionToInsert} \`.length;
+        const newCursorPosition = textBeforeMention.length + ("@" + mentionToInsert + " ").length;
         setTimeout(() => {
             inputRef.current?.focus();
             inputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
@@ -339,7 +340,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     }
 
     if (source.length === 0 && debouncedProblemDetailsQuery.trim() !== '') {
-      return [{ userId: 'no-match-desc', displayName: \`No users matching "@\${debouncedProblemDetailsQuery}"\`, mentionName: 'no-match-desc' } as UserProfileBasic];
+      return [{ userId: 'no-match-desc', displayName: `No users matching "@${debouncedProblemDetailsQuery}"`, mentionName: 'no-match-desc' } as UserProfileBasic];
     }
     if (source.length === 0) {
       return [{ userId: 'no-users-desc', displayName: 'No users to suggest.', mentionName: 'no-users-desc' } as UserProfileBasic];
@@ -381,9 +382,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     setShowCompressionDialog(false);
     toast({ title: "Compressing image...", description: "Please wait." });
     try {
-      let compressedResult = await imageCompression(originalTooLargeFile, { maxSizeMB: MAX_FILE_SIZE_MB, maxWidthOrHeight: 1920, useWebWorker: true });
+      const compressedResult = await imageCompression(originalTooLargeFile, { maxSizeMB: MAX_FILE_SIZE_MB, maxWidthOrHeight: 1920, useWebWorker: true });
       
-      // Ensure compressedResult is a File object
       let fileToSet: File;
       if (compressedResult instanceof Blob && !(compressedResult instanceof File)) {
         fileToSet = new File([compressedResult], originalTooLargeFile.name, { type: compressedResult.type, lastModified: originalTooLargeFile.lastModified });
@@ -399,7 +399,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     } catch (error) {
       console.error("[CreatePostForm] Image compression error:", error);
       toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress. Try a smaller file." });
-      form.setValue("imageFile", null, { shouldValidate: true });
+      form.setValue("imageFile", null, { shouldValidate: true }); // Set to null on failure
       setImagePreviewUrl(null);
     } finally {
       setIsCompressing(false);
@@ -409,10 +409,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
   const handleRemoveImage = () => {
     setImagePreviewUrl(null);
-    form.setValue("imageFile", null, { shouldValidate: true });
-    if (fileInputRef.current) fileInputRef.current.value = "";
-    setOriginalTooLargeFile(null);
-  };
+    form.setValue("imageFile", null, { shouldValidate: true }); // Explicitly set to null
+    if (fileInputRef.current) fileInputRef.current.value = ""; // Clear the native input
+    setOriginalTooLargeFile(null); // Also clear this
+};
 
   const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
     const finalMentionedUserIds = Array.from(selectedMentionedUserIds);
@@ -764,3 +764,4 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     </Form>
   );
 };
+
