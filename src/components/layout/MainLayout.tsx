@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory } from "lucide-react";
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, FolderOpen } from "lucide-react"; // Added FolderOpen
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -542,6 +542,7 @@ export default function MainLayout({
     { title: "Home", href: "/", icon: Home },
     { title: "Discover", href: "/discover", icon: Compass },
     { title: "Messages", href: "/messages", icon: MessageSquare },
+    { title: "Collections", href: "/collections", icon: FolderOpen }, // Added Collections
   ];
 
   const rootLayoutClasses = cn(
@@ -673,7 +674,7 @@ export default function MainLayout({
       <main
         className={cn(
           "flex-1 flex flex-col",
-          isMobile ? "pb-14" : "pb-0"
+          isMobile ? "pb-14" : "pb-0" // Account for bottom nav on mobile
         )}
       >
         {children}
@@ -686,7 +687,7 @@ export default function MainLayout({
                 key={`mobile-${item.title}`}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
+                  "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full", // Ensure full height for touch target
                   pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
                 )}
               >
@@ -700,3 +701,5 @@ export default function MainLayout({
     </div>
   );
 }
+
+    

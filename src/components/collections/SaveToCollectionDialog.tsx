@@ -1,4 +1,3 @@
-
 // src/components/collections/SaveToCollectionDialog.tsx
 "use client";
 
@@ -201,16 +200,6 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
                               "flex items-center space-x-2 p-2 rounded-md hover:bg-muted/50 cursor-pointer transition-colors",
                               isChecked && "bg-muted"
                             )}
-                            onClick={() => {
-                              const currentSelectedIds = field.value || [];
-                              let newSelectedIds;
-                              if (isChecked) {
-                                newSelectedIds = currentSelectedIds.filter((id) => id !== collection.id);
-                              } else {
-                                newSelectedIds = [...currentSelectedIds, collection.id];
-                              }
-                              field.onChange(newSelectedIds);
-                            }}
                           >
                             <Checkbox
                               id={`collection-${collection.id}`}
