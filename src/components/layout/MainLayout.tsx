@@ -556,7 +556,7 @@ export default function MainLayout({
     <div className={rootLayoutClasses}>
       {!hideAppChrome && (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center">
+          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center px-4"> {/* Added px-4 here */}
             {/* Desktop Logo/Nav */}
             <div className="mr-4 hidden md:flex">
               <Link href="/" className="mr-6 flex items-center space-x-2">
@@ -692,7 +692,7 @@ export default function MainLayout({
       </main>
       {!hideAppChrome && isMobile && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
-          <div className="container mx-auto flex justify-around items-center h-full">
+          <div className="container mx-auto flex justify-around items-center h-full px-1"> {/* Added px-1 for slight padding for nav items */}
             {navItems.map((item) => (
               <Link
                 key={`mobile-${item.title}`}
@@ -713,4 +713,3 @@ export default function MainLayout({
   );
 }
 
-    

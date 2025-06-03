@@ -51,6 +51,7 @@ import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
+import { useIsMobile } from '@/hooks/use-mobile'; // Import useIsMobile
 
 const MAX_OUTPUT_FILE_SIZE_MB = 1; // Max size for the *output* compressed file
 const MAX_UPLOAD_DIMENSION = 1600; // Max width or height for uploaded images
@@ -145,6 +146,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   });
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMobile = useIsMobile(); // Add useIsMobile hook
 
   const [currentSubSectors, setCurrentSubSectors] = useState<SubSector[]>([]);
   const [currentIndustries, setCurrentIndustries] = useState<Industry[]>([]);
@@ -363,10 +365,11 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     const newlyProcessedFiles: File[] = [];
     const newlyGeneratedPreviewUrls: string[] = [];
 
+    const newFilesToProcess = Array.from(files); // Create a fresh array
+
     setIsCompressing(true);
     toast({ title: "Processing images...", description: "Please wait.", duration: newFilesToProcess.length * 1500 });
 
-    const newFilesToProcess = Array.from(files);
 
     for (const file of newFilesToProcess) {
       if (currentSelectedFiles.length + newlyProcessedFiles.length >= MAX_IMAGE_FILES) {
@@ -537,14 +540,17 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               </Label>
               <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full flex-grow flex flex-col">
                 <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
-                  <TabsTrigger value="details" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
-                      <FileQuestion className="mr-1.5 h-4 w-4" /> Problem Details <span className="text-destructive ml-0.5">*</span>
+                  <TabsTrigger value="details" className={cn("inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1", isMobile && "flex-col h-auto p-1.5 text-xs")}>
+                      <FileQuestion className={cn("h-4 w-4", isMobile ? "mb-0.5" : "mr-1.5")} />
+                      <span className={cn(isMobile && "hidden")}>Problem Details</span> <span className="text-destructive ml-0.5">*</span>
                   </TabsTrigger>
-                  <TabsTrigger value="tried" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
-                      <Brain className="mr-1.5 h-4 w-4" /> What I&apos;ve Tried
+                  <TabsTrigger value="tried" className={cn("inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1", isMobile && "flex-col h-auto p-1.5 text-xs")}>
+                      <Brain className={cn("h-4 w-4", isMobile ? "mb-0.5" : "mr-1.5")} />
+                      <span className={cn(isMobile && "hidden")}>What I&apos;ve Tried</span>
                   </TabsTrigger>
-                  <TabsTrigger value="outcome" className="inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1">
-                      <Target className="mr-1.5 h-4 w-4" /> Expected Outcome
+                  <TabsTrigger value="outcome" className={cn("inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1", isMobile && "flex-col h-auto p-1.5 text-xs")}>
+                      <Target className={cn("h-4 w-4", isMobile ? "mb-0.5" : "mr-1.5")} />
+                      <span className={cn(isMobile && "hidden")}>Expected Outcome</span>
                   </TabsTrigger>
                 </TabsList>
 
@@ -742,7 +748,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <FormItem>
                 <FormLabel>Sub-sector (Optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting || currentSubSectors.length === 0}>
-                    <SelectTrigger><SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "No sub-sectors available"} /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "Select sector first"} /></SelectTrigger>
                     <SelectContent>{currentSubSectors.map(sub => (<SelectItem key={sub.code} value={sub.code}>{sub.name} ({sub.code})</SelectItem>))}</SelectContent>
                 </Select>
                 <FormDescription>Choose a specific sub-sector if applicable.</FormDescription>
@@ -753,7 +759,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <FormItem>
                 <FormLabel>Industry (Optional)</FormLabel>
                 <Select onValueChange={field.onChange} value={field.value || ""} disabled={isSubmitting || currentIndustries.length === 0}>
-                    <SelectTrigger><SelectValue placeholder={currentIndustries.length > 0 ? "Select an industry" : "No industries available"} /></SelectTrigger>
+                    <SelectTrigger><SelectValue placeholder={currentIndustries.length > 0 ? "Select an industry" : "Select sub-sector first"} /></SelectTrigger>
                     <SelectContent>{currentIndustries.map(ind => (<SelectItem key={ind.code} value={ind.code}>{ind.name} ({ind.code})</SelectItem>))}</SelectContent>
                 </Select>
                 <FormDescription>Choose a specific industry if applicable.</FormDescription>
@@ -844,3 +850,4 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     </Form>
   );
 };
+
