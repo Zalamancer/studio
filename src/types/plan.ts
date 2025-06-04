@@ -17,6 +17,8 @@ export interface RoadmapStep {
   subSteps?: RoadmapSubStep[]; // Optional array of sub-steps
   x: number; // X coordinate for positioning on canvas
   y: number; // Y coordinate for positioning on canvas
+  sourceNodeId?: string; // Optional: ID of the node this step was created from
+  sourceAnchor?: 'N' | 'S' | 'E' | 'W'; // Optional: Anchor point on the source node
   // Potentially add: description, status, assignee, dates, etc.
 }
 

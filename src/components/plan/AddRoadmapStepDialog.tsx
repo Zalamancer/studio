@@ -36,8 +36,8 @@ interface AddRoadmapStepDialogProps {
   onSubmit: (data: AddRoadmapStepFormData) => void;
   isSubmitting: boolean;
   parentStepTitle?: string | null;
-  isSubStep?: boolean;
-  dialogTitle?: string;
+  isSubStep?: boolean; // True if specifically adding a sub-step to an existing main step
+  dialogTitle?: string; // Allow overriding the title for more context
 }
 
 export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
@@ -46,14 +46,16 @@ export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
   onSubmit,
   isSubmitting,
   parentStepTitle,
-  isSubStep,
+  isSubStep, // Default this based on parentStepTitle if not explicitly passed
   dialogTitle,
 }) => {
+  const effectivelyIsSubStep = isSubStep ?? !!parentStepTitle;
+
   const form = useForm<AddRoadmapStepFormData>({
     resolver: zodResolver(addRoadmapStepSchema),
     defaultValues: {
       title: '',
-      type: isSubStep ? 'Sub-category/Task' : 'Main Category/Phase',
+      type: effectivelyIsSubStep ? 'Sub-category/Task' : 'Main Category/Phase',
     },
   });
 
@@ -61,14 +63,14 @@ export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
     if (isOpen) {
       form.reset({
         title: '',
-        type: isSubStep ? 'Sub-category/Task' : 'Main Category/Phase',
+        type: effectivelyIsSubStep ? 'Sub-category/Task' : 'Main Category/Phase',
       });
     }
-  }, [isOpen, isSubStep, form]);
+  }, [isOpen, effectivelyIsSubStep, form]);
 
-  const effectiveDialogTitle = dialogTitle || 
-    (parentStepTitle 
-      ? `Add Sub-step to "${parentStepTitle}"` 
+  const effectiveDialogTitle = dialogTitle ||
+    (parentStepTitle
+      ? `Add Sub-step to "${parentStepTitle}"`
       : "Add New Roadmap Step");
 
   return (
@@ -97,7 +99,7 @@ export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
                 <Select
                   onValueChange={field.onChange}
                   value={field.value}
-                  disabled={isSubmitting || isSubStep}
+                  disabled={isSubmitting || effectivelyIsSubStep} // Disable if it's a sub-step addition context
                 >
                   <SelectTrigger id="type">
                     <SelectValue placeholder="Select step type" />

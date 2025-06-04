@@ -9,7 +9,7 @@ import { getPlanById } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep } from '@/types/plan';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Move } from 'lucide-react';
+import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Move, GripVertical } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
@@ -21,11 +21,18 @@ import { cn } from '@/lib/utils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
 import { useToast } from '@/hooks/use-toast';
 
+const NODE_WIDTH = 256; // approx 64 * 4 (w-64)
+const NODE_HEIGHT = 160; // estimated height for a card with a couple of sub-steps
+const NODE_WIDTH_WITH_MARGIN = NODE_WIDTH + 32; // Add some margin for spacing
+const NODE_HEIGHT_WITH_MARGIN = NODE_HEIGHT + 48; // Add some margin for spacing
+const DOT_SIZE = 8; // px
+const DOT_OFFSET = -DOT_SIZE / 2; // px, to center the dot on the edge
+
 interface RoadmapStepCardProps {
   step: RoadmapStep;
   onAddSubStep: (parentId: string, parentTitle: string) => void;
   onSelectStep: (stepId: string) => void;
-  onAddNewMainStepAfter: (currentStepId: string) => void;
+  onInitiateNodeFromDot: (sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => void;
   isSelected: boolean;
   isSubmitting: boolean;
   onMouseDown: (event: React.MouseEvent, stepId: string) => void;
@@ -35,42 +42,56 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   step,
   onAddSubStep,
   onSelectStep,
-  onAddNewMainStepAfter,
+  onInitiateNodeFromDot,
   isSelected,
   isSubmitting,
   onMouseDown,
 }) => {
+  const [isHovered, setIsHovered] = useState(false);
+
+  const handleDotClick = (e: React.MouseEvent, anchor: 'N' | 'S' | 'E' | 'W') => {
+    e.stopPropagation(); // Prevent card selection when clicking a dot
+    onInitiateNodeFromDot(step.id, anchor);
+  };
+
   return (
     <div
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-60 sm:w-64 cursor-default", // Changed to cursor-default for main card
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-10"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
-      onClick={() => onSelectStep(step.id)} // Keep selection logic on the main card
+      onClick={() => onSelectStep(step.id)}
+      onMouseEnter={() => setIsHovered(true)}
+      onMouseLeave={() => setIsHovered(false)}
     >
-      <CardHeader 
-        className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing" // Draggable header
+      {/* Draggable Header */}
+      <CardHeader
+        className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center"
         onMouseDown={(e) => onMouseDown(e, step.id)}
       >
-        <CardTitle className="text-sm font-semibold flex items-center gap-1.5">
-            <Move className="h-3.5 w-3.5 text-muted-foreground" />
-            {step.title}
-        </CardTitle>
-        {step.type && <CardDescription className="text-xs">{step.type}</CardDescription>}
+        <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0" />
+        <div className="flex-grow min-w-0">
+          <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
+          {step.type && <CardDescription className="text-xs">{step.type}</CardDescription>}
+        </div>
       </CardHeader>
+
+      {/* Content */}
       {step.subSteps && step.subSteps.length > 0 && (
-        <CardContent className="p-2.5 pt-1.5 border-t">
+        <CardContent className="p-2.5 pt-1.5 border-t max-h-20 overflow-y-auto">
           <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
           <ul className="list-disc list-inside pl-1 space-y-0.5">
             {step.subSteps.map((subStep) => (
-              <li key={subStep.id} className="text-xs text-muted-foreground">
+              <li key={subStep.id} className="text-xs text-muted-foreground truncate" title={subStep.title}>
                 {subStep.title} ({subStep.type})
               </li>
             ))}
           </ul>
         </CardContent>
       )}
+
+      {/* Footer */}
       <CardFooter className="p-2 border-t flex flex-col sm:flex-row items-stretch sm:items-center sm:justify-end gap-1">
         <Button
           variant="outline"
@@ -81,18 +102,41 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         >
           <Plus className="h-3 w-3 mr-1" /> Add Sub-step
         </Button>
-        {isSelected && (
-          <Button
-            variant="outline"
-            size="xs"
-            onClick={(e) => { e.stopPropagation(); onAddNewMainStepAfter(step.id); }}
-            disabled={isSubmitting}
-            className="text-xs w-full sm:w-auto"
-          >
-            <Plus className="h-3 w-3 mr-1" /> Add Next Main
-          </Button>
-        )}
       </CardFooter>
+
+      {/* Hover Dots for new node creation */}
+      {isHovered && isSelected && (
+        <>
+          {/* North Dot */}
+          <Button
+            variant="outline" size="icon"
+            className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary"
+            style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }}
+            onClick={(e) => handleDotClick(e, 'N')} title="Add step above"
+          ><Plus className="h-3 w-3" /></Button>
+          {/* South Dot */}
+          <Button
+            variant="outline" size="icon"
+            className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary"
+            style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }}
+            onClick={(e) => handleDotClick(e, 'S')} title="Add step below"
+          ><Plus className="h-3 w-3" /></Button>
+          {/* West Dot */}
+          <Button
+            variant="outline" size="icon"
+            className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary"
+            style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }}
+            onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"
+          ><Plus className="h-3 w-3" /></Button>
+          {/* East Dot */}
+          <Button
+            variant="outline" size="icon"
+            className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary"
+            style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }}
+            onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"
+          ><Plus className="h-3 w-3" /></Button>
+        </>
+      )}
     </div>
   );
 };
@@ -100,26 +144,24 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
 
 const ViewPlanPage = () => {
   const paramsFromHook = useParams();
-  const params = paramsFromHook; // No React.use() here for client components
+  const params = paramsFromHook;
   const router = useRouter();
   const { user: currentUser, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const canvasRef = useRef<HTMLDivElement>(null); // Ref for the main canvas area
+  const canvasRef = useRef<HTMLDivElement>(null);
 
   const planId = params?.planId as string | undefined;
 
   const [roadmapSteps, setRoadmapSteps] = useState<RoadmapStep[]>([]);
   const [isAddStepDialogOpen, setIsAddStepDialogOpen] = useState(false);
   const [currentParentStepForDialog, setCurrentParentStepForDialog] = useState<{ id: string; title: string } | null>(null);
-  const [isAddingMainStepAfter, setIsAddingMainStepAfter] = useState<string | null>(null);
+  const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{ sourceStepId: string; sourceAnchor: 'N' | 'S' | 'E' | 'W'; } | null>(null);
   const [isSubmittingStep, setIsSubmittingStep] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
-  // Dragging state
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [nodeStartPos, setNodeStartPos] = useState<{ x: number; y: number } | null>(null);
-
 
   const isPlanIdValidUid = React.useMemo(() => {
     if (!planId) return false;
@@ -129,30 +171,33 @@ const ViewPlanPage = () => {
   const { data: plan, isLoading, error } = useQuery<ClientPlan | null, Error>({
     queryKey: ['plan', planId],
     queryFn: async () => {
-      if (!planId || !isPlanIdValidUid) {
-        return null;
-      }
+      if (!planId || !isPlanIdValidUid) return null;
       return getPlanById(planId);
     },
     enabled: !!planId && isPlanIdValidUid && !authLoading,
   });
-  
-  // Initialize roadmap steps from plan data (if available and not already initialized)
+
   useEffect(() => {
     if (plan?.roadmap && roadmapSteps.length === 0) {
       setRoadmapSteps(plan.roadmap);
     }
   }, [plan, roadmapSteps.length]);
 
+  const handleInitiateNodeFromDot = useCallback((sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => {
+    setPendingNodeFromDotInfo({ sourceStepId, sourceAnchor });
+    setCurrentParentStepForDialog(null); // Not adding a sub-step in this flow
+    setIsAddStepDialogOpen(true);
+  }, []);
 
-  const openAddStepDialog = useCallback((parentId: string | null = null, parentTitle: string | null = null, addAfterStepId: string | null = null) => {
-    if (parentId && parentTitle) {
-      setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
-      setIsAddingMainStepAfter(null);
-    } else {
-      setCurrentParentStepForDialog(null);
-      setIsAddingMainStepAfter(addAfterStepId);
-    }
+  const openAddMainStepDialog = useCallback(() => {
+    setCurrentParentStepForDialog(null);
+    setPendingNodeFromDotInfo(null);
+    setIsAddStepDialogOpen(true);
+  }, []);
+
+  const openAddSubStepDialog = useCallback((parentId: string, parentTitle: string) => {
+    setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
+    setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
   }, []);
   
@@ -172,37 +217,37 @@ const ViewPlanPage = () => {
       if (currentParentStepForDialog) { // Adding a sub-step
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
-            ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 }] } // subSteps don't have x/y for now
+            ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 } as RoadmapSubStep] }
             : step
         );
       } else { // Adding a main step
         let newX = 20;
         let newY = 20;
-        if (isAddingMainStepAfter) { // Adding after a specific main step
-            const parentStep = prevSteps.find(s => s.id === isAddingMainStepAfter);
-            if (parentStep) {
-                newX = parentStep.x + 280; // Offset to the right
-                newY = parentStep.y;       // Same y-level
-            } else if (prevSteps.length > 0) { // Fallback if parent not found, place after last
-                const lastStep = prevSteps[prevSteps.length - 1];
-                newX = lastStep.x + 280;
-                newY = lastStep.y;
-            }
-        } else if (prevSteps.length > 0) { // Adding as a new main step, not after a specific one
-            const lastStep = prevSteps[prevSteps.length - 1];
-            newX = lastStep.x;
-            newY = lastStep.y + 150; // Offset below the last step
-        }
+        let sourceNodeId: string | undefined = undefined;
+        let sourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
 
-        const newMainStep: RoadmapStep = { ...newStepBase, subSteps: [], x: newX, y: newY };
-        if (isAddingMainStepAfter) {
-          const index = prevSteps.findIndex(step => step.id === isAddingMainStepAfter);
-          if (index !== -1) {
-            const stepsCopy = [...prevSteps];
-            stepsCopy.splice(index + 1, 0, newMainStep);
-            return stepsCopy;
-          }
+        if (pendingNodeFromDotInfo) {
+            const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
+            if (sourceStep) {
+                sourceNodeId = sourceStep.id;
+                sourceAnchor = pendingNodeFromDotInfo.sourceAnchor;
+                switch(pendingNodeFromDotInfo.sourceAnchor) {
+                    case 'N': newX = sourceStep.x; newY = sourceStep.y - NODE_HEIGHT_WITH_MARGIN; break;
+                    case 'S': newX = sourceStep.x; newY = sourceStep.y + NODE_HEIGHT_WITH_MARGIN; break;
+                    case 'E': newX = sourceStep.x + NODE_WIDTH_WITH_MARGIN; newY = sourceStep.y; break;
+                    case 'W': newX = sourceStep.x - NODE_WIDTH_WITH_MARGIN; newY = sourceStep.y; break;
+                }
+            }
+        } else if (prevSteps.length > 0) {
+            const lastStep = prevSteps[prevSteps.length - 1];
+            newX = lastStep.x + NODE_WIDTH_WITH_MARGIN; // Default to placing to the right of the last step
+            newY = lastStep.y;
         }
+        // Ensure new position is not negative
+        newX = Math.max(0, newX);
+        newY = Math.max(0, newY);
+
+        const newMainStep: RoadmapStep = { ...newStepBase, subSteps: [], x: newX, y: newY, sourceNodeId, sourceAnchor };
         return [...prevSteps, newMainStep];
       }
     });
@@ -210,19 +255,19 @@ const ViewPlanPage = () => {
     toast({ title: "Step Added", description: `"${data.title}" added to the roadmap.` });
     setIsAddStepDialogOpen(false);
     setCurrentParentStepForDialog(null);
-    setIsAddingMainStepAfter(null);
+    setPendingNodeFromDotInfo(null);
     setIsSubmittingStep(false);
-  }, [currentParentStepForDialog, isAddingMainStepAfter, toast]);
+  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent, stepId: string) => {
-    event.preventDefault(); // Prevent default drag behavior
+    event.preventDefault();
     event.stopPropagation();
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag) {
       setDraggingNodeId(stepId);
       setDragStartPos({ x: event.clientX, y: event.clientY });
       setNodeStartPos({ x: stepToDrag.x, y: stepToDrag.y });
-      setSelectedStepId(stepId); // Select the node being dragged
+      setSelectedStepId(stepId);
     }
   }, [roadmapSteps]);
 
@@ -233,7 +278,7 @@ const ViewPlanPage = () => {
       setRoadmapSteps(prevSteps =>
         prevSteps.map(step =>
           step.id === draggingNodeId
-            ? { ...step, x: Math.max(0, nodeStartPos.x + dx), y: Math.max(0, nodeStartPos.y + dy) } // Ensure x, y >= 0
+            ? { ...step, x: Math.max(0, nodeStartPos.x + dx), y: Math.max(0, nodeStartPos.y + dy) }
             : step
         )
       );
@@ -244,7 +289,6 @@ const ViewPlanPage = () => {
     setDraggingNodeId(null);
     setDragStartPos(null);
     setNodeStartPos(null);
-    // TODO: Persist roadmapSteps to Firestore here if needed
   }, []);
   
 
@@ -293,11 +337,13 @@ const ViewPlanPage = () => {
   const ownerDisplayName = generateAnonymousName(plan.ownerId);
   const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Plus, Undo, Redo ];
   
-  const dialogTitle = currentParentStepForDialog
-    ? `Add Sub-step to "${currentParentStepForDialog.title}"`
-    : isAddingMainStepAfter
-    ? `Add New Main Step After Selected`
-    : "Add New Main Roadmap Step";
+  let dialogTitle = "Add New Main Roadmap Step";
+  if (currentParentStepForDialog) {
+    dialogTitle = `Add Sub-step to "${currentParentStepForDialog.title}"`;
+  } else if (pendingNodeFromDotInfo) {
+    const sourceStepTitle = roadmapSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title || "Selected Step";
+    dialogTitle = `Add New Step from "${sourceStepTitle}" (${pendingNodeFromDotInfo.sourceAnchor} anchor)`;
+  }
 
   return (
     <div className="flex flex-col flex-1 w-full overflow-hidden">
@@ -348,12 +394,12 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-auto p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas} // Also clear drag state if mouse leaves canvas
+            onMouseLeave={handleMouseUpOnCanvas}
         >
-          <div className="absolute top-4 left-4 z-20"> {/* Ensure button is above draggable nodes */}
+          <div className="absolute top-4 left-4 z-20">
             <Button
               variant="outline"
-              onClick={() => openAddStepDialog(null, null, null)}
+              onClick={openAddMainStepDialog}
               disabled={isSubmittingStep || isAddStepDialogOpen}
               className="shadow-md bg-card hover:bg-muted"
             >
@@ -369,14 +415,13 @@ const ViewPlanPage = () => {
             </div>
           )}
 
-          {/* Render draggable main steps */}
           {roadmapSteps.filter(step => step.type === 'Main Category/Phase').map(step => (
               <RoadmapStepCard
                 key={step.id}
                 step={step}
-                onAddSubStep={openAddStepDialog}
+                onAddSubStep={openAddSubStepDialog}
                 onSelectStep={handleSelectStep}
-                onAddNewMainStepAfter={(currentId) => openAddStepDialog(null, null, currentId)}
+                onInitiateNodeFromDot={handleInitiateNodeFromDot}
                 isSelected={selectedStepId === step.id}
                 isSubmitting={isSubmittingStep || isAddStepDialogOpen}
                 onMouseDown={handleMouseDownOnNode}
@@ -400,7 +445,7 @@ const ViewPlanPage = () => {
           onSubmit={handleAddRoadmapStepSubmit}
           isSubmitting={isSubmittingStep}
           parentStepTitle={currentParentStepForDialog?.title}
-          isSubStep={!!currentParentStepForDialog} // True if adding a sub-step
+          isSubStep={!!currentParentStepForDialog || (!!pendingNodeFromDotInfo && data.type === 'Sub-category/Task')}
           dialogTitle={dialogTitle}
         />
       )}
