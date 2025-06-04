@@ -1,7 +1,6 @@
-
 // src/services/userPreferenceService.ts
 import { db, auth } from '@/lib/firebase/config'; // Import auth
-import { doc, getDoc, setDoc, updateDoc, arrayUnion, arrayRemove, Timestamp } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, Timestamp } from 'firebase/firestore';
 import type { UserPreference, UpdateUserPreferencesData, SavedPaymentMethod } from '@/types/userPreferences';
 
 const PREFERENCES_COLLECTION = 'userPreferences';
@@ -30,7 +29,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
 
       const preferences: UserPreference = {
         userId: data.userId || userId,
-        favoriteSectorCodes: Array.isArray(data.favoriteSectorCodes) ? data.favoriteSectorCodes : [],
+        // favoriteSectorCodes removed
         notifyOnReply: data.notifyOnReply ?? true,
         notifyOnMention: data.notifyOnMention ?? true,
         notifyOnNewConnectionRequest: data.notifyOnNewConnectionRequest ?? true,
@@ -54,7 +53,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
     console.log(`%c[userPreferenceService] getUserPreferences: No preferences document found for ${userId}. Returning defaults.`, "color: orange;");
     return {
         userId: userId,
-        favoriteSectorCodes: [],
+        // favoriteSectorCodes removed
         paymentMethods: [],
         notifyOnReply: true,
         notifyOnMention: true,
@@ -104,13 +103,14 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
     if (dataToUpdate.stripeSubscriptionCurrentPeriodEnd === undefined) updatePayload.stripeSubscriptionCurrentPeriodEnd = null;
     if (dataToUpdate.stripeSubscriptionWillCancelAtPeriodEnd === undefined) updatePayload.stripeSubscriptionWillCancelAtPeriodEnd = null;
 
+    // favoriteSectorCodes handling removed
 
     if (docSnap.exists()) {
       await updateDoc(prefDocRef, updatePayload);
     } else {
       const createPayload: UserPreference = {
         userId: userId,
-        favoriteSectorCodes: dataToUpdate.favoriteSectorCodes || [],
+        // favoriteSectorCodes removed
         paymentMethods: Array.isArray(dataToUpdate.paymentMethods) ? dataToUpdate.paymentMethods : [],
         notifyOnReply: dataToUpdate.notifyOnReply ?? true,
         notifyOnMention: dataToUpdate.notifyOnMention ?? true,
@@ -134,56 +134,3 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
     throw new Error(error.message || "Could not update user preferences.");
   }
 };
-
-
-export const getUserFavoriteSectors = async (userId: string): Promise<string[]> => {
-  const preferences = await getUserPreferences(userId);
-  return preferences?.favoriteSectorCodes || [];
-};
-
-export const addFavoriteSector = async (userId: string, sectorCode: string): Promise<void> => {
-  if (!userId || !sectorCode) {
-    throw new Error("User ID and Sector Code are required.");
-  }
-   const currentUser = auth.currentUser;
-   if (!currentUser || currentUser.uid !== userId) {
-     throw new Error("Authentication error or user ID mismatch.");
-   }
-  const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
-  try {
-    await setDoc(prefDocRef, {
-      userId: userId, 
-      favoriteSectorCodes: arrayUnion(sectorCode),
-      updatedAt: Timestamp.now()
-    }, { merge: true });
-  } catch (error: any) {
-    console.error(`%c[userPreferenceService] addFavoriteSector: Firestore error for user ${userId}, sector ${sectorCode}:`, "color: red;", error);
-    throw new Error(error.message || "Could not add favorite sector.");
-  }
-};
-
-export const removeFavoriteSector = async (userId: string, sectorCode: string): Promise<void> => {
-  if (!userId || !sectorCode) {
-    throw new Error("User ID and Sector Code are required.");
-  }
-   const currentUser = auth.currentUser;
-   if (!currentUser || currentUser.uid !== userId) {
-     throw new Error("Authentication error or user ID mismatch.");
-   }
-  const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
-  try {
-    const docSnap = await getDoc(prefDocRef);
-    if (docSnap.exists()) { 
-      await updateDoc(prefDocRef, {
-        favoriteSectorCodes: arrayRemove(sectorCode),
-        updatedAt: Timestamp.now()
-      });
-    } else {
-      console.log(`%c[userPreferenceService] removeFavoriteSector: No preferences doc found for user ${userId}. Nothing to remove.`, "color: orange;");
-    }
-  } catch (error: any) {
-    console.error(`%c[userPreferenceService] removeFavoriteSector: Firestore error for user ${userId}, sector ${sectorCode}:`, "color: red;", error);
-    throw new Error(error.message || "Could not remove favorite sector.");
-  }
-};
-    

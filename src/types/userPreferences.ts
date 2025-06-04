@@ -1,4 +1,3 @@
-
 // src/types/userPreferences.ts
 import type { Timestamp } from 'firebase/firestore';
 
@@ -13,7 +12,7 @@ export interface SavedPaymentMethod {
 
 export interface UserPreference {
   userId: string;
-  favoriteSectorCodes?: string[];
+  // favoriteSectorCodes?: string[]; // Removed
   notifyOnReply?: boolean;
   notifyOnMention?: boolean;
   notifyOnNewConnectionRequest?: boolean;
