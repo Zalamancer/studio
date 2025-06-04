@@ -9,12 +9,14 @@ import { getPlanById } from '@/services/planService';
 import type { ClientPlan } from '@/types/plan';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Lock, MoreHorizontal, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Upload, Plus, Undo, Redo, Layers, Minus, HelpCircle } from 'lucide-react';
+import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Lock, MoreHorizontal, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Upload, Plus, Undo, Redo, Layers, Minus, HelpCircle, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 const ViewPlanPage = () => {
@@ -79,7 +81,7 @@ const ViewPlanPage = () => {
       </div>
     );
   }
-  
+
   if (!plan) { // Still loading or error handled above
     return (
       <div className="flex flex-col flex-grow items-center justify-center min-h-[calc(100vh-8rem)] p-4">
@@ -90,11 +92,11 @@ const ViewPlanPage = () => {
 
   const isOwner = currentUser?.uid === plan.ownerId;
   const ownerDisplayName = generateAnonymousName(plan.ownerId);
-  
+
   const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Plus, Undo, Redo ];
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden absolute inset-0">
+    <div className="flex flex-col h-full w-full overflow-hidden"> {/* Removed absolute inset-0 */}
       {/* Top Toolbar */}
       <header className="h-12 flex-shrink-0 bg-card border-b border-border flex items-center px-3 shadow-sm">
         <div className="flex items-center gap-2">
@@ -145,7 +147,7 @@ const ViewPlanPage = () => {
           <div className="bg-card border-2 border-foreground rounded-xl shadow-xl p-4 w-48 h-24 flex items-center justify-center text-foreground">
             hi
           </div>
-          
+
           {/* Bottom Right Controls */}
           <div className="absolute bottom-4 right-4 bg-card border border-border rounded-lg shadow-md flex items-center p-0.5 space-x-0.5">
             <Button variant="ghost" size="icon" className="h-7 w-7"><Layers className="h-4 w-4" /></Button>
@@ -161,5 +163,4 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
-
     
