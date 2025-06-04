@@ -2,7 +2,7 @@
 // src/app/plan/[planId]/page.tsx
 "use client";
 
-import React, { useMemo } from 'react'; // Removed 'use'
+import React, { useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { getPlanById } from '@/services/planService';
@@ -20,7 +20,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { cn } from '@/lib/utils';
 
 const ViewPlanPage = () => {
-  const params = useParams(); // Direct usage
+  const paramsFromHook = useParams();
+  const params = paramsFromHook; // Reverted: React.use(paramsFromHook);
   const router = useRouter();
   const { user: currentUser, loading: authLoading } = useAuth();
 
@@ -97,7 +98,7 @@ const ViewPlanPage = () => {
   const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Plus, Undo, Redo ];
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden">
+    <div className="flex flex-col flex-1 w-full overflow-hidden"> {/* Changed h-full to flex-1 */}
       {/* Top Toolbar */}
       <header className="h-12 flex-shrink-0 bg-card border-b border-border flex items-center px-3 shadow-sm">
         <div className="flex items-center gap-2">
