@@ -2,7 +2,6 @@
 // src/types/plan.ts
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
-// Added for Roadmap feature
 export interface RoadmapSubStep {
   id: string;
   parentId: string; // ID of the main step it belongs to
@@ -16,6 +15,8 @@ export interface RoadmapStep {
   title: string;
   type: 'Main Category/Phase' | 'Sub-category/Task'; // Type of the step
   subSteps?: RoadmapSubStep[]; // Optional array of sub-steps
+  x: number; // X coordinate for positioning on canvas
+  y: number; // Y coordinate for positioning on canvas
   // Potentially add: description, status, assignee, dates, etc.
 }
 
