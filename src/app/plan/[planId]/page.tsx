@@ -2,7 +2,7 @@
 // src/app/plan/[planId]/page.tsx
 "use client";
 
-import React, { use } from 'react'; // Added use
+import React, { useMemo } from 'react'; // Removed 'use'
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { getPlanById } from '@/services/planService';
@@ -14,18 +14,16 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge'; // Ensure Badge is imported
-import { Label } from '@/components/ui/label'; // Ensure Label is imported
+import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 const ViewPlanPage = () => {
-  const paramsFromHook = useParams(); // Store promise-like object
+  const params = useParams(); // Direct usage
   const router = useRouter();
   const { user: currentUser, loading: authLoading } = useAuth();
 
-  // Unwrap params using React.use()
-  const params = use(paramsFromHook);
   const planId = params?.planId as string | undefined;
 
   const isPlanIdValidUid = React.useMemo(() => {
@@ -99,7 +97,7 @@ const ViewPlanPage = () => {
   const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Plus, Undo, Redo ];
 
   return (
-    <div className="flex flex-col h-full w-full overflow-hidden"> {/* Removed absolute inset-0 */}
+    <div className="flex flex-col h-full w-full overflow-hidden">
       {/* Top Toolbar */}
       <header className="h-12 flex-shrink-0 bg-card border-b border-border flex items-center px-3 shadow-sm">
         <div className="flex items-center gap-2">

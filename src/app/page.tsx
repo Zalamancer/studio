@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef, useCallback, use } from 'react'; // Added use
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react'; // Removed 'use'
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -75,12 +75,9 @@ const BoardPageContent = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const router = useRouter();
-  const searchParamsFromHook = useSearchParams(); // Store promise-like object
+  const searchParams = useSearchParams(); // Direct usage
   const { toast } = useToast();
   const isMobile = useIsMobile();
-
-  // Unwrap searchParams using React.use()
-  const searchParams = use(searchParamsFromHook);
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
 

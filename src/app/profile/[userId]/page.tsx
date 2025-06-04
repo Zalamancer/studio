@@ -6,7 +6,7 @@
 // This file can then act as a bridge, importing and orchestrating these smaller components.
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, use } from 'react'; // Added use
+import React, { useState, useEffect, useMemo, useCallback } from 'react'; // Removed 'use'
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -56,14 +56,12 @@ const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string
 };
 
 const BusinessProfilePage = () => {
-  const paramsFromHook = useParams(); // Store promise-like object
+  const params = useParams(); // Direct usage
   const { user: currentUser, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  // Unwrap params using React.use()
-  const params = use(paramsFromHook);
   const profileUserIdFromParams = params?.userId as string | undefined;
 
   const [userRating, setUserRating] = useState(0);

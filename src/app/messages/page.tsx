@@ -2,7 +2,7 @@
 // src/app/messages/page.tsx
 "use client";
 
-import React, { useState, useEffect, useCallback, use } from 'react'; // Added use
+import React, { useState, useEffect, useCallback } from 'react'; // Added use
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, AlertTriangle, Users, UserPlus, MessageSquare, RefreshCw } from 'lucide-react';
@@ -25,12 +25,9 @@ const MessagesPage = () => {
     const { user, loading: authLoading } = useAuth();
     const queryClient = useQueryClient();
     const { toast } = useToast();
-    const searchParamsFromHook = useSearchParams(); // Store promise-like object
+    const searchParams = useSearchParams(); // Direct usage
     const router = useRouter();
     const isMobile = useIsMobile();
-
-    // Unwrap searchParams using React.use()
-    const searchParams = use(searchParamsFromHook);
 
     const [activeTab, setActiveTab] = useState<string>('chats');
     const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
