@@ -37,13 +37,9 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     updatedAt: serverTimestamp() as FieldValue,
   };
 
-  // Log the exact object being sent to Firestore
-  console.log("[planService] Exact data object being sent to Firestore for addDoc:", JSON.stringify({
-    ...dataToSave,
-    createdAt: "Firestore.serverTimestamp()", // Placeholder for logging
-    updatedAt: "Firestore.serverTimestamp()", // Placeholder for logging
-  }, null, 2));
-  console.log("[planService] Keys in dataToSave:", Object.keys(dataToSave).sort().join(', '));
+  console.log("%c[planService] createPlan: FINAL DATA OBJECT being sent to Firestore:", "color: #FF1493; font-weight: bold;", JSON.parse(JSON.stringify(dataToSave))); // Log a serializable version
+  console.log("%c[planService] createPlan: KEYS in final data object:", "color: #FF1493; font-weight: bold;", Object.keys(dataToSave).sort().join(', '));
+  console.log("%c[planService] createPlan: Compare these keys AND THEIR DATA TYPES meticulously with your Firestore rule for '/plans/{planId}'. The `request.resource.data.keys().hasOnly([...])` list in your rule MUST EXACTLY MATCH these keys. Also check type conditions (e.g., `is string`, `== null`).", "color: #FF1493;");
 
 
   try {
@@ -57,10 +53,10 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
       console.error("  1. User is authenticated (request.auth != null).");
       console.error("  2. Authenticated user's UID matches 'ownerId' in the new plan document (request.auth.uid == request.resource.data.ownerId).");
       console.error("  3. Required fields like 'name', 'sector', 'createdAt', 'updatedAt' are present and correctly typed (e.g., timestamps are request.time).");
-      console.error("  4. Optional fields ('subSector', 'industry', 'naicsCode') are either null or string.");
+      console.error("  4. Optional fields ('subSector', 'industry', 'naicsCode') are either null or string as per your rule checks.");
       console.error("  5. The document being created contains ONLY the expected fields. Check `request.resource.data.keys().hasOnly([...])` in your rule.");
       console.error("     Expected keys based on current client code: name, ownerId, sector, subSector, industry, naicsCode, createdAt, updatedAt");
-      throw new Error('Permission denied creating plan. Check Firestore security rules and console logs for details.');
+      throw new Error('Permission denied creating plan. Check Firestore security rules and console logs for details of data sent vs. rules expected.');
     }
     throw new Error(error.message || "Could not create plan.");
   }
