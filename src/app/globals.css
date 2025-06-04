@@ -182,4 +182,19 @@ body {
     background: linear-gradient(to left, hsl(var(--background)), hsla(var(--background), 0%));
   }
 }
+
+/* Grid background for whiteboard imitation */
+.grid-background {
+  background-image:
+    linear-gradient(to right, hsl(var(--border) / 0.5) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border) / 0.5) 1px, transparent 1px);
+  background-size: 20px 20px; /* Adjust grid size */
+  background-color: hsl(var(--card)); /* Slightly off-white for canvas */
+}
+.dark .grid-background {
+  background-image:
+    linear-gradient(to right, hsl(var(--border) / 0.3) 1px, transparent 1px),
+    linear-gradient(to bottom, hsl(var(--border) / 0.3) 1px, transparent 1px);
+  background-color: hsl(var(--card)); /* Slightly lighter dark for canvas in dark mode */
+}
     
