@@ -8,6 +8,7 @@ import {
   getDoc,
   serverTimestamp,
   Timestamp,
+  type FieldValue,
 } from 'firebase/firestore';
 import type { Plan, NewPlanData, ClientPlan } from '@/types/plan';
 
@@ -23,13 +24,27 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     throw new Error("Authenticated user does not match plan ownerId.");
   }
 
-  console.log(`[planService] createPlan: Called by UID ${user.uid} with data:`, planData);
+  console.log(`[planService] createPlan: Called by UID ${user.uid} with data:`, JSON.stringify(planData, null, 2));
 
-  const dataToSave = {
-    ...planData,
-    createdAt: serverTimestamp(),
-    updatedAt: serverTimestamp(),
+  const dataToSave: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: FieldValue, updatedAt: FieldValue } = {
+    name: planData.name,
+    ownerId: planData.ownerId,
+    sector: planData.sector,
+    subSector: planData.subSector || null,
+    industry: planData.industry || null,
+    naicsCode: planData.naicsCode || null,
+    createdAt: serverTimestamp() as FieldValue,
+    updatedAt: serverTimestamp() as FieldValue,
   };
+
+  // Log the exact object being sent to Firestore
+  console.log("[planService] Exact data object being sent to Firestore for addDoc:", JSON.stringify({
+    ...dataToSave,
+    createdAt: "Firestore.serverTimestamp()", // Placeholder for logging
+    updatedAt: "Firestore.serverTimestamp()", // Placeholder for logging
+  }, null, 2));
+  console.log("[planService] Keys in dataToSave:", Object.keys(dataToSave).sort().join(', '));
+
 
   try {
     const docRef = await addDoc(plansCollectionRef, dataToSave);
@@ -42,9 +57,9 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
       console.error("  1. User is authenticated (request.auth != null).");
       console.error("  2. Authenticated user's UID matches 'ownerId' in the new plan document (request.auth.uid == request.resource.data.ownerId).");
       console.error("  3. Required fields like 'name', 'sector', 'createdAt', 'updatedAt' are present and correctly typed (e.g., timestamps are request.time).");
-      console.error("  4. Optional fields like 'subSector', 'industry', 'naicsCode' are either null or string.");
-      console.error("  5. No unexpected fields are being written (check request.resource.data.keys().hasOnly([...]) in your rules).");
-      console.error("  Data attempted to write:", dataToSave);
+      console.error("  4. Optional fields ('subSector', 'industry', 'naicsCode') are either null or string.");
+      console.error("  5. The document being created contains ONLY the expected fields. Check `request.resource.data.keys().hasOnly([...])` in your rule.");
+      console.error("     Expected keys based on current client code: name, ownerId, sector, subSector, industry, naicsCode, createdAt, updatedAt");
       throw new Error('Permission denied creating plan. Check Firestore security rules and console logs for details.');
     }
     throw new Error(error.message || "Could not create plan.");
@@ -56,7 +71,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
     console.warn("[planService] getPlanById: No planId provided.");
     return null;
   }
-  const user = auth.currentUser; // For checking access based on rules later if needed
+  const user = auth.currentUser;
 
   console.log(`[planService] getPlanById: Fetching plan with ID: '${planId}'. Current auth UID: '${user?.uid || 'NULL'}'`);
   const planDocRef = doc(plansCollectionRef, planId);
@@ -64,21 +79,16 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
   try {
     const docSnap = await getDoc(planDocRef);
     if (docSnap.exists()) {
-      const data = docSnap.data() as Plan;
-      // Basic check (can be expanded with security rules for shared access)
-      // if (data.ownerId !== user?.uid && !(data.sharedWithUserIds || []).includes(user?.uid || '')) {
-      //   console.warn(`[planService] User ${user?.uid} does not have permission to view plan ${planId}. Owner: ${data.ownerId}`);
-      //   throw new Error("Permission denied to view this plan.");
-      // }
+      const data = docSnap.data() as Plan; // Assuming Plan type matches Firestore structure
 
       const clientPlan: ClientPlan = {
         id: docSnap.id,
         name: data.name,
         ownerId: data.ownerId,
         sector: data.sector,
-        subSector: data.subSector,
-        industry: data.industry,
-        naicsCode: data.naicsCode,
+        subSector: data.subSector || null,
+        industry: data.industry || null,
+        naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
       };
@@ -90,7 +100,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
   } catch (error: any) {
     console.error(`[planService] Error fetching plan ${planId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error("Ensure Firestore rules allow 'get' on `/plans/{planId}` if `request.auth.uid == resource.data.ownerId` (or shared).");
+      console.error("Ensure Firestore rules allow 'get' on `/plans/{planId}` if `request.auth.uid == resource.data.ownerId` (or other conditions for shared plans).");
       throw new Error('Permission denied fetching plan. Check Firestore rules.');
     }
     throw new Error(error.message || "Could not fetch plan.");
