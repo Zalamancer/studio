@@ -6,6 +6,10 @@ import {
   addDoc,
   doc,
   getDoc,
+  getDocs, // Added for getRecentPlans
+  query, // Added for getRecentPlans
+  orderBy, // Added for getRecentPlans
+  limit, // Added for getRecentPlans
   serverTimestamp,
   Timestamp,
   type FieldValue,
@@ -37,7 +41,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     updatedAt: serverTimestamp() as FieldValue,
   };
 
-  console.log("%c[planService] createPlan: FINAL DATA OBJECT being sent to Firestore:", "color: #FF1493; font-weight: bold;", JSON.parse(JSON.stringify(dataToSave))); // Log a serializable version
+  console.log("%c[planService] createPlan: FINAL DATA OBJECT being sent to Firestore:", "color: #FF1493; font-weight: bold;", JSON.parse(JSON.stringify(dataToSave)));
   console.log("%c[planService] createPlan: KEYS in final data object:", "color: #FF1493; font-weight: bold;", Object.keys(dataToSave).sort().join(', '));
   console.log("%c[planService] createPlan: Compare these keys AND THEIR DATA TYPES meticulously with your Firestore rule for '/plans/{planId}'. The `request.resource.data.keys().hasOnly([...])` list in your rule MUST EXACTLY MATCH these keys. Also check type conditions (e.g., `is string`, `== null`).", "color: #FF1493;");
 
@@ -53,7 +57,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
       console.error("  1. User is authenticated (request.auth != null).");
       console.error("  2. Authenticated user's UID matches 'ownerId' in the new plan document (request.auth.uid == request.resource.data.ownerId).");
       console.error("  3. Required fields like 'name', 'sector', 'createdAt', 'updatedAt' are present and correctly typed (e.g., timestamps are request.time).");
-      console.error("  4. Optional fields ('subSector', 'industry', 'naicsCode') are either null or string as per your rule checks.");
+      console.error("  4. Optional fields ('subSector', 'industry', 'naicsCode') are either null or string.");
       console.error("  5. The document being created contains ONLY the expected fields. Check `request.resource.data.keys().hasOnly([...])` in your rule.");
       console.error("     Expected keys based on current client code: name, ownerId, sector, subSector, industry, naicsCode, createdAt, updatedAt");
       throw new Error('Permission denied creating plan. Check Firestore security rules and console logs for details of data sent vs. rules expected.');
@@ -75,7 +79,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
   try {
     const docSnap = await getDoc(planDocRef);
     if (docSnap.exists()) {
-      const data = docSnap.data() as Plan; // Assuming Plan type matches Firestore structure
+      const data = docSnap.data() as Plan;
 
       const clientPlan: ClientPlan = {
         id: docSnap.id,
@@ -100,5 +104,44 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
       throw new Error('Permission denied fetching plan. Check Firestore rules.');
     }
     throw new Error(error.message || "Could not fetch plan.");
+  }
+};
+
+export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
+  console.log(`[planService] getRecentPlans: Fetching ${count} recent plans.`);
+  try {
+    const q = query(
+      plansCollectionRef,
+      orderBy('createdAt', 'desc'),
+      limit(count)
+    );
+    const querySnapshot = await getDocs(q);
+    const plans: ClientPlan[] = querySnapshot.docs.map((docSnap) => {
+      const data = docSnap.data() as Plan;
+      return {
+        id: docSnap.id,
+        name: data.name,
+        ownerId: data.ownerId,
+        sector: data.sector,
+        subSector: data.subSector || null,
+        industry: data.industry || null,
+        naicsCode: data.naicsCode || null,
+        createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
+        updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
+      };
+    });
+    console.log(`[planService] Fetched ${plans.length} recent plans.`);
+    return plans;
+  } catch (error: any) {
+    console.error("[planService] Error fetching recent plans:", error);
+    if (error.code === 'permission-denied') {
+      console.error("Firestore permission denied fetching recent plans. Check rules for listing 'plans'.");
+      throw new Error('Permission denied fetching recent plans. Check Firestore rules.');
+    }
+    if (error.code === 'failed-precondition' && error.message.includes('index')) {
+      console.error("Firestore query for recent plans requires an index on 'createdAt' (desc). Please create it in the Firebase console for the 'plans' collection.");
+      throw new Error("Firestore query requires an index for recent plans. Please create it.");
+    }
+    throw new Error(`Failed to fetch recent plans: ${error.message || 'Unknown error'}`);
   }
 };
