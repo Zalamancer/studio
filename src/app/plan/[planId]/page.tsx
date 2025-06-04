@@ -14,6 +14,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
+import { Badge } from '@/components/ui/badge'; // Added import for Badge
 
 const ViewPlanPage = () => {
   const params = useParams();

@@ -41,9 +41,65 @@ service cloud.firestore {
 
     // Collections rules (from user)
     match /collections/{collectionId} {
-      allow read: if isAuthUser() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthUser() && request.resource.data.userId == request.auth.uid;
-      allow update, delete: if isAuthUser() && resource.data.userId == request.auth.uid;
+      // Helper functions for collections
+      function isCollectionOwner() {
+        return request.auth.uid == resource.data.ownerId;
+      }
+      function isSharedWithUser() {
+        return request.auth.uid in (resource.data.sharedWithUserIds || []);
+      }
+      function hasValidCollectionFields() {
+        return request.resource.data.keys().hasAll(['name', 'ownerId', 'postIds', 'sharedWithUserIds', 'createdAt', 'updatedAt']) &&
+               request.resource.data.name is string &&
+               request.resource.data.name.size() > 0 &&
+               request.resource.data.ownerId is string &&
+               request.resource.data.postIds is list &&
+               request.resource.data.sharedWithUserIds is list;
+      }
+
+      // List rules - Separate owned and shared cases more explicitly
+      allow list: if isAuthUser() && (
+        // Case 1: Owned collections
+        (request.query.filters.size() > 0 && 
+         request.query.filters[0].field == 'ownerId' && 
+         request.query.filters[0].op == '==' && 
+         request.query.filters[0].value == request.auth.uid) ||
+        // Case 2: Shared collections - more explicit check
+        (request.query.filters.size() > 0 && 
+         request.query.filters[0].field == 'sharedWithUserIds' && 
+         request.query.filters[0].op == 'array-contains' && 
+         request.query.filters[0].value == request.auth.uid &&
+         // Additional check to ensure the user is actually in the array
+         resource.data.sharedWithUserIds.hasAny([request.auth.uid]))
+      );
+
+      // Read rules
+      allow read: if isAuthUser() && (
+        isCollectionOwner() || 
+        isSharedWithUser()
+      );
+
+      // Create rules
+      allow create: if isAuthUser() && 
+                   request.resource.data.ownerId == request.auth.uid &&
+                   hasValidCollectionFields() &&
+                   request.resource.data.createdAt == request.time &&
+                   request.resource.data.updatedAt == request.time;
+
+      // Update rules
+      allow update: if isAuthUser() && (
+        // Owner can update collection details
+        (isCollectionOwner() && 
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'postIds', 'sharedWithUserIds', 'updatedAt']) &&
+         request.resource.data.ownerId == resource.data.ownerId &&
+         request.resource.data.createdAt == resource.data.createdAt &&
+         request.resource.data.updatedAt == request.time) ||
+        // Shared users can only read
+        isSharedWithUser()
+      );
+
+      // Delete rules
+      allow delete: if isAuthUser() && isCollectionOwner();
     }
 
     // Posts, their comments, and bids
