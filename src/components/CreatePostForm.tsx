@@ -51,7 +51,7 @@ import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
-import { useIsMobile } from '@/hooks/use-mobile'; // CORRECTED PATH
+import { useIsMobile } from '@/hooks/use-mobile';
 
 const MAX_OUTPUT_FILE_SIZE_MB = 1;
 const MAX_UPLOAD_DIMENSION = 1600;
@@ -59,7 +59,7 @@ const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif
 const MAX_IMAGE_FILES = 5;
 
 const preCompressionFileSchema = z.instanceof(File)
-  .refine(file => typeof file.type === 'string' && ACCEPTED_IMAGE_TYPES.includes(file.type.toLowerCase()), { // Ensure lowercase check for type
+  .refine(file => typeof file.type === 'string' && ACCEPTED_IMAGE_TYPES.includes(file.type.toLowerCase()), {
     message: "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported for images."
   });
 
@@ -349,10 +349,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   }, [suggestibleUsers, isLoadingSuggestibleUsers, showProblemDetailsSuggestions, debouncedProblemDetailsQuery, currentUserId]);
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("[DEBUG] handleImageChange called");
+    console.log("[DEBUG] handleImageChange started");
     const files = event.target.files;
     if (!files || files.length === 0) {
-      console.log("[DEBUG] No files selected.");
+      console.log("[DEBUG] No files selected in handleImageChange.");
       return;
     }
 
@@ -372,7 +372,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
           console.log("[DEBUG] Max image files limit reached.");
           break;
         }
-        if (!ACCEPTED_IMAGE_TYPES.includes(file.type.toLowerCase())) {
+        if (!file.type || typeof file.type !== 'string' || !ACCEPTED_IMAGE_TYPES.includes(file.type.toLowerCase())) {
           toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not a supported image type.` });
           console.log(`[DEBUG] Invalid file type: ${file.type} for file ${file.name}`);
           continue;
@@ -388,14 +388,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             quality: 0.75,
           };
           const compressedOutput = await imageCompression(file, compressionOptions);
-
+          const finalFileName = (file.name.substring(0, file.name.lastIndexOf('.')) || file.name) + '.webp';
           const finalFileToAdd = compressedOutput instanceof File
-            ? compressedOutput
-            : new File([compressedOutput], file.name.substring(0, file.name.lastIndexOf('.')) + '.webp' || 'compressed.webp', { type: 'image/webp' });
+            ? new File([compressedOutput], finalFileName, { type: 'image/webp', lastModified: compressedOutput.lastModified })
+            : new File([compressedOutput], finalFileName, { type: 'image/webp' });
 
           console.log(`[DEBUG] Compressed ${file.name} to ${finalFileToAdd.name}, new size: ${finalFileToAdd.size}, final type: ${finalFileToAdd.type}`);
 
-          if (ACCEPTED_IMAGE_TYPES.includes(finalFileToAdd.type.toLowerCase())) {
+          if (finalFileToAdd.type && ACCEPTED_IMAGE_TYPES.includes(finalFileToAdd.type.toLowerCase())) {
             newlyProcessedFiles.push(finalFileToAdd);
           } else {
             console.warn(`[DEBUG] Compressed file ${finalFileToAdd.name} has an unexpected final type ${finalFileToAdd.type}. Skipping.`);
@@ -410,12 +410,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
       if (newlyProcessedFiles.length > 0) {
         const updatedFiles = [...currentSelectedFiles, ...newlyProcessedFiles];
-        console.log("[DEBUG] Files to be set (updatedFiles):", updatedFiles);
-        updatedFiles.forEach((file, idx) => {
-          console.log(`[DEBUG] File ${idx} constructor name: ${file.constructor.name}, instanceof File: ${file instanceof File}, mimeType: ${file.type}`);
-        });
-        form.setValue("imageFiles", updatedFiles, { shouldValidate: true, shouldDirty: true });
-        console.log("[DEBUG] After form.setValue for imageFiles. Current form errors:", JSON.stringify(form.formState.errors, null, 2));
+        console.log("[DEBUG] Files to be set via form.setValue (updatedFiles):", updatedFiles.map(f => ({ name: f.name, type: f.type, size: f.size, isFile: f instanceof File })));
+        try {
+          form.setValue("imageFiles", updatedFiles, { shouldValidate: true, shouldDirty: true });
+          console.log("[DEBUG] form.setValue for imageFiles successful. Current form errors:", JSON.stringify(form.formState.errors, null, 2));
+          console.log("[DEBUG] Form values for imageFiles after set:", form.getValues("imageFiles"));
+        } catch (setValueError) {
+          console.error("[DEBUG] Error during form.setValue for imageFiles:", setValueError);
+        }
 
         const updatePreviews = async () => {
           const previews = await Promise.all(newlyProcessedFiles.map(f => {
@@ -493,23 +495,39 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       console.error("Form validation errors (could not stringify):", errors);
     }
 
+    if (Object.keys(errors).length === 0) {
+      console.warn("[DEBUG] handleValidationErrors called with empty errors object. Attempting manual parse...");
+      const currentFormValues = form.getValues();
+      console.log("[DEBUG] Current form values for manual parse:", currentFormValues);
+      const parseResult = postFormSchema.safeParse(currentFormValues);
+      if (!parseResult.success) {
+        console.error("[DEBUG] Manual safeParse FAILED. ZodError details:", parseResult.error.flatten());
+        toast({ variant: "destructive", title: "Validation Error", description: "Manual Zod parse failed. Check console."});
+      } else {
+        console.log("[DEBUG] Manual safeParse SUCCEEDED, but react-hook-form reported errors. This is unusual.");
+        toast({ variant: "destructive", title: "Validation Inconsistency", description: "Please check console."});
+      }
+      const imageFilesValue = form.getValues("imageFiles");
+      console.log("[DEBUG] Image files in form at time of empty error:", imageFilesValue?.map(f => ({name: f.name, type: f.type, size: f.size, isFile: f instanceof File})));
+    }
+
     if (errors && errors.imageFiles) {
       const imageFilesError = errors.imageFiles;
-      console.error("Image files error object:", imageFilesError);
+      console.error("[DEBUG] Image files error object:", imageFilesError);
       if (imageFilesError.message) {
-        console.error("Image files error message (array level):", imageFilesError.message);
+        console.error("[DEBUG] Image files error message (array level):", imageFilesError.message);
       } else if (Array.isArray(imageFilesError)) {
-          imageFilesError.forEach((err, idx) => {
+          imageFilesError.forEach((err: any, idx: number) => {
               if(err && err._errors && err._errors.length > 0) {
-                  console.error(`Image file error at index ${idx}:`, err._errors.join(', '));
+                  console.error(`[DEBUG] Image file error at index ${idx}:`, err._errors.join(', '));
               } else if (err && err.message) {
-                  console.error(`Image file error at index ${idx} (direct message):`, err.message);
+                  console.error(`[DEBUG] Image file error at index ${idx} (direct message):`, err.message);
               } else if (err) {
-                  console.error(`Image file error at index ${idx} (unknown structure):`, err);
+                  console.error(`[DEBUG] Image file error at index ${idx} (unknown structure):`, err);
               }
           });
-      } else if (typeof imageFilesError === 'object' && imageFilesError._errors) {
-          console.error("Image files error message (_errors):", imageFilesError._errors.join(', '));
+      } else if (typeof imageFilesError === 'object' && (imageFilesError as any)._errors) {
+          console.error("[DEBUG] Image files error message (_errors):", (imageFilesError as any)._errors.join(', '));
       }
     }
     toast({ variant: "destructive", title: "Validation Error", description: "Please check the form for errors. Details logged in console." });
@@ -761,8 +779,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 </div>
                 {imagePreviewUrls.length > 0 && (
                     <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        {imagePreviewUrls.map((url, index) => (
-                            <div key={url} className="relative group aspect-square border rounded-md overflow-hidden">
+                        {imagePreviewUrls.map((url, index) => ( // Changed key to index
+                            <div key={index} className="relative group aspect-square border rounded-md overflow-hidden">
                                 <Image src={url} alt={`Preview ${index + 1}`} fill style={{objectFit:"cover"}} className="rounded-md" data-ai-hint="user upload preview"/>
                                 <Button
                                     type="button"
@@ -853,7 +871,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         </div>
 
         <DialogFooter className="pt-8 md:col-span-2">
-            {onDialogClose && (<DialogClose asChild><Button type="button" variant="outline" onClick={resetFormValues} disabled={isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers)}>Cancel</Button></DialogClose>)}
+            {onDialogClose && (<DialogClose asChild><Button type="button" variant="outline" onClick={resetFormValues} disabled={isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) || !currentUserId}>Cancel</Button></DialogClose>)}
             <Button type="submit" disabled={!currentUserId || isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers)}>
                 {(isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) ) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : ('Submit Post')}
             </Button>
