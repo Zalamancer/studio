@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  DialogTrigger, 
+  DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
 import {
@@ -24,31 +24,31 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, FolderOpen } from "lucide-react"; // Added FolderOpen
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, FolderOpen, Brain } from "lucide-react"; // Added FolderOpen, Brain
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
 import type {
   CreatePostFormData,
-  CreatePostFormProps 
+  CreatePostFormProps
 } from '@/components/CreatePostForm';
 import type {
   NewPostData,
   SectorWithSubSectors as SectorWithSubSectorsType,
   SubSector as SubSectorType,
   Industry as IndustryType
-} from '@/types/post'; 
+} from '@/types/post';
 import { addPostToFirestore, getPostsByUserId } from '@/services/postService';
 import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
-import { useIsMobile } from "@/hooks/use-mobile"; 
+import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
 import { getReviewsForProfile } from '@/services/reviewService';
-import { fetchFullUserProfile } from '@/services/connectionService'; 
+import { fetchFullUserProfile } from '@/services/connectionService';
 
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
@@ -132,9 +132,9 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
         name: "Mining, Quarrying, and Oil and Gas Extraction", code: "21",
         description: "Extracting naturally occurring mineral solids, liquids, and gases.",
         subSectors: [
-            { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "211111" }] }, 
+            { name: "Oil and Gas Extraction", code: "211", industries: [{ name: "Crude Petroleum and Natural Gas Extraction", code: "211111" }] },
             { name: "Coal Mining", code: "2121", industries: [{ name: "Coal Mining", code: "212110" }] },
-            { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold Ore and Silver Ore Mining", code: "212220" }] }, 
+            { name: "Metal Ore Mining", code: "2122", industries: [{ name: "Iron Ore Mining", code: "212210" }, { name: "Gold Ore and Silver Ore Mining", code: "212220" }] },
             { name: "Nonmetallic Mineral Mining and Quarrying", code: "2123", industries: [{ name: "Stone Mining and Quarrying", code: "212310" }, { name: "Sand, Gravel, Clay, and Ceramic and Refractory Minerals Mining and Quarrying", code: "212320" }] },
             { name: "Support Activities for Mining", code: "213", industries: [{ name: "Support Activities for Oil and Gas Operations", code: "213111" }, { name: "Support Activities for Coal Mining", code: "213113" }] },
         ],
@@ -188,7 +188,7 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
         name: "Wholesale Trade", code: "42",
         description: "Wholesaling merchandise, generally without transformation.",
         subSectors: [
-            { name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{ name: "Motor Vehicle and Parts Wholesalers", code: "4231" }, { name: "Commercial Equipment Wholesalers", code: "423440" }] }, 
+            { name: "Merchant Wholesalers, Durable Goods", code: "423", industries: [{ name: "Motor Vehicle and Parts Wholesalers", code: "4231" }, { name: "Commercial Equipment Wholesalers", code: "423440" }] },
             { name: "Merchant Wholesalers, Nondurable Goods", code: "424", industries: [{ name: "Grocery and Related Product Wholesalers", code: "4244" }, { name: "Petroleum and Petroleum Products Wholesalers", code: "4247" }] },
         ],
     },
@@ -218,8 +218,8 @@ export const detailedSectorsData: SectorWithSubSectorsType[] = [
         name: "Information", code: "51",
         description: "Producing and distributing information and cultural products.",
         subSectors: [
-            { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper Publishers", code: "513110" }, { name: "Software Publishers", code: "513210" }] }, 
-            { name: "Telecommunications", code: "517", industries: [{ name: "Wired Telecommunications Carriers", code: "5171" }, { name: "Wireless Telecommunications Carriers (except Satellite)", code: "5172" }] }, 
+            { name: "Publishing Industries (except Internet)", code: "513", industries: [{ name: "Newspaper Publishers", code: "513110" }, { name: "Software Publishers", code: "513210" }] },
+            { name: "Telecommunications", code: "517", industries: [{ name: "Wired Telecommunications Carriers", code: "5171" }, { name: "Wireless Telecommunications Carriers (except Satellite)", code: "5172" }] },
             { name: "Data Processing, Hosting, and Related Services", code: "518", industries: [{ name: "Data Processing, Hosting, and Related Services", code: "5182" }] },
         ],
     },
@@ -436,7 +436,7 @@ export default function MainLayout({
 
       let uploadedImageUrls: string[] = [];
       if (formData.imageFiles && formData.imageFiles.length > 0 && user) {
-        const uploadPromises = formData.imageFiles.map(file => 
+        const uploadPromises = formData.imageFiles.map(file =>
           uploadPostImage(file, user.uid).catch(uploadError => {
             toast({ variant: "destructive", title: `Image Upload Failed for ${file.name}`, description: (uploadError as Error).message || "Could not upload image." });
             return null; // Return null for failed uploads
@@ -491,7 +491,7 @@ export default function MainLayout({
       setIsCreatePostOpen(false);
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        const descriptionSource = variables.descriptionDetails; 
+        const descriptionSource = variables.descriptionDetails;
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
           if (mentionedUid !== user.uid) {
             try {
@@ -524,7 +524,7 @@ export default function MainLayout({
       console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       addPostMutation.mutate(formData);
     },
-    [user, toast, addPostMutation] 
+    [user, toast, addPostMutation]
   );
 
   const handleLogout = async () => {
@@ -542,7 +542,7 @@ export default function MainLayout({
     { title: "Home", href: "/", icon: Home },
     { title: "Discover", href: "/discover", icon: Compass },
     { title: "Messages", href: "/messages", icon: MessageSquare },
-    { title: "Collections", href: "/collections", icon: FolderOpen }, // Added Collections
+    { title: "Collections", href: "/collections", icon: FolderOpen },
   ];
 
   const rootLayoutClasses = cn(
@@ -550,14 +550,13 @@ export default function MainLayout({
     isMobile ? "h-[calc(var(--vh-dynamic,1vh)*100)]" : "min-h-screen"
   );
 
-  const hideAppChrome = false; 
+  const hideAppChrome = false;
 
   return (
     <div className={rootLayoutClasses}>
       {!hideAppChrome && (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center px-4"> {/* Added px-4 here */}
-            {/* Desktop Logo/Nav */}
+          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center px-4">
             <div className="mr-4 hidden md:flex">
               <Link href="/" className="mr-6 flex items-center space-x-2">
                 <Handshake className="h-6 w-6 text-primary" />
@@ -582,15 +581,13 @@ export default function MainLayout({
               </nav>
             </div>
 
-            {/* Mobile Logo/Icon (NEW) */}
             <div className="flex items-center md:hidden">
               <Link href="/" className="flex items-center space-x-2" aria-label="Go to homepage">
                 <Handshake className="h-6 w-6 text-primary" />
               </Link>
             </div>
 
-            {/* Right-aligned items (Create Post, Notifications, User Menu) */}
-            <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-4">
+            <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-3">
               {authLoading ? (
                 <div className="flex items-center space-x-2">
                   <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
@@ -598,6 +595,13 @@ export default function MainLayout({
                 </div>
               ) : user ? (
                 <>
+                  <Button variant="outline" size="sm" asChild>
+                    <Link href="/plan/create">
+                      <Brain className="mr-2 h-4 w-4" />
+                       <span className="hidden sm:inline">Create Plan</span>
+                       <span className="sm:hidden">Plan</span>
+                    </Link>
+                  </Button>
                   <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
                       if (!open && addPostMutation.isSuccess) {
                         // Reset logic is in CreatePostForm's useEffect
@@ -685,20 +689,20 @@ export default function MainLayout({
       <main
         className={cn(
           "flex-1 flex flex-col",
-          isMobile ? "pb-14" : "pb-0" // Account for bottom nav on mobile
+          isMobile ? "pb-14" : "pb-0"
         )}
       >
         {children}
       </main>
       {!hideAppChrome && isMobile && (
         <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
-          <div className="container mx-auto flex justify-around items-center h-full px-1"> {/* Added px-1 for slight padding for nav items */}
+          <div className="container mx-auto flex justify-around items-center h-full px-1">
             {navItems.map((item) => (
               <Link
                 key={`mobile-${item.title}`}
                 href={item.href}
                 className={cn(
-                  "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full", // Ensure full height for touch target
+                  "flex flex-col items-center justify-center text-xs px-2 py-1 rounded-md transition-colors w-1/4 h-full",
                   pathname === item.href ? 'text-primary font-medium' : 'text-muted-foreground hover:text-primary'
                 )}
               >
@@ -712,4 +716,3 @@ export default function MainLayout({
     </div>
   );
 }
-
