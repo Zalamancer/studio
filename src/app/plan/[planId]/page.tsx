@@ -2,7 +2,7 @@
 // src/app/plan/[planId]/page.tsx
 "use client";
 
-import React from 'react';
+import React, { use } from 'react'; // Added use
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { getPlanById } from '@/services/planService';
@@ -14,16 +14,19 @@ import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
-import { Label } from '@/components/ui/label';
+import { Badge } from '@/components/ui/badge'; // Ensure Badge is imported
+import { Label } from '@/components/ui/label'; // Ensure Label is imported
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 
 const ViewPlanPage = () => {
-  const params = useParams();
-  const planId = params?.planId as string | undefined;
+  const paramsFromHook = useParams(); // Store promise-like object
   const router = useRouter();
   const { user: currentUser, loading: authLoading } = useAuth();
+
+  // Unwrap params using React.use()
+  const params = use(paramsFromHook);
+  const planId = params?.planId as string | undefined;
 
   const isPlanIdValidUid = React.useMemo(() => {
     if (!planId) return false;
