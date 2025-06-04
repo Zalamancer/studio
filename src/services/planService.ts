@@ -38,8 +38,14 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   } catch (error: any) {
     console.error("[planService] Error creating plan:", error);
     if (error.code === 'permission-denied') {
-      console.error("Firestore permission denied. Ensure security rules allow 'create' on 'plans' collection by authenticated users who are the ownerId.");
-      throw new Error('Permission denied. Check Firestore security rules.');
+      console.error("Firestore permission denied. Ensure security rules allow 'create' on 'plans/{planId}' collection under these conditions:");
+      console.error("  1. User is authenticated (request.auth != null).");
+      console.error("  2. Authenticated user's UID matches 'ownerId' in the new plan document (request.auth.uid == request.resource.data.ownerId).");
+      console.error("  3. Required fields like 'name', 'sector', 'createdAt', 'updatedAt' are present and correctly typed (e.g., timestamps are request.time).");
+      console.error("  4. Optional fields like 'subSector', 'industry', 'naicsCode' are either null or string.");
+      console.error("  5. No unexpected fields are being written (check request.resource.data.keys().hasOnly([...]) in your rules).");
+      console.error("  Data attempted to write:", dataToSave);
+      throw new Error('Permission denied creating plan. Check Firestore security rules and console logs for details.');
     }
     throw new Error(error.message || "Could not create plan.");
   }
