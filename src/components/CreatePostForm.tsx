@@ -51,23 +51,17 @@ import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
-import { useIsMobile } from '@/hooks/use-mobile'; // Import useIsMobile
+import { useIsMobile } from '@/hooks/use-mobile';
 
-const MAX_OUTPUT_FILE_SIZE_MB = 1; // Max size for the *output* compressed file
-const MAX_UPLOAD_DIMENSION = 1600; // Max width or height for uploaded images
+const MAX_OUTPUT_FILE_SIZE_MB = 1;
+const MAX_UPLOAD_DIMENSION = 1600;
 const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif", "image/webp"];
 const MAX_IMAGE_FILES = 5;
 
-// Schema for individual file, checking type and initial size (before our compression)
 const preCompressionFileSchema = z.instanceof(File)
   .refine(file => ACCEPTED_IMAGE_TYPES.includes(file.type), {
     message: "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported."
   });
-  // Initial size check can be less strict as we'll compress.
-  // .refine(file => file.size <= 10 * 1024 * 1024, { // e.g. 10MB initial limit
-  //   message: `Max initial image size is 10MB. Images will be compressed.`
-  // });
-
 
 const postFormSchema = z.object({
   requestType: z.enum(['post', 'help_request'], {
@@ -90,7 +84,7 @@ const postFormSchema = z.object({
     .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
     .optional(),
   deadline: z.date().optional().nullable(),
-  miroBoardEmbedUrl: z.string().url("Please enter a valid Miro board embed URL.").optional().or(z.literal('')),
+  // miroBoardEmbedUrl field removed
 }).superRefine((data, ctx) => {
   // Conditional validation moved here if needed, but description fields are always present in tabs
 });
@@ -105,11 +99,11 @@ export interface CreatePostFormData {
   sector: string;
   subSector?: string | undefined;
   industry?: string | undefined;
-  imageFiles?: File[]; // Changed from imageFile to imageFiles
+  imageFiles?: File[];
   mentionedUserIds?: string[];
   maxBudget?: number | undefined;
   deadline?: Date | null | undefined;
-  miroBoardEmbedUrl?: string | undefined;
+  // miroBoardEmbedUrl field removed
 }
 
 export interface CreatePostFormProps {
@@ -141,24 +135,22 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       sector: "",
       subSector: "",
       industry: "",
-      imageFiles: [], // Initialize as empty array
+      imageFiles: [],
       maxBudget: undefined,
       deadline: undefined,
-      miroBoardEmbedUrl: "",
+      // miroBoardEmbedUrl default value removed
     },
   });
   const { toast } = useToast();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const isMobile = useIsMobile(); // Add useIsMobile hook
+  const isMobile = useIsMobile();
 
   const [currentSubSectors, setCurrentSubSectors] = useState<SubSector[]>([]);
   const [currentIndustries, setCurrentIndustries] = useState<Industry[]>([]);
 
-  // State for multiple image previews
   const [imagePreviewUrls, setImagePreviewUrls] = useState<string[]>([]);
-  // State for a single file being processed for compression
   const [fileForCompression, setFileForCompression] = useState<File | null>(null);
-  const [showCompressionDialog, setShowCompressionDialog] = useState(false); // Not used if auto-compressing
+  const [showCompressionDialog, setShowCompressionDialog] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
 
   const [problemDetailsValue, setProblemDetailsValue] = useState('');
@@ -186,7 +178,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       imageFiles: [],
       maxBudget: undefined,
       deadline: undefined,
-      miroBoardEmbedUrl: "",
+      // miroBoardEmbedUrl default value removed
     });
     setProblemDetailsValue('');
     setImagePreviewUrls([]);
@@ -371,7 +363,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     setIsCompressing(true);
     toast({ title: "Processing images...", description: "Please wait.", duration: newFilesToProcess.length * 1500 });
 
-    try { // Wrap main processing in try
+    try {
         for (const file of newFilesToProcess) {
             if (currentSelectedFiles.length + newlyProcessedFiles.length >= MAX_IMAGE_FILES) {
                 toast({ variant: "destructive", title: "Limit Reached", description: `You can only upload up to ${MAX_IMAGE_FILES} images.` });
@@ -420,9 +412,9 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               });
             });
         }
-    } finally { // Ensure isCompressing is reset
+    } finally {
         setIsCompressing(false);
-        if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input in finally as well
+        if (fileInputRef.current) fileInputRef.current.value = "";
     }
   };
 
@@ -451,10 +443,17 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       mentionedUserIds: finalMentionedUserIds,
       maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? Number(values.maxBudget) : undefined,
       deadline: values.requestType === 'help_request' && values.deadline ? values.deadline : undefined,
-      miroBoardEmbedUrl: values.miroBoardEmbedUrl?.trim() ? values.miroBoardEmbedUrl.trim() : undefined,
+      // miroBoardEmbedUrl removed from submitData
     };
     onSubmit(submitData);
   };
+  
+  const handleValidationErrors = (errors: any) => {
+    console.error("Form validation errors:", errors);
+    // You can add a toast here to inform the user about validation errors if they aren't visible
+    // toast({ variant: "destructive", title: "Validation Error", description: "Please check the form for errors." });
+  };
+
 
   const localGetInitials = (name: string | undefined | null): string => {
       if (!name || typeof name !== 'string' || name.trim() === '') return '?';
@@ -478,7 +477,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(handleSubmitForm)} className="space-y-0">
+      <form onSubmit={form.handleSubmit(handleSubmitForm, handleValidationErrors)} className="space-y-0">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 p-1">
           {/* Left Column */}
           <div className="space-y-6 flex flex-col">
@@ -537,15 +536,15 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               <Tabs value={activeDescriptionTab} onValueChange={setActiveDescriptionTab} className="w-full flex-grow flex flex-col">
                 <TabsList className="inline-flex h-10 items-center justify-center rounded-md bg-muted p-1 text-muted-foreground w-full">
                   <TabsTrigger value="details" className={cn("inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1", isMobile && "flex-col h-auto p-1.5 text-xs")}>
-                      <FileQuestion className={cn("h-4 w-4", isMobile ? "mb-0.5" : "mr-1.5")} />
+                      {isMobile ? <FileQuestion className="h-4 w-4 mb-0.5" /> : <FileQuestion className="h-4 w-4 mr-1.5" />}
                       <span className={cn(isMobile && "hidden")}>Problem Details</span> <span className="text-destructive ml-0.5">*</span>
                   </TabsTrigger>
                   <TabsTrigger value="tried" className={cn("inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1", isMobile && "flex-col h-auto p-1.5 text-xs")}>
-                      <Brain className={cn("h-4 w-4", isMobile ? "mb-0.5" : "mr-1.5")} />
+                      {isMobile ? <Brain className="h-4 w-4 mb-0.5" /> : <Brain className="h-4 w-4 mr-1.5" />}
                       <span className={cn(isMobile && "hidden")}>What I&apos;ve Tried</span>
                   </TabsTrigger>
                   <TabsTrigger value="outcome" className={cn("inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-background transition-all data-[state=active]:bg-background data-[state=active]:text-foreground data-[state=active]:shadow-sm flex-1", isMobile && "flex-col h-auto p-1.5 text-xs")}>
-                      <Target className={cn("h-4 w-4", isMobile ? "mb-0.5" : "mr-1.5")} />
+                      {isMobile ? <Target className="h-4 w-4 mb-0.5" /> : <Target className="h-4 w-4 mr-1.5" />}
                       <span className={cn(isMobile && "hidden")}>Expected Outcome</span>
                   </TabsTrigger>
                 </TabsList>
@@ -688,7 +687,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <Input
                         type="file"
                         accept={ACCEPTED_IMAGE_TYPES.join(",")}
-                        multiple // Allow multiple file selection
+                        multiple
                         ref={fileInputRef}
                         onChange={handleImageChange}
                         className="hidden"
@@ -725,27 +724,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 <FormMessage />
               </FormItem>
             )} />
-             <FormField
-                control={form.control}
-                name="miroBoardEmbedUrl"
-                render={({ field }) => (
-                    <FormItem>
-                    <FormLabel>Miro Board Embed URL (Optional)</FormLabel>
-                    <FormControl>
-                        <Input
-                        type="url"
-                        placeholder="Paste Miro board embed 'src' URL here"
-                        {...field}
-                        disabled={isSubmitting}
-                        />
-                    </FormControl>
-                    <FormDescription>
-                        Get this from Miro: Share &gt; Embed &gt; Copy iframe code &gt; extract the <strong>src</strong> URL.
-                    </FormDescription>
-                    <FormMessage />
-                    </FormItem>
-                )}
-            />
+            {/* Miro Embed URL Field Removed */}
           </div>
 
           {/* Right Column */}
@@ -867,5 +846,3 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     </Form>
   );
 };
-
-    

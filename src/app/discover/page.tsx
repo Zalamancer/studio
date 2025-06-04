@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, Star, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion, Info, Loader2, Newspaper, TrendingUp } from 'lucide-react';
+import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, Star, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion, Info, Loader2, Newspaper, TrendingUp, Brush } from 'lucide-react'; // Added Brush for Miro
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { getUserFavoriteSectors } from '@/services/userPreferenceService';
@@ -34,7 +34,6 @@ const filterCategories = [
   { name: "Healthcare", icon: Stethoscope },
 ];
 
-// Placeholder news data for collage banner
 const placeholderNewsItems = [
   {
     id: 'news-banner-1',
@@ -82,7 +81,6 @@ const placeholderNewsItems = [
   },
 ];
 
-// Placeholder data for "Recent News Updates" slider
 const recentNewsItems = [
   {
     id: 'recent-news-1',
@@ -148,7 +146,7 @@ const DiscoverPage = () => {
       title: sector.name,
       hint: sector.subSectors?.[0]?.industries?.[0]?.name.toLowerCase().replace(/\s+/g, ' ') || sector.name.toLowerCase().replace(/\s+/g, ' ') || "industry",
       description: sector.description || `Explore opportunities in the ${sector.name} sector.`,
-      icon: Factory, // Default icon, consider mapping specific icons based on sector.code
+      icon: Factory,
     }));
   }, []);
 
@@ -170,9 +168,15 @@ const DiscoverPage = () => {
         <p className="text-lg text-muted-foreground mt-1">
           Dive into various industries to find collaboration opportunities and insights.
         </p>
+         <Button 
+            variant="outline" 
+            className="mt-4" 
+            onClick={() => window.open('https://miro.com/app/dashboard/', '_blank')}
+          >
+            <Brush className="mr-2 h-4 w-4" /> Create on Miro Board
+          </Button>
       </header>
 
-      {/* News Collage Banner Section */}
       <section className="mb-12">
         <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center">
           <Newspaper className="mr-2 h-6 w-6 text-primary" /> Industry News & Insights
@@ -220,7 +224,6 @@ const DiscoverPage = () => {
         </div>
       </section>
 
-      {/* Recent News Slider Section */}
       <section className="mb-12">
         <h2 className="text-2xl font-semibold text-foreground mb-4 flex items-center">
           <TrendingUp className="mr-2 h-6 w-6 text-primary" /> Recent News Updates
@@ -228,7 +231,7 @@ const DiscoverPage = () => {
         <Carousel
           opts={{
             align: "start",
-            loop: recentNewsItems.length > 3, // Loop if more than 3 items
+            loop: recentNewsItems.length > 3,
           }}
           className="w-full"
         >
@@ -268,7 +271,6 @@ const DiscoverPage = () => {
           <CarouselNext className="absolute right-[-10px] sm:right-[-20px] top-1/2 -translate-y-1/2 z-10 disabled:opacity-30" />
         </Carousel>
       </section>
-
 
       <div className="mb-8">
         <ScrollArea className="w-full whitespace-nowrap rounded-md">

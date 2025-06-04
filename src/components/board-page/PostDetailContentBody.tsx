@@ -15,7 +15,7 @@ import {
 } from "@/components/ui/carousel";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import type { Post } from '@/types/post';
-import { TextWithMentions } from './TextWithMentions'; // Assuming this is in the same directory or correct path
+import { TextWithMentions } from './TextWithMentions';
 import { cn } from '@/lib/utils';
 
 interface PostDetailContentBodyProps {
@@ -31,21 +31,21 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
             <CarouselContent>
               {post.imageUrls.map((url, index) => (
                 <CarouselItem key={index}>
-                  <div className="relative"> {/* Simplified parent div */}
+                  <div className="relative">
                     <Image
                       src={url} alt={`Post image ${index + 1}`}
-                      width={0} // Required for Next.js Image if not using fill
-                      height={0} // Required for Next.js Image if not using fill
-                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw" // Responsive sizing
+                      width={0}
+                      height={0}
+                      sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                       style={{
                         width: '100%',
-                        height: 'auto',    // Crucial for maintaining aspect ratio
-                        objectFit: 'contain', // Ensures entire image is visible
-                        maxHeight: '500px'  // Constraint for very tall images
+                        height: 'auto',
+                        objectFit: 'contain',
+                        maxHeight: '500px'
                       }}
                       className="rounded-md"
                       data-ai-hint={post.tags && post.tags.length > 0 ? post.tags.slice(0,2).join(' ') : 'abstract'}
-                      priority={index === 0} // Prioritize loading the first image
+                      priority={index === 0}
                     />
                   </div>
                 </CarouselItem>
@@ -81,6 +81,7 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
             >
               Expected Outcome
             </TabsTrigger>
+             {/* Miro Board Tab Removed */}
           </TabsList>
           <TabsContent value="details" className="mt-2 rounded-md border p-3 bg-background min-h-[100px]">
             {post.descriptionDetails ? (
@@ -101,11 +102,11 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
               <p className="text-muted-foreground whitespace-pre-wrap">{post.descriptionOutcome}</p>
             </TabsContent>
           )}
+          {/* Miro Board Content Removed */}
         </Tabs>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 mt-4 border-t pt-4 text-sm">
-        {/* Column 1 */}
         <div className="space-y-2">
           <div>
             <strong className="block text-foreground">Sector:</strong>
@@ -118,7 +119,6 @@ export const PostDetailContentBody: React.FC<PostDetailContentBodyProps> = React
             </div>
           )}
         </div>
-        {/* Column 2 */}
         <div className="space-y-2">
           {post.subSector && (
             <div>

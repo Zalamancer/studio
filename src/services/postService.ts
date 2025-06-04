@@ -1,3 +1,4 @@
+
 // src/services/postService.ts
 import { db } from '@/lib/firebase/config';
 import {
@@ -31,11 +32,11 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       ratingScore: postData.ratingScore || 0,
       imageUrls: Array.isArray(postData.imageUrls) ? postData.imageUrls : [],
       mentionedUserIds: Array.isArray(postData.mentionedUserIds) ? postData.mentionedUserIds : [],
-      requestType: postData.requestType || 'post', // Default to 'post'
+      requestType: postData.requestType || 'post',
       createdAt: serverTimestamp(),
       commentCount: 0,
 
-      descriptionDetails: postData.descriptionDetails || "", // Always save this
+      descriptionDetails: postData.descriptionDetails || "",
       descriptionTried: postData.descriptionTried || null,
       descriptionOutcome: postData.descriptionOutcome || null,
 
@@ -43,12 +44,8 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       deadline: postData.requestType === 'help_request'
         ? (postData.deadline instanceof Date ? Timestamp.fromDate(postData.deadline) : (postData.deadline || null))
         : null,
+      // miroBoardEmbedUrl removed
     };
-
-    // Fields to remove (they are no longer part of NewPostData based on previous instructions)
-    // delete dataForFirestore.businessType;
-    // delete dataForFirestore.safetyIndicator;
-
 
     console.log("[postService] addPostToFirestore: Data being sent to Firestore:", JSON.stringify(dataForFirestore, null, 2));
 
@@ -100,6 +97,7 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
             mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
             commentCount: data.commentCount || 0,
+            // miroBoardEmbedUrl removed
        } as Post;
     });
     console.log(`[postService] Fetched ${posts.length} posts from Firestore.`);
@@ -110,7 +108,6 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
         return [];
     }
     console.error('[postService] Error fetching posts from Firestore:', error);
-    // Return empty array or throw error based on how you want to handle fetch failures
     return [];
   }
 };
@@ -172,6 +169,7 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         imageUrls: Array.isArray(data.imageUrls) ? data.imageUrls : [],
         mentionedUserIds: Array.isArray(data.mentionedUserIds) ? data.mentionedUserIds : [],
         commentCount: data.commentCount || 0,
+        // miroBoardEmbedUrl removed
       } as Post;
     });
     console.log(`[postService] Successfully mapped ${posts.length} posts for user ${userId}`);
