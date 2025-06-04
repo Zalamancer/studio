@@ -84,7 +84,6 @@ const postFormSchema = z.object({
     .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
     .optional(),
   deadline: z.date().optional().nullable(),
-  // miroBoardEmbedUrl field removed
 }).superRefine((data, ctx) => {
   // Conditional validation moved here if needed, but description fields are always present in tabs
 });
@@ -103,7 +102,6 @@ export interface CreatePostFormData {
   mentionedUserIds?: string[];
   maxBudget?: number | undefined;
   deadline?: Date | null | undefined;
-  // miroBoardEmbedUrl field removed
 }
 
 export interface CreatePostFormProps {
@@ -138,7 +136,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       imageFiles: [],
       maxBudget: undefined,
       deadline: undefined,
-      // miroBoardEmbedUrl default value removed
     },
   });
   const { toast } = useToast();
@@ -178,7 +175,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       imageFiles: [],
       maxBudget: undefined,
       deadline: undefined,
-      // miroBoardEmbedUrl default value removed
     });
     setProblemDetailsValue('');
     setImagePreviewUrls([]);
@@ -353,28 +349,37 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   }, [suggestibleUsers, isLoadingSuggestibleUsers, showProblemDetailsSuggestions, debouncedProblemDetailsQuery, currentUserId]);
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log("[DEBUG] handleImageChange called");
     const files = event.target.files;
-    if (!files || files.length === 0) return;
+    if (!files || files.length === 0) {
+      console.log("[DEBUG] No files selected.");
+      return;
+    }
 
     const currentSelectedFiles = form.getValues("imageFiles") || [];
     const newlyProcessedFiles: File[] = [];
     const newFilesToProcess = Array.from(files);
 
+    console.log(`[DEBUG] Processing ${newFilesToProcess.length} new files. Already have ${currentSelectedFiles.length} files.`);
     setIsCompressing(true);
     toast({ title: "Processing images...", description: "Please wait.", duration: newFilesToProcess.length * 1500 });
 
     try {
         for (const file of newFilesToProcess) {
+            console.log(`[DEBUG] Processing file: ${file.name}, size: ${file.size}, type: ${file.type}`);
             if (currentSelectedFiles.length + newlyProcessedFiles.length >= MAX_IMAGE_FILES) {
                 toast({ variant: "destructive", title: "Limit Reached", description: `You can only upload up to ${MAX_IMAGE_FILES} images.` });
+                console.log("[DEBUG] Max image files limit reached.");
                 break;
             }
             if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
                 toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not a supported image type.` });
+                console.log(`[DEBUG] Invalid file type: ${file.type} for file ${file.name}`);
                 continue;
             }
 
             try {
+                console.log(`[DEBUG] Compressing ${file.name}...`);
                 const compressionOptions = {
                     maxSizeMB: MAX_OUTPUT_FILE_SIZE_MB,
                     maxWidthOrHeight: MAX_UPLOAD_DIMENSION,
@@ -383,15 +388,20 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     quality: 0.75,
                 };
                 const compressedFile = await imageCompression(file, compressionOptions);
+                console.log(`[DEBUG] Compressed ${file.name} to ${compressedFile.name}, new size: ${compressedFile.size}`);
                 newlyProcessedFiles.push(compressedFile);
             } catch (error) {
-                console.error(`Error compressing ${file.name}:`, error);
+                console.error(`[DEBUG] Error compressing ${file.name}:`, error);
                 toast({ variant: "destructive", title: `Compression Failed for ${file.name}`, description: "Could not process this image. Please try another." });
             }
         }
 
         if (newlyProcessedFiles.length > 0) {
-            form.setValue("imageFiles", [...currentSelectedFiles, ...newlyProcessedFiles], { shouldValidate: true });
+            const updatedFiles = [...currentSelectedFiles, ...newlyProcessedFiles];
+            console.log("[DEBUG] Before form.setValue for imageFiles, files:", updatedFiles);
+            form.setValue("imageFiles", updatedFiles, { shouldValidate: true, shouldDirty: true });
+            console.log("[DEBUG] After form.setValue for imageFiles. Current form errors:", form.formState.errors);
+
             const updatePreviews = async () => {
                 const previews = await Promise.all(newlyProcessedFiles.map(f => {
                     return new Promise<string>((resolve, reject) => {
@@ -402,9 +412,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     });
                 }));
                 setImagePreviewUrls(prev => [...prev, ...previews]);
+                console.log("[DEBUG] Image previews updated.");
             };
             updatePreviews().catch(error => {
-              console.error("Error updating image previews:", error);
+              console.error("[DEBUG] Error updating image previews:", error);
               toast({
                 variant: "destructive",
                 title: "Preview Error",
@@ -412,7 +423,12 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
               });
             });
         }
+    } catch (e) {
+        // Catch any other unexpected errors in the outer try block
+        console.error("[DEBUG] Unexpected error in handleImageChange:", e);
+        toast({ variant: "destructive", title: "Image Processing Error", description: "An unexpected error occurred." });
     } finally {
+        console.log("[DEBUG] handleImageChange finally block. Resetting isCompressing to false.");
         setIsCompressing(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -427,6 +443,17 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   };
 
   const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
+    console.log("[DEBUG] handleSubmitForm called with form values:", values);
+    if (form.formState.isSubmitting) { // Check react-hook-form's internal isSubmitting
+        console.log("[DEBUG] Form is already submitting (react-hook-form state). Preventing duplicate submit.");
+        return;
+    }
+    if (isSubmitting) { // Check our own isSubmitting flag (from useMutation usually)
+        console.log("[DEBUG] Form is already submitting (custom isSubmitting state). Preventing duplicate submit.");
+        return;
+    }
+    console.log("[DEBUG] Form is not currently submitting. Proceeding with submission logic...");
+
     const finalMentionedUserIds = Array.from(selectedMentionedUserIds);
 
     const submitData: CreatePostFormData = {
@@ -443,15 +470,17 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       mentionedUserIds: finalMentionedUserIds,
       maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? Number(values.maxBudget) : undefined,
       deadline: values.requestType === 'help_request' && values.deadline ? values.deadline : undefined,
-      // miroBoardEmbedUrl removed from submitData
     };
-    onSubmit(submitData);
+    console.log("[DEBUG] Prepared submitData:", submitData);
+    onSubmit(submitData); // This is the prop function, likely calls addPostMutation.mutate
   };
   
   const handleValidationErrors = (errors: any) => {
     console.error("Form validation errors:", errors);
-    // You can add a toast here to inform the user about validation errors if they aren't visible
-    // toast({ variant: "destructive", title: "Validation Error", description: "Please check the form for errors." });
+    if (errors.imageFiles) {
+      console.error("Image files error:", errors.imageFiles.message || errors.imageFiles);
+    }
+    toast({ variant: "destructive", title: "Validation Error", description: "Please check the form for errors. Details in console." });
   };
 
 
@@ -724,7 +753,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 <FormMessage />
               </FormItem>
             )} />
-            {/* Miro Embed URL Field Removed */}
           </div>
 
           {/* Right Column */}
@@ -846,3 +874,5 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     </Form>
   );
 };
+
+    
