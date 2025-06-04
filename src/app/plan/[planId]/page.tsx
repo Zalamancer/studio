@@ -104,8 +104,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         </Button>
       </CardFooter>
 
-      {/* Hover Dots for new node creation */}
-      {isHovered && isSelected && (
+      {/* Connection Dots - Show if selected */}
+      {isSelected && (
         <>
           {/* North Dot */}
           <Button
@@ -239,11 +239,11 @@ const ViewPlanPage = () => {
                 }
             }
         } else if (prevSteps.length > 0) {
-            const lastStep = prevSteps[prevSteps.length - 1];
-            newX = lastStep.x + NODE_WIDTH_WITH_MARGIN; // Default to placing to the right of the last step
+            const lastStep = prevSteps.sort((a,b) => (a.x + a.y) - (b.x + b.y))[prevSteps.length - 1] || prevSteps[prevSteps.length - 1];
+            newX = lastStep.x + NODE_WIDTH_WITH_MARGIN; 
             newY = lastStep.y;
         }
-        // Ensure new position is not negative
+        
         newX = Math.max(0, newX);
         newY = Math.max(0, newY);
 
@@ -337,12 +337,12 @@ const ViewPlanPage = () => {
   const ownerDisplayName = generateAnonymousName(plan.ownerId);
   const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Plus, Undo, Redo ];
   
-  let dialogTitle = "Add New Main Roadmap Step";
+  let dialogTitleForAddStep = "Add New Main Roadmap Step";
   if (currentParentStepForDialog) {
-    dialogTitle = `Add Sub-step to "${currentParentStepForDialog.title}"`;
+    dialogTitleForAddStep = `Add Sub-step to "${currentParentStepForDialog.title}"`;
   } else if (pendingNodeFromDotInfo) {
     const sourceStepTitle = roadmapSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title || "Selected Step";
-    dialogTitle = `Add New Step from "${sourceStepTitle}" (${pendingNodeFromDotInfo.sourceAnchor} anchor)`;
+    dialogTitleForAddStep = `Add New Step from "${sourceStepTitle}" (${pendingNodeFromDotInfo.sourceAnchor} anchor)`;
   }
 
   return (
@@ -395,11 +395,12 @@ const ViewPlanPage = () => {
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
             onMouseLeave={handleMouseUpOnCanvas}
+            onClick={() => setSelectedStepId(null)} // Deselect on canvas click
         >
           <div className="absolute top-4 left-4 z-20">
             <Button
               variant="outline"
-              onClick={openAddMainStepDialog}
+              onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
               disabled={isSubmittingStep || isAddStepDialogOpen}
               className="shadow-md bg-card hover:bg-muted"
             >
@@ -446,7 +447,7 @@ const ViewPlanPage = () => {
           isSubmitting={isSubmittingStep}
           parentStepTitle={currentParentStepForDialog?.title}
           isSubStep={!!currentParentStepForDialog || (!!pendingNodeFromDotInfo && data.type === 'Sub-category/Task')}
-          dialogTitle={dialogTitle}
+          dialogTitle={dialogTitleForAddStep}
         />
       )}
     </div>
