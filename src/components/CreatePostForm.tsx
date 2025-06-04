@@ -90,6 +90,7 @@ const postFormSchema = z.object({
     .pipe(z.coerce.number().nonnegative("Budget must be a non-negative number.").optional())
     .optional(),
   deadline: z.date().optional().nullable(),
+  miroBoardEmbedUrl: z.string().url("Please enter a valid Miro board embed URL.").optional().or(z.literal('')),
 }).superRefine((data, ctx) => {
   // Conditional validation moved here if needed, but description fields are always present in tabs
 });
@@ -108,6 +109,7 @@ export interface CreatePostFormData {
   mentionedUserIds?: string[];
   maxBudget?: number | undefined;
   deadline?: Date | null | undefined;
+  miroBoardEmbedUrl?: string | undefined;
 }
 
 export interface CreatePostFormProps {
@@ -142,6 +144,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       imageFiles: [], // Initialize as empty array
       maxBudget: undefined,
       deadline: undefined,
+      miroBoardEmbedUrl: "",
     },
   });
   const { toast } = useToast();
@@ -183,6 +186,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       imageFiles: [],
       maxBudget: undefined,
       deadline: undefined,
+      miroBoardEmbedUrl: "",
     });
     setProblemDetailsValue('');
     setImagePreviewUrls([]);
@@ -361,74 +365,65 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     if (!files || files.length === 0) return;
 
     const currentSelectedFiles = form.getValues("imageFiles") || [];
-    const currentPreviewUrls = [...imagePreviewUrls];
     const newlyProcessedFiles: File[] = [];
-    const newlyGeneratedPreviewUrls: string[] = [];
-
-    const newFilesToProcess = Array.from(files); // Create a fresh array
+    const newFilesToProcess = Array.from(files);
 
     setIsCompressing(true);
     toast({ title: "Processing images...", description: "Please wait.", duration: newFilesToProcess.length * 1500 });
 
+    try { // Wrap main processing in try
+        for (const file of newFilesToProcess) {
+            if (currentSelectedFiles.length + newlyProcessedFiles.length >= MAX_IMAGE_FILES) {
+                toast({ variant: "destructive", title: "Limit Reached", description: `You can only upload up to ${MAX_IMAGE_FILES} images.` });
+                break;
+            }
+            if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+                toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not a supported image type.` });
+                continue;
+            }
 
-    for (const file of newFilesToProcess) {
-      if (currentSelectedFiles.length + newlyProcessedFiles.length >= MAX_IMAGE_FILES) {
-        toast({ variant: "destructive", title: "Limit Reached", description: `You can only upload up to ${MAX_IMAGE_FILES} images.` });
-        break;
-      }
-      if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
-        toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not a supported image type.` });
-        continue;
-      }
+            try {
+                const compressionOptions = {
+                    maxSizeMB: MAX_OUTPUT_FILE_SIZE_MB,
+                    maxWidthOrHeight: MAX_UPLOAD_DIMENSION,
+                    useWebWorker: true,
+                    mimeType: 'image/webp',
+                    quality: 0.75,
+                };
+                const compressedFile = await imageCompression(file, compressionOptions);
+                newlyProcessedFiles.push(compressedFile);
+            } catch (error) {
+                console.error(`Error compressing ${file.name}:`, error);
+                toast({ variant: "destructive", title: `Compression Failed for ${file.name}`, description: "Could not process this image. Please try another." });
+            }
+        }
 
-      try {
-        const compressionOptions = {
-          maxSizeMB: MAX_OUTPUT_FILE_SIZE_MB,
-          maxWidthOrHeight: MAX_UPLOAD_DIMENSION,
-          useWebWorker: true,
-          mimeType: 'image/webp', // Output WebP
-          quality: 0.75, // WebP quality (0 to 1)
-        };
-        console.log(`Compressing ${file.name} with options:`, compressionOptions);
-        const compressedFile = await imageCompression(file, compressionOptions);
-        console.log(`Compressed ${file.name} from ${(file.size / 1024).toFixed(2)}KB to ${(compressedFile.size / 1024).toFixed(2)}KB`);
-
-        newlyProcessedFiles.push(compressedFile);
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          newlyGeneratedPreviewUrls.push(reader.result as string);
-          // Defer state updates until all files are processed if batching
-        };
-        reader.readAsDataURL(compressedFile);
-
-      } catch (error) {
-        console.error(`Error compressing ${file.name}:`, error);
-        toast({ variant: "destructive", title: `Compression Failed for ${file.name}`, description: "Could not process this image. Please try another." });
-      }
+        if (newlyProcessedFiles.length > 0) {
+            form.setValue("imageFiles", [...currentSelectedFiles, ...newlyProcessedFiles], { shouldValidate: true });
+            const updatePreviews = async () => {
+                const previews = await Promise.all(newlyProcessedFiles.map(f => {
+                    return new Promise<string>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onloadend = () => resolve(reader.result as string);
+                        reader.onerror = reject;
+                        reader.readAsDataURL(f);
+                    });
+                }));
+                setImagePreviewUrls(prev => [...prev, ...previews]);
+            };
+            updatePreviews().catch(error => {
+              console.error("Error updating image previews:", error);
+              toast({
+                variant: "destructive",
+                title: "Preview Error",
+                description: "Some image previews could not be generated."
+              });
+            });
+        }
+    } finally { // Ensure isCompressing is reset
+        setIsCompressing(false);
+        if (fileInputRef.current) fileInputRef.current.value = ""; // Reset file input in finally as well
     }
-    setIsCompressing(false);
-
-    // Batch update form state and previews after loop
-    if (newlyProcessedFiles.length > 0) {
-        form.setValue("imageFiles", [...currentSelectedFiles, ...newlyProcessedFiles], { shouldValidate: true });
-        // This requires waiting for all readers to finish. A bit more complex.
-        // For simplicity, let's assume readers finish quickly or use a Promise.all for readers
-        // For now, directly update with whatever has been read so far and hope it catches up
-        const updatePreviews = async () => {
-            const previews = await Promise.all(newlyProcessedFiles.map(f => {
-                return new Promise<string>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.onerror = reject;
-                    reader.readAsDataURL(f);
-                });
-            }));
-            setImagePreviewUrls(prev => [...prev, ...previews]);
-        };
-        updatePreviews();
-    }
-
-    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
 
@@ -456,6 +451,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       mentionedUserIds: finalMentionedUserIds,
       maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? Number(values.maxBudget) : undefined,
       deadline: values.requestType === 'help_request' && values.deadline ? values.deadline : undefined,
+      miroBoardEmbedUrl: values.miroBoardEmbedUrl?.trim() ? values.miroBoardEmbedUrl.trim() : undefined,
     };
     onSubmit(submitData);
   };
@@ -729,6 +725,27 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 <FormMessage />
               </FormItem>
             )} />
+             <FormField
+                control={form.control}
+                name="miroBoardEmbedUrl"
+                render={({ field }) => (
+                    <FormItem>
+                    <FormLabel>Miro Board Embed URL (Optional)</FormLabel>
+                    <FormControl>
+                        <Input
+                        type="url"
+                        placeholder="Paste Miro board embed 'src' URL here"
+                        {...field}
+                        disabled={isSubmitting}
+                        />
+                    </FormControl>
+                    <FormDescription>
+                        Get this from Miro: Share &gt; Embed &gt; Copy iframe code &gt; extract the <strong>src</strong> URL.
+                    </FormDescription>
+                    <FormMessage />
+                    </FormItem>
+                )}
+            />
           </div>
 
           {/* Right Column */}
@@ -851,3 +868,4 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   );
 };
 
+    
