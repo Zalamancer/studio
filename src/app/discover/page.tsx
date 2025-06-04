@@ -10,7 +10,7 @@ import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea, ScrollBar } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, Star, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion, Info, Loader2, Newspaper, TrendingUp, Brush } from 'lucide-react'; // Added Brush for Miro
+import { LayoutGrid, Scale, Package, Megaphone, Users, Cpu, Landmark, Stethoscope, Briefcase, Star, Factory, Hammer, Tractor, Trees, Wrench, ShoppingCart, Plane, Building2, Code, DollarSign, HomeIcon, Palette, Film, Utensils, UserCog, ShieldQuestion, Info, Loader2, Newspaper, TrendingUp } from 'lucide-react'; // Removed Brush
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
 import { getUserFavoriteSectors } from '@/services/userPreferenceService';
@@ -168,13 +168,7 @@ const DiscoverPage = () => {
         <p className="text-lg text-muted-foreground mt-1">
           Dive into various industries to find collaboration opportunities and insights.
         </p>
-         <Button 
-            variant="outline" 
-            className="mt-4" 
-            onClick={() => window.open('https://miro.com/app/dashboard/', '_blank')}
-          >
-            <Brush className="mr-2 h-4 w-4" /> Create on Miro Board
-          </Button>
+         {/* Miro Board Button Removed */}
       </header>
 
       <section className="mb-12">
