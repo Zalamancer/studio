@@ -51,7 +51,7 @@ import { getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
-import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useIsMobile } from '@/hooks/use-mobile'; // CORRECTED PATH
 
 const MAX_OUTPUT_FILE_SIZE_MB = 1;
 const MAX_UPLOAD_DIMENSION = 1600;
@@ -59,7 +59,7 @@ const ACCEPTED_IMAGE_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/gif
 const MAX_IMAGE_FILES = 5;
 
 const preCompressionFileSchema = z.instanceof(File)
-  .refine(file => typeof file.type === 'string' && ACCEPTED_IMAGE_TYPES.includes(file.type), {
+  .refine(file => typeof file.type === 'string' && ACCEPTED_IMAGE_TYPES.includes(file.type.toLowerCase()), { // Ensure lowercase check for type
     message: "Only .jpg, .jpeg, .png, .gif, and .webp formats are supported for images."
   });
 
@@ -372,7 +372,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
           console.log("[DEBUG] Max image files limit reached.");
           break;
         }
-        if (!ACCEPTED_IMAGE_TYPES.includes(file.type)) {
+        if (!ACCEPTED_IMAGE_TYPES.includes(file.type.toLowerCase())) {
           toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not a supported image type.` });
           console.log(`[DEBUG] Invalid file type: ${file.type} for file ${file.name}`);
           continue;
@@ -384,20 +384,18 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             maxSizeMB: MAX_OUTPUT_FILE_SIZE_MB,
             maxWidthOrHeight: MAX_UPLOAD_DIMENSION,
             useWebWorker: true,
-            mimeType: 'image/webp', // Compress to WebP
+            mimeType: 'image/webp',
             quality: 0.75,
           };
           const compressedOutput = await imageCompression(file, compressionOptions);
-          
-          // Ensure compressedOutput is a File object
-          const finalFileToAdd = compressedOutput instanceof File 
-            ? compressedOutput 
+
+          const finalFileToAdd = compressedOutput instanceof File
+            ? compressedOutput
             : new File([compressedOutput], file.name.substring(0, file.name.lastIndexOf('.')) + '.webp' || 'compressed.webp', { type: 'image/webp' });
 
           console.log(`[DEBUG] Compressed ${file.name} to ${finalFileToAdd.name}, new size: ${finalFileToAdd.size}, final type: ${finalFileToAdd.type}`);
-          
-          // Ensure the *final* file type is acceptable (should be webp now)
-          if (ACCEPTED_IMAGE_TYPES.includes(finalFileToAdd.type)) {
+
+          if (ACCEPTED_IMAGE_TYPES.includes(finalFileToAdd.type.toLowerCase())) {
             newlyProcessedFiles.push(finalFileToAdd);
           } else {
             console.warn(`[DEBUG] Compressed file ${finalFileToAdd.name} has an unexpected final type ${finalFileToAdd.type}. Skipping.`);
@@ -454,7 +452,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   };
 
   const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
-    console.log("[DEBUG] handleSubmitForm called with form values:", values);
+    console.log("[DEBUG] handleSubmitForm entered. Form values:", values);
     if (form.formState.isSubmitting || isSubmitting) {
         console.log("[DEBUG] Form is already submitting. Preventing duplicate submit.");
         return;
@@ -483,10 +481,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? Number(values.maxBudget) : undefined,
       deadline: values.requestType === 'help_request' && values.deadline ? values.deadline : undefined,
     };
-    console.log("[DEBUG] Prepared submitData:", submitData);
+    console.log("[DEBUG] Prepared submitData for onSubmit prop:", submitData);
     onSubmit(submitData);
   };
-  
+
   const handleValidationErrors = (errors: any) => {
     console.error("Form validation errors (raw object):", errors);
     try {
@@ -494,15 +492,15 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     } catch (e) {
       console.error("Form validation errors (could not stringify):", errors);
     }
-  
+
     if (errors && errors.imageFiles) {
       const imageFilesError = errors.imageFiles;
       console.error("Image files error object:", imageFilesError);
-      if (imageFilesError.message) { // Top-level error for the array (e.g., max items)
+      if (imageFilesError.message) {
         console.error("Image files error message (array level):", imageFilesError.message);
-      } else if (Array.isArray(imageFilesError)) { // Array of errors for individual items
+      } else if (Array.isArray(imageFilesError)) {
           imageFilesError.forEach((err, idx) => {
-              if(err && err._errors && err._errors.length > 0) { // Zod errors often in _errors
+              if(err && err._errors && err._errors.length > 0) {
                   console.error(`Image file error at index ${idx}:`, err._errors.join(', '));
               } else if (err && err.message) {
                   console.error(`Image file error at index ${idx} (direct message):`, err.message);
@@ -510,7 +508,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                   console.error(`Image file error at index ${idx} (unknown structure):`, err);
               }
           });
-      } else if (typeof imageFilesError === 'object' && imageFilesError._errors) { // Sometimes errors are wrapped
+      } else if (typeof imageFilesError === 'object' && imageFilesError._errors) {
           console.error("Image files error message (_errors):", imageFilesError._errors.join(', '));
       }
     }
@@ -856,7 +854,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
 
         <DialogFooter className="pt-8 md:col-span-2">
             {onDialogClose && (<DialogClose asChild><Button type="button" variant="outline" onClick={resetFormValues} disabled={isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers)}>Cancel</Button></DialogClose>)}
-            <Button type="submit" disabled={isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) || !currentUserId}>
+            <Button type="submit" disabled={!currentUserId || isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers)}>
                 {(isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) ) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : ('Submit Post')}
             </Button>
         </DialogFooter>
