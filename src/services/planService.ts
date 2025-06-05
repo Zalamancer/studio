@@ -13,9 +13,9 @@ import {
   serverTimestamp,
   Timestamp,
   type FieldValue,
-  updateDoc, // Added updateDoc
+  updateDoc,
 } from 'firebase/firestore';
-import type { Plan, NewPlanData, ClientPlan, RoadmapStep, UpdatePlanRoadmapData } from '@/types/plan';
+import type { Plan, NewPlanData, ClientPlan, RoadmapStep, RoadmapSubStep, UpdatePlanRoadmapData } from '@/types/plan';
 
 const PLANS_COLLECTION = 'plans';
 const plansCollectionRef = collection(db, PLANS_COLLECTION);
@@ -40,13 +40,24 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     naicsCode: planData.naicsCode || null,
     createdAt: serverTimestamp() as FieldValue,
     updatedAt: serverTimestamp() as FieldValue,
-    roadmap: planData.roadmap || [], // Initialize with empty roadmap or provided one
+    roadmap: (planData.roadmap || []).map(step => ({ // Sanitize initial roadmap as well
+      id: typeof step.id === 'string' ? step.id : `init_step_id_${Date.now()}`,
+      title: typeof step.title === 'string' ? step.title : "",
+      x: typeof step.x === 'number' ? step.x : 0,
+      y: typeof step.y === 'number' ? step.y : 0,
+      description: (step.description === undefined || step.description === '') ? null : step.description,
+      subSteps: (step.subSteps || []).map(sub => ({
+        id: typeof sub.id === 'string' ? sub.id : `init_sub_id_${Date.now()}`,
+        parentId: typeof sub.parentId === 'string' ? sub.parentId : "",
+        title: typeof sub.title === 'string' ? sub.title : "",
+      })),
+      ...(step.sourceNodeId !== undefined && { sourceNodeId: step.sourceNodeId }),
+      ...(step.sourceAnchor !== undefined && { sourceAnchor: step.sourceAnchor }),
+      ...(step.sourceLineYOffset !== undefined && { sourceLineYOffset: step.sourceLineYOffset }),
+    })),
   };
 
   console.log("%c[planService] createPlan: FINAL DATA OBJECT being sent to Firestore:", "color: #FF1493; font-weight: bold;", JSON.parse(JSON.stringify(dataToSave)));
-  console.log("%c[planService] createPlan: KEYS in final data object:", "color: #FF1493; font-weight: bold;", Object.keys(dataToSave).sort().join(', '));
-  console.log("%c[planService] createPlan: Compare these keys AND THEIR DATA TYPES meticulously with your Firestore rule for '/plans/{planId}'. The `request.resource.data.keys().hasOnly([...])` list in your rule MUST EXACTLY MATCH these keys. Also check type conditions (e.g., `is string`, `== null`).", "color: #FF1493;");
-
 
   try {
     const docRef = await addDoc(plansCollectionRef, dataToSave);
@@ -56,12 +67,6 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     console.error("[planService] Error creating plan:", error);
     if (error.code === 'permission-denied') {
       console.error("Firestore permission denied. Ensure security rules allow 'create' on 'plans/{planId}' collection under these conditions:");
-      console.error("  1. User is authenticated (request.auth != null).");
-      console.error("  2. Authenticated user's UID matches 'ownerId' in the new plan document (request.auth.uid == request.resource.data.ownerId).");
-      console.error("  3. Required fields like 'name', 'sector', 'createdAt', 'updatedAt', 'roadmap' are present and correctly typed (e.g., timestamps are request.time, roadmap is list).");
-      console.error("  4. Optional fields ('subSector', 'industry', 'naicsCode') are either null or string.");
-      console.error("  5. The document being created contains ONLY the expected fields. Check `request.resource.data.keys().hasOnly([...])` in your rule.");
-      console.error("     Expected keys based on current client code: name, ownerId, sector, subSector, industry, naicsCode, createdAt, updatedAt, roadmap");
       throw new Error('Permission denied creating plan. Check Firestore security rules and console logs for details of data sent vs. rules expected.');
     }
     throw new Error(error.message || "Could not create plan.");
@@ -93,7 +98,10 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
-        roadmap: data.roadmap || [], // Include roadmap
+        roadmap: (data.roadmap || []).map(step => ({ // Ensure subSteps array exists
+          ...step,
+          subSteps: step.subSteps || [],
+        })),
       };
       console.log(`[planService] Plan ${planId} fetched successfully.`);
       return clientPlan;
@@ -123,12 +131,40 @@ export const updatePlanRoadmap = async (planId: string, ownerId: string, updated
   }
 
   console.log(`[planService] updatePlanRoadmap: Updating roadmap for plan ID: ${planId} by owner ${ownerId}`);
-  const planDocRef = doc(plansCollectionRef, planId);
+  
+  const sanitizedRoadmap = updatedRoadmap.map(step => {
+    const sanitizedSubSteps = (step.subSteps || []).map(subStep => {
+      const finalSubStep: RoadmapSubStep = {
+        id: typeof subStep.id === 'string' ? subStep.id : `invalid_sub_id_${Date.now()}`,
+        parentId: typeof subStep.parentId === 'string' ? subStep.parentId : "",
+        title: typeof subStep.title === 'string' ? subStep.title : "",
+      };
+      // Do NOT include x, y for sub-steps here if they are not in the RoadmapSubStep type definition.
+      return finalSubStep;
+    });
+
+    const finalStep: any = { // Using 'any' to build then casting
+      id: typeof step.id === 'string' ? step.id : `invalid_step_id_${Date.now()}`,
+      title: typeof step.title === 'string' ? step.title : "",
+      x: typeof step.x === 'number' ? step.x : 0,
+      y: typeof step.y === 'number' ? step.y : 0,
+      description: (step.description === undefined || step.description === '') ? null : step.description,
+      subSteps: sanitizedSubSteps,
+    };
+
+    if (step.sourceNodeId !== undefined) finalStep.sourceNodeId = step.sourceNodeId;
+    if (step.sourceAnchor !== undefined) finalStep.sourceAnchor = step.sourceAnchor;
+    if (step.sourceLineYOffset !== undefined) finalStep.sourceLineYOffset = step.sourceLineYOffset;
+    
+    return finalStep as RoadmapStep; // Cast to the expected type
+  });
 
   const dataToUpdate: UpdatePlanRoadmapData = {
-    roadmap: updatedRoadmap,
+    roadmap: sanitizedRoadmap,
     updatedAt: serverTimestamp() as FieldValue,
   };
+
+  const planDocRef = doc(plansCollectionRef, planId);
 
   try {
     await updateDoc(planDocRef, dataToUpdate);
@@ -142,7 +178,6 @@ export const updatePlanRoadmap = async (planId: string, ownerId: string, updated
     throw new Error(error.message || "Could not update plan roadmap.");
   }
 };
-
 
 export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
   console.log(`[planService] getRecentPlans: Fetching ${count} recent plans.`);
@@ -165,7 +200,10 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
         naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
-        roadmap: data.roadmap || [],
+        roadmap: (data.roadmap || []).map(step => ({ // Ensure subSteps array exists
+          ...step,
+          subSteps: step.subSteps || [],
+        })),
       };
     });
     console.log(`[planService] Fetched ${plans.length} recent plans.`);
@@ -183,4 +221,3 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
     throw new Error(`Failed to fetch recent plans: ${error.message || 'Unknown error'}`);
   }
 };
-
