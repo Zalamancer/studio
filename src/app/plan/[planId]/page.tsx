@@ -22,12 +22,12 @@ import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/
 import { useToast } from '@/hooks/use-toast';
 
 const NODE_WIDTH = 256; // Corresponds to w-64
-const NODE_HEIGHT = 192; // Updated to 192px (h-48)
+const NODE_HEIGHT = 192; // Fixed height for card (h-48)
 const NODE_WIDTH_WITH_MARGIN = NODE_WIDTH + 64;
 const NODE_HEIGHT_WITH_MARGIN = NODE_HEIGHT + 64;
 const DOT_SIZE = 8;
-const DOT_OFFSET = -DOT_SIZE / 2;
-const DOT_CONNECTION_OFFSET = 1; // How far from the edge the line connects
+const DOT_OFFSET = -DOT_SIZE / 2; // -4px, so dot edge is 4px outside card boundary
+const DOT_CONNECTION_OFFSET = 4; // Line connects 4px inside card boundary (center of 16px dot)
 
 interface RoadmapStepCardProps {
   step: RoadmapStep;
@@ -55,19 +55,19 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   }, [onInitiateNodeFromDot, step.id]);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent card selection when dragging header
     onMouseDownOnNode(e, step.id);
   }, [onMouseDownOnNode, step.id]);
 
   const handleCardClick = useCallback((e: React.MouseEvent) => {
-    // Only trigger select if clicking on non-interactive parts of the card body
+    // Only trigger select if clicking on non-interactive parts of the card body itself
     if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.card-body-content')) {
       onSelectStep(e, step.id);
     }
   }, [onSelectStep, step.id]);
 
   const handleAddSubStepClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent card selection when clicking footer button
     onAddSubStep(e, step.id, step.title);
   }, [onAddSubStep, step.id, step.title]);
 
@@ -75,7 +75,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     <div
       className={cn(
         "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10",
-        "flex flex-col h-48", // Fixed height
+        "h-48 flex flex-col", // Fixed height h-48 (192px)
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
@@ -86,19 +86,19 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         onMouseDown={handleHeaderMouseDown}
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
-        <div className="flex-grow min-w-0 pointer-events-none card-body-content">
+        <div className="flex-grow min-w-0 pointer-events-none card-body-content"> {/* Added card-body-content for click handling */}
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
           {step.type && <CardDescription className="text-xs">{step.type}</CardDescription>}
         </div>
       </CardHeader>
 
-      <CardContent className="p-2.5 pt-1.5 border-t flex-grow card-body-content overflow-y-auto"> {/* Made content scrollable */}
+      <CardContent className="p-2.5 pt-1.5 border-t flex-grow card-body-content overflow-y-auto"> {/* Made content scrollable and marked as card-body-content */}
         {step.subSteps && step.subSteps.length > 0 && (
           <>
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
-            <ul className="list-disc list-inside pl-1 space-y-0.5">
+            <ul className="list-disc list-inside pl-1 space-y-0.5"> {/* Removed max-h and overflow from ul */}
               {step.subSteps.map((subStep) => (
-                <li key={subStep.id} className="text-xs text-muted-foreground" title={subStep.title}>
+                <li key={subStep.id} className="text-xs text-muted-foreground" title={subStep.title}> {/* Removed truncate */}
                   {subStep.title} ({subStep.type})
                 </li>
               ))}
@@ -160,7 +160,7 @@ const ViewPlanPage = () => {
 
   const { data: plan, isLoading, error } = useQuery<ClientPlan | null, Error>({
     queryKey: ['plan', planId],
-    fn: async () => {
+    queryFn: async () => {
       if (!planId || !isPlanIdValidUid) return null;
       return getPlanById(planId);
     },
@@ -173,9 +173,10 @@ const ViewPlanPage = () => {
     }
   }, [plan, roadmapSteps.length]);
 
+
   const handleInitiateNodeFromDot = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => {
     event.stopPropagation();
-    setSelectedStepId(sourceStepId);
+    setSelectedStepId(sourceStepId); // Ensure the source node is selected
     setPendingNodeFromDotInfo({ sourceStepId, sourceAnchor });
     setCurrentParentStepForDialog(null);
     setIsAddStepDialogOpen(true);
@@ -190,7 +191,7 @@ const ViewPlanPage = () => {
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
-    setSelectedStepId(parentId);
+    setSelectedStepId(parentId); // Ensure the parent node is selected
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
@@ -211,19 +212,19 @@ const ViewPlanPage = () => {
     };
 
     setRoadmapSteps(prevSteps => {
-      if (currentParentStepForDialog) {
+      if (currentParentStepForDialog) { // Adding a sub-step
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
             ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 } as RoadmapSubStep] }
             : step
         );
-      } else {
+      } else { // Adding a new main step (possibly linked)
         let newX = 20;
         let newY = (prevSteps.filter(s => s.type === 'Main Category/Phase').length * (NODE_HEIGHT_WITH_MARGIN)) + 20;
         let stepSourceNodeId: string | undefined = undefined;
         let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
 
-        if (pendingNodeFromDotInfo) {
+        if (pendingNodeFromDotInfo) { // Node created from a dot
             const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
             if (sourceStep) {
                 stepSourceNodeId = sourceStep.id;
@@ -235,13 +236,13 @@ const ViewPlanPage = () => {
                     case 'W': newX = sourceStep.x - NODE_WIDTH_WITH_MARGIN; newY = sourceStep.y; break;
                 }
             }
-        } else if (prevSteps.filter(s => s.type === 'Main Category/Phase').length > 0) {
+        } else if (prevSteps.filter(s => s.type === 'Main Category/Phase').length > 0) { // General new main step
             const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase');
             const lastMainStepY = Math.max(...mainSteps.map(s => s.y).filter(y => typeof y === 'number'), 0);
-            newX = 20;
+            newX = 20; // Default X for new main steps
             newY = lastMainStepY + NODE_HEIGHT_WITH_MARGIN;
         }
-
+        // Ensure new steps don't go to negative coordinates
         newX = Math.max(0, newX);
         newY = Math.max(0, newY);
 
@@ -265,8 +266,8 @@ const ViewPlanPage = () => {
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    event.stopPropagation(); // Prevent canvas click from deselecting
-    setSelectedStepId(stepId);
+    event.stopPropagation(); 
+    setSelectedStepId(stepId); // Select the node on drag start
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag) {
       setDraggingNodeId(stepId);
@@ -296,7 +297,7 @@ const ViewPlanPage = () => {
   }, [setDraggingNodeId, setDragStartPos, setNodeStartPos]);
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
+    if (event.target === event.currentTarget) { // Only deselect if clicking directly on canvas
       setSelectedStepId(null);
     }
   }, [setSelectedStepId]);
@@ -426,26 +427,26 @@ const ViewPlanPage = () => {
 
               let x1=0, y1=0, x2=0, y2=0;
 
-              switch (targetStep.sourceAnchor) { // This is the anchor on the source node
-                case 'N': // Source's North dot to Target's South dot (target is above source)
+              switch (targetStep.sourceAnchor) { // This is the anchor on the source node which was clicked
+                case 'N': // Source's North dot to Target's South dot (new node is above source)
                   x1 = sourceStep.x + NODE_WIDTH / 2;
                   y1 = sourceStep.y + DOT_CONNECTION_OFFSET;
                   x2 = targetStep.x + NODE_WIDTH / 2;
                   y2 = targetStep.y + NODE_HEIGHT - DOT_CONNECTION_OFFSET;
                   break;
-                case 'S': // Source's South dot to Target's North dot (target is below source)
+                case 'S': // Source's South dot to Target's North dot (new node is below source)
                   x1 = sourceStep.x + NODE_WIDTH / 2;
                   y1 = sourceStep.y + NODE_HEIGHT - DOT_CONNECTION_OFFSET;
                   x2 = targetStep.x + NODE_WIDTH / 2;
                   y2 = targetStep.y + DOT_CONNECTION_OFFSET;
                   break;
-                case 'E': // Source's East dot to Target's West dot (target is to the right of source)
+                case 'E': // Source's East dot to Target's West dot (new node is to the right of source)
                   x1 = sourceStep.x + NODE_WIDTH - DOT_CONNECTION_OFFSET;
                   y1 = sourceStep.y + NODE_HEIGHT / 2;
                   x2 = targetStep.x + DOT_CONNECTION_OFFSET;
                   y2 = targetStep.y + NODE_HEIGHT / 2;
                   break;
-                case 'W': // Source's West dot to Target's East dot (target is to the left of source)
+                case 'W': // Source's West dot to Target's East dot (new node is to the left of source)
                   x1 = sourceStep.x + DOT_CONNECTION_OFFSET;
                   y1 = sourceStep.y + NODE_HEIGHT / 2;
                   x2 = targetStep.x + NODE_WIDTH - DOT_CONNECTION_OFFSET;
