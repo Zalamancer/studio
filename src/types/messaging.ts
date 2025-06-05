@@ -1,3 +1,4 @@
+
 // src/types/messaging.ts
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
@@ -52,7 +53,7 @@ export interface Message {
 // Represents a message with a serializable timestamp (e.g., number) for client components
 export interface SerializableMessage extends Omit<Message, 'timestamp'> {
   timestamp: number; // Timestamp as milliseconds since epoch
-  isBotMessage?: boolean;
+  isBotMessage: boolean; // Made non-optional, should default to false if not present in Firestore
 }
 
 
@@ -74,3 +75,4 @@ export interface NewConversationData extends Omit<Conversation, 'id' | 'createdA
   adminIds: string[]; // Required for group, empty for direct
   formerParticipants?: { [userId: string]: Timestamp | FieldValue }; // Make optional since not required by security rules
 }
+

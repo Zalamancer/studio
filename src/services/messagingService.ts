@@ -1,3 +1,4 @@
+
 // src/services/messagingService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -390,24 +391,30 @@ export const getMessagesForConversation = (
       (querySnapshot: QuerySnapshot) => {
         console.log(`%c[Service] onSnapshot fired for ${conversationId}. Docs count: ${querySnapshot.docs.length}`, "color: cyan;");
         const messages = querySnapshot.docs.map((docSnap: DocumentSnapshot) => {
-          const data = docSnap.data() as Message;
-          const timestampMillis = data.timestamp instanceof Timestamp
-              ? data.timestamp.toMillis()
-              : (typeof data.timestamp === 'number' ? data.timestamp : Date.now());
+          const data = docSnap.data() as Message; // Original Firestore data
+
+          // Validate essential fields before creating SerializableMessage
+          if (!data || typeof data.senderId !== 'string' || typeof data.text !== 'string' || !(data.timestamp instanceof Timestamp)) {
+            console.warn(`[Service] getMessagesForConversation: Malformed message document ${docSnap.id} in conv ${conversationId}. Skipping. Data:`, data);
+            return null; // Skip this malformed document
+          }
+
+          const timestampMillis = data.timestamp.toMillis();
 
           const serializableMsg: SerializableMessage = {
             id: docSnap.id,
             conversationId: conversationId,
             senderId: data.senderId,
-            text: data.text || "",
+            text: data.text, // Already validated to be string
             timestamp: timestampMillis,
-            read: data.read || false,
-            isBotMessage: data.isBotMessage === true,
+            read: data.read === true, // Ensure boolean
+            isBotMessage: data.isBotMessage === true, // Ensure boolean
             replyToMessageId: data.replyToMessageId || undefined,
             repliedToTextSnippet: data.repliedToTextSnippet || undefined,
           };
           return serializableMsg;
-        });
+        }).filter((msg): msg is SerializableMessage => msg !== null); // Filter out any nulls from malformed docs
+        
         onUpdate(messages);
       },
       (error: Error & { code?: string }) => {
@@ -417,22 +424,23 @@ export const getMessagesForConversation = (
           onError(error);
         } else {
           // For permission denied, silently check if user has left
-          checkUserStatus().then(hasLeft => {
-            if (!hasLeft) {
+          checkUserStatus().then(userHasLeft => {
+            if (!userHasLeft) {
               // If user hasn't left, then it's a real permission error
               console.error(`%c[Service] Permission denied for ${conversationId} but user hasn't left group:`, "color: red;", error);
               onError(error);
             }
-            // If user has left, we already handled it in checkUserStatus
+            // If user has left, we already handled it in checkUserStatus by calling onUpdate([])
           });
         }
       }
     );
-
-    return unsubscribe;
+    // This return was missing, it should be the unsubscribe function from onSnapshot
+    return unsubscribe; 
   });
 
-  // Return a no-op unsubscribe function initially
+  // Return a no-op unsubscribe function initially for the outer function
+  // The actual unsubscribe will be returned by the promise resolution
   return () => {};
 };
 
@@ -801,3 +809,4 @@ export const transferGroupOwnership = async (
     throw new Error(`Failed to transfer ownership: ${error.message}`);
   }
 };
+
