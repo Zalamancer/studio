@@ -25,29 +25,32 @@ import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 
 const NODE_WIDTH = 256; // Default width of RoadmapStepCard (w-64)
-const DOT_SIZE = 8;
-const DOT_OFFSET = -DOT_SIZE;
+const DOT_SIZE = 8; // Diameter of the connection dot
+const DOT_OFFSET = - (DOT_SIZE / 2); // Offset to center the dot on the edge, was -DOT_SIZE
 
 // Detailed constants for height calculation
-const HEADER_PADDING_TOP = 10; // p-2.5 on CardHeader
-const HEADER_PADDING_BOTTOM = 10; // p-2.5 on CardHeader
-const HEADER_TITLE_LINE_HEIGHT = 20; // text-sm font-semibold -> approx 20px line-height (Tailwind default)
-const HEADER_DESCRIPTION_LINE_HEIGHT = 16; // text-xs -> approx 16px line-height
+const HEADER_PADDING_TOP = 10; // p-2.5
+const HEADER_PADDING_BOTTOM = 10; // p-2.5
+const HEADER_TITLE_LINE_HEIGHT = 20; // text-sm (approx 1.25rem * 16px/rem for default font)
+const HEADER_DESCRIPTION_LINE_HEIGHT = 16; // text-xs (approx 1rem * 16px/rem)
 
-const CONTENT_PADDING_TOP = 6;    // pt-1.5 on CardContent
-const CONTENT_PADDING_BOTTOM = 10;  // pb from p-2.5 on CardContent
+const CONTENT_PADDING_TOP = 6;    // pt-1.5 (0.375rem)
+const CONTENT_PADDING_BOTTOM = 10;  // pb from p-2.5 (0.625rem)
 const SUBSTEPS_LABEL_TEXT_HEIGHT = 16; // text-xs font-medium
 const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4; // mb-1
 const SUBSTEP_ITEM_LINE_HEIGHT = 16; // text-xs
-const SUBSTEP_INTER_ITEM_SPACING = 2; // space-y-0.5 means 0.125rem, typically 2px if 1rem = 16px
+const SUBSTEP_INTER_ITEM_SPACING = 2; // space-y-0.5 (0.125rem) for ul
 
-const FOOTER_PADDING_TOP = 8;     // p-2 on CardFooter
-const FOOTER_PADDING_BOTTOM = 8;  // p-2 on CardFooter
+const FOOTER_PADDING_TOP = 8;     // p-2
+const FOOTER_PADDING_BOTTOM = 8;  // p-2
 const FOOTER_CONTENT_HEIGHT = 28;  // Buttons h-7 (size="xs")
 
 const INTERNAL_BORDER_HEIGHT = 1; // For border-t elements
 
-const NODE_END_PADDING = 50;
+const NODE_END_PADDING = 50; // For dynamic canvas height calculation
+
+const SCROLL_ZONE_HEIGHT = 80; // Pixels from top/bottom edge to trigger scroll
+const SCROLL_SPEED = 15;      // Pixels to scroll per animation frame
 
 
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
@@ -55,8 +58,8 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
 
   // Header
   let headerInternalContent = HEADER_TITLE_LINE_HEIGHT; // Title is always there
-  if (step.type) {
-    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT; // Add if type (acting as description) exists
+  if (step.type) { // Assuming type is displayed as a description line
+    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT;
   }
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
 
@@ -76,11 +79,11 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   // Footer
   calculatedHeight += INTERNAL_BORDER_HEIGHT; // Border above footer
   calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
-
+  
   const baseMinHeightForEmptyCard =
     (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) + // Header
     INTERNAL_BORDER_HEIGHT + // Content border
-    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // Empty content
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // Empty content (0 if no substeps label)
     INTERNAL_BORDER_HEIGHT + // Footer border
     (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM); // Footer
 
@@ -136,12 +139,13 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       e.stopPropagation();
       if (cardDivRef.current && dotRef.current) {
         const cardRect = cardDivRef.current.getBoundingClientRect();
+        // Get dot's position relative to the viewport
         const dotRect = dotRef.current.getBoundingClientRect();
+        // Calculate dot's center Y relative to the card's top edge
         const relativeYOffset = (dotRect.top - cardRect.top) + (dotRect.height / 2);
         onInitiateNodeFromDot(e, step.id, 'W', relativeYOffset);
       } else {
-        console.warn("SubStepDot: Refs not ready for precise offset calculation. Using parent's mid-left.");
-        onInitiateNodeFromDot(e, step.id, 'W');
+        onInitiateNodeFromDot(e, step.id, 'W'); // Fallback if refs not ready
       }
     };
 
@@ -151,9 +155,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         onClick={handleSubStepDotClick}
         className={cn(
           "inline-block rounded-full bg-muted-foreground",
-          "h-2 w-2", // Adjusted base size
+          "h-2 w-2",
           "transition-all duration-150 ease-in-out",
-          "hover:cursor-pointer hover:bg-green-500", // Adjusted hover color
+          "hover:cursor-pointer hover:bg-green-500",
           "hover:scale-150"
         )}
         title="Add new step from this sub-step (to the left)"
@@ -224,9 +228,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
 
       {isSelected && (
         <>
-          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
-          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
-          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
+          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
+          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
+          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
+          {/* Left dot removed based on previous request */}
         </>
       )}
     </div>
@@ -275,7 +280,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
           {step.subSteps && step.subSteps.length > 0 && (
             <div>
               <h4 className="text-sm font-medium mb-2">Sub-steps ({step.subSteps.length})</h4>
-              <ul className="list-disc list-outside space-y-1 pl-4">
+              <ul className="list-none space-y-1 pl-0 ml-0">
                 {step.subSteps.map(sub => (
                   <li key={sub.id} className="text-sm text-muted-foreground">
                     {sub.title} <span className="text-xs text-muted-foreground/70">({sub.type})</span>
@@ -318,6 +323,9 @@ const ViewPlanPage = () => {
   const [nodeStartPos, setNodeStartPos] = useState<{ x: number; y: number } | null>(null);
 
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
+
+  const scrollIntervalRef = useRef<number | null>(null);
+  const currentScrollDirectionRef = useRef<number>(0); // 0: none, -1: up, 1: down
 
 
   const isPlanIdValidUid = React.useMemo(() => {
@@ -494,6 +502,31 @@ const ViewPlanPage = () => {
     }
   }, [roadmapSteps, setSelectedStepId]);
 
+  const scrollStep = useCallback(() => {
+    if (canvasRef.current && currentScrollDirectionRef.current !== 0 && draggingNodeId) {
+      const scrollAmount = currentScrollDirectionRef.current * SCROLL_SPEED;
+      canvasRef.current.scrollTop += scrollAmount;
+  
+      // Adjust the node's Y position on the canvas to compensate for the scroll.
+      setRoadmapSteps(prevSteps =>
+        prevSteps.map(step =>
+          step.id === draggingNodeId
+            ? { ...step, y: Math.round(Math.max(0, (step.y || 0) + scrollAmount)) }
+            : step
+        )
+      );
+      // Update nodeStartPos.y to reflect this programmatic move
+      setNodeStartPos(prevPos => prevPos ? { ...prevPos, y: Math.round(Math.max(0, (prevPos.y || 0) + scrollAmount)) } : null);
+  
+      scrollIntervalRef.current = requestAnimationFrame(scrollStep);
+    } else {
+      if (scrollIntervalRef.current) {
+        cancelAnimationFrame(scrollIntervalRef.current);
+        scrollIntervalRef.current = null;
+      }
+    }
+  }, [draggingNodeId, setRoadmapSteps, setNodeStartPos]);
+
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
     if (draggingNodeId && dragStartPos && nodeStartPos && canvasRef.current) {
       const currentCanvasClientWidth = canvasRef.current.clientWidth;
@@ -501,27 +534,55 @@ const ViewPlanPage = () => {
       const dy = event.clientY - dragStartPos.y;
 
       const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
-
+      
       const newX = Math.round(Math.max(0, Math.min(nodeStartPos.x + dx, maxX)));
       const newY = Math.round(Math.max(0, nodeStartPos.y + dy));
 
       setRoadmapSteps(prevSteps => {
         const currentDraggingStep = prevSteps.find(s => s.id === draggingNodeId);
-        // If the position hasn't actually changed, return the previous steps to avoid re-render
         if (currentDraggingStep && currentDraggingStep.x === newX && currentDraggingStep.y === newY) {
           return prevSteps;
         }
-
         return prevSteps.map(step =>
           step.id === draggingNodeId
             ? { ...step, x: newX, y: newY }
             : step
         );
       });
+      
+      // Auto-scroll logic
+      const viewportMouseY = event.clientY;
+      const viewportHeight = window.innerHeight;
+
+      if (viewportMouseY < SCROLL_ZONE_HEIGHT) {
+        if (currentScrollDirectionRef.current !== -1) {
+          currentScrollDirectionRef.current = -1;
+          if (scrollIntervalRef.current === null) {
+            scrollIntervalRef.current = requestAnimationFrame(scrollStep);
+          }
+        }
+      } else if (viewportMouseY > viewportHeight - SCROLL_ZONE_HEIGHT) {
+        if (currentScrollDirectionRef.current !== 1) {
+          currentScrollDirectionRef.current = 1;
+          if (scrollIntervalRef.current === null) {
+            scrollIntervalRef.current = requestAnimationFrame(scrollStep);
+          }
+        }
+      } else {
+        if (currentScrollDirectionRef.current !== 0) {
+          currentScrollDirectionRef.current = 0;
+          // scrollStep will cancel itself when direction is 0
+        }
+      }
     }
-  }, [draggingNodeId, dragStartPos, nodeStartPos]);
+  }, [draggingNodeId, dragStartPos, nodeStartPos, scrollStep, setRoadmapSteps]);
 
   const handleMouseUpOnCanvas = useCallback(() => {
+    if (scrollIntervalRef.current !== null) {
+      cancelAnimationFrame(scrollIntervalRef.current);
+      scrollIntervalRef.current = null;
+    }
+    currentScrollDirectionRef.current = 0;
     setDraggingNodeId(null);
     setDragStartPos(null);
     setNodeStartPos(null);
@@ -637,7 +698,7 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas}
+            onMouseLeave={handleMouseUpOnCanvas} // Important to stop scrolling if mouse leaves canvas
             onClick={handleCanvasClick}
             style={{ minHeight: dynamicCanvasMinHeight ? `${dynamicCanvasMinHeight}px` : '100vh' }}
         >
@@ -758,4 +819,5 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
+
     
