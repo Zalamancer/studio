@@ -31,11 +31,11 @@ const DOT_OFFSET = -DOT_SIZE / 2; // px, to center the dot on the edge
 interface RoadmapStepCardProps {
   step: RoadmapStep;
   onAddSubStep: (parentId: string, parentTitle: string) => void;
-  onSelectStep: (stepId: string) => void;
-  onInitiateNodeFromDot: (sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => void;
+  onSelectStep: (event: React.MouseEvent, stepId: string) => void; // Pass event for stopPropagation
+  onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => void; // Pass event
   isSelected: boolean;
   isSubmitting: boolean;
-  onMouseDown: (event: React.MouseEvent, stepId: string) => void;
+  onMouseDownOnNode: (event: React.MouseEvent, stepId: string) => void; // Pass event
 }
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
@@ -45,14 +45,26 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   onInitiateNodeFromDot,
   isSelected,
   isSubmitting,
-  onMouseDown,
+  onMouseDownOnNode,
 }) => {
-  const [isHovered, setIsHovered] = useState(false);
+  // isHovered state removed as dot visibility is now tied to isSelected
 
   const handleDotClick = (e: React.MouseEvent, anchor: 'N' | 'S' | 'E' | 'W') => {
-    e.stopPropagation(); // Prevent card selection when clicking a dot
-    onInitiateNodeFromDot(step.id, anchor);
+    e.stopPropagation(); // Prevent card selection/deselection when clicking a dot
+    onInitiateNodeFromDot(e, step.id, anchor);
   };
+
+  const handleHeaderMouseDown = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent card selection/deselection when starting a drag
+    onMouseDownOnNode(e, step.id);
+  };
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    // This ensures that clicking the card body itself (not header or dots) triggers selection.
+    // Propagation is not stopped here, as this is the intended selection click.
+    onSelectStep(e, step.id);
+  };
+
 
   return (
     <div
@@ -61,14 +73,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         isSelected && "ring-2 ring-primary shadow-primary/30 z-10"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
-      onClick={() => onSelectStep(step.id)}
-      onMouseEnter={() => setIsHovered(true)}
-      onMouseLeave={() => setIsHovered(false)}
+      onClick={handleCardClick} // Main card click for selection
     >
       {/* Draggable Header */}
       <CardHeader
         className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center"
-        onMouseDown={(e) => onMouseDown(e, step.id)}
+        onMouseDown={handleHeaderMouseDown} // Drag initiation
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0" />
         <div className="flex-grow min-w-0">
@@ -96,7 +106,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         <Button
           variant="outline"
           size="xs"
-          onClick={(e) => { e.stopPropagation(); onAddSubStep(step.id, step.title); }}
+          onClick={(e) => { e.stopPropagation(); onAddSubStep(step.id, step.title); }} // Stop propagation here too
           disabled={isSubmitting}
           className="text-xs w-full sm:w-auto"
         >
@@ -178,14 +188,17 @@ const ViewPlanPage = () => {
   });
 
   useEffect(() => {
-    if (plan?.roadmap && roadmapSteps.length === 0) {
+    if (plan?.roadmap && roadmapSteps.length === 0) { // Only init if roadmapSteps is empty
       setRoadmapSteps(plan.roadmap);
     }
   }, [plan, roadmapSteps.length]);
 
-  const handleInitiateNodeFromDot = useCallback((sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => {
+
+  const handleInitiateNodeFromDot = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => {
+    // event.stopPropagation(); // Already done in RoadmapStepCard's handleDotClick
+    setSelectedStepId(sourceStepId); // Ensure the source node is selected
     setPendingNodeFromDotInfo({ sourceStepId, sourceAnchor });
-    setCurrentParentStepForDialog(null); // Not adding a sub-step in this flow
+    setCurrentParentStepForDialog(null);
     setIsAddStepDialogOpen(true);
   }, []);
 
@@ -196,14 +209,19 @@ const ViewPlanPage = () => {
   }, []);
 
   const openAddSubStepDialog = useCallback((parentId: string, parentTitle: string) => {
+    // event.stopPropagation(); // Already done in RoadmapStepCard's button onClick
+    setSelectedStepId(parentId); // Select the parent when adding sub-step
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
   }, []);
   
-  const handleSelectStep = (stepId: string) => {
+  const handleSelectStep = useCallback((event: React.MouseEvent, stepId: string) => {
+    // This is the direct click on the card body for selection/deselection
+    // event.stopPropagation(); // Not needed here, this is the primary selection event for the card
     setSelectedStepId(prevId => (prevId === stepId ? null : stepId));
-  };
+  }, []);
+
 
   const handleAddRoadmapStepSubmit = useCallback((data: AddRoadmapStepFormData) => {
     setIsSubmittingStep(true);
@@ -214,15 +232,15 @@ const ViewPlanPage = () => {
     };
 
     setRoadmapSteps(prevSteps => {
-      if (currentParentStepForDialog) { // Adding a sub-step
+      if (currentParentStepForDialog) {
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
             ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 } as RoadmapSubStep] }
             : step
         );
-      } else { // Adding a main step
+      } else {
         let newX = 20;
-        let newY = 20;
+        let newY = (prevSteps.filter(s => s.type === 'Main Category/Phase').length * (NODE_HEIGHT_WITH_MARGIN)) + 20; // Default vertical stacking
         let sourceNodeId: string | undefined = undefined;
         let sourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
 
@@ -238,13 +256,14 @@ const ViewPlanPage = () => {
                     case 'W': newX = sourceStep.x - NODE_WIDTH_WITH_MARGIN; newY = sourceStep.y; break;
                 }
             }
-        } else if (prevSteps.length > 0) {
-            const lastStep = prevSteps.sort((a,b) => (a.x + a.y) - (b.x + b.y))[prevSteps.length - 1] || prevSteps[prevSteps.length - 1];
-            newX = lastStep.x + NODE_WIDTH_WITH_MARGIN; 
-            newY = lastStep.y;
+        } else if (prevSteps.filter(s => s.type === 'Main Category/Phase').length > 0) {
+            const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase');
+            const lastMainStep = mainSteps.sort((a,b) => a.y - b.y)[mainSteps.length-1]; // Simplistic: find lowest positioned one
+            newX = lastMainStep.x; // Stack below by default if not from dot
+            newY = lastMainStep.y + NODE_HEIGHT_WITH_MARGIN;
         }
         
-        newX = Math.max(0, newX);
+        newX = Math.max(0, newX); // Ensure within bounds
         newY = Math.max(0, newY);
 
         const newMainStep: RoadmapStep = { ...newStepBase, subSteps: [], x: newX, y: newY, sourceNodeId, sourceAnchor };
@@ -260,14 +279,13 @@ const ViewPlanPage = () => {
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent, stepId: string) => {
-    event.preventDefault();
-    event.stopPropagation();
+    // event.stopPropagation(); // Already done in RoadmapStepCard's handleHeaderMouseDown
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag) {
+      setSelectedStepId(stepId); // Ensure node is selected when drag starts
       setDraggingNodeId(stepId);
       setDragStartPos({ x: event.clientX, y: event.clientY });
       setNodeStartPos({ x: stepToDrag.x, y: stepToDrag.y });
-      setSelectedStepId(stepId);
     }
   }, [roadmapSteps]);
 
@@ -291,6 +309,10 @@ const ViewPlanPage = () => {
     setNodeStartPos(null);
   }, []);
   
+  const handleCanvasClick = useCallback(() => {
+    // Only deselect if the click is directly on the canvas, not on a node or its interactive elements
+    setSelectedStepId(null);
+  }, []);
 
   if (authLoading || (isLoading && isPlanIdValidUid)) {
     return (
@@ -394,27 +416,19 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-auto p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas}
-            onClick={() => setSelectedStepId(null)} // Deselect on canvas click
+            onMouseLeave={handleMouseUpOnCanvas} // Added to handle mouse leaving canvas during drag
+            onClick={handleCanvasClick} // Deselect on canvas click
         >
           <div className="absolute top-4 left-4 z-20">
             <Button
               variant="outline"
-              onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
+              onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }} // Stop propagation
               disabled={isSubmittingStep || isAddStepDialogOpen}
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Main Roadmap Step
             </Button>
           </div>
-
-          {roadmapSteps.length === 0 && !isAddStepDialogOpen && (
-            <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70">
-              <StickyNote className="h-10 w-10 mb-2" />
-              <p className="text-sm font-medium">Roadmap is empty.</p>
-              <p className="text-xs">Click "Add Main Roadmap Step" to begin planning.</p>
-            </div>
-          )}
 
           {roadmapSteps.filter(step => step.type === 'Main Category/Phase').map(step => (
               <RoadmapStepCard
@@ -425,9 +439,17 @@ const ViewPlanPage = () => {
                 onInitiateNodeFromDot={handleInitiateNodeFromDot}
                 isSelected={selectedStepId === step.id}
                 isSubmitting={isSubmittingStep || isAddStepDialogOpen}
-                onMouseDown={handleMouseDownOnNode}
+                onMouseDownOnNode={handleMouseDownOnNode}
               />
             ))}
+          
+          {roadmapSteps.length === 0 && !isAddStepDialogOpen && (
+            <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none">
+              <StickyNote className="h-10 w-10 mb-2" />
+              <p className="text-sm font-medium">Roadmap is empty.</p>
+              <p className="text-xs">Click "Add Main Roadmap Step" to begin planning.</p>
+            </div>
+          )}
           
           <div className="absolute bottom-4 right-4 bg-card border border-border rounded-lg shadow-md flex items-center p-0.5 space-x-0.5 z-20">
             <Button variant="ghost" size="icon" className="h-7 w-7"><Layers className="h-4 w-4" /></Button>
