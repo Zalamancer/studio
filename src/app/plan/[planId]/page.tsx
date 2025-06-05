@@ -25,28 +25,32 @@ import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 
 const NODE_WIDTH = 256; // Default width of RoadmapStepCard (w-64)
-const DOT_SIZE = 8; // Visual size of the dot button part
-const DOT_OFFSET = -DOT_SIZE; // Offset for visual centering of the 16x16 button from edge
-// const DOT_CONNECTION_OFFSET = 4; // This offset is being removed
+const DOT_SIZE = 8; 
+const DOT_OFFSET = -DOT_SIZE; 
 
 // Constants for height estimation
 const CARD_HEADER_EST_HEIGHT = 40;
 const CARD_FOOTER_EST_HEIGHT = 40;
-const CARD_CONTENT_PADDING_EST_Y = 10;
-const CARD_DESCRIPTION_EST_HEIGHT = 18;
+const CARD_CONTENT_PADDING_EST_Y = 10; 
+const CARD_DESCRIPTION_EST_HEIGHT = 18; 
 const SUBSTEPS_LABEL_EST_HEIGHT = 20;
-const SUBSTEP_ITEM_EST_HEIGHT = 22;
+const SUBSTEP_ITEM_EST_HEIGHT = 22; 
 const MIN_CARD_EST_HEIGHT = 120;
 
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
   let height = CARD_HEADER_EST_HEIGHT + CARD_FOOTER_EST_HEIGHT + CARD_CONTENT_PADDING_EST_Y;
-  if (step.type) height += CARD_DESCRIPTION_EST_HEIGHT;
-  if (step.subSteps && step.subSteps.length > 0) {
-    height += SUBSTEPS_LABEL_EST_HEIGHT;
-    height += step.subSteps.length * SUBSTEP_ITEM_EST_HEIGHT;
-    height += 8;
+  if (step.type) {
+    height += CARD_DESCRIPTION_EST_HEIGHT;
   }
-  height += 20;
+  if (step.subSteps && step.subSteps.length > 0) {
+    height += SUBSTEPS_LABEL_EST_HEIGHT; // Label "Sub-steps:"
+    height += step.subSteps.length * SUBSTEP_ITEM_EST_HEIGHT; // List items
+    if (step.subSteps.length > 1) { // Add spacing between items if more than one sub-step
+      height += (step.subSteps.length - 1) * 2; // 2px for space-y-0.5 for each gap
+    }
+    height += 8; // A fixed small buffer for the sub-step section.
+  }
+  height += 20; // Final general buffer
   return Math.max(height, MIN_CARD_EST_HEIGHT);
 };
 
@@ -237,6 +241,7 @@ const ViewPlanPage = () => {
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [nodeStartPos, setNodeStartPos] = useState<{ x: number; y: number } | null>(null);
+  
 
   const isPlanIdValidUid = React.useMemo(() => {
     if (!planId) return false;
@@ -286,11 +291,11 @@ const ViewPlanPage = () => {
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
     setSelectedStepId(parentId);
-    setSelectedNodeForPanel(null);
+    // setSelectedNodeForPanel(null); // Do not open panel for parent when adding sub-step
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
-  }, [setSelectedStepId, setSelectedNodeForPanel, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
+  }, [setSelectedStepId, /*setSelectedNodeForPanel,*/ setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
   
   const handleOpenNodeDetailsClick = useCallback((event: React.MouseEvent, clickedStep: RoadmapStep) => {
     event.stopPropagation();
@@ -320,7 +325,7 @@ const ViewPlanPage = () => {
         let stepSourceNodeId: string | undefined = undefined;
         let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
         
-        const currentCanvasClientWidth = canvasRef.current ? canvasRef.current.clientWidth : 0;
+        const currentCanvasClientWidth = canvasRef.current ? canvasRef.current.clientWidth : window.innerWidth; // Fallback
 
         if (pendingNodeFromDotInfo) {
             const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
@@ -366,7 +371,7 @@ const ViewPlanPage = () => {
     setCurrentParentStepForDialog(null);
     setPendingNodeFromDotInfo(null);
     setIsSubmittingStep(false);
-  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast, roadmapSteps]);
+  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
     event.stopPropagation();
@@ -407,7 +412,7 @@ const ViewPlanPage = () => {
   }, []);
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
+    if (event.target === event.currentTarget) { // Ensure click is on the canvas itself, not a child node
       setSelectedStepId(null);
       setSelectedNodeForPanel(null);
     }
@@ -542,25 +547,25 @@ const ViewPlanPage = () => {
               let x1=0, y1=0, x2=0, y2=0;
 
               switch (targetStep.sourceAnchor) {
-                case 'N': // Line starts from North of sourceStep, connects to South of targetStep
+                case 'N': 
                   x1 = sourceStep.x + NODE_WIDTH / 2;
                   y1 = sourceStep.y;
                   x2 = targetStep.x + NODE_WIDTH / 2;
                   y2 = targetStep.y + targetCardHeight;
                   break;
-                case 'S': // Line starts from South of sourceStep, connects to North of targetStep
+                case 'S': 
                   x1 = sourceStep.x + NODE_WIDTH / 2;
                   y1 = sourceStep.y + sourceCardHeight;
                   x2 = targetStep.x + NODE_WIDTH / 2;
                   y2 = targetStep.y;
                   break;
-                case 'E': // Line starts from East of sourceStep, connects to West of targetStep
+                case 'E': 
                   x1 = sourceStep.x + NODE_WIDTH;
                   y1 = sourceStep.y + sourceCardHeight / 2;
                   x2 = targetStep.x;
                   y2 = targetStep.y + targetCardHeight / 2;
                   break;
-                case 'W': // Line starts from West of sourceStep, connects to East of targetStep
+                case 'W': 
                   x1 = sourceStep.x;
                   y1 = sourceStep.y + sourceCardHeight / 2;
                   x2 = targetStep.x + NODE_WIDTH;
@@ -638,7 +643,6 @@ const ViewPlanPage = () => {
         <SheetContent 
             side="right" 
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
-            // Removed onInteractOutside to allow canvas clicks to close it
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
