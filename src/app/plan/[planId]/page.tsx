@@ -396,17 +396,17 @@ const AddRoadmapStepDialogInternal: React.FC<AddRoadmapStepDialogInternalProps> 
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
           <div>
             <Label htmlFor="title-dialog">Step Title <span className="text-destructive">*</span></Label>
-            <Input id="title-dialog" {...form.register('title')} placeholder="e.g., Market Research, Phase 1 Kickoff" disabled={isSubmitting} />
+            <Input id="title-dialog" {...form.register('title')} placeholder="e.g., Market Research, Phase 1 Kickoff" disabled={isSubmitting || form.formState.isSubmitting} />
             {form.formState.errors.title && (
               <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
             )}
           </div>
           <AddStepDialogFooter>
             <AddStepDialogClose asChild>
-              <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
+              <Button type="button" variant="outline" disabled={isSubmitting || form.formState.isSubmitting}>Cancel</Button>
             </AddStepDialogClose>
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            <Button type="submit" disabled={isSubmitting || form.formState.isSubmitting}>
+              {(isSubmitting || form.formState.isSubmitting) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Add Step
             </Button>
           </AddStepDialogFooter>
@@ -449,6 +449,8 @@ const ViewPlanPage = () => {
   const [isSavingRoadmap, setIsSavingRoadmap] = useState(false);
 
   const [confirmDeleteNodeInfo, setConfirmDeleteNodeInfo] = useState<{ id: string; title: string } | null>(null);
+  const [isAddStepButtonCoolingDown, setIsAddStepButtonCoolingDown] = useState(false);
+
 
   const isPlanIdValidUid = React.useMemo(() => {
     if (!planId) return false;
@@ -508,12 +510,15 @@ const ViewPlanPage = () => {
   }, []);
 
   const openAddMainStepDialog = useCallback(() => {
+    if (isAddStepButtonCoolingDown) return;
+    setIsAddStepButtonCoolingDown(true);
     setSelectedStepId(null);
     setSelectedNodeForPanel(null);
     setCurrentParentStepForDialog(null);
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
-  }, []);
+    setTimeout(() => setIsAddStepButtonCoolingDown(false), 1000);
+  }, [isAddStepButtonCoolingDown]);
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
@@ -530,83 +535,88 @@ const ViewPlanPage = () => {
     setSelectedStepId(current => (current === clickedStep.id ? null : clickedStep.id));
   }, []);
 
-  const handleAddRoadmapStepSubmit = useCallback((formData: AddRoadmapStepDialogFormDataInternal) => {
+  const handleAddRoadmapStepSubmit = useCallback(async (formData: AddRoadmapStepDialogFormDataInternal) => {
+    if (isSubmittingStep) {
+      console.warn("[ViewPlanPage] handleAddRoadmapStepSubmit: Already submitting, ignoring additional call.");
+      return;
+    }
     setIsSubmittingStep(true);
-    const newStepBase = {
-      id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-      title: formData.title,
-      description: null,
-    };
+    try {
+      const newStepBase = {
+        id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+        title: formData.title,
+        description: null,
+      };
 
-    setRoadmapSteps(prevSteps => {
-      if (currentParentStepForDialog) {
-        return prevSteps.map(step =>
-          step.id === currentParentStepForDialog.id
-            ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id } as RoadmapSubStep] }
-            : step
-        );
-      } else {
-        let newX = 20;
-        let newY = 20;
-        let stepSourceNodeId: string | undefined = undefined;
-        let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
-        let stepSourceLineYOffset: number | undefined = undefined;
+      setRoadmapSteps(prevSteps => {
+        if (currentParentStepForDialog) {
+          return prevSteps.map(step =>
+            step.id === currentParentStepForDialog.id
+              ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id } as RoadmapSubStep] }
+              : step
+          );
+        } else {
+          let newX = 20;
+          let newY = 20;
+          let stepSourceNodeId: string | undefined = undefined;
+          let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
+          let stepSourceLineYOffset: number | undefined = undefined;
 
-        if (canvasRef.current) {
-          const currentCanvasClientWidth = canvasRef.current.clientWidth;
-
-          if (pendingNodeFromDotInfo) {
+          if (canvasRef.current) {
+            const currentCanvasClientWidth = canvasRef.current.clientWidth;
+            if (pendingNodeFromDotInfo) {
               const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
               if (sourceStep) {
-                  stepSourceNodeId = sourceStep.id;
-                  stepSourceAnchor = pendingNodeFromDotInfo.sourceAnchor;
-                  stepSourceLineYOffset = pendingNodeFromDotInfo.sourceYOffset;
-
-                  const sourceCardHeight = getEstimatedCardHeight(sourceStep);
-                  const newCardDynamicHeight = getEstimatedCardHeight({ ...newStepBase, subSteps: [] } as RoadmapStep);
-                  switch(pendingNodeFromDotInfo.sourceAnchor) {
-                      case 'N': newX = sourceStep.x; newY = sourceStep.y - (newCardDynamicHeight + 64); break;
-                      case 'S': newX = sourceStep.x; newY = sourceStep.y + sourceCardHeight + 64; break;
-                      case 'E': newX = sourceStep.x + NODE_WIDTH + 64; newY = sourceStep.y + (stepSourceLineYOffset ? (stepSourceLineYOffset - newCardDynamicHeight/2) : (sourceCardHeight/2 - newCardDynamicHeight/2)); break;
-                      case 'W': newX = sourceStep.x - (NODE_WIDTH + 64); newY = sourceStep.y + (stepSourceLineYOffset ? (stepSourceLineYOffset - newCardDynamicHeight/2) : (sourceCardHeight/2 - newCardDynamicHeight/2)); break;
-                  }
+                stepSourceNodeId = sourceStep.id;
+                stepSourceAnchor = pendingNodeFromDotInfo.sourceAnchor;
+                stepSourceLineYOffset = pendingNodeFromDotInfo.sourceYOffset;
+                const sourceCardHeight = getEstimatedCardHeight(sourceStep);
+                const newCardDynamicHeight = getEstimatedCardHeight({ ...newStepBase, subSteps: [] } as RoadmapStep);
+                switch (pendingNodeFromDotInfo.sourceAnchor) {
+                  case 'N': newX = sourceStep.x; newY = sourceStep.y - (newCardDynamicHeight + 64); break;
+                  case 'S': newX = sourceStep.x; newY = sourceStep.y + sourceCardHeight + 64; break;
+                  case 'E': newX = sourceStep.x + NODE_WIDTH + 64; newY = sourceStep.y + (stepSourceLineYOffset ? (stepSourceLineYOffset - newCardDynamicHeight / 2) : (sourceCardHeight / 2 - newCardDynamicHeight / 2)); break;
+                  case 'W': newX = sourceStep.x - (NODE_WIDTH + 64); newY = sourceStep.y + (stepSourceLineYOffset ? (stepSourceLineYOffset - newCardDynamicHeight / 2) : (sourceCardHeight / 2 - newCardDynamicHeight / 2)); break;
+                }
               }
-          } else if (prevSteps.length > 0) {
+            } else if (prevSteps.length > 0) {
               const mainSteps = prevSteps;
               if (mainSteps.length > 0) {
                 const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
                 newX = 20;
                 newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
               } else {
-                  const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0]);
-                  newX = 20;
-                  newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
+                const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0]);
+                newX = 20;
+                newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
               }
+            }
+            const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
+            newX = Math.round(Math.max(0, Math.min(newX, maxX)));
+            newY = Math.round(Math.max(0, newY));
           }
-          const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
-          newX = Math.round(Math.max(0, Math.min(newX, maxX)));
-          newY = Math.round(Math.max(0, newY));
+          const newMainStep: RoadmapStep = {
+            ...newStepBase,
+            subSteps: [],
+            x: newX,
+            y: newY,
+            sourceNodeId: stepSourceNodeId,
+            sourceAnchor: stepSourceAnchor,
+            sourceLineYOffset: stepSourceLineYOffset,
+          };
+          return [...prevSteps, newMainStep];
         }
+      });
+      toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
+      setIsAddStepDialogOpen(false); // Request to close the dialog
+    } catch (error) {
+      console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
+      toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
+      setIsSubmittingStep(false); // Reset if there's an error *before* closing dialog
+    }
+    // isSubmittingStep is reset when the dialog closes (see onOpenChange for AddRoadmapStepDialogInternal)
+  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast, isSubmittingStep, roadmapSteps]);
 
-        const newMainStep: RoadmapStep = {
-          ...newStepBase,
-          subSteps: [],
-          x: newX,
-          y: newY,
-          sourceNodeId: stepSourceNodeId,
-          sourceAnchor: stepSourceAnchor,
-          sourceLineYOffset: stepSourceLineYOffset,
-        };
-        return [...prevSteps, newMainStep];
-      }
-    });
-
-    toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
-    setIsAddStepDialogOpen(false);
-    setCurrentParentStepForDialog(null);
-    setPendingNodeFromDotInfo(null);
-    setIsSubmittingStep(false);
-  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
   const processDragMovementLoop = useCallback(() => {
     if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current) {
@@ -902,7 +912,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={isSubmittingStep || isAddStepDialogOpen || !isOwner}
+              disabled={isAddStepButtonCoolingDown || isAddStepDialogOpen || !isOwner || isSubmittingStep}
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
@@ -960,7 +970,7 @@ const ViewPlanPage = () => {
                 onOpenDetails={handleOpenNodeDetailsClick}
                 onInitiateNodeFromDot={handleInitiateNodeFromDot}
                 isSelected={selectedStepId === step.id}
-                isSubmitting={isSubmittingStep || isAddStepDialogOpen || !isOwner}
+                isSubmitting={!isOwner || isSubmittingStep || isAddStepDialogOpen}
                 onMouseDownOnNode={isOwner ? handleMouseDownOnNode : (e) => e.stopPropagation()}
                 onDeleteNode={isOwner ? handleDeleteNodeClick : () => {}}
               />
@@ -987,7 +997,14 @@ const ViewPlanPage = () => {
       {planId && (
         <AddRoadmapStepDialogInternal
           isOpen={isAddStepDialogOpen && isOwner}
-          onOpenChange={setIsAddStepDialogOpen}
+          onOpenChange={(open) => {
+            setIsAddStepDialogOpen(open);
+            if (!open) {
+              setIsSubmittingStep(false);
+              setCurrentParentStepForDialog(null);
+              setPendingNodeFromDotInfo(null);
+            }
+          }}
           onSubmit={handleAddRoadmapStepSubmit}
           isSubmitting={isSubmittingStep}
           parentStepTitle={currentParentStepForDialog?.title}
@@ -997,21 +1014,19 @@ const ViewPlanPage = () => {
 
       <Sheet open={!!selectedNodeForPanel} onOpenChange={(open) => { if (!open) setSelectedNodeForPanel(null); }}>
         <SheetContent className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col">
+          <SheetHeader className="p-4 border-b">
+            <SheetTitle className="truncate" title={selectedNodeForPanel?.title || "Node Details"}>
+              {selectedNodeForPanel ? `Editing: ${selectedNodeForPanel.title}` : "Node Details"}
+            </SheetTitle>
+            <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
+          </SheetHeader>
           {selectedNodeForPanel && (
-            <>
-              <SheetHeader className="p-4 border-b">
-                <SheetTitle className="truncate" title={selectedNodeForPanel.title}>
-                  Editing: {selectedNodeForPanel.title}
-                </SheetTitle>
-                <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
-              </SheetHeader>
-              <RoadmapStepDetailPanel
-                step={selectedNodeForPanel}
-                onDescriptionChange={handleStepDescriptionChange}
-                onTitleChange={handleStepTitleChange}
-                isOwner={isOwner}
-              />
-            </>
+            <RoadmapStepDetailPanel
+              step={selectedNodeForPanel}
+              onDescriptionChange={handleStepDescriptionChange}
+              onTitleChange={handleStepTitleChange}
+              isOwner={isOwner}
+            />
           )}
         </SheetContent>
       </Sheet>
