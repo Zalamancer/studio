@@ -27,7 +27,7 @@ import { Textarea } from '@/components/ui/textarea';
 const NODE_WIDTH = 256; // Default width of RoadmapStepCard (w-64)
 const DOT_SIZE = 8; // Visual size of the dot button part
 const DOT_OFFSET = -DOT_SIZE; // Offset for visual centering of the 16x16 button from edge
-const DOT_CONNECTION_OFFSET = 4; // Offset from the card edge to the center of the 16x16 dot button
+// const DOT_CONNECTION_OFFSET = 4; // This offset is being removed
 
 // Constants for height estimation
 const CARD_HEADER_EST_HEIGHT = 40;
@@ -286,7 +286,7 @@ const ViewPlanPage = () => {
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
     setSelectedStepId(parentId);
-    setSelectedNodeForPanel(null); 
+    setSelectedNodeForPanel(null);
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
@@ -340,7 +340,7 @@ const ViewPlanPage = () => {
             const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase');
             if (mainSteps.length > 0) {
               const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
-              newX = 20; // Initial X considering canvas padding implicitly
+              newX = 20; 
               newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
             }
         }
@@ -542,28 +542,28 @@ const ViewPlanPage = () => {
               let x1=0, y1=0, x2=0, y2=0;
 
               switch (targetStep.sourceAnchor) {
-                case 'N':
+                case 'N': // Line starts from North of sourceStep, connects to South of targetStep
                   x1 = sourceStep.x + NODE_WIDTH / 2;
-                  y1 = sourceStep.y + DOT_CONNECTION_OFFSET;
+                  y1 = sourceStep.y;
                   x2 = targetStep.x + NODE_WIDTH / 2;
-                  y2 = targetStep.y + targetCardHeight - DOT_CONNECTION_OFFSET;
+                  y2 = targetStep.y + targetCardHeight;
                   break;
-                case 'S':
+                case 'S': // Line starts from South of sourceStep, connects to North of targetStep
                   x1 = sourceStep.x + NODE_WIDTH / 2;
-                  y1 = sourceStep.y + sourceCardHeight - DOT_CONNECTION_OFFSET;
+                  y1 = sourceStep.y + sourceCardHeight;
                   x2 = targetStep.x + NODE_WIDTH / 2;
-                  y2 = targetStep.y + DOT_CONNECTION_OFFSET;
+                  y2 = targetStep.y;
                   break;
-                case 'E':
-                  x1 = sourceStep.x + NODE_WIDTH - DOT_CONNECTION_OFFSET;
+                case 'E': // Line starts from East of sourceStep, connects to West of targetStep
+                  x1 = sourceStep.x + NODE_WIDTH;
                   y1 = sourceStep.y + sourceCardHeight / 2;
-                  x2 = targetStep.x + DOT_CONNECTION_OFFSET;
+                  x2 = targetStep.x;
                   y2 = targetStep.y + targetCardHeight / 2;
                   break;
-                case 'W':
-                  x1 = sourceStep.x + DOT_CONNECTION_OFFSET;
+                case 'W': // Line starts from West of sourceStep, connects to East of targetStep
+                  x1 = sourceStep.x;
                   y1 = sourceStep.y + sourceCardHeight / 2;
-                  x2 = targetStep.x + NODE_WIDTH - DOT_CONNECTION_OFFSET;
+                  x2 = targetStep.x + NODE_WIDTH;
                   y2 = targetStep.y + targetCardHeight / 2;
                   break;
                 default: return null;
@@ -638,7 +638,7 @@ const ViewPlanPage = () => {
         <SheetContent 
             side="right" 
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
-            showCloseButton={true} 
+            // Removed onInteractOutside to allow canvas clicks to close it
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
@@ -653,3 +653,4 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
+
