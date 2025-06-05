@@ -34,7 +34,7 @@ import {
   DialogFooter as AddStepDialogFooter,
   DialogHeader as AddStepDialogHeader,
   DialogTitle as AddStepDialogTitle,
-} from '@/components/ui/dialog'; // Correct for Dialog components
+} from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -44,7 +44,7 @@ import {
   AlertDialogFooter as ConfirmDialogFooter,
   AlertDialogHeader as ConfirmDialogHeader,
   AlertDialogTitle as ConfirmDialogTitle,
-} from '@/components/ui/alert-dialog'; // Corrected import for AlertDialog components
+} from '@/components/ui/alert-dialog';
 
 const NODE_WIDTH = 256; // width of RoadmapStepCard
 const DOT_SIZE = 8;
@@ -106,7 +106,7 @@ interface RoadmapStepCardProps {
   onOpenDetails: (event: React.MouseEvent, step: RoadmapStep) => void;
   onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset?: number) => void;
   isSelected: boolean;
-  isSubmitting: boolean; // Combined submitting state from parent
+  isSubmitting: boolean;
   onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void;
   onDeleteNode: (stepId: string, stepTitle: string) => void;
 }
@@ -266,13 +266,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
 
 interface RoadmapStepDetailPanelProps {
   step: RoadmapStep;
-  onClose: () => void;
   onDescriptionChange: (stepId: string, newDescription: string | null) => void;
   onTitleChange: (stepId: string, newTitle: string) => void;
   isOwner: boolean;
 }
 
-const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, onClose, onDescriptionChange, onTitleChange, isOwner }) => {
+const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, onDescriptionChange, onTitleChange, isOwner }) => {
   const [editableDescription, setEditableDescription] = useState(step.description || '');
   const [editableTitle, setEditableTitle] = useState(step.title || '');
 
@@ -294,61 +293,49 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
   };
 
   return (
-    <>
-      <SheetHeader className="p-4 border-b">
-        <div className="flex justify-between items-center">
-          {isOwner ? (
-            <Input
-              id={`step-title-input-${step.id}`}
-              value={editableTitle}
-              onChange={handleTitleChange}
-              placeholder="Step Title"
-              className="text-lg font-semibold border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto flex-grow"
-              disabled={!isOwner}
-            />
-          ) : (
-            <SheetTitle className="truncate" title={step.title}>{step.title}</SheetTitle>
-          )}
-            <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7 p-1 flex-shrink-0">
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-            </Button>
+    <ScrollArea className="flex-1">
+      <div className="p-4 space-y-4">
+        <div>
+          <Label htmlFor={`step-title-input-${step.id}`} className="text-sm font-medium mb-1 block">Title</Label>
+          <Input
+            id={`step-title-input-${step.id}`}
+            value={editableTitle}
+            onChange={handleTitleChange}
+            placeholder="Step Title"
+            className="text-lg font-semibold border-input focus-visible:ring-ring focus-visible:ring-offset-background p-2 h-auto"
+            disabled={!isOwner}
+          />
         </div>
-        <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
-      </SheetHeader>
-      <ScrollArea className="flex-1">
-        <div className="p-4 space-y-4">
-          <div>
-            <Label htmlFor={`step-description-${step.id}`} className="text-sm font-medium mb-1 block">Description</Label>
-            <Textarea
-              id={`step-description-${step.id}`}
-              value={editableDescription}
-              onChange={handleDescriptionChange}
-              placeholder="Add details about this step..."
-              rows={6}
-              className="text-sm resize-none"
-              disabled={!isOwner}
-            />
-          </div>
+        <div>
+          <Label htmlFor={`step-description-${step.id}`} className="text-sm font-medium mb-1 block">Description</Label>
+          <Textarea
+            id={`step-description-${step.id}`}
+            value={editableDescription}
+            onChange={handleDescriptionChange}
+            placeholder="Add details about this step..."
+            rows={6}
+            className="text-sm resize-none"
+            disabled={!isOwner}
+          />
+        </div>
 
-          {step.subSteps && step.subSteps.length > 0 && (
-            <div>
-              <h4 className="text-sm font-medium mb-2">Sub-steps ({step.subSteps.length})</h4>
-              <ul className="list-none space-y-1 pl-0 ml-0">
-                {step.subSteps.map(sub => (
-                  <li key={sub.id} className="text-sm text-muted-foreground">
-                    {sub.title}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {(!step.subSteps || step.subSteps.length === 0) && (
-             <p className="text-sm text-muted-foreground italic">No sub-steps defined for this item.</p>
-          )}
-        </div>
-      </ScrollArea>
-    </>
+        {step.subSteps && step.subSteps.length > 0 && (
+          <div>
+            <h4 className="text-sm font-medium mb-2">Sub-steps ({step.subSteps.length})</h4>
+            <ul className="list-none space-y-1 pl-0 ml-0">
+              {step.subSteps.map(sub => (
+                <li key={sub.id} className="text-sm text-muted-foreground">
+                  {sub.title}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {(!step.subSteps || step.subSteps.length === 0) && (
+            <p className="text-sm text-muted-foreground italic">No sub-steps defined for this item.</p>
+        )}
+      </div>
+    </ScrollArea>
   );
 };
 
@@ -680,7 +667,7 @@ const ViewPlanPage = () => {
 
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    if (draggingNodeIdRef.current) return; // Prevent starting new drag if one is active
+    if (draggingNodeIdRef.current) return;
 
     event.stopPropagation();
     setSelectedStepId(stepId);
@@ -1006,22 +993,33 @@ const ViewPlanPage = () => {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedNodeForPanel(null);
+            // Optionally, save changes here if you want auto-save on panel close
+            // handleSaveRoadmap();
           }
         }}
       >
         <SheetContent
             side="right"
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
-            showCloseButton={false}
+            // showCloseButton prop removed to use default close button
         >
           {selectedNodeForPanel && (
-            <RoadmapStepDetailPanel
-              step={selectedNodeForPanel}
-              onClose={() => {setSelectedNodeForPanel(null);}}
-              onDescriptionChange={handleStepDescriptionChange}
-              onTitleChange={handleStepTitleChange}
-              isOwner={isOwner}
-            />
+            <>
+              <SheetHeader className="p-4 border-b">
+                {/* Title is now rendered here, not inside RoadmapStepDetailPanel */}
+                <SheetTitle className="truncate" title={selectedNodeForPanel.title}>
+                  {/* Display the title. Input for editing is inside RoadmapStepDetailPanel */}
+                  Editing: {selectedNodeForPanel.title}
+                </SheetTitle>
+                <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
+              </SheetHeader>
+              <RoadmapStepDetailPanel
+                step={selectedNodeForPanel}
+                onDescriptionChange={handleStepDescriptionChange}
+                onTitleChange={handleStepTitleChange}
+                isOwner={isOwner}
+              />
+            </>
           )}
         </SheetContent>
       </Sheet>
@@ -1050,3 +1048,5 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
+
+    
