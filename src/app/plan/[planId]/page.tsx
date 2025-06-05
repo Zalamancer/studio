@@ -26,27 +26,28 @@ import { Textarea } from '@/components/ui/textarea';
 
 const NODE_WIDTH = 256; // Default width of RoadmapStepCard (w-64)
 const DOT_SIZE = 8;
-const DOT_OFFSET = -DOT_SIZE; // Used for placing dots slightly outside the card bounds
+const DOT_OFFSET = -DOT_SIZE;
 
-const HEADER_PADDING_TOP = 10; // p-2.5
-const HEADER_PADDING_BOTTOM = 10; // p-2.5
-const HEADER_TITLE_LINE_HEIGHT = 20; // text-sm font-semibold -> line-height approx 20px
-const HEADER_DESCRIPTION_LINE_HEIGHT = 16; // text-xs -> line-height approx 16px
+// Detailed constants for height calculation
+const HEADER_PADDING_TOP = 10; // p-2.5 on CardHeader
+const HEADER_PADDING_BOTTOM = 10; // p-2.5 on CardHeader
+const HEADER_TITLE_LINE_HEIGHT = 20; // text-sm font-semibold -> approx 20px line-height (Tailwind default)
+const HEADER_DESCRIPTION_LINE_HEIGHT = 16; // text-xs -> approx 16px line-height
 
-const CONTENT_PADDING_TOP = 6;    // pt-1.5
-const CONTENT_PADDING_BOTTOM = 10;  // pb from p-2.5
+const CONTENT_PADDING_TOP = 6;    // pt-1.5 on CardContent
+const CONTENT_PADDING_BOTTOM = 10;  // pb from p-2.5 on CardContent
 const SUBSTEPS_LABEL_TEXT_HEIGHT = 16; // text-xs font-medium
 const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4; // mb-1
 const SUBSTEP_ITEM_LINE_HEIGHT = 16; // text-xs
-const SUBSTEP_INTER_ITEM_SPACING = 2; // space-y-0.5 from Tailwind (0.125rem * 16px/rem = 2px)
+const SUBSTEP_INTER_ITEM_SPACING = 2; // space-y-0.5 means 0.125rem, typically 2px if 1rem = 16px
 
-const FOOTER_PADDING_TOP = 8;     // p-2
-const FOOTER_PADDING_BOTTOM = 8;  // p-2
+const FOOTER_PADDING_TOP = 8;     // p-2 on CardFooter
+const FOOTER_PADDING_BOTTOM = 8;  // p-2 on CardFooter
 const FOOTER_CONTENT_HEIGHT = 28;  // Buttons h-7 (size="xs")
 
-const INTERNAL_BORDER_HEIGHT = 1; // border-t
+const INTERNAL_BORDER_HEIGHT = 1; // For border-t elements
 
-const NODE_END_PADDING = 50; // Extra padding below the last node before 100vh buffer
+const NODE_END_PADDING = 50;
 
 
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
@@ -54,8 +55,8 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
 
   // Header
   let headerInternalContent = HEADER_TITLE_LINE_HEIGHT; // Title is always there
-  if (step.type) { // Assuming type is always shown if present, like a description
-    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT;
+  if (step.type) {
+    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT; // Add if type (acting as description) exists
   }
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
 
@@ -75,13 +76,13 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   // Footer
   calculatedHeight += INTERNAL_BORDER_HEIGHT; // Border above footer
   calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
-  
-  const baseMinHeightForEmptyCard = 
-    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) + 
-    INTERNAL_BORDER_HEIGHT + 
-    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + 
-    INTERNAL_BORDER_HEIGHT + 
-    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM);
+
+  const baseMinHeightForEmptyCard =
+    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) + // Header
+    INTERNAL_BORDER_HEIGHT + // Content border
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // Empty content
+    INTERNAL_BORDER_HEIGHT + // Footer border
+    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM); // Footer
 
   return Math.max(calculatedHeight, baseMinHeightForEmptyCard);
 };
@@ -136,7 +137,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       if (cardDivRef.current && dotRef.current) {
         const cardRect = cardDivRef.current.getBoundingClientRect();
         const dotRect = dotRef.current.getBoundingClientRect();
-        // Calculate offset relative to the parent card's top edge
         const relativeYOffset = (dotRect.top - cardRect.top) + (dotRect.height / 2);
         onInitiateNodeFromDot(e, step.id, 'W', relativeYOffset);
       } else {
@@ -151,7 +151,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         onClick={handleSubStepDotClick}
         className={cn(
           "inline-block rounded-full bg-muted-foreground",
-          "h-2 w-2", // Adjusted size for better visual appearance
+          "h-2 w-2",
           "transition-all duration-150 ease-in-out",
           "hover:cursor-pointer hover:bg-green-500",
           "hover:scale-150"
@@ -166,13 +166,13 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       ref={cardDivRef}
       className={cn(
         "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10",
-        "flex flex-col", // Ensure card grows with content vertically
+        "flex flex-col",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
     >
       <CardHeader
-        className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center flex-shrink-0" // Added flex-shrink-0
+        className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center flex-shrink-0"
         onMouseDown={handleHeaderMouseDown}
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
@@ -186,7 +186,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         {step.subSteps && step.subSteps.length > 0 && (
           <>
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
-            <ul className="list-none space-y-0.5 pl-0 ml-0"> {/* Ensure no extra ul padding */}
+            <ul className="list-none space-y-0.5 pl-0 ml-0">
               {step.subSteps.map((subStep, index) => (
                 <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
                   <SubStepDot subStepIndex={index} />
@@ -200,7 +200,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         )}
       </CardContent>
 
-      <CardFooter className="p-2 border-t flex items-center justify-end gap-1.5 flex-shrink-0"> {/* Added flex-shrink-0 */}
+      <CardFooter className="p-2 border-t flex items-center justify-end gap-1.5 flex-shrink-0">
         <Button
           variant="outline"
           size="xs"
@@ -222,7 +222,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         </Button>
       </CardFooter>
 
-      {/* Connection Dots for Selected Card */}
       {isSelected && (
         <>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
@@ -318,7 +317,7 @@ const ViewPlanPage = () => {
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [nodeStartPos, setNodeStartPos] = useState<{ x: number; y: number } | null>(null);
-  
+
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
 
 
@@ -391,9 +390,9 @@ const ViewPlanPage = () => {
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
-    setSelectedStepId(parentId); 
+    setSelectedStepId(parentId);
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
-    setSelectedNodeForPanel(null); 
+    setSelectedNodeForPanel(null);
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setCurrentParentStepForDialog, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
@@ -410,7 +409,7 @@ const ViewPlanPage = () => {
       id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       title: formData.title,
       type: formData.type,
-      description: null, 
+      description: null,
     };
 
     setRoadmapSteps(prevSteps => {
@@ -498,24 +497,28 @@ const ViewPlanPage = () => {
 
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
     if (draggingNodeId && dragStartPos && nodeStartPos && canvasRef.current) {
+      const currentCanvasClientWidth = canvasRef.current.clientWidth;
       const dx = event.clientX - dragStartPos.x;
       const dy = event.clientY - dragStartPos.y;
-      
-      const currentCanvasClientWidth = canvasRef.current.clientWidth;
+
       const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
 
-      setRoadmapSteps(prevSteps =>
-        prevSteps.map(step =>
+      const newX = Math.round(Math.max(0, Math.min(nodeStartPos.x + dx, maxX)));
+      const newY = Math.round(Math.max(0, nodeStartPos.y + dy));
+
+      setRoadmapSteps(prevSteps => {
+        const currentDraggingStep = prevSteps.find(s => s.id === draggingNodeId);
+        if (currentDraggingStep && currentDraggingStep.x === newX && currentDraggingStep.y === newY) {
+          return prevSteps; // Avoid update if position hasn't changed
+        }
+        return prevSteps.map(step =>
           step.id === draggingNodeId
-            ? { ...step,
-                x: Math.round(Math.max(0, Math.min(nodeStartPos.x + dx, maxX))),
-                y: Math.round(Math.max(0, nodeStartPos.y + dy))
-              }
+            ? { ...step, x: newX, y: newY }
             : step
-        )
-      );
+        );
+      });
     }
-  }, [draggingNodeId, dragStartPos, nodeStartPos ]);
+  }, [draggingNodeId, dragStartPos, nodeStartPos]); // Removed canvasRef from deps, as ref itself is stable
 
   const handleMouseUpOnCanvas = useCallback(() => {
     setDraggingNodeId(null);
@@ -633,7 +636,7 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas} 
+            onMouseLeave={handleMouseUpOnCanvas}
             onClick={handleCanvasClick}
             style={{ minHeight: dynamicCanvasMinHeight ? `${dynamicCanvasMinHeight}px` : '100vh' }}
         >
@@ -666,12 +669,11 @@ const ViewPlanPage = () => {
                 case 'W': x1 = sourceStep.x; y1 = sourceStep.y + (targetStep.sourceLineYOffset !== undefined ? targetStep.sourceLineYOffset : sourceCardHeight / 2); break;
               }
 
-              // Target points to the middle of the opposite edge
-              switch (targetStep.sourceAnchor) { 
-                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break; // From Top (N) of source to Bottom (S) of target
-                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break; // From Bottom (S) of source to Top (N) of target
-                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break; // From Right (E) of source to Left (W) of target
-                case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break; // From Left (W) of source to Right (E) of target
+              switch (targetStep.sourceAnchor) {
+                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break;
+                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break;
+                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break;
+                case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break;
                 default: return null;
               }
 
@@ -734,7 +736,7 @@ const ViewPlanPage = () => {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedNodeForPanel(null);
-            setSelectedStepId(null); 
+            setSelectedStepId(null);
           }
         }}
       >
