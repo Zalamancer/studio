@@ -9,7 +9,7 @@ import { getPlanById } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep } from '@/types/plan';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Move, GripVertical } from 'lucide-react';
+import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Move, GripVertical } from 'lucide-react'; // Used ShareIcon instead of Share
 import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
@@ -21,12 +21,13 @@ import { cn } from '@/lib/utils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
 import { useToast } from '@/hooks/use-toast';
 
-const NODE_WIDTH = 256; // approx 64 * 4 (w-64)
-const NODE_HEIGHT = 160; // estimated height for a card with a couple of sub-steps
-const NODE_WIDTH_WITH_MARGIN = NODE_WIDTH + 64; // Increased margin for better spacing
-const NODE_HEIGHT_WITH_MARGIN = NODE_HEIGHT + 64; // Increased margin
-const DOT_SIZE = 8; // px
-const DOT_OFFSET = -DOT_SIZE / 2; // px, to center the dot on the edge
+const NODE_WIDTH = 256;
+const NODE_HEIGHT = 160; // Approximate height for line calculations. Actual card height may vary.
+const NODE_WIDTH_WITH_MARGIN = NODE_WIDTH + 64;
+const NODE_HEIGHT_WITH_MARGIN = NODE_HEIGHT + 64;
+const DOT_SIZE = 8;
+const DOT_OFFSET = -DOT_SIZE / 2;
+const DOT_CONNECTION_OFFSET = 4; // Visual offset for line connection from the edge, to align with dot centers
 
 interface RoadmapStepCardProps {
   step: RoadmapStep;
@@ -35,7 +36,7 @@ interface RoadmapStepCardProps {
   onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => void;
   isSelected: boolean;
   isSubmitting: boolean;
-  onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void; // Changed event type for CardHeader
+  onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void;
 }
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
@@ -49,18 +50,19 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
 }) => {
 
   const handleDotClick = (e: React.MouseEvent, anchor: 'N' | 'S' | 'E' | 'W') => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent card selection when clicking a dot
     onInitiateNodeFromDot(e, step.id, anchor);
   };
 
-  const handleHeaderMouseDown = (e: React.MouseEvent<HTMLDivElement>) => { // Changed event type
-    e.stopPropagation();
+  const handleHeaderMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation(); // Prevent card selection when starting a drag
     onMouseDownOnNode(e, step.id);
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.card-body-content')) {
-        onSelectStep(e, step.id);
+    // Only select if the click is directly on the card body or content, not header/footer/dots
+     if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.card-body-content')) {
+      onSelectStep(e, step.id);
     }
   };
 
@@ -72,15 +74,15 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   return (
     <div
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10", // Added z-10
-        isSelected && "ring-2 ring-primary shadow-primary/30 z-20" // Ensure selected is on top
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10",
+        isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
       onClick={handleCardClick}
     >
       <CardHeader
         className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center"
-        onMouseDown={handleHeaderMouseDown}
+        onMouseDown={handleHeaderMouseDown} // Attached to header for dragging
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
         <div className="flex-grow min-w-0 pointer-events-none card-body-content">
@@ -116,9 +118,13 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
 
       {isSelected && (
         <>
+          {/* North Dot */}
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
+          {/* South Dot */}
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
+          {/* West Dot */}
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"><Plus className="h-3 w-3" /></Button>
+          {/* East Dot */}
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
         </>
       )}
@@ -163,15 +169,16 @@ const ViewPlanPage = () => {
   });
 
   useEffect(() => {
-    if (plan?.roadmap && roadmapSteps.length === 0) { // Only set initial if roadmapSteps is empty
+    if (plan?.roadmap && roadmapSteps.length === 0 && plan.roadmap.every(s => typeof s.x === 'number' && typeof s.y === 'number')) {
       setRoadmapSteps(plan.roadmap);
     }
   }, [plan, roadmapSteps.length]);
 
   const handleInitiateNodeFromDot = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => {
-    setSelectedStepId(sourceStepId);
+    event.stopPropagation();
+    setSelectedStepId(sourceStepId); // Select the source node
     setPendingNodeFromDotInfo({ sourceStepId, sourceAnchor });
-    setCurrentParentStepForDialog(null);
+    setCurrentParentStepForDialog(null); // Not adding a sub-step
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setPendingNodeFromDotInfo, setCurrentParentStepForDialog, setIsAddStepDialogOpen]);
 
@@ -185,13 +192,14 @@ const ViewPlanPage = () => {
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
-    setSelectedStepId(parentId);
+    setSelectedStepId(parentId); // Select the parent node
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
   
   const handleSelectStep = useCallback((event: React.MouseEvent, stepId: string) => {
+    event.stopPropagation();
     setSelectedStepId(prevId => (prevId === stepId ? null : stepId));
   }, [setSelectedStepId]);
 
@@ -206,12 +214,14 @@ const ViewPlanPage = () => {
 
     setRoadmapSteps(prevSteps => {
       if (currentParentStepForDialog) {
+        // Adding a sub-step
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
             ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 } as RoadmapSubStep] }
             : step
         );
       } else {
+        // Adding a new main step
         let newX = 20;
         let newY = (prevSteps.filter(s => s.type === 'Main Category/Phase').length * (NODE_HEIGHT_WITH_MARGIN)) + 20;
         let stepSourceNodeId: string | undefined = undefined;
@@ -231,12 +241,12 @@ const ViewPlanPage = () => {
             }
         } else if (prevSteps.filter(s => s.type === 'Main Category/Phase').length > 0) {
             const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase');
-            const lastMainStepY = Math.max(...mainSteps.map(s => s.y), 0);
+            const lastMainStepY = Math.max(...mainSteps.map(s => s.y).filter(y => typeof y === 'number'), 0);
             newX = 20;
             newY = lastMainStepY + NODE_HEIGHT_WITH_MARGIN;
         }
         
-        newX = Math.max(0, newX);
+        newX = Math.max(0, newX); // Ensure non-negative coords
         newY = Math.max(0, newY);
 
         const newMainStep: RoadmapStep = {
@@ -258,10 +268,11 @@ const ViewPlanPage = () => {
     setIsSubmittingStep(false);
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
-  const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => { // Corrected event type
+  const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
+    event.stopPropagation();
+    setSelectedStepId(stepId); // Select the node on drag start
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag) {
-      setSelectedStepId(stepId);
       setDraggingNodeId(stepId);
       setDragStartPos({ x: event.clientX, y: event.clientY });
       setNodeStartPos({ x: stepToDrag.x, y: stepToDrag.y });
@@ -289,6 +300,7 @@ const ViewPlanPage = () => {
   }, [setDraggingNodeId, setDragStartPos, setNodeStartPos]);
   
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
+    // Deselect if clicking directly on the canvas background
     if (event.target === event.currentTarget) {
       setSelectedStepId(null);
     }
@@ -338,7 +350,7 @@ const ViewPlanPage = () => {
 
   const isOwner = currentUser?.uid === plan.ownerId;
   const ownerDisplayName = generateAnonymousName(plan.ownerId);
-  const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, Share, PenTool, Square, Frame, Plus, Undo, Redo ];
+  const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Plus, Undo, Redo ];
   
   let dialogTitleForAddStep = "Add New Main Roadmap Step";
   if (currentParentStepForDialog) {
@@ -365,7 +377,7 @@ const ViewPlanPage = () => {
           <Button variant="ghost" size="icon" className="h-8 w-8"><MessageSquare className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon" className="h-8 w-8"><Presentation className="h-4 w-4" /></Button>
           <Button variant="default" size="sm" className="h-8">
-            <Share2 className="h-4 w-4 mr-1.5 sm:mr-2" />
+            <Share2 className="h-4 w-4 mr-1.5 sm:mr-2" /> {/* Reverted to Share2 if ShareIcon was a typo */}
             <span className="hidden sm:inline">Share</span>
           </Button>
           {currentUser && (
@@ -397,7 +409,7 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-auto p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas}
+            onMouseLeave={handleMouseUpOnCanvas} 
             onClick={handleCanvasClick}
         >
           <div className="absolute top-4 left-4 z-20">
@@ -419,43 +431,43 @@ const ViewPlanPage = () => {
 
               let x1, y1, x2, y2;
 
-              // Calculate start point (source node)
+              // Start Point (x1, y1) from sourceStep's dot center
               switch (targetStep.sourceAnchor) {
                 case 'N':
                   x1 = sourceStep.x + NODE_WIDTH / 2;
-                  y1 = sourceStep.y;
+                  y1 = sourceStep.y + DOT_CONNECTION_OFFSET;
                   break;
                 case 'S':
                   x1 = sourceStep.x + NODE_WIDTH / 2;
-                  y1 = sourceStep.y + NODE_HEIGHT;
+                  y1 = sourceStep.y + NODE_HEIGHT - DOT_CONNECTION_OFFSET;
                   break;
                 case 'E':
-                  x1 = sourceStep.x + NODE_WIDTH;
+                  x1 = sourceStep.x + NODE_WIDTH - DOT_CONNECTION_OFFSET;
                   y1 = sourceStep.y + NODE_HEIGHT / 2;
                   break;
                 case 'W':
-                  x1 = sourceStep.x;
+                  x1 = sourceStep.x + DOT_CONNECTION_OFFSET;
                   y1 = sourceStep.y + NODE_HEIGHT / 2;
                   break;
                 default: return null;
               }
 
-              // Calculate end point (target node's opposite side)
+              // End Point (x2, y2) on targetStep's opposite dot center
               switch (targetStep.sourceAnchor) {
-                case 'N': // Target is below source, line connects to target's top
+                case 'N': // Target's South dot
                   x2 = targetStep.x + NODE_WIDTH / 2;
-                  y2 = targetStep.y;
+                  y2 = targetStep.y + NODE_HEIGHT - DOT_CONNECTION_OFFSET;
                   break;
-                case 'S': // Target is above source, line connects to target's bottom
+                case 'S': // Target's North dot
                   x2 = targetStep.x + NODE_WIDTH / 2;
-                  y2 = targetStep.y + NODE_HEIGHT;
+                  y2 = targetStep.y + DOT_CONNECTION_OFFSET;
                   break;
-                case 'E': // Target is to the right of source, line connects to target's left
-                  x2 = targetStep.x;
+                case 'E': // Target's West dot
+                  x2 = targetStep.x + DOT_CONNECTION_OFFSET;
                   y2 = targetStep.y + NODE_HEIGHT / 2;
                   break;
-                case 'W': // Target is to the left of source, line connects to target's right
-                  x2 = targetStep.x + NODE_WIDTH;
+                case 'W': // Target's East dot
+                  x2 = targetStep.x + NODE_WIDTH - DOT_CONNECTION_OFFSET;
                   y2 = targetStep.y + NODE_HEIGHT / 2;
                   break;
                 default: return null;
