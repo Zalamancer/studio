@@ -295,17 +295,21 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
   return (
     <ScrollArea className="flex-1">
       <div className="p-4 space-y-4">
-        <div>
-          <Label htmlFor={`step-title-input-${step.id}`} className="text-sm font-medium mb-1 block">Title</Label>
-          <Input
-            id={`step-title-input-${step.id}`}
-            value={editableTitle}
-            onChange={handleTitleChange}
-            placeholder="Step Title"
-            className="text-lg font-semibold border-input focus-visible:ring-ring focus-visible:ring-offset-background p-2 h-auto"
-            disabled={!isOwner}
-          />
-        </div>
+        {isOwner ? (
+          <div>
+            <Label htmlFor={`step-title-input-${step.id}`} className="text-sm font-medium mb-1 block">Title</Label>
+            <Input
+              id={`step-title-input-${step.id}`}
+              value={editableTitle}
+              onChange={handleTitleChange}
+              placeholder="Step Title"
+              className="text-lg font-semibold border-input focus-visible:ring-ring focus-visible:ring-offset-background p-2 h-auto"
+              disabled={!isOwner}
+            />
+          </div>
+        ) : (
+          <h3 className="text-lg font-semibold mb-2">{step.title}</h3>
+        )}
         <div>
           <Label htmlFor={`step-description-${step.id}`} className="text-sm font-medium mb-1 block">Description</Label>
           <Textarea
@@ -934,12 +938,15 @@ const ViewPlanPage = () => {
                 default: return null;
               }
 
+              const isSubStepLine = targetStep.sourceLineYOffset !== undefined;
+
               return (
                 <line
                   key={`line-${sourceStep.id}-${targetStep.id}`}
                   x1={x1} y1={y1} x2={x2} y2={y2}
                   stroke="hsl(var(--foreground) / 0.7)"
-                  strokeWidth="3"
+                  strokeWidth={isSubStepLine ? "1.5" : "3"}
+                  strokeDasharray={isSubStepLine ? "5 5" : "none"}
                 />
               );
             })}
@@ -988,27 +995,12 @@ const ViewPlanPage = () => {
         />
       )}
 
-      <Sheet
-        open={!!selectedNodeForPanel}
-        onOpenChange={(open) => {
-          if (!open) {
-            setSelectedNodeForPanel(null);
-            // Optionally, save changes here if you want auto-save on panel close
-            // handleSaveRoadmap();
-          }
-        }}
-      >
-        <SheetContent
-            side="right"
-            className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
-            // showCloseButton prop removed to use default close button
-        >
+      <Sheet open={!!selectedNodeForPanel} onOpenChange={(open) => { if (!open) setSelectedNodeForPanel(null); }}>
+        <SheetContent className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col">
           {selectedNodeForPanel && (
             <>
               <SheetHeader className="p-4 border-b">
-                {/* Title is now rendered here, not inside RoadmapStepDetailPanel */}
                 <SheetTitle className="truncate" title={selectedNodeForPanel.title}>
-                  {/* Display the title. Input for editing is inside RoadmapStepDetailPanel */}
                   Editing: {selectedNodeForPanel.title}
                 </SheetTitle>
                 <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
