@@ -34,6 +34,8 @@ import {
   DialogFooter as AddStepDialogFooter,
   DialogHeader as AddStepDialogHeader,
   DialogTitle as AddStepDialogTitle,
+} from '@/components/ui/dialog'; // Correct for Dialog components
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -42,7 +44,7 @@ import {
   AlertDialogFooter as ConfirmDialogFooter,
   AlertDialogHeader as ConfirmDialogHeader,
   AlertDialogTitle as ConfirmDialogTitle,
-} from '@/components/ui/dialog';
+} from '@/components/ui/alert-dialog'; // Corrected import for AlertDialog components
 
 const NODE_WIDTH = 256; // width of RoadmapStepCard
 const DOT_SIZE = 8;
@@ -104,9 +106,9 @@ interface RoadmapStepCardProps {
   onOpenDetails: (event: React.MouseEvent, step: RoadmapStep) => void;
   onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset?: number) => void;
   isSelected: boolean;
-  isSubmitting: boolean;
+  isSubmitting: boolean; // Combined submitting state from parent
   onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void;
-  onDeleteNode: (stepId: string, stepTitle: string) => void; // New prop for delete
+  onDeleteNode: (stepId: string, stepTitle: string) => void;
 }
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
@@ -266,13 +268,13 @@ interface RoadmapStepDetailPanelProps {
   step: RoadmapStep;
   onClose: () => void;
   onDescriptionChange: (stepId: string, newDescription: string | null) => void;
-  onTitleChange: (stepId: string, newTitle: string) => void; // New prop
-  isOwner: boolean; // To control editability
+  onTitleChange: (stepId: string, newTitle: string) => void;
+  isOwner: boolean;
 }
 
 const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, onClose, onDescriptionChange, onTitleChange, isOwner }) => {
   const [editableDescription, setEditableDescription] = useState(step.description || '');
-  const [editableTitle, setEditableTitle] = useState(step.title || ''); // New state for title
+  const [editableTitle, setEditableTitle] = useState(step.title || '');
 
   useEffect(() => {
     setEditableTitle(step.title || '');
@@ -549,7 +551,7 @@ const ViewPlanPage = () => {
       if (currentParentStepForDialog) {
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
-            ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id } as RoadmapSubStep] } // No x,y for sub-step data
+            ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id } as RoadmapSubStep] }
             : step
         );
       } else {
@@ -678,14 +680,7 @@ const ViewPlanPage = () => {
 
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    if (draggingNodeIdRef.current && draggingNodeIdRef.current !== stepId) {
-        // If already dragging another node, don't start a new drag, but allow selection.
-        setSelectedStepId(stepId);
-        return;
-    }
-    if (draggingNodeIdRef.current === stepId) { // Already dragging this one
-        return;
-    }
+    if (draggingNodeIdRef.current) return; // Prevent starting new drag if one is active
 
     event.stopPropagation();
     setSelectedStepId(stepId);
@@ -750,16 +745,13 @@ const ViewPlanPage = () => {
   const handleDeleteNodeClick = useCallback((stepId: string, stepTitle: string) => {
     setConfirmDeleteNodeInfo({ id: stepId, title: stepTitle });
   }, []);
-  
+
   const confirmDeleteNode = useCallback(() => {
     if (!confirmDeleteNodeInfo) return;
     const stepIdToDelete = confirmDeleteNodeInfo.id;
-  
+
     setRoadmapSteps(prevSteps => {
-      // Filter out the step to be deleted
       const updatedSteps = prevSteps.filter(step => step.id !== stepIdToDelete);
-  
-      // Clear sourceNodeId references from other nodes that pointed to the deleted node
       const finalSteps = updatedSteps.map(step => {
         if (step.sourceNodeId === stepIdToDelete) {
           return { ...step, sourceNodeId: undefined, sourceAnchor: undefined, sourceLineYOffset: undefined };
@@ -768,7 +760,7 @@ const ViewPlanPage = () => {
       });
       return finalSteps;
     });
-  
+
     if (selectedStepId === stepIdToDelete) {
       setSelectedStepId(null);
       setSelectedNodeForPanel(null);
@@ -1020,7 +1012,7 @@ const ViewPlanPage = () => {
         <SheetContent
             side="right"
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
-            showCloseButton={false} // Disable default sheet close button
+            showCloseButton={false}
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
