@@ -53,12 +53,12 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   // Header
   let headerInternalContent = HEADER_TITLE_LINE_HEIGHT;
   if (step.type) { // step.type is used as CardDescription
-    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT; // Add space if description exists
+    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT; 
   }
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
 
   // Content
-  calculatedHeight += INTERNAL_BORDER_HEIGHT; // Border between Header and Content
+  calculatedHeight += INTERNAL_BORDER_HEIGHT; 
   let contentInternalContent = 0;
   if (step.subSteps && step.subSteps.length > 0) {
     contentInternalContent += SUBSTEPS_LABEL_TEXT_HEIGHT;
@@ -71,14 +71,13 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   calculatedHeight += CONTENT_PADDING_TOP + contentInternalContent + CONTENT_PADDING_BOTTOM;
 
   // Footer
-  calculatedHeight += INTERNAL_BORDER_HEIGHT; // Border between Content and Footer
+  calculatedHeight += INTERNAL_BORDER_HEIGHT; 
   calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
-
-  // Fallback minimum height if no content in card, ensures card structure is visible
+  
   const baseMinHeight =
     (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) +
     INTERNAL_BORDER_HEIGHT +
-    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // Assume empty content section if no sub-steps
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + 
     INTERNAL_BORDER_HEIGHT +
     (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM);
 
@@ -150,22 +149,22 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         {step.subSteps && step.subSteps.length > 0 && (
           <>
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
-            <ul className="list-none space-y-1"> {/* Changed to list-none */}
+            <ul className="list-none space-y-1 pl-0 ml-0"> {/* Ensure no left padding/margin on ul */}
               {step.subSteps.map((subStep) => (
                 <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
                   <span
                     onClick={(e) => {
                       e.stopPropagation();
-                      onInitiateNodeFromDot(e, step.id, 'E'); // Default to 'E' anchor
+                      onInitiateNodeFromDot(e, step.id, 'W'); // Changed to 'W' for left creation
                     }}
                     className={cn(
                       "inline-block rounded-full bg-muted-foreground",
-                      "h-2 w-2", // Base size
+                      "h-2 w-2", 
                       "transition-all duration-150 ease-in-out",
-                      "hover:cursor-pointer hover:bg-green-500", // Or primary color
+                      "hover:cursor-pointer hover:bg-green-500", 
                       "hover:scale-150"
                     )}
-                    title="Add new step from here"
+                    title="Add new step from here (to the left)"
                   >
                   </span>
                   <span className="text-muted-foreground truncate" title={subStep.title}>
@@ -229,7 +228,13 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
   return (
     <>
       <SheetHeader className="p-4 border-b">
-        <SheetTitle className="truncate" title={step.title}>{step.title}</SheetTitle>
+        <div className="flex justify-between items-center">
+            <SheetTitle className="truncate" title={step.title}>{step.title}</SheetTitle>
+            <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7 p-1 flex-shrink-0">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+            </Button>
+        </div>
         <SheetDescription>{step.type}</SheetDescription>
       </SheetHeader>
       <ScrollArea className="flex-1">
@@ -249,7 +254,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
           {step.subSteps && step.subSteps.length > 0 && (
             <div>
               <h4 className="text-sm font-medium mb-2">Sub-steps ({step.subSteps.length})</h4>
-              <ul className="list-disc list-outside space-y-1 pl-4"> {/* Changed to list-outside for better bullet alignment */}
+              <ul className="list-disc list-outside space-y-1 pl-4"> 
                 {step.subSteps.map(sub => (
                   <li key={sub.id} className="text-sm text-muted-foreground">
                     {sub.title} <span className="text-xs text-muted-foreground/70">({sub.type})</span>
@@ -263,6 +268,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
           )}
         </div>
       </ScrollArea>
+      {/* Footer removed as per user request */}
     </>
   );
 };
@@ -341,10 +347,9 @@ const ViewPlanPage = () => {
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
-    setSelectedStepId(parentId);
+    setSelectedStepId(parentId); 
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
     setPendingNodeFromDotInfo(null);
-    // setSelectedNodeForPanel(null); // Ensure detail panel doesn't open for parent
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
 
@@ -360,7 +365,7 @@ const ViewPlanPage = () => {
       id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       title: formData.title,
       type: formData.type,
-      description: null, // Initialize with null description
+      description: null,
     };
 
     setRoadmapSteps(prevSteps => {
@@ -375,7 +380,7 @@ const ViewPlanPage = () => {
         let newY = 20;
         let stepSourceNodeId: string | undefined = undefined;
         let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
-
+        
         const currentCanvasClientWidth = canvasRef.current ? canvasRef.current.clientWidth : window.innerWidth;
 
         if (pendingNodeFromDotInfo) {
@@ -404,7 +409,7 @@ const ViewPlanPage = () => {
                 newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
             }
         }
-
+        
         const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
         newX = Math.max(0, Math.min(newX, maxX));
         newY = Math.max(0, newY);
@@ -444,16 +449,16 @@ const ViewPlanPage = () => {
     if (draggingNodeId && dragStartPos && nodeStartPos && canvasRef.current) {
       const dx = event.clientX - dragStartPos.x;
       const dy = event.clientY - dragStartPos.y;
-
+      
       const currentCanvasClientWidth = canvasRef.current.clientWidth;
       const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
 
       setRoadmapSteps(prevSteps =>
         prevSteps.map(step =>
           step.id === draggingNodeId
-            ? { ...step,
-                x: Math.max(0, Math.min(nodeStartPos.x + dx, maxX)),
-                y: Math.max(0, nodeStartPos.y + dy)
+            ? { ...step, 
+                x: Math.max(0, Math.min(nodeStartPos.x + dx, maxX)), 
+                y: Math.max(0, nodeStartPos.y + dy) 
               }
             : step
         )
@@ -468,7 +473,6 @@ const ViewPlanPage = () => {
   }, []);
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-
     if (event.target === event.currentTarget) {
       setSelectedStepId(null);
       setSelectedNodeForPanel(null);
@@ -700,7 +704,7 @@ const ViewPlanPage = () => {
         <SheetContent
             side="right"
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
-            // removed onInteractOutside={(e) => e.preventDefault()}
+            showCloseButton={false} 
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
@@ -717,3 +721,4 @@ const ViewPlanPage = () => {
 export default ViewPlanPage;
 
     
+
