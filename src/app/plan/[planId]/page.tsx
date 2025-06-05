@@ -25,35 +25,35 @@ import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 
 const NODE_WIDTH = 256; // Default width of RoadmapStepCard (w-64)
-const DOT_SIZE = 8;
-const DOT_OFFSET = -DOT_SIZE;
+const DOT_SIZE = 8; // Visual size of the connection dot
+const DOT_OFFSET = -DOT_SIZE; // Offset to place dot center on the border
 
 // Constants for height estimation
-const HEADER_PADDING_TOP = 10;
-const HEADER_PADDING_BOTTOM = 10;
-const HEADER_CONTENT_BASE_HEIGHT = 20; // For CardTitle (text-sm font-semibold) -> line-height ~20px
-const HEADER_DESCRIPTION_HEIGHT = 16; // For CardDescription (text-xs) if step.type -> line-height ~16px
+const HEADER_PADDING_TOP = 10; // p-2.5
+const HEADER_PADDING_BOTTOM = 10; // p-2.5
+const HEADER_TITLE_LINE_HEIGHT = 20; // text-sm font-semibold -> line-height approx 20px
+const HEADER_DESCRIPTION_LINE_HEIGHT = 16; // text-xs -> line-height approx 16px
 
-const CONTENT_PADDING_TOP = 6;    // CardContent pt-1.5
-const CONTENT_PADDING_BOTTOM = 10;  // CardContent p-2.5 (implies pb-2.5)
-const SUBSTEPS_LABEL_TEXT_HEIGHT = 16; // Label is text-xs font-medium -> line-height ~16px
+const CONTENT_PADDING_TOP = 6;    // pt-1.5
+const CONTENT_PADDING_BOTTOM = 10;  // pb from p-2.5
+const SUBSTEPS_LABEL_TEXT_HEIGHT = 16; // text-xs font-medium
 const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4; // mb-1
-const SUBSTEP_ITEM_LINE_HEIGHT = 16; // Li is text-xs -> line-height ~16px
-const SUBSTEP_ITEM_SPACING = 2; // space-y-0.5
+const SUBSTEP_ITEM_LINE_HEIGHT = 16; // text-xs
+const SUBSTEP_INTER_ITEM_SPACING = 2; // space-y-0.5
 
-const FOOTER_PADDING_TOP = 8;     // CardFooter p-2
-const FOOTER_PADDING_BOTTOM = 8;
-const FOOTER_CONTENT_HEIGHT = 28;  // Buttons h-7
+const FOOTER_PADDING_TOP = 8;     // p-2
+const FOOTER_PADDING_BOTTOM = 8;  // p-2
+const FOOTER_CONTENT_HEIGHT = 28;  // Buttons h-7 (size="xs")
 
-const INTERNAL_BORDER_HEIGHT = 1;
+const INTERNAL_BORDER_HEIGHT = 1; // border-t
 
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
   let calculatedHeight = 0;
 
   // Header
-  let headerInternalContent = HEADER_CONTENT_BASE_HEIGHT; // For CardTitle
-  if (step.type) { // step.type is the CardDescription
-    headerInternalContent += HEADER_DESCRIPTION_HEIGHT;
+  let headerInternalContent = HEADER_TITLE_LINE_HEIGHT;
+  if (step.type) { // step.type is used as CardDescription
+    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT; // Add space if description exists
   }
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
 
@@ -65,7 +65,7 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
     contentInternalContent += SUBSTEPS_LABEL_MARGIN_BOTTOM;
     contentInternalContent += step.subSteps.length * SUBSTEP_ITEM_LINE_HEIGHT;
     if (step.subSteps.length > 1) {
-      contentInternalContent += (step.subSteps.length - 1) * SUBSTEP_ITEM_SPACING;
+      contentInternalContent += (step.subSteps.length - 1) * SUBSTEP_INTER_ITEM_SPACING;
     }
   }
   calculatedHeight += CONTENT_PADDING_TOP + contentInternalContent + CONTENT_PADDING_BOTTOM;
@@ -74,13 +74,13 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   calculatedHeight += INTERNAL_BORDER_HEIGHT; // Border between Content and Footer
   calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
 
-  // Minimum height for a card with no description and no sub-steps
+  // Fallback minimum height if no content in card, ensures card structure is visible
   const baseMinHeight =
-    (HEADER_PADDING_TOP + HEADER_CONTENT_BASE_HEIGHT + HEADER_PADDING_BOTTOM) + // Header
-    INTERNAL_BORDER_HEIGHT + // Border H->C
-    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // Content (empty internal)
-    INTERNAL_BORDER_HEIGHT + // Border C->F
-    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM); // Footer
+    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) +
+    INTERNAL_BORDER_HEIGHT +
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // Assume empty content section if no sub-steps
+    INTERNAL_BORDER_HEIGHT +
+    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM);
 
   return Math.max(calculatedHeight, baseMinHeight);
 };
@@ -111,7 +111,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   }, [onInitiateNodeFromDot, step.id]);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation(); 
+    e.stopPropagation();
     onMouseDownOnNode(e, step.id);
   }, [onMouseDownOnNode, step.id]);
 
@@ -120,7 +120,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     onAddSubStep(e, step.id, step.title);
   }, [onAddSubStep, step.id, step.title]);
 
-  const handleOpenDetailsClick = useCallback((e: React.MouseEvent) => {
+  const handleOpenDetailsButtonClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     onOpenDetails(e, step);
   }, [onOpenDetails, step]);
@@ -130,30 +130,47 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     <div
       className={cn(
         "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10",
-        "flex flex-col", 
+        "flex flex-col",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
     >
       <CardHeader
         className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center flex-shrink-0"
-        onMouseDown={handleHeaderMouseDown} 
+        onMouseDown={handleHeaderMouseDown}
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
-        <div className="flex-grow min-w-0 pointer-events-none card-body-content"> 
+        <div className="flex-grow min-w-0 pointer-events-none card-body-content">
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
           {step.type && <CardDescription className="text-xs">{step.type}</CardDescription>}
         </div>
       </CardHeader>
 
-      <CardContent className="p-2.5 pt-1.5 border-t card-body-content"> 
+      <CardContent className="p-2.5 pt-1.5 border-t card-body-content">
         {step.subSteps && step.subSteps.length > 0 && (
           <>
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
-            <ul className="list-disc list-outside space-y-0.5">
+            <ul className="list-none space-y-1"> {/* Changed to list-none */}
               {step.subSteps.map((subStep) => (
-                <li key={subStep.id} className="text-xs text-muted-foreground" title={subStep.title}>
-                  {subStep.title} ({subStep.type})
+                <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
+                  <span
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onInitiateNodeFromDot(e, step.id, 'E'); // Default to 'E' anchor
+                    }}
+                    className={cn(
+                      "inline-block rounded-full bg-muted-foreground",
+                      "h-2 w-2", // Base size
+                      "transition-all duration-150 ease-in-out",
+                      "hover:cursor-pointer hover:bg-green-500", // Or primary color
+                      "hover:scale-150"
+                    )}
+                    title="Add new step from here"
+                  >
+                  </span>
+                  <span className="text-muted-foreground truncate" title={subStep.title}>
+                    {subStep.title} ({subStep.type})
+                  </span>
                 </li>
               ))}
             </ul>
@@ -174,7 +191,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         <Button
           variant="outline"
           size="xs"
-          onClick={handleOpenDetailsClick}
+          onClick={handleOpenDetailsButtonClick}
           disabled={isSubmitting}
           className="text-xs h-7 px-2"
           title="Open Details"
@@ -183,7 +200,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         </Button>
       </CardFooter>
 
-      
+
       {isSelected && (
         <>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
@@ -232,7 +249,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
           {step.subSteps && step.subSteps.length > 0 && (
             <div>
               <h4 className="text-sm font-medium mb-2">Sub-steps ({step.subSteps.length})</h4>
-              <ul className="list-disc list-outside space-y-1 pl-4">
+              <ul className="list-disc list-outside space-y-1 pl-4"> {/* Changed to list-outside for better bullet alignment */}
                 {step.subSteps.map(sub => (
                   <li key={sub.id} className="text-sm text-muted-foreground">
                     {sub.title} <span className="text-xs text-muted-foreground/70">({sub.type})</span>
@@ -258,7 +275,7 @@ const ViewPlanPage = () => {
   const { user: currentUser, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
-  
+
   const planId = params?.planId as string | undefined;
 
   const [roadmapSteps, setRoadmapSteps] = useState<RoadmapStep[]>([]);
@@ -266,14 +283,14 @@ const ViewPlanPage = () => {
   const [currentParentStepForDialog, setCurrentParentStepForDialog] = useState<{ id: string; title: string } | null>(null);
   const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{ sourceStepId: string; sourceAnchor: 'N' | 'S' | 'E' | 'W'; } | null>(null);
   const [isSubmittingStep, setIsSubmittingStep] = useState(false);
-  
+
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
 
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [nodeStartPos, setNodeStartPos] = useState<{ x: number; y: number } | null>(null);
-  
+
 
   const isPlanIdValidUid = React.useMemo(() => {
     if (!planId) return false;
@@ -306,32 +323,33 @@ const ViewPlanPage = () => {
 
   const handleInitiateNodeFromDot = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => {
     event.stopPropagation();
-    setSelectedStepId(sourceStepId); 
-    setSelectedNodeForPanel(null); 
+    setSelectedStepId(sourceStepId);
+    setSelectedNodeForPanel(null);
     setPendingNodeFromDotInfo({ sourceStepId, sourceAnchor });
-    setCurrentParentStepForDialog(null); 
-    setIsAddStepDialogOpen(true); 
+    setCurrentParentStepForDialog(null);
+    setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setCurrentParentStepForDialog, setIsAddStepDialogOpen]);
 
 
   const openAddMainStepDialog = useCallback(() => {
-    setSelectedStepId(null); 
-    setSelectedNodeForPanel(null); 
-    setCurrentParentStepForDialog(null); 
-    setPendingNodeFromDotInfo(null); 
+    setSelectedStepId(null);
+    setSelectedNodeForPanel(null);
+    setCurrentParentStepForDialog(null);
+    setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setSelectedNodeForPanel, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
     setSelectedStepId(parentId);
-    setCurrentParentStepForDialog({ id: parentId, title: parentTitle }); 
+    setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
     setPendingNodeFromDotInfo(null);
+    // setSelectedNodeForPanel(null); // Ensure detail panel doesn't open for parent
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
-  
+
   const handleOpenNodeDetailsClick = useCallback((event: React.MouseEvent, clickedStep: RoadmapStep) => {
-    event.stopPropagation(); 
+    event.stopPropagation();
     setSelectedNodeForPanel(current => (current?.id === clickedStep.id ? null : clickedStep));
     setSelectedStepId(current => (current === clickedStep.id ? null : clickedStep.id));
   }, [setSelectedNodeForPanel, setSelectedStepId]);
@@ -342,25 +360,25 @@ const ViewPlanPage = () => {
       id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       title: formData.title,
       type: formData.type,
-      description: null,
+      description: null, // Initialize with null description
     };
 
     setRoadmapSteps(prevSteps => {
-      if (currentParentStepForDialog) { 
+      if (currentParentStepForDialog) {
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
             ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 } as RoadmapSubStep] }
             : step
         );
-      } else { 
+      } else {
         let newX = 20;
         let newY = 20;
         let stepSourceNodeId: string | undefined = undefined;
         let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
-        
+
         const currentCanvasClientWidth = canvasRef.current ? canvasRef.current.clientWidth : window.innerWidth;
 
-        if (pendingNodeFromDotInfo) { 
+        if (pendingNodeFromDotInfo) {
             const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
             if (sourceStep) {
                 stepSourceNodeId = sourceStep.id;
@@ -374,19 +392,19 @@ const ViewPlanPage = () => {
                     case 'W': newX = sourceStep.x - (NODE_WIDTH + 64); newY = sourceStep.y; break;
                 }
             }
-        } else if (prevSteps.length > 0) { 
-            const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase'); 
+        } else if (prevSteps.length > 0) {
+            const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase');
             if (mainSteps.length > 0) {
               const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
-              newX = 20; 
+              newX = 20;
               newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
-            } else { 
+            } else {
                 const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0]);
                 newX = 20;
                 newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
             }
         }
-        
+
         const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
         newX = Math.max(0, Math.min(newX, maxX));
         newY = Math.max(0, newY);
@@ -411,9 +429,9 @@ const ViewPlanPage = () => {
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    event.stopPropagation(); 
-    setSelectedStepId(stepId); 
-    
+    event.stopPropagation();
+    setSelectedStepId(stepId);
+
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag && typeof stepToDrag.x === 'number' && typeof stepToDrag.y === 'number') {
       setDraggingNodeId(stepId);
@@ -426,7 +444,7 @@ const ViewPlanPage = () => {
     if (draggingNodeId && dragStartPos && nodeStartPos && canvasRef.current) {
       const dx = event.clientX - dragStartPos.x;
       const dy = event.clientY - dragStartPos.y;
-      
+
       const currentCanvasClientWidth = canvasRef.current.clientWidth;
       const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
 
@@ -441,7 +459,7 @@ const ViewPlanPage = () => {
         )
       );
     }
-  }, [draggingNodeId, dragStartPos, nodeStartPos ]); 
+  }, [draggingNodeId, dragStartPos, nodeStartPos ]);
 
   const handleMouseUpOnCanvas = useCallback(() => {
     setDraggingNodeId(null);
@@ -450,7 +468,7 @@ const ViewPlanPage = () => {
   }, []);
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    
+
     if (event.target === event.currentTarget) {
       setSelectedStepId(null);
       setSelectedNodeForPanel(null);
@@ -560,13 +578,13 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas} 
-            onClick={handleCanvasClick} 
+            onMouseLeave={handleMouseUpOnCanvas}
+            onClick={handleCanvasClick}
         >
           <div className="absolute top-4 left-4 z-20">
             <Button
               variant="outline"
-              onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }} 
+              onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
               disabled={isSubmittingStep || isAddStepDialogOpen}
               className="shadow-md bg-card hover:bg-muted"
             >
@@ -670,18 +688,19 @@ const ViewPlanPage = () => {
         />
       )}
 
-      <Sheet 
-        open={!!selectedNodeForPanel} 
-        onOpenChange={(open) => { 
-          if (!open) { 
-            setSelectedNodeForPanel(null); 
+      <Sheet
+        open={!!selectedNodeForPanel}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSelectedNodeForPanel(null);
             setSelectedStepId(null);
           }
         }}
       >
-        <SheetContent 
-            side="right" 
+        <SheetContent
+            side="right"
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
+            // removed onInteractOutside={(e) => e.preventDefault()}
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
@@ -696,3 +715,5 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
+
+    
