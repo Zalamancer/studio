@@ -175,12 +175,12 @@ const BoardPageContent = () => {
     <div className="container mx-auto p-4 pt-6 flex flex-col flex-grow">
       <div className={cn(
         "flex-grow",
-        isMobile ? "grid grid-cols-1" : "md:flex md:flex-row" // Use flex for desktop
+        isMobile ? "grid grid-cols-1" : "md:flex md:flex-row md:gap-0" 
       )}>
         <div className={cn(
-          "flex flex-col overflow-hidden",
-          isMobile && selectedPost ? "hidden" : "md:flex-1 md:min-w-0", // Left panel is flexible
-          !isMobile && "md:pr-4" // Padding for desktop separation
+          "flex flex-col overflow-hidden", // Ensure vertical overflow is handled, horizontal should be clipped by parent
+          isMobile && selectedPost ? "hidden" : "md:flex-1 md:min-w-0", 
+          !isMobile && "md:pr-4" 
         )}>
           <PostList
             posts={posts}
@@ -204,7 +204,7 @@ const BoardPageContent = () => {
             <SheetContent
               side="right"
               className="w-full h-full p-0 flex flex-col sm:max-w-full"
-              showCloseButton={false}
+              showCloseButton={false} 
             >
               <SheetTitle className="sr-only">
                 {selectedPost ? `Details for post: ${selectedPost.question.substring(0, 50)}${selectedPost.question.length > 50 ? '...' : ''}` : "Post Details"}
@@ -216,11 +216,11 @@ const BoardPageContent = () => {
           </Sheet>
         ) : (
           selectedPost ? (
-            <div className="md:w-[450px] md:flex-shrink-0 md:border-l md:border-border md:pl-4 flex flex-col">
+            <div className="md:w-[450px] md:flex-shrink-0 md:border-l md:border-border md:pl-4 flex flex-col md:overflow-hidden"> {/* Added md:overflow-hidden */}
               {renderPostDetailPanel()}
             </div>
           ) : (
-            <div className="hidden md:flex md:w-[450px] md:flex-shrink-0 md:border-l md:border-border md:pl-4 flex-col items-center justify-center p-8 bg-card/50 text-muted-foreground sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)]">
+            <div className="hidden md:flex md:w-[450px] md:flex-shrink-0 md:border-l md:border-border md:pl-4 flex-col items-center justify-center p-8 bg-card/50 text-muted-foreground sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] md:overflow-hidden"> {/* Added md:overflow-hidden */}
               <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
               <p className="text-lg">Select a post to view details</p>
               <p className="text-sm mt-1">Details will appear here once you click on a post from the list.</p>
