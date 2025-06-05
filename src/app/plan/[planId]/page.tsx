@@ -25,33 +25,64 @@ import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 
 const NODE_WIDTH = 256; // Default width of RoadmapStepCard (w-64)
-const DOT_SIZE = 8; 
-const DOT_OFFSET = -DOT_SIZE; 
+const DOT_SIZE = 8;
+const DOT_OFFSET = -DOT_SIZE;
 
 // Constants for height estimation
-const CARD_HEADER_EST_HEIGHT = 40;
-const CARD_FOOTER_EST_HEIGHT = 40;
-const CARD_CONTENT_PADDING_EST_Y = 10; 
-const CARD_DESCRIPTION_EST_HEIGHT = 18; 
-const SUBSTEPS_LABEL_EST_HEIGHT = 20;
-const SUBSTEP_ITEM_EST_HEIGHT = 22; 
-const MIN_CARD_EST_HEIGHT = 120;
+const HEADER_PADDING_TOP = 10;
+const HEADER_PADDING_BOTTOM = 10;
+const HEADER_CONTENT_BASE_HEIGHT = 20; // For CardTitle (text-sm font-semibold) -> line-height ~20px
+const HEADER_DESCRIPTION_HEIGHT = 16; // For CardDescription (text-xs) if step.type -> line-height ~16px
+
+const CONTENT_PADDING_TOP = 6;    // CardContent pt-1.5
+const CONTENT_PADDING_BOTTOM = 10;  // CardContent p-2.5 (implies pb-2.5)
+const SUBSTEPS_LABEL_TEXT_HEIGHT = 16; // Label is text-xs font-medium -> line-height ~16px
+const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4; // mb-1
+const SUBSTEP_ITEM_LINE_HEIGHT = 16; // Li is text-xs -> line-height ~16px
+const SUBSTEP_ITEM_SPACING = 2; // space-y-0.5
+
+const FOOTER_PADDING_TOP = 8;     // CardFooter p-2
+const FOOTER_PADDING_BOTTOM = 8;
+const FOOTER_CONTENT_HEIGHT = 28;  // Buttons h-7
+
+const INTERNAL_BORDER_HEIGHT = 1;
 
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
-  let height = CARD_HEADER_EST_HEIGHT + CARD_FOOTER_EST_HEIGHT + CARD_CONTENT_PADDING_EST_Y;
-  if (step.type) {
-    height += CARD_DESCRIPTION_EST_HEIGHT;
+  let calculatedHeight = 0;
+
+  // Header
+  let headerInternalContent = HEADER_CONTENT_BASE_HEIGHT; // For CardTitle
+  if (step.type) { // step.type is the CardDescription
+    headerInternalContent += HEADER_DESCRIPTION_HEIGHT;
   }
+  calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
+
+  // Content
+  calculatedHeight += INTERNAL_BORDER_HEIGHT; // Border between Header and Content
+  let contentInternalContent = 0;
   if (step.subSteps && step.subSteps.length > 0) {
-    height += SUBSTEPS_LABEL_EST_HEIGHT; // Label "Sub-steps:"
-    height += step.subSteps.length * SUBSTEP_ITEM_EST_HEIGHT; // List items
-    if (step.subSteps.length > 1) { // Add spacing between items if more than one sub-step
-      height += (step.subSteps.length - 1) * 2; // 2px for space-y-0.5 for each gap
+    contentInternalContent += SUBSTEPS_LABEL_TEXT_HEIGHT;
+    contentInternalContent += SUBSTEPS_LABEL_MARGIN_BOTTOM;
+    contentInternalContent += step.subSteps.length * SUBSTEP_ITEM_LINE_HEIGHT;
+    if (step.subSteps.length > 1) {
+      contentInternalContent += (step.subSteps.length - 1) * SUBSTEP_ITEM_SPACING;
     }
-    height += 8; // A fixed small buffer for the sub-step section.
   }
-  height += 20; // Final general buffer
-  return Math.max(height, MIN_CARD_EST_HEIGHT);
+  calculatedHeight += CONTENT_PADDING_TOP + contentInternalContent + CONTENT_PADDING_BOTTOM;
+
+  // Footer
+  calculatedHeight += INTERNAL_BORDER_HEIGHT; // Border between Content and Footer
+  calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
+
+  // Minimum height for a card with no description and no sub-steps
+  const baseMinHeight =
+    (HEADER_PADDING_TOP + HEADER_CONTENT_BASE_HEIGHT + HEADER_PADDING_BOTTOM) + // Header
+    INTERNAL_BORDER_HEIGHT + // Border H->C
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // Content (empty internal)
+    INTERNAL_BORDER_HEIGHT + // Border C->F
+    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM); // Footer
+
+  return Math.max(calculatedHeight, baseMinHeight);
 };
 
 
@@ -80,7 +111,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   }, [onInitiateNodeFromDot, step.id]);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    e.stopPropagation();
+    e.stopPropagation(); // Prevent canvas click through header drag
     onMouseDownOnNode(e, step.id);
   }, [onMouseDownOnNode, step.id]);
 
@@ -99,23 +130,23 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     <div
       className={cn(
         "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10",
-        "flex flex-col",
+        "flex flex-col", // Ensure flex column layout for proper height distribution
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
     >
       <CardHeader
         className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center flex-shrink-0"
-        onMouseDown={handleHeaderMouseDown}
+        onMouseDown={handleHeaderMouseDown} // Keep this for dragging
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
-        <div className="flex-grow min-w-0 pointer-events-none card-body-content">
+        <div className="flex-grow min-w-0 pointer-events-none card-body-content"> {/* Ensure content can be selected */}
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
           {step.type && <CardDescription className="text-xs">{step.type}</CardDescription>}
         </div>
       </CardHeader>
 
-      <CardContent className="p-2.5 pt-1.5 border-t card-body-content">
+      <CardContent className="p-2.5 pt-1.5 border-t card-body-content"> {/* Ensure content can be selected */}
         {step.subSteps && step.subSteps.length > 0 && (
           <>
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
@@ -143,7 +174,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         <Button
           variant="outline"
           size="xs"
-          onClick={handleOpenDetailsClick}
+          onClick={handleOpenDetailsClick} // Changed from onCardClick
           disabled={isSubmitting}
           className="text-xs h-7 px-2"
           title="Open Details"
@@ -152,6 +183,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         </Button>
       </CardFooter>
 
+      {/* Connection Dots - Placed on top of the card so they respond to clicks */}
       {isSelected && (
         <>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
@@ -176,6 +208,9 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
   useEffect(() => {
     setEditableDescription(step.description || '');
   }, [step]);
+
+  // In a real app, you'd have a way to save editableDescription (e.g., on blur, or with a save button)
+  // For now, it's just local state within the panel.
 
   return (
     <>
@@ -214,6 +249,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
           )}
         </div>
       </ScrollArea>
+      {/* Footer removed as per previous request, relying on Sheet's own close button */}
     </>
   );
 };
@@ -226,6 +262,7 @@ const ViewPlanPage = () => {
   const { user: currentUser, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const canvasRef = useRef<HTMLDivElement>(null);
+  // const [canvasWidth, setCanvasWidth] = useState(0); // Removed, using clientWidth directly
   
   const planId = params?.planId as string | undefined;
 
@@ -271,34 +308,51 @@ const ViewPlanPage = () => {
     }
   }, [plan]);
 
+  // Update canvasWidth on resize - No longer needed as we use clientWidth directly
+  // useEffect(() => {
+  //   if (!canvasRef.current) return;
+  //   const resizeObserver = new ResizeObserver(entries => {
+  //     for (let entry of entries) {
+  //       if (entry.target === canvasRef.current) {
+  //         setCanvasWidth(entry.target.clientWidth);
+  //       }
+  //     }
+  //   });
+  //   resizeObserver.observe(canvasRef.current);
+  //   setCanvasWidth(canvasRef.current.clientWidth); // Initial set
+  //   return () => resizeObserver.disconnect();
+  // }, []);
+
+
   const handleInitiateNodeFromDot = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => {
     event.stopPropagation();
-    setSelectedStepId(sourceStepId); 
-    setSelectedNodeForPanel(null); 
+    setSelectedStepId(sourceStepId); // Highlight the source node
+    setSelectedNodeForPanel(null); // Ensure detail panel for source node is closed
     setPendingNodeFromDotInfo({ sourceStepId, sourceAnchor });
-    setCurrentParentStepForDialog(null);
-    setIsAddStepDialogOpen(true);
+    setCurrentParentStepForDialog(null); // Not adding a sub-step here
+    setIsAddStepDialogOpen(true); // Open dialog to define the new node
   }, [setSelectedStepId, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setCurrentParentStepForDialog, setIsAddStepDialogOpen]);
 
+
   const openAddMainStepDialog = useCallback(() => {
-    setSelectedStepId(null);
-    setSelectedNodeForPanel(null);
-    setCurrentParentStepForDialog(null);
-    setPendingNodeFromDotInfo(null);
+    setSelectedStepId(null); // No specific node selected on canvas when adding a main step
+    setSelectedNodeForPanel(null); // Ensure detail panel is closed
+    setCurrentParentStepForDialog(null); // Not a sub-step
+    setPendingNodeFromDotInfo(null); // Not from a specific dot
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setSelectedNodeForPanel, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
-    setSelectedStepId(parentId);
-    // setSelectedNodeForPanel(null); // Do not open panel for parent when adding sub-step
-    setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
-    setPendingNodeFromDotInfo(null);
+    setSelectedStepId(parentId); // Highlight the parent node
+    // setSelectedNodeForPanel(null); // Panel for parent remains closed
+    setCurrentParentStepForDialog({ id: parentId, title: parentTitle }); // This is for a sub-step
+    setPendingNodeFromDotInfo(null); // Not from a dot
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, /*setSelectedNodeForPanel,*/ setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
   
   const handleOpenNodeDetailsClick = useCallback((event: React.MouseEvent, clickedStep: RoadmapStep) => {
-    event.stopPropagation();
+    event.stopPropagation(); // Prevent canvas click when clicking node's open button
     setSelectedNodeForPanel(current => (current?.id === clickedStep.id ? null : clickedStep));
     setSelectedStepId(current => (current === clickedStep.id ? null : clickedStep.id));
   }, [setSelectedNodeForPanel, setSelectedStepId]);
@@ -313,21 +367,21 @@ const ViewPlanPage = () => {
     };
 
     setRoadmapSteps(prevSteps => {
-      if (currentParentStepForDialog) {
+      if (currentParentStepForDialog) { // Adding a sub-step
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
             ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 } as RoadmapSubStep] }
             : step
         );
-      } else {
+      } else { // Adding a main step (either new or from a dot)
         let newX = 20;
         let newY = 20;
         let stepSourceNodeId: string | undefined = undefined;
         let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
         
-        const currentCanvasClientWidth = canvasRef.current ? canvasRef.current.clientWidth : window.innerWidth; // Fallback
+        const currentCanvasClientWidth = canvasRef.current ? canvasRef.current.clientWidth : window.innerWidth;
 
-        if (pendingNodeFromDotInfo) {
+        if (pendingNodeFromDotInfo) { // New node from a dot
             const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
             if (sourceStep) {
                 stepSourceNodeId = sourceStep.id;
@@ -341,12 +395,16 @@ const ViewPlanPage = () => {
                     case 'W': newX = sourceStep.x - (NODE_WIDTH + 64); newY = sourceStep.y; break;
                 }
             }
-        } else if (prevSteps.length > 0) {
-            const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase');
+        } else if (prevSteps.length > 0) { // General new main step, position below last main step
+            const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase'); // Consider only main steps for this positioning
             if (mainSteps.length > 0) {
               const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
               newX = 20; 
               newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
+            } else { // If no main steps, position below any step
+                const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0]);
+                newX = 20;
+                newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
             }
         }
         
@@ -374,15 +432,17 @@ const ViewPlanPage = () => {
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    event.stopPropagation();
-    setSelectedStepId(stepId);
+    event.stopPropagation(); // Prevent canvas click when starting drag
+    setSelectedStepId(stepId); // Select node for highlight and potential panel open
+    // setSelectedNodeForPanel(null); // Don't open panel on drag start, only on "Open" button
+    
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag && typeof stepToDrag.x === 'number' && typeof stepToDrag.y === 'number') {
       setDraggingNodeId(stepId);
       setDragStartPos({ x: event.clientX, y: event.clientY });
       setNodeStartPos({ x: stepToDrag.x, y: stepToDrag.y });
     }
-  }, [roadmapSteps]);
+  }, [roadmapSteps, setSelectedStepId/*, setSelectedNodeForPanel*/]);
 
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
     if (draggingNodeId && dragStartPos && nodeStartPos && canvasRef.current) {
@@ -403,7 +463,7 @@ const ViewPlanPage = () => {
         )
       );
     }
-  }, [draggingNodeId, dragStartPos, nodeStartPos]);
+  }, [draggingNodeId, dragStartPos, nodeStartPos /*canvasWidth*/]); // Removed canvasWidth dependency
 
   const handleMouseUpOnCanvas = useCallback(() => {
     setDraggingNodeId(null);
@@ -412,7 +472,8 @@ const ViewPlanPage = () => {
   }, []);
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) { // Ensure click is on the canvas itself, not a child node
+    // Close panel if click is directly on canvas background
+    if (event.target === event.currentTarget) {
       setSelectedStepId(null);
       setSelectedNodeForPanel(null);
     }
@@ -518,16 +579,16 @@ const ViewPlanPage = () => {
 
         <main
             ref={canvasRef}
-            className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
+            className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6" // Changed overflow-auto to overflow-y-auto overflow-x-hidden
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
             onMouseLeave={handleMouseUpOnCanvas} 
-            onClick={handleCanvasClick}
+            onClick={handleCanvasClick} // This will handle closing the panel
         >
           <div className="absolute top-4 left-4 z-20">
             <Button
               variant="outline"
-              onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
+              onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }} // Stop propagation here
               disabled={isSubmittingStep || isAddStepDialogOpen}
               className="shadow-md bg-card hover:bg-muted"
             >
@@ -547,25 +608,25 @@ const ViewPlanPage = () => {
               let x1=0, y1=0, x2=0, y2=0;
 
               switch (targetStep.sourceAnchor) {
-                case 'N': 
+                case 'N':
                   x1 = sourceStep.x + NODE_WIDTH / 2;
                   y1 = sourceStep.y;
                   x2 = targetStep.x + NODE_WIDTH / 2;
                   y2 = targetStep.y + targetCardHeight;
                   break;
-                case 'S': 
+                case 'S':
                   x1 = sourceStep.x + NODE_WIDTH / 2;
                   y1 = sourceStep.y + sourceCardHeight;
                   x2 = targetStep.x + NODE_WIDTH / 2;
                   y2 = targetStep.y;
                   break;
-                case 'E': 
+                case 'E':
                   x1 = sourceStep.x + NODE_WIDTH;
                   y1 = sourceStep.y + sourceCardHeight / 2;
                   x2 = targetStep.x;
                   y2 = targetStep.y + targetCardHeight / 2;
                   break;
-                case 'W': 
+                case 'W':
                   x1 = sourceStep.x;
                   y1 = sourceStep.y + sourceCardHeight / 2;
                   x2 = targetStep.x + NODE_WIDTH;
@@ -634,7 +695,7 @@ const ViewPlanPage = () => {
       <Sheet 
         open={!!selectedNodeForPanel} 
         onOpenChange={(open) => { 
-          if (!open) {
+          if (!open) { // This handles closing via Esc or overlay click from Sheet itself
             setSelectedNodeForPanel(null); 
             setSelectedStepId(null);
           }
@@ -643,11 +704,12 @@ const ViewPlanPage = () => {
         <SheetContent 
             side="right" 
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
+            // Removed onInteractOutside - let canvas click handler manage it
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
               step={selectedNodeForPanel}
-              onClose={() => {setSelectedNodeForPanel(null); setSelectedStepId(null);}}
+              onClose={() => {setSelectedNodeForPanel(null); setSelectedStepId(null);}} // This is called by the Panel's internal close button
             />
           )}
         </SheetContent>
@@ -657,4 +719,3 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
-
