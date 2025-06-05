@@ -6,15 +6,16 @@ import {
   addDoc,
   doc,
   getDoc,
-  getDocs, // Added for getRecentPlans
-  query, // Added for getRecentPlans
-  orderBy, // Added for getRecentPlans
-  limit, // Added for getRecentPlans
+  getDocs,
+  query,
+  orderBy,
+  limit,
   serverTimestamp,
   Timestamp,
   type FieldValue,
+  updateDoc, // Added updateDoc
 } from 'firebase/firestore';
-import type { Plan, NewPlanData, ClientPlan } from '@/types/plan';
+import type { Plan, NewPlanData, ClientPlan, RoadmapStep, UpdatePlanRoadmapData } from '@/types/plan';
 
 const PLANS_COLLECTION = 'plans';
 const plansCollectionRef = collection(db, PLANS_COLLECTION);
@@ -30,7 +31,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
 
   console.log(`[planService] createPlan: Called by UID ${user.uid} with data:`, JSON.stringify(planData, null, 2));
 
-  const dataToSave: Omit<Plan, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: FieldValue, updatedAt: FieldValue } = {
+  const dataToSave: Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'roadmap'> & { createdAt: FieldValue, updatedAt: FieldValue, roadmap?: RoadmapStep[] } = {
     name: planData.name,
     ownerId: planData.ownerId,
     sector: planData.sector,
@@ -39,6 +40,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     naicsCode: planData.naicsCode || null,
     createdAt: serverTimestamp() as FieldValue,
     updatedAt: serverTimestamp() as FieldValue,
+    roadmap: planData.roadmap || [], // Initialize with empty roadmap or provided one
   };
 
   console.log("%c[planService] createPlan: FINAL DATA OBJECT being sent to Firestore:", "color: #FF1493; font-weight: bold;", JSON.parse(JSON.stringify(dataToSave)));
@@ -56,10 +58,10 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
       console.error("Firestore permission denied. Ensure security rules allow 'create' on 'plans/{planId}' collection under these conditions:");
       console.error("  1. User is authenticated (request.auth != null).");
       console.error("  2. Authenticated user's UID matches 'ownerId' in the new plan document (request.auth.uid == request.resource.data.ownerId).");
-      console.error("  3. Required fields like 'name', 'sector', 'createdAt', 'updatedAt' are present and correctly typed (e.g., timestamps are request.time).");
+      console.error("  3. Required fields like 'name', 'sector', 'createdAt', 'updatedAt', 'roadmap' are present and correctly typed (e.g., timestamps are request.time, roadmap is list).");
       console.error("  4. Optional fields ('subSector', 'industry', 'naicsCode') are either null or string.");
       console.error("  5. The document being created contains ONLY the expected fields. Check `request.resource.data.keys().hasOnly([...])` in your rule.");
-      console.error("     Expected keys based on current client code: name, ownerId, sector, subSector, industry, naicsCode, createdAt, updatedAt");
+      console.error("     Expected keys based on current client code: name, ownerId, sector, subSector, industry, naicsCode, createdAt, updatedAt, roadmap");
       throw new Error('Permission denied creating plan. Check Firestore security rules and console logs for details of data sent vs. rules expected.');
     }
     throw new Error(error.message || "Could not create plan.");
@@ -91,6 +93,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
+        roadmap: data.roadmap || [], // Include roadmap
       };
       console.log(`[planService] Plan ${planId} fetched successfully.`);
       return clientPlan;
@@ -106,6 +109,40 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
     throw new Error(error.message || "Could not fetch plan.");
   }
 };
+
+export const updatePlanRoadmap = async (planId: string, ownerId: string, updatedRoadmap: RoadmapStep[]): Promise<void> => {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("User not authenticated. Cannot update plan.");
+  }
+  if (user.uid !== ownerId) {
+    throw new Error("Authenticated user does not match plan ownerId. Cannot update.");
+  }
+  if (!planId) {
+    throw new Error("Plan ID is required to update roadmap.");
+  }
+
+  console.log(`[planService] updatePlanRoadmap: Updating roadmap for plan ID: ${planId} by owner ${ownerId}`);
+  const planDocRef = doc(plansCollectionRef, planId);
+
+  const dataToUpdate: UpdatePlanRoadmapData = {
+    roadmap: updatedRoadmap,
+    updatedAt: serverTimestamp() as FieldValue,
+  };
+
+  try {
+    await updateDoc(planDocRef, dataToUpdate);
+    console.log(`[planService] Roadmap for plan ${planId} updated successfully.`);
+  } catch (error: any) {
+    console.error(`[planService] Error updating roadmap for plan ${planId}:`, error);
+    if (error.code === 'permission-denied') {
+      console.error("Firestore permission denied. Ensure security rules allow 'update' on 'plans/{planId}' for the owner, and that 'roadmap' and 'updatedAt' are allowed fields.");
+      throw new Error('Permission denied updating plan roadmap. Check Firestore rules.');
+    }
+    throw new Error(error.message || "Could not update plan roadmap.");
+  }
+};
+
 
 export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
   console.log(`[planService] getRecentPlans: Fetching ${count} recent plans.`);
@@ -128,6 +165,7 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
         naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
+        roadmap: data.roadmap || [],
       };
     });
     console.log(`[planService] Fetched ${plans.length} recent plans.`);
@@ -145,3 +183,4 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
     throw new Error(`Failed to fetch recent plans: ${error.message || 'Unknown error'}`);
   }
 };
+

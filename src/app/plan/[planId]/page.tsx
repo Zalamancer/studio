@@ -4,12 +4,12 @@
 
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
-import { getPlanById } from '@/services/planService';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getPlanById, updatePlanRoadmap } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep } from '@/types/plan';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Move, GripVertical, X, Eye } from 'lucide-react';
+import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Move, GripVertical, X, Eye, Save } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
@@ -23,7 +23,7 @@ import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
-import { useForm } from 'react-hook-form'; // Added this import
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
@@ -240,14 +240,23 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
 interface RoadmapStepDetailPanelProps {
   step: RoadmapStep;
   onClose: () => void;
+  onDescriptionChange: (stepId: string, newDescription: string | null) => void;
 }
 
-const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, onClose }) => {
+const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, onClose, onDescriptionChange }) => {
   const [editableDescription, setEditableDescription] = useState(step.description || '');
 
   useEffect(() => {
     setEditableDescription(step.description || '');
   }, [step]);
+
+  const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const newDesc = e.target.value;
+    setEditableDescription(newDesc);
+    // Call the callback to update the parent's state
+    onDescriptionChange(step.id, newDesc.trim() === '' ? null : newDesc);
+  };
+
 
   return (
     <>
@@ -268,9 +277,9 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
             <Textarea
               id={`step-description-${step.id}`}
               value={editableDescription}
-              onChange={(e) => setEditableDescription(e.target.value)}
+              onChange={handleDescriptionChange}
               placeholder="Add details about this step..."
-              rows={4}
+              rows={6} // Increased rows for better editing
               className="text-sm resize-none"
             />
           </div>
@@ -377,6 +386,7 @@ const ViewPlanPage = () => {
   const router = useRouter();
   const { user: currentUser, loading: authLoading } = useAuth();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const planId = params?.planId as string | undefined;
@@ -391,20 +401,21 @@ const ViewPlanPage = () => {
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
 
   const draggingNodeIdRef = useRef<string | null>(null);
-  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null);
-  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null);
-  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null);
-  const dragUpdateFrameRef = useRef<number | null>(null);
-  const autoScrollFrameRef = useRef<number | null>(null);
+  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null); // Mouse screen coordinates at drag start
+  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null); // Node's canvas coordinates at drag start
+  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null); // Tracks latest mouse position during drag
+  const dragUpdateFrameRef = useRef<number | null>(null); // For node position updates
+  const autoScrollFrameRef = useRef<number | null>(null); // For canvas auto-scrolling
 
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
+  const [isSavingRoadmap, setIsSavingRoadmap] = useState(false);
 
   const isPlanIdValidUid = React.useMemo(() => {
     if (!planId) return false;
     return IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20;
   }, [planId]);
 
-  const { data: plan, isLoading, error } = useQuery<ClientPlan | null, Error>({
+  const { data: plan, isLoading, error, refetch: refetchPlan } = useQuery<ClientPlan | null, Error>({
     queryKey: ['plan', planId],
     queryFn: async () => {
       if (!planId || !isPlanIdValidUid) return null;
@@ -421,6 +432,7 @@ const ViewPlanPage = () => {
         y: Math.round(typeof step.y === 'number' ? step.y : Math.floor(index / 3) * (getEstimatedCardHeight(step) + 64) + 20),
         subSteps: step.subSteps || [],
         sourceLineYOffset: step.sourceLineYOffset,
+        description: step.description || null,
       }));
       setRoadmapSteps(initializedSteps);
     } else if (plan && !plan.roadmap) {
@@ -619,7 +631,7 @@ const ViewPlanPage = () => {
 
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    if (draggingNodeIdRef.current) return;
+    if (draggingNodeIdRef.current) return; 
     event.stopPropagation();
     setSelectedStepId(stepId);
 
@@ -663,6 +675,31 @@ const ViewPlanPage = () => {
       setSelectedNodeForPanel(null);
     }
   }, []);
+
+  const handleStepDescriptionChange = useCallback((stepId: string, newDescription: string | null) => {
+    setRoadmapSteps(prevSteps =>
+      prevSteps.map(step =>
+        step.id === stepId ? { ...step, description: newDescription } : step
+      )
+    );
+  }, []);
+
+  const handleSaveRoadmap = async () => {
+    if (!plan || !currentUser || !planId) {
+      toast({ variant: "destructive", title: "Error", description: "Plan data or user authentication missing." });
+      return;
+    }
+    setIsSavingRoadmap(true);
+    try {
+      await updatePlanRoadmap(planId, currentUser.uid, roadmapSteps);
+      toast({ title: "Roadmap Saved", description: "Your changes have been saved successfully." });
+      queryClient.invalidateQueries({ queryKey: ['plan', planId] }); // Invalidate to refetch if needed
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save roadmap." });
+    } finally {
+      setIsSavingRoadmap(false);
+    }
+  };
 
 
   if (authLoading || (isLoading && isPlanIdValidUid)) {
@@ -732,6 +769,19 @@ const ViewPlanPage = () => {
            {isOwner && <Badge variant="outline" className="text-xs ml-2 hidden sm:inline-flex">Owner</Badge>}
         </div>
         <div className="ml-auto flex items-center gap-2">
+          {isOwner && (
+            <Button
+              variant="default"
+              size="sm"
+              className="h-8"
+              onClick={handleSaveRoadmap}
+              disabled={isSavingRoadmap}
+            >
+              {isSavingRoadmap ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}
+              <span className="hidden sm:inline">Save Roadmap</span>
+              <span className="sm:hidden">Save</span>
+            </Button>
+          )}
           <Button variant="ghost" size="icon" className="h-8 w-8"><MessageSquare className="h-4 w-4" /></Button>
           <Button variant="ghost" size="icon" className="h-8 w-8"><Presentation className="h-4 w-4" /></Button>
           <Button variant="default" size="sm" className="h-8">
@@ -771,15 +821,18 @@ const ViewPlanPage = () => {
             onClick={handleCanvasClick}
             style={{ minHeight: dynamicCanvasMinHeight ? `${dynamicCanvasMinHeight}px` : '100vh' }}
         >
-          <div className="absolute top-4 left-4 z-20">
+          <div className="absolute top-4 left-4 z-20 flex items-center gap-2">
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={isSubmittingStep || isAddStepDialogOpen}
+              disabled={isSubmittingStep || isAddStepDialogOpen || !isOwner}
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
             </Button>
+            {!isOwner && (
+                 <Badge variant="secondary" className="text-xs">View Only Mode</Badge>
+            )}
           </div>
 
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
@@ -827,8 +880,8 @@ const ViewPlanPage = () => {
                 onOpenDetails={handleOpenNodeDetailsClick}
                 onInitiateNodeFromDot={handleInitiateNodeFromDot}
                 isSelected={selectedStepId === step.id}
-                isSubmitting={isSubmittingStep || isAddStepDialogOpen}
-                onMouseDownOnNode={handleMouseDownOnNode}
+                isSubmitting={isSubmittingStep || isAddStepDialogOpen || !isOwner}
+                onMouseDownOnNode={isOwner ? handleMouseDownOnNode : (e) => e.stopPropagation()} // Only allow drag if owner
               />
             ))}
 
@@ -836,7 +889,7 @@ const ViewPlanPage = () => {
             <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none">
               <StickyNote className="h-10 w-10 mb-2" />
               <p className="text-sm font-medium">Roadmap is empty.</p>
-              <p className="text-xs">Click "Add Roadmap Step" to begin planning.</p>
+              {isOwner && <p className="text-xs">Click "Add Roadmap Step" to begin planning.</p>}
             </div>
           )}
 
@@ -852,7 +905,7 @@ const ViewPlanPage = () => {
 
       {planId && (
         <AddRoadmapStepDialogInternal
-          isOpen={isAddStepDialogOpen}
+          isOpen={isAddStepDialogOpen && isOwner}
           onOpenChange={setIsAddStepDialogOpen}
           onSubmit={handleAddRoadmapStepSubmit}
           isSubmitting={isSubmittingStep}
@@ -877,6 +930,7 @@ const ViewPlanPage = () => {
             <RoadmapStepDetailPanel
               step={selectedNodeForPanel}
               onClose={() => {setSelectedNodeForPanel(null);}}
+              onDescriptionChange={isOwner ? handleStepDescriptionChange : ()=>{}} // Only pass updater if owner
             />
           )}
         </SheetContent>
@@ -887,4 +941,3 @@ const ViewPlanPage = () => {
 
 export default ViewPlanPage;
 
-    

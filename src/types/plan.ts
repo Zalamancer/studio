@@ -6,21 +6,19 @@ export interface RoadmapSubStep {
   id: string;
   parentId: string; // ID of the main step it belongs to
   title: string;
-  // type field removed
   // Potentially add: description, status, assignee, dates, etc.
 }
 
 export interface RoadmapStep {
   id: string;
   title: string;
-  // type field removed
   subSteps?: RoadmapSubStep[]; // Optional array of sub-steps
   x: number; // X coordinate for positioning on canvas
   y: number; // Y coordinate for positioning on canvas
   sourceNodeId?: string; // Optional: ID of the node this step was created from
   sourceAnchor?: 'N' | 'S' | 'E' | 'W'; // Optional: Anchor point on the source node
   sourceLineYOffset?: number; // Optional: Y-offset relative to sourceNode's top for line start (used for sub-step origins)
-  description?: string | null; // Added description for consistency
+  description?: string | null;
 }
 
 
@@ -34,18 +32,26 @@ export interface Plan {
   naicsCode: string | null; // Most specific NAICS code selected
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  roadmap?: RoadmapStep[]; // Optional: Store the roadmap structure
+  roadmap?: RoadmapStep[];
 }
 
 export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'roadmap'> {
   createdAt?: FieldValue;
   updatedAt?: FieldValue;
-  roadmap?: RoadmapStep[]; // Allow setting initial roadmap
+  roadmap?: RoadmapStep[];
 }
+
+// For updating existing plans, specifically the roadmap
+export interface UpdatePlanRoadmapData {
+  roadmap: RoadmapStep[];
+  updatedAt: FieldValue;
+}
+
 
 // Client-side representation with serializable timestamps
 export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
   createdAt: number; // Milliseconds since epoch
   updatedAt: number; // Milliseconds since epoch
-  roadmap?: RoadmapStep[]; // Include roadmap on client
+  roadmap?: RoadmapStep[];
 }
+
