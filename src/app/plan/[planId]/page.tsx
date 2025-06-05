@@ -25,8 +25,9 @@ import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 
 const NODE_WIDTH = 256; // Default width of RoadmapStepCard (w-64)
-const DOT_SIZE = 8; // Visual size of the connection dot
-const DOT_OFFSET = -DOT_SIZE; // Offset to place dot center on the border
+const DOT_SIZE = 8;
+const DOT_OFFSET = -DOT_SIZE;
+const NODE_END_PADDING = 50; // Extra padding below the last node before 100vh buffer
 
 // Constants for height estimation
 const HEADER_PADDING_TOP = 10; // p-2.5
@@ -52,7 +53,7 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
 
   // Header
   let headerInternalContent = HEADER_TITLE_LINE_HEIGHT;
-  if (step.type) { // step.type is used as CardDescription
+  if (step.type) {
     headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT;
   }
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
@@ -73,12 +74,13 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   // Footer
   calculatedHeight += INTERNAL_BORDER_HEIGHT;
   calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
-
-  const baseMinHeight =
-    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) +
-    INTERNAL_BORDER_HEIGHT +
-    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) +
-    INTERNAL_BORDER_HEIGHT +
+  
+  // Fallback to a minimum height to prevent overly small cards
+  const baseMinHeight = 
+    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) + 
+    INTERNAL_BORDER_HEIGHT + 
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // No sub-steps by default for min height
+    INTERNAL_BORDER_HEIGHT + 
     (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM);
 
   return Math.max(calculatedHeight, baseMinHeight);
@@ -89,7 +91,7 @@ interface RoadmapStepCardProps {
   step: RoadmapStep;
   onAddSubStep: (event: React.MouseEvent, parentId: string, parentTitle: string) => void;
   onOpenDetails: (event: React.MouseEvent, step: RoadmapStep) => void;
-  onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffsetRelativeToNodeTop?: number) => void;
+  onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset?: number) => void;
   isSelected: boolean;
   isSubmitting: boolean;
   onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void;
@@ -108,7 +110,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
 
   const handleDotClick = useCallback((e: React.MouseEvent, anchor: 'N' | 'S' | 'E' | 'W') => {
     e.stopPropagation();
-    onInitiateNodeFromDot(e, step.id, anchor); // No offset for main dots
+    onInitiateNodeFromDot(e, step.id, anchor);
   }, [onInitiateNodeFromDot, step.id]);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
@@ -134,13 +136,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       if (cardDivRef.current && dotRef.current) {
         const cardRect = cardDivRef.current.getBoundingClientRect();
         const dotRect = dotRef.current.getBoundingClientRect();
-        // Calculate the Y position of the dot's center relative to the card's top edge.
         const relativeYOffset = (dotRect.top + dotRect.height / 2) - cardRect.top;
         onInitiateNodeFromDot(e, step.id, 'W', relativeYOffset);
       } else {
-        // Fallback or error handling if refs are not available
         console.warn("SubStepDot: Refs not ready for precise offset calculation. Using parent's mid-left.");
-        onInitiateNodeFromDot(e, step.id, 'W'); // Fallback to parent's 'W' without specific offset
+        onInitiateNodeFromDot(e, step.id, 'W');
       }
     };
 
@@ -150,7 +150,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         onClick={handleSubStepDotClick}
         className={cn(
           "inline-block rounded-full bg-muted-foreground",
-          "h-2 w-2", // Adjusted size
+          "h-2 w-2",
           "transition-all duration-150 ease-in-out",
           "hover:cursor-pointer hover:bg-green-500",
           "hover:scale-150"
@@ -315,6 +315,8 @@ const ViewPlanPage = () => {
   const [draggingNodeId, setDraggingNodeId] = useState<string | null>(null);
   const [dragStartPos, setDragStartPos] = useState<{ x: number; y: number } | null>(null);
   const [nodeStartPos, setNodeStartPos] = useState<{ x: number; y: number } | null>(null);
+  
+  const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
 
 
   const isPlanIdValidUid = React.useMemo(() => {
@@ -338,13 +340,32 @@ const ViewPlanPage = () => {
         x: typeof step.x === 'number' ? step.x : (index % 3) * (NODE_WIDTH + 64) + 20,
         y: typeof step.y === 'number' ? step.y : Math.floor(index / 3) * (getEstimatedCardHeight(step) + 64) + 20,
         subSteps: step.subSteps || [],
-        sourceLineYOffset: step.sourceLineYOffset // Ensure this is carried over
+        sourceLineYOffset: step.sourceLineYOffset
       }));
       setRoadmapSteps(initializedSteps);
     } else if (plan && !plan.roadmap) {
       setRoadmapSteps([]);
     }
   }, [plan]);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      if (roadmapSteps.length === 0) {
+        setDynamicCanvasMinHeight(window.innerHeight);
+      } else {
+        let maxBottomY = 0;
+        roadmapSteps.forEach(step => {
+          const nodeHeight = getEstimatedCardHeight(step);
+          const nodeBottom = (step.y || 0) + nodeHeight;
+          if (nodeBottom > maxBottomY) {
+            maxBottomY = nodeBottom;
+          }
+        });
+        const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight;
+        setDynamicCanvasMinHeight(calculatedMinHeight);
+      }
+    }
+  }, [roadmapSteps]);
 
 
   const handleInitiateNodeFromDot = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset?: number) => {
@@ -367,9 +388,9 @@ const ViewPlanPage = () => {
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
-    setSelectedStepId(parentId); // Highlight the parent
+    setSelectedStepId(parentId); 
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
-    setSelectedNodeForPanel(null); // Close detail panel if open for parent
+    setSelectedNodeForPanel(null); 
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setCurrentParentStepForDialog, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
@@ -386,7 +407,7 @@ const ViewPlanPage = () => {
       id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       title: formData.title,
       type: formData.type,
-      description: null, // Description will be editable in the panel
+      description: null, 
     };
 
     setRoadmapSteps(prevSteps => {
@@ -411,15 +432,15 @@ const ViewPlanPage = () => {
               if (sourceStep) {
                   stepSourceNodeId = sourceStep.id;
                   stepSourceAnchor = pendingNodeFromDotInfo.sourceAnchor;
-                  stepSourceLineYOffset = pendingNodeFromDotInfo.sourceYOffset; // Capture the Y offset
+                  stepSourceLineYOffset = pendingNodeFromDotInfo.sourceYOffset;
 
                   const sourceCardHeight = getEstimatedCardHeight(sourceStep);
                   const newCardDynamicHeight = getEstimatedCardHeight({ ...newStepBase, subSteps: [] } as RoadmapStep);
                   switch(pendingNodeFromDotInfo.sourceAnchor) {
                       case 'N': newX = sourceStep.x; newY = sourceStep.y - (newCardDynamicHeight + 64); break;
                       case 'S': newX = sourceStep.x; newY = sourceStep.y + sourceCardHeight + 64; break;
-                      case 'E': newX = sourceStep.x + NODE_WIDTH + 64; newY = sourceStep.y; break;
-                      case 'W': newX = sourceStep.x - (NODE_WIDTH + 64); newY = sourceStep.y; break;
+                      case 'E': newX = sourceStep.x + NODE_WIDTH + 64; newY = sourceStep.y + (stepSourceLineYOffset ? (stepSourceLineYOffset - newCardDynamicHeight/2) : (sourceCardHeight/2 - newCardDynamicHeight/2)); break;
+                      case 'W': newX = sourceStep.x - (NODE_WIDTH + 64); newY = sourceStep.y + (stepSourceLineYOffset ? (stepSourceLineYOffset - newCardDynamicHeight/2) : (sourceCardHeight/2 - newCardDynamicHeight/2)); break;
                   }
               }
           } else if (prevSteps.length > 0) {
@@ -447,7 +468,7 @@ const ViewPlanPage = () => {
           y: newY,
           sourceNodeId: stepSourceNodeId,
           sourceAnchor: stepSourceAnchor,
-          sourceLineYOffset: stepSourceLineYOffset, // Store this for line drawing
+          sourceLineYOffset: stepSourceLineYOffset,
         };
         return [...prevSteps, newMainStep];
       }
@@ -609,8 +630,9 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas} // Important for releasing drag outside canvas
-            onClick={handleCanvasClick} // For deselecting nodes
+            onMouseLeave={handleMouseUpOnCanvas} 
+            onClick={handleCanvasClick}
+            style={{ minHeight: dynamicCanvasMinHeight ? `${dynamicCanvasMinHeight}px` : '100vh' }}
         >
           <div className="absolute top-4 left-4 z-20">
             <Button
@@ -634,28 +656,14 @@ const ViewPlanPage = () => {
 
               let x1=0, y1=0, x2=0, y2=0;
 
-              // Calculate source point (x1, y1)
               switch (targetStep.sourceAnchor) {
-                case 'N':
-                  x1 = sourceStep.x + NODE_WIDTH / 2;
-                  y1 = sourceStep.y;
-                  break;
-                case 'S':
-                  x1 = sourceStep.x + NODE_WIDTH / 2;
-                  y1 = sourceStep.y + sourceCardHeight;
-                  break;
-                case 'E':
-                  x1 = sourceStep.x + NODE_WIDTH;
-                  y1 = sourceStep.y + (targetStep.sourceLineYOffset !== undefined ? targetStep.sourceLineYOffset : sourceCardHeight / 2);
-                  break;
-                case 'W':
-                  x1 = sourceStep.x;
-                  y1 = sourceStep.y + (targetStep.sourceLineYOffset !== undefined ? targetStep.sourceLineYOffset : sourceCardHeight / 2);
-                  break;
+                case 'N': x1 = sourceStep.x + NODE_WIDTH / 2; y1 = sourceStep.y; break;
+                case 'S': x1 = sourceStep.x + NODE_WIDTH / 2; y1 = sourceStep.y + sourceCardHeight; break;
+                case 'E': x1 = sourceStep.x + NODE_WIDTH; y1 = sourceStep.y + (targetStep.sourceLineYOffset !== undefined ? targetStep.sourceLineYOffset : sourceCardHeight / 2); break;
+                case 'W': x1 = sourceStep.x; y1 = sourceStep.y + (targetStep.sourceLineYOffset !== undefined ? targetStep.sourceLineYOffset : sourceCardHeight / 2); break;
               }
 
-              // Calculate target point (x2, y2)
-              switch (targetStep.sourceAnchor) { // Target connects to the opposite edge
+              switch (targetStep.sourceAnchor) { 
                 case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break;
                 case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break;
                 case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break;
@@ -722,19 +730,18 @@ const ViewPlanPage = () => {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedNodeForPanel(null);
-            setSelectedStepId(null); // Also deselect the node on the canvas
+            setSelectedStepId(null); 
           }
         }}
       >
         <SheetContent
             side="right"
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
-            showCloseButton={true} // Use SheetContent's built-in X
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
               step={selectedNodeForPanel}
-              onClose={() => {setSelectedNodeForPanel(null); setSelectedStepId(null);}} // Ensure canvas selection clears too
+              onClose={() => {setSelectedNodeForPanel(null); setSelectedStepId(null);}}
             />
           )}
         </SheetContent>
