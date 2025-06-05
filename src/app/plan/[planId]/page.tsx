@@ -9,7 +9,7 @@ import { getPlanById, updatePlanRoadmap } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep } from '@/types/plan';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Move, GripVertical, X, Eye, Save } from 'lucide-react';
+import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Move, GripVertical, X, Eye, Save, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
@@ -34,6 +34,14 @@ import {
   DialogFooter as AddStepDialogFooter,
   DialogHeader as AddStepDialogHeader,
   DialogTitle as AddStepDialogTitle,
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent as ConfirmDialogContent,
+  AlertDialogDescription as ConfirmDialogDescription,
+  AlertDialogFooter as ConfirmDialogFooter,
+  AlertDialogHeader as ConfirmDialogHeader,
+  AlertDialogTitle as ConfirmDialogTitle,
 } from '@/components/ui/dialog';
 
 const NODE_WIDTH = 256; // width of RoadmapStepCard
@@ -98,6 +106,7 @@ interface RoadmapStepCardProps {
   isSelected: boolean;
   isSubmitting: boolean;
   onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void;
+  onDeleteNode: (stepId: string, stepTitle: string) => void; // New prop for delete
 }
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
@@ -108,6 +117,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   isSelected,
   isSubmitting,
   onMouseDownOnNode,
+  onDeleteNode,
 }) => {
   const cardDivRef = useRef<HTMLDivElement>(null);
 
@@ -129,6 +139,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     e.stopPropagation();
     onOpenDetails(e, step);
   }, [onOpenDetails, step]);
+
+  const handleDeleteButtonClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    onDeleteNode(step.id, step.title);
+  }, [onDeleteNode, step.id, step.title]);
 
   const SubStepDot: React.FC<{ subStepIndex: number }> = ({ subStepIndex }) => {
     const dotRef = React.useRef<HTMLSpanElement>(null);
@@ -170,7 +185,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         "flex flex-col",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
-      style={{ left: `${step.x}px`, top: `${step.y}px` }}
+      style={{ left: `${Math.round(step.x)}px`, top: `${Math.round(step.y)}px` }}
     >
       <CardHeader
         className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center flex-shrink-0"
@@ -208,7 +223,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
           disabled={isSubmitting}
           className="text-xs h-7 px-2"
         >
-          <Plus className="h-3 w-3 mr-1" /> Add Sub-step
+          <Plus className="h-3 w-3 mr-1" /> Sub-step
         </Button>
         <Button
           variant="outline"
@@ -219,6 +234,16 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
           title="Open Details"
         >
           <Eye className="h-3.5 w-3.5 mr-1" /> Open
+        </Button>
+        <Button
+          variant="ghost"
+          size="xs"
+          onClick={handleDeleteButtonClick}
+          disabled={isSubmitting}
+          className="text-xs h-7 px-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          title="Delete Step"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
         </Button>
       </CardFooter>
 
@@ -241,34 +266,53 @@ interface RoadmapStepDetailPanelProps {
   step: RoadmapStep;
   onClose: () => void;
   onDescriptionChange: (stepId: string, newDescription: string | null) => void;
+  onTitleChange: (stepId: string, newTitle: string) => void; // New prop
+  isOwner: boolean; // To control editability
 }
 
-const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, onClose, onDescriptionChange }) => {
+const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, onClose, onDescriptionChange, onTitleChange, isOwner }) => {
   const [editableDescription, setEditableDescription] = useState(step.description || '');
+  const [editableTitle, setEditableTitle] = useState(step.title || ''); // New state for title
 
   useEffect(() => {
+    setEditableTitle(step.title || '');
     setEditableDescription(step.description || '');
   }, [step]);
+
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newTitle = e.target.value;
+    setEditableTitle(newTitle);
+    onTitleChange(step.id, newTitle);
+  };
 
   const handleDescriptionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newDesc = e.target.value;
     setEditableDescription(newDesc);
-    // Call the callback to update the parent's state
     onDescriptionChange(step.id, newDesc.trim() === '' ? null : newDesc);
   };
-
 
   return (
     <>
       <SheetHeader className="p-4 border-b">
         <div className="flex justify-between items-center">
+          {isOwner ? (
+            <Input
+              id={`step-title-input-${step.id}`}
+              value={editableTitle}
+              onChange={handleTitleChange}
+              placeholder="Step Title"
+              className="text-lg font-semibold border-0 shadow-none focus-visible:ring-0 focus-visible:ring-offset-0 p-0 h-auto flex-grow"
+              disabled={!isOwner}
+            />
+          ) : (
             <SheetTitle className="truncate" title={step.title}>{step.title}</SheetTitle>
+          )}
             <Button variant="ghost" size="icon" onClick={onClose} className="h-7 w-7 p-1 flex-shrink-0">
                 <X className="h-4 w-4" />
                 <span className="sr-only">Close</span>
             </Button>
         </div>
-        <SheetDescription>Edit details for this roadmap step.</SheetDescription>
+        <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
       </SheetHeader>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
@@ -279,8 +323,9 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
               value={editableDescription}
               onChange={handleDescriptionChange}
               placeholder="Add details about this step..."
-              rows={6} // Increased rows for better editing
+              rows={6}
               className="text-sm resize-none"
+              disabled={!isOwner}
             />
           </div>
 
@@ -401,14 +446,16 @@ const ViewPlanPage = () => {
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
 
   const draggingNodeIdRef = useRef<string | null>(null);
-  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null); // Mouse screen coordinates at drag start
-  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null); // Node's canvas coordinates at drag start
-  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null); // Tracks latest mouse position during drag
-  const dragUpdateFrameRef = useRef<number | null>(null); // For node position updates
-  const autoScrollFrameRef = useRef<number | null>(null); // For canvas auto-scrolling
+  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null);
+  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null);
+  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null);
+  const dragUpdateFrameRef = useRef<number | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
 
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
   const [isSavingRoadmap, setIsSavingRoadmap] = useState(false);
+
+  const [confirmDeleteNodeInfo, setConfirmDeleteNodeInfo] = useState<{ id: string; title: string } | null>(null);
 
   const isPlanIdValidUid = React.useMemo(() => {
     if (!planId) return false;
@@ -502,7 +549,7 @@ const ViewPlanPage = () => {
       if (currentParentStepForDialog) {
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
-            ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 } as RoadmapSubStep] }
+            ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id } as RoadmapSubStep] } // No x,y for sub-step data
             : step
         );
       } else {
@@ -631,7 +678,15 @@ const ViewPlanPage = () => {
 
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    if (draggingNodeIdRef.current) return; 
+    if (draggingNodeIdRef.current && draggingNodeIdRef.current !== stepId) {
+        // If already dragging another node, don't start a new drag, but allow selection.
+        setSelectedStepId(stepId);
+        return;
+    }
+    if (draggingNodeIdRef.current === stepId) { // Already dragging this one
+        return;
+    }
+
     event.stopPropagation();
     setSelectedStepId(stepId);
 
@@ -684,6 +739,45 @@ const ViewPlanPage = () => {
     );
   }, []);
 
+  const handleStepTitleChange = useCallback((stepId: string, newTitle: string) => {
+    setRoadmapSteps(prevSteps =>
+      prevSteps.map(step =>
+        step.id === stepId ? { ...step, title: newTitle } : step
+      )
+    );
+  }, []);
+
+  const handleDeleteNodeClick = useCallback((stepId: string, stepTitle: string) => {
+    setConfirmDeleteNodeInfo({ id: stepId, title: stepTitle });
+  }, []);
+  
+  const confirmDeleteNode = useCallback(() => {
+    if (!confirmDeleteNodeInfo) return;
+    const stepIdToDelete = confirmDeleteNodeInfo.id;
+  
+    setRoadmapSteps(prevSteps => {
+      // Filter out the step to be deleted
+      const updatedSteps = prevSteps.filter(step => step.id !== stepIdToDelete);
+  
+      // Clear sourceNodeId references from other nodes that pointed to the deleted node
+      const finalSteps = updatedSteps.map(step => {
+        if (step.sourceNodeId === stepIdToDelete) {
+          return { ...step, sourceNodeId: undefined, sourceAnchor: undefined, sourceLineYOffset: undefined };
+        }
+        return step;
+      });
+      return finalSteps;
+    });
+  
+    if (selectedStepId === stepIdToDelete) {
+      setSelectedStepId(null);
+      setSelectedNodeForPanel(null);
+    }
+    toast({ title: "Node Deleted", description: `Step "${confirmDeleteNodeInfo.title}" and its connections removed.` });
+    setConfirmDeleteNodeInfo(null);
+  }, [confirmDeleteNodeInfo, selectedStepId, toast]);
+
+
   const handleSaveRoadmap = async () => {
     if (!plan || !currentUser || !planId) {
       toast({ variant: "destructive", title: "Error", description: "Plan data or user authentication missing." });
@@ -693,7 +787,7 @@ const ViewPlanPage = () => {
     try {
       await updatePlanRoadmap(planId, currentUser.uid, roadmapSteps);
       toast({ title: "Roadmap Saved", description: "Your changes have been saved successfully." });
-      queryClient.invalidateQueries({ queryKey: ['plan', planId] }); // Invalidate to refetch if needed
+      queryClient.invalidateQueries({ queryKey: ['plan', planId] });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save roadmap." });
     } finally {
@@ -881,7 +975,8 @@ const ViewPlanPage = () => {
                 onInitiateNodeFromDot={handleInitiateNodeFromDot}
                 isSelected={selectedStepId === step.id}
                 isSubmitting={isSubmittingStep || isAddStepDialogOpen || !isOwner}
-                onMouseDownOnNode={isOwner ? handleMouseDownOnNode : (e) => e.stopPropagation()} // Only allow drag if owner
+                onMouseDownOnNode={isOwner ? handleMouseDownOnNode : (e) => e.stopPropagation()}
+                onDeleteNode={isOwner ? handleDeleteNodeClick : () => {}}
               />
             ))}
 
@@ -925,19 +1020,41 @@ const ViewPlanPage = () => {
         <SheetContent
             side="right"
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
+            showCloseButton={false} // Disable default sheet close button
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
               step={selectedNodeForPanel}
               onClose={() => {setSelectedNodeForPanel(null);}}
-              onDescriptionChange={isOwner ? handleStepDescriptionChange : ()=>{}} // Only pass updater if owner
+              onDescriptionChange={handleStepDescriptionChange}
+              onTitleChange={handleStepTitleChange}
+              isOwner={isOwner}
             />
           )}
         </SheetContent>
       </Sheet>
+
+      {confirmDeleteNodeInfo && (
+        <AlertDialog open={!!confirmDeleteNodeInfo} onOpenChange={() => setConfirmDeleteNodeInfo(null)}>
+          <ConfirmDialogContent>
+            <ConfirmDialogHeader>
+              <ConfirmDialogTitle>Delete Roadmap Step?</ConfirmDialogTitle>
+              <ConfirmDialogDescription>
+                Are you sure you want to delete the step "{confirmDeleteNodeInfo.title}"?
+                This will also remove any sub-steps and incoming connections to this step. This action cannot be undone.
+              </ConfirmDialogDescription>
+            </ConfirmDialogHeader>
+            <ConfirmDialogFooter>
+              <AlertDialogCancel onClick={() => setConfirmDeleteNodeInfo(null)}>Cancel</AlertDialogCancel>
+              <AlertDialogAction onClick={confirmDeleteNode} className="bg-destructive hover:bg-destructive/90">
+                Delete Step
+              </AlertDialogAction>
+            </ConfirmDialogFooter>
+          </ConfirmDialogContent>
+        </AlertDialog>
+      )}
     </div>
   );
 };
 
 export default ViewPlanPage;
-
