@@ -24,60 +24,59 @@ import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 
-const NODE_WIDTH = 256; 
-const DOT_SIZE = 8; 
-const DOT_OFFSET = - (DOT_SIZE / 2); 
+const NODE_WIDTH = 256;
+const DOT_SIZE = 8;
+const DOT_OFFSET = - (DOT_SIZE / 2);
 
-const HEADER_PADDING_TOP = 10; 
-const HEADER_PADDING_BOTTOM = 10; 
-const HEADER_TITLE_LINE_HEIGHT = 20; 
-const HEADER_DESCRIPTION_LINE_HEIGHT = 16; 
+const HEADER_PADDING_TOP = 10;
+const HEADER_PADDING_BOTTOM = 10;
+const HEADER_TITLE_LINE_HEIGHT = 20;
+const HEADER_DESCRIPTION_LINE_HEIGHT = 16;
 
-const CONTENT_PADDING_TOP = 6;    
-const CONTENT_PADDING_BOTTOM = 10;  
-const SUBSTEPS_LABEL_TEXT_HEIGHT = 16; 
-const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4; 
-const SUBSTEP_ITEM_LINE_HEIGHT = 16; 
-const SUBSTEP_INTER_ITEM_SPACING = 2; 
+const CONTENT_PADDING_TOP = 6;
+const CONTENT_PADDING_BOTTOM = 10;
+const SUBSTEPS_LABEL_TEXT_HEIGHT = 16;
+const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4;
+const SUBSTEP_ITEM_LINE_HEIGHT = 16;
+const SUBSTEP_INTER_ITEM_SPACING = 2;
 
-const FOOTER_PADDING_TOP = 8;     
-const FOOTER_PADDING_BOTTOM = 8;  
-const FOOTER_CONTENT_HEIGHT = 28;  
+const FOOTER_PADDING_TOP = 8;
+const FOOTER_PADDING_BOTTOM = 8;
+const FOOTER_CONTENT_HEIGHT = 28;
 
-const INTERNAL_BORDER_HEIGHT = 1; 
+const INTERNAL_BORDER_HEIGHT = 1;
 const NODE_END_PADDING = 50;
-
 
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
   let calculatedHeight = 0;
 
-  let headerInternalContent = HEADER_TITLE_LINE_HEIGHT; 
-  if (step.type) { 
+  let headerInternalContent = HEADER_TITLE_LINE_HEIGHT;
+  if (step.type) {
     headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT;
   }
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
 
-  calculatedHeight += INTERNAL_BORDER_HEIGHT; 
+  calculatedHeight += INTERNAL_BORDER_HEIGHT;
   let contentInternalContent = 0;
   if (step.subSteps && step.subSteps.length > 0) {
-    contentInternalContent += SUBSTEPS_LABEL_TEXT_HEIGHT; 
-    contentInternalContent += SUBSTEPS_LABEL_MARGIN_BOTTOM; 
-    contentInternalContent += step.subSteps.length * SUBSTEP_ITEM_LINE_HEIGHT; 
+    contentInternalContent += SUBSTEPS_LABEL_TEXT_HEIGHT;
+    contentInternalContent += SUBSTEPS_LABEL_MARGIN_BOTTOM;
+    contentInternalContent += step.subSteps.length * SUBSTEP_ITEM_LINE_HEIGHT;
     if (step.subSteps.length > 1) {
-      contentInternalContent += (step.subSteps.length - 1) * SUBSTEP_INTER_ITEM_SPACING; 
+      contentInternalContent += (step.subSteps.length - 1) * SUBSTEP_INTER_ITEM_SPACING;
     }
   }
   calculatedHeight += CONTENT_PADDING_TOP + contentInternalContent + CONTENT_PADDING_BOTTOM;
 
-  calculatedHeight += INTERNAL_BORDER_HEIGHT; 
+  calculatedHeight += INTERNAL_BORDER_HEIGHT;
   calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
-  
+
   const baseMinHeightForEmptyCard =
-    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) + 
-    INTERNAL_BORDER_HEIGHT + 
-    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + 
-    INTERNAL_BORDER_HEIGHT + 
-    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM); 
+    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) +
+    INTERNAL_BORDER_HEIGHT +
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) +
+    INTERNAL_BORDER_HEIGHT +
+    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM);
 
   return Math.max(calculatedHeight, baseMinHeightForEmptyCard);
 };
@@ -133,9 +132,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         const cardRect = cardDivRef.current.getBoundingClientRect();
         const dotRect = dotRef.current.getBoundingClientRect();
         const relativeYOffset = (dotRect.top - cardRect.top) + (dotRect.height / 2);
-        onInitiateNodeFromDot(e, step.id, 'W', relativeYOffset); 
+        onInitiateNodeFromDot(e, step.id, 'W', relativeYOffset);
       } else {
-        onInitiateNodeFromDot(e, step.id, 'W'); 
+        onInitiateNodeFromDot(e, step.id, 'W');
       }
     };
 
@@ -145,10 +144,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         onClick={handleSubStepDotClick}
         className={cn(
           "inline-block rounded-full bg-muted-foreground",
-          "h-2 w-2", // Adjusted base size
+          "h-2 w-2",
           "transition-all duration-150 ease-in-out",
-          "hover:cursor-pointer hover:bg-green-500", // Green color on hover
-          "hover:scale-150" // Scale up on hover
+          "hover:cursor-pointer hover:bg-green-500",
+          "hover:scale-150"
         )}
         title="Add new step from this sub-step (to the left)"
       ></span>
@@ -158,7 +157,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   return (
     <div
       ref={cardDivRef}
-      data-step-id={step.id} // Add data attribute for querying
+      data-step-id={step.id}
       className={cn(
         "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10 select-none",
         "flex flex-col",
@@ -181,7 +180,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         {step.subSteps && step.subSteps.length > 0 && (
           <>
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
-            <ul className="list-none space-y-0.5 pl-0 ml-0"> {/* Changed to list-none and removed pl-1 */}
+            <ul className="list-none space-y-0.5 pl-0 ml-0">
               {step.subSteps.map((subStep, index) => (
                 <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
                   <SubStepDot subStepIndex={index} />
@@ -357,7 +356,7 @@ const ViewPlanPage = () => {
           }
         });
       }
-      const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight; // Add 100vh
+      const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight;
       setDynamicCanvasMinHeight(calculatedMinHeight < window.innerHeight ? window.innerHeight : calculatedMinHeight);
     }
   }, [roadmapSteps]);
@@ -475,54 +474,38 @@ const ViewPlanPage = () => {
     setIsSubmittingStep(false);
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
-
-  const adjustScrollForCentering = useCallback(() => {
+  const autoScrollLoop = useCallback(() => {
     if (!draggingNodeId || !canvasRef.current) {
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = null;
       return;
     }
 
-    const draggedNodeElement = canvasRef.current.querySelector(`[data-step-id="${draggingNodeId}"]`) as HTMLDivElement;
-    if (!draggedNodeElement) {
-      animationFrameRef.current = requestAnimationFrame(adjustScrollForCentering);
+    const currentRoadmapSteps = roadmapSteps; // Read directly from state
+    const draggedNode = currentRoadmapSteps.find(s => s.id === draggingNodeId);
+
+    if (!draggedNode || typeof draggedNode.x !== 'number' || typeof draggedNode.y !== 'number') {
+      animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
       return;
     }
 
-    const nodeRect = draggedNodeElement.getBoundingClientRect();
-    const nodeViewportYCenter = nodeRect.top + nodeRect.height / 2;
+    const nodeHeight = getEstimatedCardHeight(draggedNode);
+    const nodeCenterOnCanvas = draggedNode.y + nodeHeight / 2;
     const viewportCenterY = window.innerHeight / 2;
-    const scrollDelta = nodeViewportYCenter - viewportCenterY; // How much the node is off-center
+    const currentScrollTop = canvasRef.current.scrollTop;
+    const nodeCenterInViewport = nodeCenterOnCanvas - currentScrollTop;
+    const scrollDiff = nodeCenterInViewport - viewportCenterY;
 
-    // Define a threshold to prevent excessive scrolling for minor adjustments
-    const SCROLL_SENSITIVITY_THRESHOLD = 5; // px
-    const MAX_SCROLL_ADJUSTMENT_PER_FRAME = 20; // Max pixels to scroll per frame
+    const SCROLL_THRESHOLD = 1; // px
+    const SMOOTHING_FACTOR = 0.1;
 
-    if (Math.abs(scrollDelta) > SCROLL_SENSITIVITY_THRESHOLD) {
-      let adjustmentAmount = scrollDelta * 0.1; // Adjust by 10% of the delta per frame for smoothings
-      adjustmentAmount = Math.max(-MAX_SCROLL_ADJUSTMENT_PER_FRAME, Math.min(MAX_SCROLL_ADJUSTMENT_PER_FRAME, adjustmentAmount));
-      
-      const oldScrollTop = canvasRef.current.scrollTop;
-      canvasRef.current.scrollTop += adjustmentAmount;
-      const newScrollTop = canvasRef.current.scrollTop;
-      const actualScrollAmountApplied = newScrollTop - oldScrollTop;
-
-      if (actualScrollAmountApplied !== 0) {
-        // Compensate nodeStartPos.y
-        // If canvas scrolled down (scrollTop increased, actualScrollAmountApplied > 0),
-        // the node on the canvas effectively moved 'up' relative to the mouse's initial position.
-        // So, nodeStartPos.y (which is canvas-based) needs to decrease.
-        setNodeStartPos(prevPos => {
-          if (!prevPos) return null;
-          const newStartY = prevPos.y - actualScrollAmountApplied;
-          if (Math.round(prevPos.y) === Math.round(newStartY)) return prevPos;
-          return { ...prevPos, y: newStartY };
-        });
-      }
+    if (Math.abs(scrollDiff) > SCROLL_THRESHOLD) {
+      const scrollAdjustment = scrollDiff * SMOOTHING_FACTOR;
+      canvasRef.current.scrollTop += scrollAdjustment;
     }
-    animationFrameRef.current = requestAnimationFrame(adjustScrollForCentering);
-  }, [draggingNodeId]);
 
+    animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
+  }, [draggingNodeId, roadmapSteps]); // autoScrollLoop depends on roadmapSteps to get the latest node position
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
     event.stopPropagation();
@@ -535,9 +518,9 @@ const ViewPlanPage = () => {
       setNodeStartPos({ x: stepToDrag.x, y: stepToDrag.y });
 
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = requestAnimationFrame(adjustScrollForCentering);
+      animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
     }
-  }, [roadmapSteps, setSelectedStepId, adjustScrollForCentering]);
+  }, [roadmapSteps, setSelectedStepId, autoScrollLoop]);
 
 
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
@@ -546,10 +529,9 @@ const ViewPlanPage = () => {
     const currentCanvasClientWidth = canvasRef.current.clientWidth;
     const dx = event.clientX - dragStartPos.x;
     const dy = event.clientY - dragStartPos.y;
-    const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
     
-    const newX = Math.round(Math.max(0, Math.min(nodeStartPos.x + dx, maxX)));
-    const newY = Math.round(Math.max(0, nodeStartPos.y + dy)); // This newY is based on dragStartPos, which is compensated by adjustScrollLoop
+    const newX = Math.round(Math.max(0, Math.min(nodeStartPos.x + dx, currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0)));
+    const newY = Math.round(Math.max(0, nodeStartPos.y + dy));
 
     setRoadmapSteps(prevSteps => {
       const currentDraggingStep = prevSteps.find(s => s.id === draggingNodeId);
@@ -686,7 +668,7 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas} 
+            onMouseLeave={handleMouseUpOnCanvas}
             onClick={handleCanvasClick}
             style={{ minHeight: dynamicCanvasMinHeight ? `${dynamicCanvasMinHeight}px` : '100vh' }}
         >
@@ -719,11 +701,12 @@ const ViewPlanPage = () => {
                 case 'W': x1 = sourceStep.x; y1 = sourceStep.y + (targetStep.sourceLineYOffset !== undefined ? targetStep.sourceLineYOffset : sourceCardHeight / 2); break;
               }
 
+              // Adjust target connection points to middle of the edges
               switch (targetStep.sourceAnchor) {
-                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break;
-                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break;
-                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break;
-                case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break;
+                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break; // Connects to bottom-middle of target
+                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break; // Connects to top-middle of target
+                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break; // Connects to left-middle of target
+                case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break; // Connects to right-middle of target
                 default: return null;
               }
 
