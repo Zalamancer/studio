@@ -53,12 +53,12 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   // Header
   let headerInternalContent = HEADER_TITLE_LINE_HEIGHT;
   if (step.type) { // step.type is used as CardDescription
-    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT; 
+    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT;
   }
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
 
   // Content
-  calculatedHeight += INTERNAL_BORDER_HEIGHT; 
+  calculatedHeight += INTERNAL_BORDER_HEIGHT;
   let contentInternalContent = 0;
   if (step.subSteps && step.subSteps.length > 0) {
     contentInternalContent += SUBSTEPS_LABEL_TEXT_HEIGHT;
@@ -71,13 +71,13 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   calculatedHeight += CONTENT_PADDING_TOP + contentInternalContent + CONTENT_PADDING_BOTTOM;
 
   // Footer
-  calculatedHeight += INTERNAL_BORDER_HEIGHT; 
+  calculatedHeight += INTERNAL_BORDER_HEIGHT;
   calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
-  
+
   const baseMinHeight =
     (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) +
     INTERNAL_BORDER_HEIGHT +
-    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + 
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) +
     INTERNAL_BORDER_HEIGHT +
     (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM);
 
@@ -149,19 +149,19 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         {step.subSteps && step.subSteps.length > 0 && (
           <>
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
-            <ul className="list-none space-y-1 pl-0 ml-0"> {/* Ensure no left padding/margin on ul */}
+            <ul className="list-none space-y-0.5 pl-0 ml-0">
               {step.subSteps.map((subStep) => (
                 <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
                   <span
                     onClick={(e) => {
                       e.stopPropagation();
-                      onInitiateNodeFromDot(e, step.id, 'W'); // Changed to 'W' for left creation
+                      onInitiateNodeFromDot(e, step.id, 'W'); // Create to the left of parent
                     }}
                     className={cn(
                       "inline-block rounded-full bg-muted-foreground",
-                      "h-2 w-2", 
+                      "h-2 w-2",
                       "transition-all duration-150 ease-in-out",
-                      "hover:cursor-pointer hover:bg-green-500", 
+                      "hover:cursor-pointer hover:bg-green-500",
                       "hover:scale-150"
                     )}
                     title="Add new step from here (to the left)"
@@ -204,7 +204,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         <>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
-          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"><Plus className="h-3 w-3" /></Button>
+          {/* Left dot removed */}
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
         </>
       )}
@@ -254,7 +254,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
           {step.subSteps && step.subSteps.length > 0 && (
             <div>
               <h4 className="text-sm font-medium mb-2">Sub-steps ({step.subSteps.length})</h4>
-              <ul className="list-disc list-outside space-y-1 pl-4"> 
+              <ul className="list-disc list-outside space-y-1 pl-4">
                 {step.subSteps.map(sub => (
                   <li key={sub.id} className="text-sm text-muted-foreground">
                     {sub.title} <span className="text-xs text-muted-foreground/70">({sub.type})</span>
@@ -268,7 +268,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
           )}
         </div>
       </ScrollArea>
-      {/* Footer removed as per user request */}
+      {/* Footer removed */}
     </>
   );
 };
@@ -347,11 +347,12 @@ const ViewPlanPage = () => {
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
-    setSelectedStepId(parentId); 
+    setSelectedStepId(parentId);
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
+    setSelectedNodeForPanel(null); // Close detail panel if open
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
-  }, [setSelectedStepId, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
+  }, [setSelectedStepId, setCurrentParentStepForDialog, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
 
   const handleOpenNodeDetailsClick = useCallback((event: React.MouseEvent, clickedStep: RoadmapStep) => {
     event.stopPropagation();
@@ -380,7 +381,7 @@ const ViewPlanPage = () => {
         let newY = 20;
         let stepSourceNodeId: string | undefined = undefined;
         let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
-        
+
         const currentCanvasClientWidth = canvasRef.current ? canvasRef.current.clientWidth : window.innerWidth;
 
         if (pendingNodeFromDotInfo) {
@@ -409,7 +410,7 @@ const ViewPlanPage = () => {
                 newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
             }
         }
-        
+
         const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
         newX = Math.max(0, Math.min(newX, maxX));
         newY = Math.max(0, newY);
@@ -449,16 +450,16 @@ const ViewPlanPage = () => {
     if (draggingNodeId && dragStartPos && nodeStartPos && canvasRef.current) {
       const dx = event.clientX - dragStartPos.x;
       const dy = event.clientY - dragStartPos.y;
-      
+
       const currentCanvasClientWidth = canvasRef.current.clientWidth;
       const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
 
       setRoadmapSteps(prevSteps =>
         prevSteps.map(step =>
           step.id === draggingNodeId
-            ? { ...step, 
-                x: Math.max(0, Math.min(nodeStartPos.x + dx, maxX)), 
-                y: Math.max(0, nodeStartPos.y + dy) 
+            ? { ...step,
+                x: Math.max(0, Math.min(nodeStartPos.x + dx, maxX)),
+                y: Math.max(0, nodeStartPos.y + dy)
               }
             : step
         )
@@ -704,7 +705,7 @@ const ViewPlanPage = () => {
         <SheetContent
             side="right"
             className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col"
-            showCloseButton={false} 
+            showCloseButton={true} // Explicitly keep the top-right X
         >
           {selectedNodeForPanel && (
             <RoadmapStepDetailPanel
@@ -719,6 +720,4 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
-
     
-
