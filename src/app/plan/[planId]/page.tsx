@@ -20,47 +20,55 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
+import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog'; // This component itself will be modified
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
+import { Input } from '@/components/ui/input';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
+import {
+  Dialog,
+  DialogClose as AddStepDialogClose, // Renamed to avoid conflict
+  DialogContent as AddStepDialogContent, // Renamed
+  DialogDescription as AddStepDialogDescription, // Renamed
+  DialogFooter as AddStepDialogFooter, // Renamed
+  DialogHeader as AddStepDialogHeader, // Renamed
+  DialogTitle as AddStepDialogTitle, // Renamed
+} from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+
 
 const NODE_WIDTH = 256; // width of RoadmapStepCard
 const DOT_SIZE = 8;
 const DOT_OFFSET = - (DOT_SIZE / 2);
 
-// Constants for card height calculation
-const HEADER_PADDING_TOP = 10; // Based on p-2.5 in Tailwind (2.5 * 4px)
+const HEADER_PADDING_TOP = 10;
 const HEADER_PADDING_BOTTOM = 10;
-const HEADER_TITLE_LINE_HEIGHT = 20; // Based on text-sm
-const HEADER_DESCRIPTION_LINE_HEIGHT = 16; // Based on text-xs
+const HEADER_TITLE_LINE_HEIGHT = 20;
+// const HEADER_DESCRIPTION_LINE_HEIGHT = 16; // No longer needed as type/description is removed from card header
 
-const CONTENT_PADDING_TOP = 6; // Based on pt-1.5
-const CONTENT_PADDING_BOTTOM = 10; // Based on p-2.5
-const SUBSTEPS_LABEL_TEXT_HEIGHT = 16; // text-xs font-medium
-const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4; // mb-1
-const SUBSTEP_ITEM_LINE_HEIGHT = 16; // text-xs
-const SUBSTEP_INTER_ITEM_SPACING = 2; // space-y-0.5
+const CONTENT_PADDING_TOP = 6;
+const CONTENT_PADDING_BOTTOM = 10;
+const SUBSTEPS_LABEL_TEXT_HEIGHT = 16;
+const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4;
+const SUBSTEP_ITEM_LINE_HEIGHT = 16;
+const SUBSTEP_INTER_ITEM_SPACING = 2;
 
-const FOOTER_PADDING_TOP = 8; // p-2
+const FOOTER_PADDING_TOP = 8;
 const FOOTER_PADDING_BOTTOM = 8;
-const FOOTER_CONTENT_HEIGHT = 28; // h-7 for buttons
+const FOOTER_CONTENT_HEIGHT = 28;
 
-const INTERNAL_BORDER_HEIGHT = 1; // For border-t
-const NODE_END_PADDING = 50; // Extra padding at the bottom of the canvas
+const INTERNAL_BORDER_HEIGHT = 1;
+const NODE_END_PADDING = 50;
 
-// Function to estimate card height
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
   let calculatedHeight = 0;
 
-  // Header height
-  let headerInternalContent = HEADER_TITLE_LINE_HEIGHT; // Title is always there
-  if (step.type) { // Description is optional
-    headerInternalContent += HEADER_DESCRIPTION_LINE_HEIGHT;
-  }
+  // Header height - only title now
+  let headerInternalContent = HEADER_TITLE_LINE_HEIGHT;
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
 
-  // Content height
-  calculatedHeight += INTERNAL_BORDER_HEIGHT; // border-t
+  calculatedHeight += INTERNAL_BORDER_HEIGHT;
   let contentInternalContent = 0;
   if (step.subSteps && step.subSteps.length > 0) {
     contentInternalContent += SUBSTEPS_LABEL_TEXT_HEIGHT;
@@ -72,17 +80,15 @@ const getEstimatedCardHeight = (step: RoadmapStep): number => {
   }
   calculatedHeight += CONTENT_PADDING_TOP + contentInternalContent + CONTENT_PADDING_BOTTOM;
 
-  // Footer height
-  calculatedHeight += INTERNAL_BORDER_HEIGHT; // border-t
+  calculatedHeight += INTERNAL_BORDER_HEIGHT;
   calculatedHeight += FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM;
 
-  // Ensure a minimum height in case content is very sparse
   const baseMinHeightForEmptyCard =
-    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) + // Header
+    (HEADER_PADDING_TOP + HEADER_TITLE_LINE_HEIGHT + HEADER_PADDING_BOTTOM) +
     INTERNAL_BORDER_HEIGHT +
-    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) + // Content (empty)
+    (CONTENT_PADDING_TOP + 0 + CONTENT_PADDING_BOTTOM) +
     INTERNAL_BORDER_HEIGHT +
-    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM); // Footer
+    (FOOTER_PADDING_TOP + FOOTER_CONTENT_HEIGHT + FOOTER_PADDING_BOTTOM);
 
   return Math.max(calculatedHeight, baseMinHeightForEmptyCard);
 };
@@ -159,13 +165,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     );
   };
 
-
   return (
     <div
       ref={cardDivRef}
       data-step-id={step.id}
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10 select-none",
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default select-none z-10", // Reverted to bg-card
         "flex flex-col",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
@@ -178,7 +183,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
         <div className="flex-grow min-w-0 pointer-events-none card-body-content">
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
-          {step.type && <CardDescription className="text-xs">{step.type}</CardDescription>}
+          {/* Removed step.type display */}
         </div>
       </CardHeader>
 
@@ -191,7 +196,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
                 <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
                   <SubStepDot subStepIndex={index} />
                   <span className="text-muted-foreground truncate" title={subStep.title}>
-                    {subStep.title} ({subStep.type})
+                    {subStep.title} {/* Removed subStep.type display */}
                   </span>
                 </li>
               ))}
@@ -259,7 +264,8 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
                 <span className="sr-only">Close</span>
             </Button>
         </div>
-        <SheetDescription>{step.type}</SheetDescription>
+        {/* Removed step.type display from SheetDescription */}
+        <SheetDescription>Edit details for this roadmap step.</SheetDescription>
       </SheetHeader>
       <ScrollArea className="flex-1">
         <div className="p-4 space-y-4">
@@ -281,7 +287,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
               <ul className="list-none space-y-1 pl-0 ml-0">
                 {step.subSteps.map(sub => (
                   <li key={sub.id} className="text-sm text-muted-foreground">
-                    {sub.title} <span className="text-xs text-muted-foreground/70">({sub.type})</span>
+                    {sub.title} {/* Removed subStep.type display */}
                   </li>
                 ))}
               </ul>
@@ -296,7 +302,85 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
   );
 };
 
+// --- AddRoadmapStepDialog internal component ---
+const addRoadmapStepDialogSchema = z.object({
+  title: z.string().min(1, "Title is required.").max(100, "Title cannot exceed 100 characters."),
+  // type field removed
+});
 
+export type AddRoadmapStepDialogFormDataInternal = z.infer<typeof addRoadmapStepDialogSchema>;
+
+interface AddRoadmapStepDialogInternalProps {
+  isOpen: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (data: AddRoadmapStepDialogFormDataInternal) => void;
+  isSubmitting: boolean;
+  parentStepTitle?: string | null;
+  // isSubStep prop is no longer needed as type is removed
+  dialogTitle?: string;
+}
+
+const AddRoadmapStepDialogInternal: React.FC<AddRoadmapStepDialogInternalProps> = ({
+  isOpen,
+  onOpenChange,
+  onSubmit,
+  isSubmitting,
+  parentStepTitle,
+  dialogTitle,
+}) => {
+  const form = useForm<AddRoadmapStepDialogFormDataInternal>({
+    resolver: zodResolver(addRoadmapStepDialogSchema),
+    defaultValues: {
+      title: '',
+    },
+  });
+
+  React.useEffect(() => {
+    if (isOpen) {
+      form.reset({ title: '' });
+    }
+  }, [isOpen, form]);
+
+  const effectiveDialogTitle = dialogTitle ||
+    (parentStepTitle
+      ? `Add Sub-step to "${parentStepTitle}"`
+      : "Add New Roadmap Step");
+
+  return (
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <AddStepDialogContent className="sm:max-w-md">
+        <AddStepDialogHeader>
+          <AddStepDialogTitle>{effectiveDialogTitle}</AddStepDialogTitle>
+          <AddStepDialogDescription>
+            Define a new step for your collaboration plan.
+          </AddStepDialogDescription>
+        </AddStepDialogHeader>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
+          <div>
+            <Label htmlFor="title-dialog">Step Title <span className="text-destructive">*</span></Label>
+            <Input id="title-dialog" {...form.register('title')} placeholder="e.g., Market Research, Phase 1 Kickoff" disabled={isSubmitting} />
+            {form.formState.errors.title && (
+              <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
+            )}
+          </div>
+          {/* Step Type Select removed */}
+          <AddStepDialogFooter>
+            <AddStepDialogClose asChild>
+              <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
+            </AddStepDialogClose>
+            <Button type="submit" disabled={isSubmitting}>
+              {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              Add Step
+            </Button>
+          </AddStepDialogFooter>
+        </form>
+      </AddStepDialogContent>
+    </Dialog>
+  );
+};
+
+
+// --- Main Page Component ---
 const ViewPlanPage = () => {
   const paramsFromHook = useParams();
   const params = paramsFromHook;
@@ -317,12 +401,13 @@ const ViewPlanPage = () => {
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
 
   const draggingNodeIdRef = useRef<string | null>(null);
-  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null);
-  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null);
-  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null);
+  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null); // Screen coords
+  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null); // Canvas coords
+  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null); // Screen coords
 
-  const animationFrameRef = useRef<number | null>(null);
+  const autoScrollFrameRef = useRef<number | null>(null);
   const dragUpdateFrameRef = useRef<number | null>(null);
+
 
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
 
@@ -347,13 +432,15 @@ const ViewPlanPage = () => {
         x: Math.round(typeof step.x === 'number' ? step.x : (index % 3) * (NODE_WIDTH + 64) + 20),
         y: Math.round(typeof step.y === 'number' ? step.y : Math.floor(index / 3) * (getEstimatedCardHeight(step) + 64) + 20),
         subSteps: step.subSteps || [],
-        sourceLineYOffset: step.sourceLineYOffset
+        sourceLineYOffset: step.sourceLineYOffset,
+        // type field is now removed from RoadmapStep type
       }));
       setRoadmapSteps(initializedSteps);
     } else if (plan && !plan.roadmap) {
       setRoadmapSteps([]);
     }
   }, [plan]);
+
 
   useEffect(() => {
     if (typeof window !== 'undefined' && canvasRef.current) {
@@ -404,12 +491,11 @@ const ViewPlanPage = () => {
     setSelectedStepId(current => (current === clickedStep.id ? null : clickedStep.id));
   }, []);
 
-  const handleAddRoadmapStepSubmit = useCallback((formData: AddRoadmapStepFormData) => {
+  const handleAddRoadmapStepSubmit = useCallback((formData: AddRoadmapStepDialogFormDataInternal) => {
     setIsSubmittingStep(true);
-    const newStepBase = {
+    const newStepBase = { // type removed from base
       id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       title: formData.title,
-      type: formData.type,
       description: null,
     };
 
@@ -447,12 +533,12 @@ const ViewPlanPage = () => {
                   }
               }
           } else if (prevSteps.length > 0) {
-              const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase');
+              const mainSteps = prevSteps; // All steps are main steps now
               if (mainSteps.length > 0) {
                 const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
                 newX = 20;
                 newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
-              } else {
+              } else { // Should not be hit if prevSteps.length > 0 and mainSteps is prevSteps
                   const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0]);
                   newX = 20;
                   newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
@@ -482,8 +568,6 @@ const ViewPlanPage = () => {
     setPendingNodeFromDotInfo(null);
     setIsSubmittingStep(false);
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
-
-  // --- Dragging and Auto-Scroll Logic ---
 
   const processDragMovementLoop = useCallback(() => {
     if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current) {
@@ -518,55 +602,54 @@ const ViewPlanPage = () => {
 
   const autoScrollLoop = useCallback(() => {
     if (!draggingNodeIdRef.current || !canvasRef.current) {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
+      if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
       return;
     }
 
     const draggedNode = roadmapSteps.find(s => s.id === draggingNodeIdRef.current);
     if (!draggedNode || typeof draggedNode.x !== 'number' || typeof draggedNode.y !== 'number') {
-      animationFrameRef.current = requestAnimationFrame(autoScrollLoop); // Continue if node not found yet
+      autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
       return;
     }
-    
+
     const nodeHeight = getEstimatedCardHeight(draggedNode);
     const nodeCanvasCenterY = draggedNode.y + (nodeHeight / 2);
     const viewportCenterY = window.innerHeight / 2;
     const currentCanvasScrollTop = canvasRef.current.scrollTop;
     const targetScrollTop = nodeCanvasCenterY - viewportCenterY;
     const scrollDiff = targetScrollTop - currentCanvasScrollTop;
-    
-    const SMOOTHING_FACTOR_CENTERING = 0.1; // Reduced for slower, smoother centering
-    const SCROLL_THRESHOLD_FOR_CENTERING = 2; // Only scroll if diff is noticeable
+
+    const SMOOTHING_FACTOR_CENTERING = 0.15;
+    const SCROLL_THRESHOLD_FOR_CENTERING = 2;
 
     if (Math.abs(scrollDiff) > SCROLL_THRESHOLD_FOR_CENTERING) {
       const scrollAdjustment = scrollDiff * SMOOTHING_FACTOR_CENTERING;
       canvasRef.current.scrollTop += scrollAdjustment;
     }
-    animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
-  }, [draggingNodeIdRef, roadmapSteps, canvasRef]); // Added refs to dependency array
+    autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
+  }, [draggingNodeIdRef, roadmapSteps]);
 
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    if (draggingNodeIdRef.current) return; // Prevent starting a new drag if one is active
+    if (draggingNodeIdRef.current) return;
     event.stopPropagation();
     setSelectedStepId(stepId);
 
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag && typeof stepToDrag.x === 'number' && typeof stepToDrag.y === 'number') {
       draggingNodeIdRef.current = stepId;
-      // Store screen coords of mouse and canvas coords of node
       dragOperationStartRef.current = { x: event.clientX, y: event.clientY };
       nodeInitialCanvasPosRef.current = { x: stepToDrag.x, y: stepToDrag.y };
       latestMousePositionRef.current = { x: event.clientX, y: event.clientY };
 
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
       dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
-      
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
+
+      if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
     }
-  }, [roadmapSteps, processDragMovementLoop, autoScrollLoop]); // Added processDragMovementLoop & autoScrollLoop
+  }, [roadmapSteps, processDragMovementLoop, autoScrollLoop]);
 
 
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
@@ -576,8 +659,8 @@ const ViewPlanPage = () => {
 
 
   const handleMouseUpOnCanvas = useCallback(() => {
-    if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-    animationFrameRef.current = null;
+    if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current);
+    autoScrollFrameRef.current = null;
     if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
     dragUpdateFrameRef.current = null;
 
@@ -639,7 +722,7 @@ const ViewPlanPage = () => {
   const isOwner = currentUser?.uid === plan.ownerId;
   const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Plus, Undo, Redo ];
 
-  let dialogTitleForAddStep = "Add New Main Roadmap Step";
+  let dialogTitleForAddStep = "Add New Roadmap Step";
   if (currentParentStepForDialog) {
     dialogTitleForAddStep = `Add Sub-step to "${currentParentStepForDialog.title}"`;
   } else if (pendingNodeFromDotInfo) {
@@ -708,7 +791,7 @@ const ViewPlanPage = () => {
               disabled={isSubmittingStep || isAddStepDialogOpen}
               className="shadow-md bg-card hover:bg-muted"
             >
-              <Plus className="h-4 w-4 mr-2" /> Add Main Roadmap Step
+              <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
             </Button>
           </div>
 
@@ -766,7 +849,7 @@ const ViewPlanPage = () => {
             <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none">
               <StickyNote className="h-10 w-10 mb-2" />
               <p className="text-sm font-medium">Roadmap is empty.</p>
-              <p className="text-xs">Click "Add Main Roadmap Step" to begin planning.</p>
+              <p className="text-xs">Click "Add Roadmap Step" to begin planning.</p>
             </div>
           )}
 
@@ -781,13 +864,12 @@ const ViewPlanPage = () => {
       </div>
 
       {planId && (
-        <AddRoadmapStepDialog
+        <AddRoadmapStepDialogInternal
           isOpen={isAddStepDialogOpen}
           onOpenChange={setIsAddStepDialogOpen}
           onSubmit={handleAddRoadmapStepSubmit}
           isSubmitting={isSubmittingStep}
           parentStepTitle={currentParentStepForDialog?.title}
-          isSubStep={!!currentParentStepForDialog}
           dialogTitle={dialogTitleForAddStep}
         />
       )}
@@ -817,4 +899,3 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
-

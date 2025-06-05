@@ -3,7 +3,7 @@
 "use client";
 
 import React from 'react';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
@@ -18,14 +18,12 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// Select components removed as type field is removed
 import { Loader2 } from 'lucide-react';
 
 const addRoadmapStepSchema = z.object({
   title: z.string().min(1, "Title is required.").max(100, "Title cannot exceed 100 characters."),
-  type: z.enum(['Main Category/Phase', 'Sub-category/Task'], {
-    required_error: "Step type is required.",
-  }),
+  // type field removed from schema
 });
 
 export type AddRoadmapStepFormData = z.infer<typeof addRoadmapStepSchema>;
@@ -36,8 +34,8 @@ interface AddRoadmapStepDialogProps {
   onSubmit: (data: AddRoadmapStepFormData) => void;
   isSubmitting: boolean;
   parentStepTitle?: string | null;
-  isSubStep?: boolean; // True if specifically adding a sub-step to an existing main step
-  dialogTitle?: string; // Allow overriding the title for more context
+  // isSubStep prop is no longer meaningful
+  dialogTitle?: string; 
 }
 
 export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
@@ -46,16 +44,13 @@ export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
   onSubmit,
   isSubmitting,
   parentStepTitle,
-  isSubStep, // Default this based on parentStepTitle if not explicitly passed
   dialogTitle,
 }) => {
-  const effectivelyIsSubStep = isSubStep ?? !!parentStepTitle;
-
   const form = useForm<AddRoadmapStepFormData>({
     resolver: zodResolver(addRoadmapStepSchema),
     defaultValues: {
       title: '',
-      type: effectivelyIsSubStep ? 'Sub-category/Task' : 'Main Category/Phase',
+      // type field removed from defaultValues
     },
   });
 
@@ -63,10 +58,10 @@ export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
     if (isOpen) {
       form.reset({
         title: '',
-        type: effectivelyIsSubStep ? 'Sub-category/Task' : 'Main Category/Phase',
+        // type field removed from reset
       });
     }
-  }, [isOpen, effectivelyIsSubStep, form]);
+  }, [isOpen, form]);
 
   const effectiveDialogTitle = dialogTitle ||
     (parentStepTitle
@@ -84,37 +79,13 @@ export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4 py-2">
           <div>
-            <Label htmlFor="title">Step Title <span className="text-destructive">*</span></Label>
-            <Input id="title" {...form.register('title')} placeholder="e.g., Market Research, Phase 1 Kickoff" disabled={isSubmitting} />
+            <Label htmlFor="dialog-step-title">Step Title <span className="text-destructive">*</span></Label>
+            <Input id="dialog-step-title" {...form.register('title')} placeholder="e.g., Market Research, Phase 1 Kickoff" disabled={isSubmitting} />
             {form.formState.errors.title && (
               <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
             )}
           </div>
-          <div>
-            <Label htmlFor="type">Step Type <span className="text-destructive">*</span></Label>
-            <Controller
-              name="type"
-              control={form.control}
-              render={({ field }) => (
-                <Select
-                  onValueChange={field.onChange}
-                  value={field.value}
-                  disabled={isSubmitting || effectivelyIsSubStep} // Disable if it's a sub-step addition context
-                >
-                  <SelectTrigger id="type">
-                    <SelectValue placeholder="Select step type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Main Category/Phase">Main Category/Phase</SelectItem>
-                    <SelectItem value="Sub-category/Task">Sub-category/Task</SelectItem>
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            {form.formState.errors.type && (
-              <p className="text-xs text-destructive mt-1">{form.formState.errors.type.message}</p>
-            )}
-          </div>
+          {/* Step Type Select and its Controller removed */}
           <DialogFooter>
             <DialogClose asChild>
               <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
@@ -129,4 +100,3 @@ export const AddRoadmapStepDialog: React.FC<AddRoadmapStepDialogProps> = ({
     </Dialog>
   );
 };
-    

@@ -6,21 +6,21 @@ export interface RoadmapSubStep {
   id: string;
   parentId: string; // ID of the main step it belongs to
   title: string;
-  type: 'Sub-category/Task'; // For now, sub-steps are always this type
+  // type field removed
   // Potentially add: description, status, assignee, dates, etc.
 }
 
 export interface RoadmapStep {
   id: string;
   title: string;
-  type: 'Main Category/Phase' | 'Sub-category/Task'; // Type of the step
+  // type field removed
   subSteps?: RoadmapSubStep[]; // Optional array of sub-steps
   x: number; // X coordinate for positioning on canvas
   y: number; // Y coordinate for positioning on canvas
   sourceNodeId?: string; // Optional: ID of the node this step was created from
   sourceAnchor?: 'N' | 'S' | 'E' | 'W'; // Optional: Anchor point on the source node
   sourceLineYOffset?: number; // Optional: Y-offset relative to sourceNode's top for line start (used for sub-step origins)
-  // Potentially add: description, status, assignee, dates, etc.
+  description?: string | null; // Added description for consistency
 }
 
 
@@ -35,10 +35,6 @@ export interface Plan {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   roadmap?: RoadmapStep[]; // Optional: Store the roadmap structure
-  // Later, we might add:
-  // content?: any; // For storing whiteboard data directly
-  // miroBoardId?: string | null; // If integrating with Miro
-  // sharedWithUserIds?: string[];
 }
 
 export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'roadmap'> {
@@ -53,5 +49,3 @@ export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
   updatedAt: number; // Milliseconds since epoch
   roadmap?: RoadmapStep[]; // Include roadmap on client
 }
-
-    
