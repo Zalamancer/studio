@@ -20,23 +20,21 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter }
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
-import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog'; // This component itself will be modified
 import { useToast } from '@/hooks/use-toast';
 import { Textarea } from '@/components/ui/textarea';
 import { Input } from '@/components/ui/input';
+import { useForm } from 'react-hook-form'; // Added this import
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
   Dialog,
-  DialogClose as AddStepDialogClose, // Renamed to avoid conflict
-  DialogContent as AddStepDialogContent, // Renamed
-  DialogDescription as AddStepDialogDescription, // Renamed
-  DialogFooter as AddStepDialogFooter, // Renamed
-  DialogHeader as AddStepDialogHeader, // Renamed
-  DialogTitle as AddStepDialogTitle, // Renamed
+  DialogClose as AddStepDialogClose,
+  DialogContent as AddStepDialogContent,
+  DialogDescription as AddStepDialogDescription,
+  DialogFooter as AddStepDialogFooter,
+  DialogHeader as AddStepDialogHeader,
+  DialogTitle as AddStepDialogTitle,
 } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-
 
 const NODE_WIDTH = 256; // width of RoadmapStepCard
 const DOT_SIZE = 8;
@@ -45,7 +43,6 @@ const DOT_OFFSET = - (DOT_SIZE / 2);
 const HEADER_PADDING_TOP = 10;
 const HEADER_PADDING_BOTTOM = 10;
 const HEADER_TITLE_LINE_HEIGHT = 20;
-// const HEADER_DESCRIPTION_LINE_HEIGHT = 16; // No longer needed as type/description is removed from card header
 
 const CONTENT_PADDING_TOP = 6;
 const CONTENT_PADDING_BOTTOM = 10;
@@ -64,7 +61,6 @@ const NODE_END_PADDING = 50;
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
   let calculatedHeight = 0;
 
-  // Header height - only title now
   let headerInternalContent = HEADER_TITLE_LINE_HEIGHT;
   calculatedHeight += HEADER_PADDING_TOP + headerInternalContent + HEADER_PADDING_BOTTOM;
 
@@ -170,7 +166,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       ref={cardDivRef}
       data-step-id={step.id}
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default select-none z-10", // Reverted to bg-card
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default select-none z-10",
         "flex flex-col",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
@@ -183,7 +179,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
         <div className="flex-grow min-w-0 pointer-events-none card-body-content">
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
-          {/* Removed step.type display */}
         </div>
       </CardHeader>
 
@@ -196,7 +191,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
                 <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
                   <SubStepDot subStepIndex={index} />
                   <span className="text-muted-foreground truncate" title={subStep.title}>
-                    {subStep.title} {/* Removed subStep.type display */}
+                    {subStep.title}
                   </span>
                 </li>
               ))}
@@ -264,7 +259,6 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
                 <span className="sr-only">Close</span>
             </Button>
         </div>
-        {/* Removed step.type display from SheetDescription */}
         <SheetDescription>Edit details for this roadmap step.</SheetDescription>
       </SheetHeader>
       <ScrollArea className="flex-1">
@@ -287,7 +281,7 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
               <ul className="list-none space-y-1 pl-0 ml-0">
                 {step.subSteps.map(sub => (
                   <li key={sub.id} className="text-sm text-muted-foreground">
-                    {sub.title} {/* Removed subStep.type display */}
+                    {sub.title}
                   </li>
                 ))}
               </ul>
@@ -302,10 +296,8 @@ const RoadmapStepDetailPanel: React.FC<RoadmapStepDetailPanelProps> = ({ step, o
   );
 };
 
-// --- AddRoadmapStepDialog internal component ---
 const addRoadmapStepDialogSchema = z.object({
   title: z.string().min(1, "Title is required.").max(100, "Title cannot exceed 100 characters."),
-  // type field removed
 });
 
 export type AddRoadmapStepDialogFormDataInternal = z.infer<typeof addRoadmapStepDialogSchema>;
@@ -316,7 +308,6 @@ interface AddRoadmapStepDialogInternalProps {
   onSubmit: (data: AddRoadmapStepDialogFormDataInternal) => void;
   isSubmitting: boolean;
   parentStepTitle?: string | null;
-  // isSubStep prop is no longer needed as type is removed
   dialogTitle?: string;
 }
 
@@ -363,7 +354,6 @@ const AddRoadmapStepDialogInternal: React.FC<AddRoadmapStepDialogInternalProps> 
               <p className="text-xs text-destructive mt-1">{form.formState.errors.title.message}</p>
             )}
           </div>
-          {/* Step Type Select removed */}
           <AddStepDialogFooter>
             <AddStepDialogClose asChild>
               <Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button>
@@ -401,13 +391,11 @@ const ViewPlanPage = () => {
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
 
   const draggingNodeIdRef = useRef<string | null>(null);
-  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null); // Screen coords
-  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null); // Canvas coords
-  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null); // Screen coords
-
-  const autoScrollFrameRef = useRef<number | null>(null);
+  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null);
+  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null);
+  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null);
   const dragUpdateFrameRef = useRef<number | null>(null);
-
+  const autoScrollFrameRef = useRef<number | null>(null);
 
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
 
@@ -433,7 +421,6 @@ const ViewPlanPage = () => {
         y: Math.round(typeof step.y === 'number' ? step.y : Math.floor(index / 3) * (getEstimatedCardHeight(step) + 64) + 20),
         subSteps: step.subSteps || [],
         sourceLineYOffset: step.sourceLineYOffset,
-        // type field is now removed from RoadmapStep type
       }));
       setRoadmapSteps(initializedSteps);
     } else if (plan && !plan.roadmap) {
@@ -493,7 +480,7 @@ const ViewPlanPage = () => {
 
   const handleAddRoadmapStepSubmit = useCallback((formData: AddRoadmapStepDialogFormDataInternal) => {
     setIsSubmittingStep(true);
-    const newStepBase = { // type removed from base
+    const newStepBase = {
       id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
       title: formData.title,
       description: null,
@@ -533,12 +520,12 @@ const ViewPlanPage = () => {
                   }
               }
           } else if (prevSteps.length > 0) {
-              const mainSteps = prevSteps; // All steps are main steps now
+              const mainSteps = prevSteps;
               if (mainSteps.length > 0) {
                 const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
                 newX = 20;
                 newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
-              } else { // Should not be hit if prevSteps.length > 0 and mainSteps is prevSteps
+              } else {
                   const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0]);
                   newX = 20;
                   newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
@@ -899,3 +886,5 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
+
+    
