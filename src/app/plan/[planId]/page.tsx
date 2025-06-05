@@ -94,7 +94,7 @@ interface RoadmapStepCardProps {
   onOpenDetails: (event: React.MouseEvent, step: RoadmapStep) => void;
   onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset?: number) => void;
   isSelected: boolean;
-  isSubmitting: boolean; // Combined submitting state
+  isSubmitting: boolean;
   onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void;
 }
 
@@ -110,12 +110,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   const cardDivRef = useRef<HTMLDivElement>(null);
 
   const handleDotClick = useCallback((e: React.MouseEvent, anchor: 'N' | 'S' | 'E' | 'W') => {
-    e.stopPropagation(); // Prevent triggering canvas click or node selection
+    e.stopPropagation();
     onInitiateNodeFromDot(e, step.id, anchor);
   }, [onInitiateNodeFromDot, step.id]);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // Do not stop propagation here if we want the canvas to potentially deselect
     onMouseDownOnNode(e, step.id);
   }, [onMouseDownOnNode, step.id]);
 
@@ -137,11 +136,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       if (cardDivRef.current && dotRef.current) {
         const cardRect = cardDivRef.current.getBoundingClientRect();
         const dotRect = dotRef.current.getBoundingClientRect();
-        // Calculate the Y offset of the dot's center relative to the card's top edge
         const relativeYOffset = (dotRect.top - cardRect.top) + (dotRect.height / 2);
-        onInitiateNodeFromDot(e, step.id, 'W', relativeYOffset); // Assuming 'W' for left side
+        onInitiateNodeFromDot(e, step.id, 'W', relativeYOffset);
       } else {
-        // Fallback if refs are not available (should ideally not happen)
         onInitiateNodeFromDot(e, step.id, 'W');
       }
     };
@@ -149,13 +146,13 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     return (
       <span
         ref={dotRef}
-        onMouseDown={handleSubStepDotClick} // Changed to onMouseDown for consistency with node drag start
+        onMouseDown={handleSubStepDotClick}
         className={cn(
           "inline-block rounded-full bg-muted-foreground cursor-pointer",
-          "h-2 w-2", // Standard dot size
+          "h-2 w-2",
           "transition-all duration-150 ease-in-out",
-          "hover:bg-green-500 hover:ring-2 hover:ring-green-300", // Visual feedback
-          "hover:scale-150 active:scale-125" // Interactive scaling
+          "hover:bg-green-500 hover:ring-2 hover:ring-green-300",
+          "hover:scale-150 active:scale-125"
         )}
         title="Add new step from this sub-step (to the left)"
       ></span>
@@ -166,27 +163,25 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   return (
     <div
       ref={cardDivRef}
-      data-step-id={step.id} // Add data attribute for querying
+      data-step-id={step.id}
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10 select-none", // Added select-none
-        "flex flex-col", // Ensure flex column layout for height distribution
-        isSelected && "ring-2 ring-primary shadow-primary/30 z-20" // Higher z-index when selected
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10 select-none",
+        "flex flex-col",
+        isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
     >
-      {/* Header */}
       <CardHeader
-        className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center flex-shrink-0" // Ensure header doesn't shrink content
+        className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center flex-shrink-0"
         onMouseDown={handleHeaderMouseDown}
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
-        <div className="flex-grow min-w-0 pointer-events-none card-body-content"> {/* Ensure content doesn't interfere with drag */}
+        <div className="flex-grow min-w-0 pointer-events-none card-body-content">
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
           {step.type && <CardDescription className="text-xs">{step.type}</CardDescription>}
         </div>
       </CardHeader>
 
-      {/* Content - make it scrollable if too long */}
       <CardContent className="p-2.5 pt-1.5 border-t card-body-content">
         {step.subSteps && step.subSteps.length > 0 && (
           <>
@@ -205,7 +200,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         )}
       </CardContent>
 
-      {/* Footer */}
       <CardFooter className="p-2 border-t flex items-center justify-end gap-1.5 flex-shrink-0">
         <Button
           variant="outline"
@@ -228,13 +222,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         </Button>
       </CardFooter>
 
-      {/* Anchor Points - visible when selected */}
       {isSelected && (
         <>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
-          {/* Only show West dot if there are no sub-steps, because sub-step dots handle left connections */}
           {(!step.subSteps || step.subSteps.length === 0) && (
               <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"><Plus className="h-3 w-3" /></Button>
           )}
@@ -325,12 +317,12 @@ const ViewPlanPage = () => {
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
 
   const draggingNodeIdRef = useRef<string | null>(null);
-  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null); // Screen coords
-  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null); // Node's canvas coords at drag start
-  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null); // Latest mouse screen coords
+  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null);
+  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null);
+  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null);
 
-  const animationFrameRef = useRef<number | null>(null); // For canvas auto-scroll loop
-  const dragUpdateFrameRef = useRef<number | null>(null); // For node position update loop
+  const animationFrameRef = useRef<number | null>(null);
+  const dragUpdateFrameRef = useRef<number | null>(null);
 
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
 
@@ -352,8 +344,8 @@ const ViewPlanPage = () => {
     if (plan?.roadmap) {
       const initializedSteps = plan.roadmap.map((step, index) => ({
         ...step,
-        x: typeof step.x === 'number' ? step.x : (index % 3) * (NODE_WIDTH + 64) + 20,
-        y: typeof step.y === 'number' ? step.y : Math.floor(index / 3) * (getEstimatedCardHeight(step) + 64) + 20,
+        x: Math.round(typeof step.x === 'number' ? step.x : (index % 3) * (NODE_WIDTH + 64) + 20),
+        y: Math.round(typeof step.y === 'number' ? step.y : Math.floor(index / 3) * (getEstimatedCardHeight(step) + 64) + 20),
         subSteps: step.subSteps || [],
         sourceLineYOffset: step.sourceLineYOffset
       }));
@@ -375,7 +367,7 @@ const ViewPlanPage = () => {
           }
         });
       }
-      const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight; // Add 100vh
+      const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight;
       setDynamicCanvasMinHeight(calculatedMinHeight < window.innerHeight ? window.innerHeight : calculatedMinHeight);
     }
   }, [roadmapSteps]);
@@ -492,18 +484,20 @@ const ViewPlanPage = () => {
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
   // --- Dragging and Auto-Scroll Logic ---
+
   const processDragMovementLoop = useCallback(() => {
-    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current || !canvasRef.current) {
+    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current) {
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
       dragUpdateFrameRef.current = null;
       return;
     }
 
-    const currentCanvasClientWidth = canvasRef.current.clientWidth;
     const dx = latestMousePositionRef.current.x - dragOperationStartRef.current.x;
     const dy = latestMousePositionRef.current.y - dragOperationStartRef.current.y;
+    const currentCanvasClientWidth = canvasRef.current?.clientWidth || window.innerWidth;
+    const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
 
-    const newX = Math.round(Math.max(0, Math.min(nodeInitialCanvasPosRef.current.x + dx, currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0)));
+    const newX = Math.round(Math.max(0, Math.min(nodeInitialCanvasPosRef.current.x + dx, maxX)));
     const newY = Math.round(Math.max(0, nodeInitialCanvasPosRef.current.y + dy));
 
     setRoadmapSteps(prevSteps => {
@@ -517,8 +511,10 @@ const ViewPlanPage = () => {
           : step
       );
     });
+
     dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
   }, [setRoadmapSteps]);
+
 
   const autoScrollLoop = useCallback(() => {
     if (!draggingNodeIdRef.current || !canvasRef.current) {
@@ -529,50 +525,55 @@ const ViewPlanPage = () => {
 
     const draggedNode = roadmapSteps.find(s => s.id === draggingNodeIdRef.current);
     if (!draggedNode || typeof draggedNode.x !== 'number' || typeof draggedNode.y !== 'number') {
-      animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
+      animationFrameRef.current = requestAnimationFrame(autoScrollLoop); // Continue if node not found yet
       return;
     }
-
+    
     const nodeHeight = getEstimatedCardHeight(draggedNode);
-    const nodeCanvasCenterY = draggedNode.y + nodeHeight / 2;
+    const nodeCanvasCenterY = draggedNode.y + (nodeHeight / 2);
     const viewportCenterY = window.innerHeight / 2;
     const currentCanvasScrollTop = canvasRef.current.scrollTop;
     const targetScrollTop = nodeCanvasCenterY - viewportCenterY;
     const scrollDiff = targetScrollTop - currentCanvasScrollTop;
-    const SMOOTHING_FACTOR_CENTERING = 0.15;
-    const SCROLL_THRESHOLD_FOR_CENTERING = 2;
+    
+    const SMOOTHING_FACTOR_CENTERING = 0.1; // Reduced for slower, smoother centering
+    const SCROLL_THRESHOLD_FOR_CENTERING = 2; // Only scroll if diff is noticeable
 
     if (Math.abs(scrollDiff) > SCROLL_THRESHOLD_FOR_CENTERING) {
       const scrollAdjustment = scrollDiff * SMOOTHING_FACTOR_CENTERING;
       canvasRef.current.scrollTop += scrollAdjustment;
     }
     animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
-  }, [roadmapSteps]);
+  }, [draggingNodeIdRef, roadmapSteps, canvasRef]); // Added refs to dependency array
+
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    if (draggingNodeIdRef.current) return; // Prevent starting a new drag if one is already active
+    if (draggingNodeIdRef.current) return; // Prevent starting a new drag if one is active
     event.stopPropagation();
     setSelectedStepId(stepId);
 
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag && typeof stepToDrag.x === 'number' && typeof stepToDrag.y === 'number') {
       draggingNodeIdRef.current = stepId;
+      // Store screen coords of mouse and canvas coords of node
       dragOperationStartRef.current = { x: event.clientX, y: event.clientY };
       nodeInitialCanvasPosRef.current = { x: stepToDrag.x, y: stepToDrag.y };
       latestMousePositionRef.current = { x: event.clientX, y: event.clientY };
 
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
-
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
       dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
+      
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
     }
-  }, [roadmapSteps, autoScrollLoop, processDragMovementLoop]);
+  }, [roadmapSteps, processDragMovementLoop, autoScrollLoop]); // Added processDragMovementLoop & autoScrollLoop
+
 
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
     if (!draggingNodeIdRef.current) return;
     latestMousePositionRef.current = { x: event.clientX, y: event.clientY };
   }, []);
+
 
   const handleMouseUpOnCanvas = useCallback(() => {
     if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
