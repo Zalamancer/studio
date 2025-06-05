@@ -151,9 +151,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         onClick={handleSubStepDotClick}
         className={cn(
           "inline-block rounded-full bg-muted-foreground",
-          "h-2 w-2",
+          "h-2 w-2", // Adjusted base size
           "transition-all duration-150 ease-in-out",
-          "hover:cursor-pointer hover:bg-green-500",
+          "hover:cursor-pointer hover:bg-green-500", // Adjusted hover color
           "hover:scale-150"
         )}
         title="Add new step from this sub-step (to the left)"
@@ -165,7 +165,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     <div
       ref={cardDivRef}
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10",
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10 select-none",
         "flex flex-col",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
@@ -227,7 +227,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
-          {/* Left dot removed as per previous request */}
         </>
       )}
     </div>
@@ -508,9 +507,11 @@ const ViewPlanPage = () => {
 
       setRoadmapSteps(prevSteps => {
         const currentDraggingStep = prevSteps.find(s => s.id === draggingNodeId);
+        // If the position hasn't actually changed, return the previous steps to avoid re-render
         if (currentDraggingStep && currentDraggingStep.x === newX && currentDraggingStep.y === newY) {
-          return prevSteps; // Avoid update if position hasn't changed
+          return prevSteps;
         }
+
         return prevSteps.map(step =>
           step.id === draggingNodeId
             ? { ...step, x: newX, y: newY }
@@ -518,7 +519,7 @@ const ViewPlanPage = () => {
         );
       });
     }
-  }, [draggingNodeId, dragStartPos, nodeStartPos]); // Removed canvasRef from deps, as ref itself is stable
+  }, [draggingNodeId, dragStartPos, nodeStartPos]);
 
   const handleMouseUpOnCanvas = useCallback(() => {
     setDraggingNodeId(null);
