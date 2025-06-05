@@ -22,29 +22,27 @@ import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/
 import { useToast } from '@/hooks/use-toast';
 
 const NODE_WIDTH = 256; // Corresponds to w-64 Tailwind class
-// NODE_HEIGHT is now dynamic based on content (sub-steps) for the card itself.
-// For line drawing, we will use estimated heights.
 
 const DOT_SIZE = 8;
-const DOT_OFFSET = -DOT_SIZE / 2; // -4px, visual offset for the dot button itself
-const DOT_CONNECTION_OFFSET = 4; // How far from the card's *calculated* edge the line should connect to align with dot center
+const DOT_OFFSET = -DOT_SIZE / 2;
+const DOT_CONNECTION_OFFSET = 4; // Center of the dot (8px dot, -4px offset + 4px to center = 0 relative to card edge for line calc)
 
-// Constants for estimating card height
 const CARD_HEADER_EST_HEIGHT = 40;
-const CARD_FOOTER_EST_HEIGHT = 40;
-const CARD_CONTENT_PADDING_EST_Y = 10;
-const SUBSTEPS_LABEL_EST_HEIGHT = 20;
-const SUBSTEP_ITEM_EST_HEIGHT = 22;
-const MIN_CARD_EST_HEIGHT = 120;
+const CARD_FOOTER_EST_HEIGHT = 40; // Approximate height for a single line button footer
+const CARD_CONTENT_PADDING_EST_Y = 10; // Top/bottom padding within CardContent
+const SUBSTEPS_LABEL_EST_HEIGHT = 20; // Height for "Sub-steps:" label
+const SUBSTEP_ITEM_EST_HEIGHT = 22; // Estimated height per sub-step item
+const MIN_CARD_EST_HEIGHT = 120; // Minimum visual height for a card
 
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
   let height = CARD_HEADER_EST_HEIGHT + CARD_FOOTER_EST_HEIGHT + CARD_CONTENT_PADDING_EST_Y;
   if (step.subSteps && step.subSteps.length > 0) {
     height += SUBSTEPS_LABEL_EST_HEIGHT;
     height += step.subSteps.length * SUBSTEP_ITEM_EST_HEIGHT;
-    height += 8; // Buffer for list styling
+    height += 8; // Some buffer for list styling (margins, etc.)
   }
-  height += 20; // Buffer for title area
+  // Add some buffer for title area (which can wrap)
+  height += 20; // e.g. for a potentially two-line title
 
   return Math.max(height, MIN_CARD_EST_HEIGHT);
 };
@@ -94,8 +92,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   return (
     <div
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10",
-        "flex flex-col", 
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10", // NODE_WIDTH is w-64
+        "flex flex-col",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
@@ -176,12 +174,9 @@ const ViewPlanPage = () => {
 
   useEffect(() => {
     if (canvasRef.current) {
-      setCanvasWidth(canvasRef.current.clientWidth);
-      const resizeObserver = new ResizeObserver(entries => {
-        for (let entry of entries) {
-          setCanvasWidth(entry.contentRect.width);
-        }
-      });
+      const updateWidth = () => setCanvasWidth(canvasRef.current!.clientWidth);
+      updateWidth(); // Initial set
+      const resizeObserver = new ResizeObserver(updateWidth);
       resizeObserver.observe(canvasRef.current);
       return () => resizeObserver.disconnect();
     }
@@ -272,7 +267,7 @@ const ViewPlanPage = () => {
                 stepSourceNodeId = sourceStep.id;
                 stepSourceAnchor = pendingNodeFromDotInfo.sourceAnchor;
                 const sourceCardHeight = getEstimatedCardHeight(sourceStep);
-                const newCardHeight = getEstimatedCardHeight({ ...newStepBase, subSteps: [] } as RoadmapStep); // Estimate height of new node
+                const newCardHeight = getEstimatedCardHeight({ ...newStepBase, subSteps: [] } as RoadmapStep);
 
                 switch(pendingNodeFromDotInfo.sourceAnchor) {
                     case 'N': newX = sourceStep.x; newY = sourceStep.y - (newCardHeight + 64); break;
@@ -290,9 +285,9 @@ const ViewPlanPage = () => {
             }
         }
         
-        if (canvasRef.current) {
-            const currentCanvasWidth = canvasRef.current.clientWidth;
-            newX = Math.min(newX, currentCanvasWidth - NODE_WIDTH);
+        const currentEffectiveCanvasWidth = canvasWidth || (canvasRef.current?.clientWidth || 0);
+        if (currentEffectiveCanvasWidth > 0) {
+            newX = Math.min(newX, currentEffectiveCanvasWidth - NODE_WIDTH - 20); // -20 for padding/margin
         }
         newX = Math.max(0, newX);
         newY = Math.max(0, newY);
@@ -314,7 +309,7 @@ const ViewPlanPage = () => {
     setCurrentParentStepForDialog(null);
     setPendingNodeFromDotInfo(null);
     setIsSubmittingStep(false);
-  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
+  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast, canvasWidth, canvasRef]);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
     event.stopPropagation();
@@ -331,19 +326,20 @@ const ViewPlanPage = () => {
     if (draggingNodeId && dragStartPos && nodeStartPos && canvasRef.current) {
       const dx = event.clientX - dragStartPos.x;
       const dy = event.clientY - dragStartPos.y;
-      const currentCanvasWidth = canvasRef.current.clientWidth;
+      const currentEffectiveCanvasWidth = canvasWidth || (canvasRef.current?.clientWidth || 0);
+
       setRoadmapSteps(prevSteps =>
         prevSteps.map(step =>
           step.id === draggingNodeId
             ? { ...step,
-                x: Math.max(0, Math.min(nodeStartPos.x + dx, currentCanvasWidth - NODE_WIDTH)),
+                x: Math.max(0, Math.min(nodeStartPos.x + dx, currentEffectiveCanvasWidth - NODE_WIDTH - (canvasRef.current?.style.paddingRight || 0))), // Adjusted for right padding
                 y: Math.max(0, nodeStartPos.y + dy)
               }
             : step
         )
       );
     }
-  }, [draggingNodeId, dragStartPos, nodeStartPos]); // canvasWidth state not needed as dep here, canvasRef.current is used
+  }, [draggingNodeId, dragStartPos, nodeStartPos, canvasWidth, canvasRef]); // canvasWidth state is a dependency
 
   const handleMouseUpOnCanvas = useCallback(() => {
     if (draggingNodeId) {
@@ -460,7 +456,7 @@ const ViewPlanPage = () => {
 
         <main
             ref={canvasRef}
-            className="flex-1 grid-background relative overflow-auto p-4 md:p-6"
+            className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
             onMouseLeave={handleMouseUpOnCanvas}
@@ -577,5 +573,3 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
-
-    
