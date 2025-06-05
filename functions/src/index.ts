@@ -98,27 +98,27 @@ async function isRealUser(userId: string): Promise<boolean> {
  */
 async function findUniqueBotMentionName(
   basePrefix: string,
-  initialSuffix: number, // This is a 4-digit number for bots
+  initialSuffix: number, // This can be a large timestamp-based number now
   maxAttempts: number = 10,
-  maxRandomRetries: number = 3
+  maxRandomRetries: number = 3 // Random retries might be less critical if initialSuffix is highly unique
 ): Promise<string> {
   let attempt = 0;
   let candidateName: string;
   let candidateNameLower: string;
-  const originalBotName = `${basePrefix}${initialSuffix}`; // e.g., Bot1234
+  const originalBotName = `${basePrefix}${initialSuffix}`; // e.g., Bot1678886400000
 
   while (attempt < maxAttempts) {
     if (attempt === 0) {
       candidateName = originalBotName;
     } else if (attempt < maxRandomRetries) {
-      // Random retry: generate a new 4-digit suffix
-      const newRandomSuffix = Math.floor(1000 + Math.random() * 9000);
+      // Random retry: generate a new suffix. Using timestamp + random for these too.
+      const newRandomSuffix = Date.now() + Math.floor(Math.random() * 1000);
       candidateName = `${basePrefix}${newRandomSuffix}`;
       logger.info(`[findUniqueBotMentionName] Collision on attempt ${attempt}. Trying new random bot name: ${candidateName}`);
     } else {
       // Suffix retry: append to the *original* bot name
       const suffixNumber = attempt - maxRandomRetries + 1;
-      candidateName = `${originalBotName}_${suffixNumber}`; // e.g., Bot1234_1
+      candidateName = `${originalBotName}_${suffixNumber}`; // e.g., Bot1678886400000_1
       logger.info(`[findUniqueBotMentionName] Collision on attempt ${attempt}. Trying suffixed bot name: ${candidateName}`);
     }
     candidateNameLower = candidateName.toLowerCase();
@@ -150,9 +150,9 @@ async function _createBotUserLogic(targetIndustryName?: string): Promise<BotUser
   logger.info(`[${functionName}] Attempting to create new bot user. Target: ` +
         (targetIndustryName || "Random"));
   try {
-    const initialRandomSuffix = Math.floor(1000 + Math.random() * 9000); // Start with a 4-digit suffix for bots
-    const botEmail = `bot_${Date.now()}_${initialRandomSuffix}@example.com`;
-    const botPassword = `strongPassword${Date.now()}${initialRandomSuffix}`;
+    const uniqueTimestampSuffix = Date.now(); // Use timestamp for better initial uniqueness
+    const botEmail = `bot_${uniqueTimestampSuffix}_${Math.floor(100 + Math.random() * 900)}@example.com`;
+    const botPassword = `strongPassword${uniqueTimestampSuffix}${Math.floor(100 + Math.random() * 900)}`;
 
     const userRecord = await authAdmin.createUser({
       email: botEmail,
@@ -161,7 +161,8 @@ async function _createBotUserLogic(targetIndustryName?: string): Promise<BotUser
     });
 
     // Ensure unique mentionName for the bot
-    const uniqueMentionName = await findUniqueBotMentionName("Bot", initialRandomSuffix);
+    // Pass the highly unique timestamp suffix to findUniqueBotMentionName
+    const uniqueMentionName = await findUniqueBotMentionName("Bot", uniqueTimestampSuffix);
 
     let industryForBot: string;
     let selectedSector: SectorWithSubSectors | undefined;
@@ -972,6 +973,9 @@ export const scheduledBotActivity = onMessagePublished(
 );
 // Ensure newline at end of file
 import {onDocumentWritten} from "firebase-functions/v2/firestore"; // Corrected import
+
+
+    
 
 
     
