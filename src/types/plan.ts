@@ -19,6 +19,7 @@ export interface RoadmapStep {
   y: number; // Y coordinate for positioning on canvas
   sourceNodeId?: string; // Optional: ID of the node this step was created from
   sourceAnchor?: 'N' | 'S' | 'E' | 'W'; // Optional: Anchor point on the source node
+  sourceLineYOffset?: number; // Optional: Y-offset relative to sourceNode's top for line start (used for sub-step origins)
   // Potentially add: description, status, assignee, dates, etc.
 }
 
