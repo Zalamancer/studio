@@ -35,7 +35,7 @@ interface RoadmapStepCardProps {
   onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => void;
   isSelected: boolean;
   isSubmitting: boolean;
-  onMouseDownOnNode: (event: React.MouseEvent, stepId: string) => void;
+  onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void; // Changed event type for CardHeader
 }
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
@@ -49,49 +49,48 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
 }) => {
 
   const handleDotClick = (e: React.MouseEvent, anchor: 'N' | 'S' | 'E' | 'W') => {
-    e.stopPropagation(); // Prevent card selection when dot is clicked
+    e.stopPropagation();
     onInitiateNodeFromDot(e, step.id, anchor);
   };
 
-  const handleHeaderMouseDown = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card click if drag starts on header
+  const handleHeaderMouseDown = (e: React.MouseEvent<HTMLDivElement>) => { // Changed event type
+    e.stopPropagation();
     onMouseDownOnNode(e, step.id);
   };
 
   const handleCardClick = (e: React.MouseEvent) => {
-    // Only trigger select if the click is directly on the card body, not its interactive children
     if (e.target === e.currentTarget || (e.target as HTMLElement).closest('.card-body-content')) {
         onSelectStep(e, step.id);
     }
   };
 
   const handleAddSubStepClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent card selection
+    e.stopPropagation();
     onAddSubStep(e, step.id, step.title);
   }
 
   return (
     <div
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default",
-        isSelected && "ring-2 ring-primary shadow-primary/30 z-10"
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10", // Added z-10
+        isSelected && "ring-2 ring-primary shadow-primary/30 z-20" // Ensure selected is on top
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px` }}
-      onClick={handleCardClick} // Main selection click
+      onClick={handleCardClick}
     >
       <CardHeader
         className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center"
-        onMouseDown={handleHeaderMouseDown} // Dragging
+        onMouseDown={handleHeaderMouseDown}
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
-        <div className="flex-grow min-w-0 pointer-events-none card-body-content"> {/* Added card-body-content */}
+        <div className="flex-grow min-w-0 pointer-events-none card-body-content">
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
           {step.type && <CardDescription className="text-xs">{step.type}</CardDescription>}
         </div>
       </CardHeader>
 
       {step.subSteps && step.subSteps.length > 0 && (
-        <CardContent className="p-2.5 pt-1.5 border-t max-h-20 overflow-y-auto card-body-content"> {/* Added card-body-content */}
+        <CardContent className="p-2.5 pt-1.5 border-t max-h-20 overflow-y-auto card-body-content">
           <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
           <ul className="list-disc list-inside pl-1 space-y-0.5">
             {step.subSteps.map((subStep) => (
@@ -107,7 +106,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         <Button
           variant="outline"
           size="xs"
-          onClick={handleAddSubStepClick} // Add Sub-step
+          onClick={handleAddSubStepClick}
           disabled={isSubmitting}
           className="text-xs w-full sm:w-auto"
         >
@@ -115,13 +114,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         </Button>
       </CardFooter>
 
-      {/* Connection Dots - Visible only when selected */}
       {isSelected && (
         <>
-          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
-          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
-          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary" style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"><Plus className="h-3 w-3" /></Button>
-          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
+          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
+          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
+          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"><Plus className="h-3 w-3" /></Button>
+          <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE}px)`, width: DOT_SIZE * 2, height: DOT_SIZE * 2, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
         </>
       )}
     </div>
@@ -165,13 +163,13 @@ const ViewPlanPage = () => {
   });
 
   useEffect(() => {
-    if (plan?.roadmap && roadmapSteps.length === 0) {
+    if (plan?.roadmap && roadmapSteps.length === 0) { // Only set initial if roadmapSteps is empty
       setRoadmapSteps(plan.roadmap);
     }
   }, [plan, roadmapSteps.length]);
 
   const handleInitiateNodeFromDot = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => {
-    setSelectedStepId(sourceStepId); // Select the source node
+    setSelectedStepId(sourceStepId);
     setPendingNodeFromDotInfo({ sourceStepId, sourceAnchor });
     setCurrentParentStepForDialog(null);
     setIsAddStepDialogOpen(true);
@@ -179,14 +177,15 @@ const ViewPlanPage = () => {
 
 
   const openAddMainStepDialog = useCallback(() => {
-    setSelectedStepId(null); // Clear selection when adding a generic main step
+    setSelectedStepId(null);
     setCurrentParentStepForDialog(null);
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
   }, [setSelectedStepId, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
-    setSelectedStepId(parentId); // Select the parent node
+    event.stopPropagation();
+    setSelectedStepId(parentId);
     setCurrentParentStepForDialog({ id: parentId, title: parentTitle });
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
@@ -206,13 +205,13 @@ const ViewPlanPage = () => {
     };
 
     setRoadmapSteps(prevSteps => {
-      if (currentParentStepForDialog) { // Adding a sub-step
+      if (currentParentStepForDialog) {
         return prevSteps.map(step =>
           step.id === currentParentStepForDialog.id
             ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id, x:0, y:0 } as RoadmapSubStep] }
             : step
         );
-      } else { // Adding a new main step
+      } else {
         let newX = 20;
         let newY = (prevSteps.filter(s => s.type === 'Main Category/Phase').length * (NODE_HEIGHT_WITH_MARGIN)) + 20;
         let stepSourceNodeId: string | undefined = undefined;
@@ -232,13 +231,12 @@ const ViewPlanPage = () => {
             }
         } else if (prevSteps.filter(s => s.type === 'Main Category/Phase').length > 0) {
             const mainSteps = prevSteps.filter(s => s.type === 'Main Category/Phase');
-            // Find the step with the maximum y-coordinate to place the new one below it
             const lastMainStepY = Math.max(...mainSteps.map(s => s.y), 0);
-            newX = 20; // Default X for new main steps added globally
+            newX = 20;
             newY = lastMainStepY + NODE_HEIGHT_WITH_MARGIN;
         }
         
-        newX = Math.max(0, newX); // Ensure non-negative coordinates
+        newX = Math.max(0, newX);
         newY = Math.max(0, newY);
 
         const newMainStep: RoadmapStep = {
@@ -260,10 +258,10 @@ const ViewPlanPage = () => {
     setIsSubmittingStep(false);
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
-  const handleMouseDownOnNode = useCallback((event: React.MouseEvent, stepId: string) => {
+  const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => { // Corrected event type
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag) {
-      setSelectedStepId(stepId); // Ensure node becomes selected on drag start
+      setSelectedStepId(stepId);
       setDraggingNodeId(stepId);
       setDragStartPos({ x: event.clientX, y: event.clientY });
       setNodeStartPos({ x: stepToDrag.x, y: stepToDrag.y });
@@ -291,7 +289,6 @@ const ViewPlanPage = () => {
   }, [setDraggingNodeId, setDragStartPos, setNodeStartPos]);
   
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
-    // Deselect if click is directly on canvas, not on a card or its children (like dots)
     if (event.target === event.currentTarget) {
       setSelectedStepId(null);
     }
@@ -400,8 +397,8 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-auto p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas} // Also handle mouse leaving the canvas
-            onClick={handleCanvasClick} // For deselecting nodes
+            onMouseLeave={handleMouseUpOnCanvas}
+            onClick={handleCanvasClick}
         >
           <div className="absolute top-4 left-4 z-20">
             <Button
@@ -413,6 +410,70 @@ const ViewPlanPage = () => {
               <Plus className="h-4 w-4 mr-2" /> Add Main Roadmap Step
             </Button>
           </div>
+
+          <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
+            {roadmapSteps.map(targetStep => {
+              if (!targetStep.sourceNodeId || !targetStep.sourceAnchor) return null;
+              const sourceStep = roadmapSteps.find(s => s.id === targetStep.sourceNodeId);
+              if (!sourceStep) return null;
+
+              let x1, y1, x2, y2;
+
+              // Calculate start point (source node)
+              switch (targetStep.sourceAnchor) {
+                case 'N':
+                  x1 = sourceStep.x + NODE_WIDTH / 2;
+                  y1 = sourceStep.y;
+                  break;
+                case 'S':
+                  x1 = sourceStep.x + NODE_WIDTH / 2;
+                  y1 = sourceStep.y + NODE_HEIGHT;
+                  break;
+                case 'E':
+                  x1 = sourceStep.x + NODE_WIDTH;
+                  y1 = sourceStep.y + NODE_HEIGHT / 2;
+                  break;
+                case 'W':
+                  x1 = sourceStep.x;
+                  y1 = sourceStep.y + NODE_HEIGHT / 2;
+                  break;
+                default: return null;
+              }
+
+              // Calculate end point (target node's opposite side)
+              switch (targetStep.sourceAnchor) {
+                case 'N': // Target is below source, line connects to target's top
+                  x2 = targetStep.x + NODE_WIDTH / 2;
+                  y2 = targetStep.y;
+                  break;
+                case 'S': // Target is above source, line connects to target's bottom
+                  x2 = targetStep.x + NODE_WIDTH / 2;
+                  y2 = targetStep.y + NODE_HEIGHT;
+                  break;
+                case 'E': // Target is to the right of source, line connects to target's left
+                  x2 = targetStep.x;
+                  y2 = targetStep.y + NODE_HEIGHT / 2;
+                  break;
+                case 'W': // Target is to the left of source, line connects to target's right
+                  x2 = targetStep.x + NODE_WIDTH;
+                  y2 = targetStep.y + NODE_HEIGHT / 2;
+                  break;
+                default: return null;
+              }
+              
+              return (
+                <line
+                  key={`line-${sourceStep.id}-${targetStep.id}`}
+                  x1={x1}
+                  y1={y1}
+                  x2={x2}
+                  y2={y2}
+                  stroke="hsl(var(--foreground) / 0.7)"
+                  strokeWidth="3"
+                />
+              );
+            })}
+          </svg>
 
           {roadmapSteps.filter(step => step.type === 'Main Category/Phase').map(step => (
               <RoadmapStepCard
