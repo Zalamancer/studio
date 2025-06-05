@@ -109,7 +109,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   }, [onInitiateNodeFromDot, step.id]);
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    // e.stopPropagation(); // Removed stopPropagation from header to allow canvas events
     onMouseDownOnNode(e, step.id);
   }, [onMouseDownOnNode, step.id]);
 
@@ -141,7 +140,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     return (
       <span
         ref={dotRef}
-        onMouseDown={handleSubStepDotClick} // Changed from onClick to onMouseDown for consistency
+        onMouseDown={handleSubStepDotClick}
         className={cn(
           "inline-block rounded-full bg-muted-foreground cursor-pointer",
           "h-2 w-2",
@@ -159,7 +158,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       ref={cardDivRef}
       data-step-id={step.id}
       className={cn(
-        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10 select-none", // Added select-none
+        "absolute bg-card border rounded-lg shadow-md w-64 cursor-default z-10 select-none",
         "flex flex-col",
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
@@ -221,7 +220,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
-          {/* West dot is now handled by SubStepDot if sub-steps exist, or can be added if needed */}
           {(!step.subSteps || step.subSteps.length === 0) && (
               <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"><Plus className="h-3 w-3" /></Button>
           )}
@@ -311,15 +309,13 @@ const ViewPlanPage = () => {
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
 
-  // Refs for drag state needed by animation loops, to avoid them as useCallback dependencies
   const draggingNodeIdRef = useRef<string | null>(null);
-  const dragStartPosRef = useRef<{ x: number; y: number } | null>(null);
-  const nodeStartPosRef = useRef<{ x: number; y: number } | null>(null);
+  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null);
+  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null);
   const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null);
 
-  // Refs for animation frame IDs
-  const animationFrameRef = useRef<number | null>(null); // For canvas auto-scroll
-  const dragUpdateFrameRef = useRef<number | null>(null); // For node position updates
+  const animationFrameRef = useRef<number | null>(null);
+  const dragUpdateFrameRef = useRef<number | null>(null);
 
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
 
@@ -341,8 +337,8 @@ const ViewPlanPage = () => {
     if (plan?.roadmap) {
       const initializedSteps = plan.roadmap.map((step, index) => ({
         ...step,
-        x: typeof step.x === 'number' ? step.x : (index % 3) * (NODE_WIDTH + 64) + 20,
-        y: typeof step.y === 'number' ? step.y : Math.floor(index / 3) * (getEstimatedCardHeight(step) + 64) + 20,
+        x: typeof step.x === 'number' ? Math.round(step.x) : (index % 3) * (NODE_WIDTH + 64) + 20,
+        y: typeof step.y === 'number' ? Math.round(step.y) : Math.floor(index / 3) * (getEstimatedCardHeight(step) + 64) + 20,
         subSteps: step.subSteps || [],
         sourceLineYOffset: step.sourceLineYOffset
       }));
@@ -364,11 +360,10 @@ const ViewPlanPage = () => {
           }
         });
       }
-      const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight; // lowest_node.y + node.height + 100vh
+      const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight;
       setDynamicCanvasMinHeight(calculatedMinHeight < window.innerHeight ? window.innerHeight : calculatedMinHeight);
     }
   }, [roadmapSteps]);
-
 
   const handleInitiateNodeFromDot = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset?: number) => {
     event.stopPropagation();
@@ -377,7 +372,7 @@ const ViewPlanPage = () => {
     setPendingNodeFromDotInfo({ sourceStepId, sourceAnchor, sourceYOffset });
     setCurrentParentStepForDialog(null);
     setIsAddStepDialogOpen(true);
-  }, [setSelectedStepId, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setCurrentParentStepForDialog, setIsAddStepDialogOpen]);
+  }, []);
 
 
   const openAddMainStepDialog = useCallback(() => {
@@ -386,7 +381,7 @@ const ViewPlanPage = () => {
     setCurrentParentStepForDialog(null);
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
-  }, [setSelectedStepId, setSelectedNodeForPanel, setCurrentParentStepForDialog, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
+  }, []);
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
@@ -395,13 +390,13 @@ const ViewPlanPage = () => {
     setSelectedNodeForPanel(null);
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
-  }, [setSelectedStepId, setCurrentParentStepForDialog, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
+  }, []);
 
   const handleOpenNodeDetailsClick = useCallback((event: React.MouseEvent, clickedStep: RoadmapStep) => {
     event.stopPropagation();
     setSelectedNodeForPanel(current => (current?.id === clickedStep.id ? null : clickedStep));
     setSelectedStepId(current => (current === clickedStep.id ? null : clickedStep.id));
-  }, [setSelectedNodeForPanel, setSelectedStepId]);
+  }, []);
 
   const handleAddRoadmapStepSubmit = useCallback((formData: AddRoadmapStepFormData) => {
     setIsSubmittingStep(true);
@@ -458,8 +453,8 @@ const ViewPlanPage = () => {
               }
           }
           const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
-          newX = Math.max(0, Math.min(newX, maxX));
-          newY = Math.max(0, newY);
+          newX = Math.round(Math.max(0, Math.min(newX, maxX)));
+          newY = Math.round(Math.max(0, newY));
         }
 
         const newMainStep: RoadmapStep = {
@@ -483,52 +478,19 @@ const ViewPlanPage = () => {
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast]);
 
 
-  // Animation loop for canvas auto-scrolling
-  const autoScrollLoop = useCallback(() => {
-    if (!draggingNodeIdRef.current || !canvasRef.current) {
-      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
-      animationFrameRef.current = null;
-      return;
-    }
-
-    const draggedNode = roadmapSteps.find(s => s.id === draggingNodeIdRef.current);
-    if (!draggedNode || typeof draggedNode.x !== 'number' || typeof draggedNode.y !== 'number') {
-      animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
-      return;
-    }
-
-    const nodeHeight = getEstimatedCardHeight(draggedNode);
-    const nodeCenterOnCanvas = draggedNode.y + nodeHeight / 2;
-    const viewportCenterY = window.innerHeight / 2;
-    const currentScrollTop = canvasRef.current.scrollTop;
-    const nodeCenterInViewport = nodeCenterOnCanvas - currentScrollTop;
-
-    const scrollDiff = nodeCenterInViewport - viewportCenterY;
-    const SCROLL_THRESHOLD = 5; // px
-    const SMOOTHING_FACTOR = 0.15; // Adjust for faster/slower smooth scroll
-
-    if (Math.abs(scrollDiff) > SCROLL_THRESHOLD) {
-      const scrollAdjustment = scrollDiff * SMOOTHING_FACTOR;
-      canvasRef.current.scrollTop += scrollAdjustment;
-    }
-
-    animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
-  }, [roadmapSteps]); // Depends on roadmapSteps to get current node position
-
-  // Animation loop for updating node position based on mouse drag
   const processDragMovementLoop = useCallback(() => {
-    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragStartPosRef.current || !nodeStartPosRef.current || !canvasRef.current) {
+    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current || !canvasRef.current) {
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
       dragUpdateFrameRef.current = null;
       return;
     }
 
     const currentCanvasClientWidth = canvasRef.current.clientWidth;
-    const dx = latestMousePositionRef.current.x - dragStartPosRef.current.x;
-    const dy = latestMousePositionRef.current.y - dragStartPosRef.current.y;
+    const dx = latestMousePositionRef.current.x - dragOperationStartRef.current.x;
+    const dy = latestMousePositionRef.current.y - dragOperationStartRef.current.y;
 
-    const newX = Math.round(Math.max(0, Math.min(nodeStartPosRef.current.x + dx, currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0)));
-    const newY = Math.round(Math.max(0, nodeStartPosRef.current.y + dy));
+    const newX = Math.round(Math.max(0, Math.min(nodeInitialCanvasPosRef.current.x + dx, currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0)));
+    const newY = Math.round(Math.max(0, nodeInitialCanvasPosRef.current.y + dy));
 
     setRoadmapSteps(prevSteps => {
       const currentDraggingStep = prevSteps.find(s => s.id === draggingNodeIdRef.current);
@@ -543,27 +505,53 @@ const ViewPlanPage = () => {
     });
 
     dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
-  }, [setRoadmapSteps]); // setRoadmapSteps is stable
+  }, [setRoadmapSteps]);
+
+  const autoScrollLoop = useCallback(() => {
+    if (!draggingNodeIdRef.current || !canvasRef.current) {
+      if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      animationFrameRef.current = null;
+      return;
+    }
+
+    const draggedNode = roadmapSteps.find(s => s.id === draggingNodeIdRef.current);
+    if (!draggedNode || typeof draggedNode.x !== 'number' || typeof draggedNode.y !== 'number') {
+      animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
+      return;
+    }
+
+    const nodeHeight = getEstimatedCardHeight(draggedNode);
+    const nodeCanvasCenterY = draggedNode.y + nodeHeight / 2;
+    const viewportCenterY = window.innerHeight / 2;
+    const currentCanvasScrollTop = canvasRef.current.scrollTop;
+
+    const targetScrollTop = nodeCanvasCenterY - viewportCenterY;
+
+    const scrollDiff = targetScrollTop - currentCanvasScrollTop;
+    const SCROLL_THRESHOLD_FOR_CENTERING = 2; // px; smaller threshold for more responsive centering
+    const SMOOTHING_FACTOR_CENTERING = 0.1; // Adjust for scroll speed
+
+    if (Math.abs(scrollDiff) > SCROLL_THRESHOLD_FOR_CENTERING) {
+      const scrollAdjustment = scrollDiff * SMOOTHING_FACTOR_CENTERING;
+      canvasRef.current.scrollTop += scrollAdjustment;
+    }
+
+    animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
+  }, [roadmapSteps]); // Removed draggingNodeIdRef as it's accessed via ref.current
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    event.stopPropagation();
-
-    if (draggingNodeIdRef.current) {
-        // If a drag is already in progress, only update selection if it's a different node.
-        if (draggingNodeIdRef.current !== stepId) {
-            setSelectedStepId(stepId);
-        }
-        return; // Do not initiate new drag logic.
+    if (draggingNodeIdRef.current) { // Prevent starting a new drag if one is already active
+        return;
     }
-    
+    event.stopPropagation();
     setSelectedStepId(stepId);
 
     const stepToDrag = roadmapSteps.find(s => s.id === stepId);
     if (stepToDrag && typeof stepToDrag.x === 'number' && typeof stepToDrag.y === 'number') {
       draggingNodeIdRef.current = stepId;
-      dragStartPosRef.current = { x: event.clientX, y: event.clientY };
-      nodeStartPosRef.current = { x: stepToDrag.x, y: stepToDrag.y };
-      latestMousePositionRef.current = { x: event.clientX, y: event.clientY }; // Initialize
+      dragOperationStartRef.current = { x: event.clientX, y: event.clientY };
+      nodeInitialCanvasPosRef.current = { x: stepToDrag.x, y: stepToDrag.y };
+      latestMousePositionRef.current = { x: event.clientX, y: event.clientY };
 
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
       animationFrameRef.current = requestAnimationFrame(autoScrollLoop);
@@ -571,7 +559,7 @@ const ViewPlanPage = () => {
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
       dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
     }
-  }, [roadmapSteps, setSelectedStepId, autoScrollLoop, processDragMovementLoop]);
+  }, [roadmapSteps, autoScrollLoop, processDragMovementLoop]);
 
 
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
@@ -587,11 +575,9 @@ const ViewPlanPage = () => {
     dragUpdateFrameRef.current = null;
 
     draggingNodeIdRef.current = null;
-    dragStartPosRef.current = null;
-    nodeStartPosRef.current = null;
+    dragOperationStartRef.current = null;
+    nodeInitialCanvasPosRef.current = null;
     latestMousePositionRef.current = null;
-    // No need to set state for draggingNodeId, dragStartPos, nodeStartPos here
-    // as their state versions are not used by the loops anymore
   }, []);
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => {
@@ -599,7 +585,7 @@ const ViewPlanPage = () => {
       setSelectedStepId(null);
       setSelectedNodeForPanel(null);
     }
-  }, [setSelectedStepId, setSelectedNodeForPanel]);
+  }, []);
 
 
   if (authLoading || (isLoading && isPlanIdValidUid)) {
@@ -644,7 +630,6 @@ const ViewPlanPage = () => {
   }
 
   const isOwner = currentUser?.uid === plan.ownerId;
-  const ownerDisplayName = generateAnonymousName(plan.ownerId);
   const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Plus, Undo, Redo ];
 
   let dialogTitleForAddStep = "Add New Main Roadmap Step";
@@ -705,7 +690,7 @@ const ViewPlanPage = () => {
             className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
             onMouseUp={handleMouseUpOnCanvas}
-            onMouseLeave={handleMouseUpOnCanvas} // Important to stop drag if mouse leaves canvas
+            onMouseLeave={handleMouseUpOnCanvas}
             onClick={handleCanvasClick}
             style={{ minHeight: dynamicCanvasMinHeight ? `${dynamicCanvasMinHeight}px` : '100vh' }}
         >
@@ -805,8 +790,6 @@ const ViewPlanPage = () => {
         onOpenChange={(open) => {
           if (!open) {
             setSelectedNodeForPanel(null);
-            // Keep selectedStepId as is for node selection highlight,
-            // only clear panel content.
           }
         }}
       >
@@ -829,7 +812,3 @@ const ViewPlanPage = () => {
 export default ViewPlanPage;
 
     
-
-
-    
-
