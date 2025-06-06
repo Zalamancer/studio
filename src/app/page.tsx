@@ -216,11 +216,11 @@ const BoardPageContent = () => {
           </Sheet>
         ) : (
           selectedPost ? (
-            <div className="md:flex-1 md:min-w-0 md:border-l md:border-border md:pl-4 flex flex-col md:overflow-hidden">
+            <div className="md:flex-1 md:min-w-0 md:border-l md:border-border md:pl-4 flex flex-col">
               {renderPostDetailPanel()}
             </div>
           ) : (
-            <div className="hidden md:flex md:flex-1 md:min-w-0 md:border-l md:border-border md:pl-4 flex-col items-center justify-center p-8 bg-card/50 text-muted-foreground sticky top-20 h-[calc(100vh-6.5rem)] max-h-[calc(100vh-6.5rem)] md:overflow-hidden">
+            <div className="hidden md:flex md:flex-1 md:min-w-0 md:border-l md:border-border md:pl-4 flex-col items-center justify-center p-8 bg-card/50 text-muted-foreground md:sticky md:top-20 md:max-h-[calc(100vh-6.5rem)]">
               <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
               <p className="text-lg">Select a post to view details</p>
               <p className="text-sm mt-1">Details will appear here once you click on a post from the list.</p>
@@ -238,3 +238,6 @@ export default BoardPageContent;
 
     
 
+
+
+    
