@@ -104,7 +104,7 @@ interface RoadmapStepCardProps {
   step: RoadmapStep;
   onAddSubStep: (event: React.MouseEvent, parentId: string, parentTitle: string) => void;
   onOpenDetails: (event: React.MouseEvent, step: RoadmapStep) => void;
-  onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => void; // Removed initialTitle
+  onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => void;
   onAutoCreateStepFromSubStep: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset: number, newStepTitle: string) => void;
   isSelected: boolean;
   isSubmitting: boolean;
@@ -149,7 +149,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     onDeleteNode(step.id, step.title);
   }, [onDeleteNode, step.id, step.title]);
 
-  const SubStepDot: React.FC<{ subStep: RoadmapSubStep }> = ({ subStep }) => {
+  const SubStepDot: React.FC<{ subStep: RoadmapSubStep; subStepTitle: string }> = ({ subStep, subStepTitle }) => {
     const dotRef = React.useRef<HTMLSpanElement>(null);
 
     const handleSubStepDotClick = (e: React.MouseEvent) => {
@@ -158,25 +158,24 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         const cardRect = cardDivRef.current.getBoundingClientRect();
         const dotRect = dotRef.current.getBoundingClientRect();
         const relativeYOffset = (dotRect.top - cardRect.top) + (dotRect.height / 2);
-        onAutoCreateStepFromSubStep(e, step.id, 'W', relativeYOffset, subStep.title);
+        onAutoCreateStepFromSubStep(e, step.id, 'W', relativeYOffset, subStepTitle);
       } else {
-        // Fallback if refs not available (should ideally not happen)
-        onAutoCreateStepFromSubStep(e, step.id, 'W', 0, subStep.title);
+        onAutoCreateStepFromSubStep(e, step.id, 'W', 0, subStepTitle);
       }
     };
 
     return (
       <span
         ref={dotRef}
-        onMouseDown={handleSubStepDotClick} // Changed to onMouseDown to match main dots for consistency
+        onMouseDown={handleSubStepDotClick}
         className={cn(
           "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-pointer",
-          "h-2 w-2", // Removed mr-1.5 as it's absolutely positioned
+          "h-2 w-2",
           "transition-all duration-150 ease-in-out",
           "hover:bg-green-500 hover:ring-2 hover:ring-green-300",
           "hover:scale-150 active:scale-125"
         )}
-        title={`Create new step: "${subStep.title}" (to the left)`}
+        title={`Create new step: "${subStepTitle}" (to the left)`}
       ></span>
     );
   };
@@ -208,8 +207,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
             <ul className="list-none space-y-0.5 pl-0 ml-0">
               {step.subSteps.map((subStep) => (
-                <li key={subStep.id} className="relative flex items-center gap-1.5 text-xs pl-4"> {/* Added relative and pl-4 */}
-                  <SubStepDot subStep={subStep} />
+                <li key={subStep.id} className="relative flex items-center gap-1.5 text-xs pl-4">
+                  <SubStepDot subStep={subStep} subStepTitle={subStep.title} />
                   <span className="text-muted-foreground truncate" title={subStep.title}>
                     {subStep.title}
                   </span>
@@ -257,7 +256,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
-          {/* Conditionally render the West dot on the main card if there are no sub-steps */}
           {(!step.subSteps || step.subSteps.length === 0) && (
               <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"><Plus className="h-3 w-3" /></Button>
           )}
@@ -379,11 +377,11 @@ const AddRoadmapStepDialogInternal: React.FC<AddRoadmapStepDialogInternalProps> 
 
   React.useEffect(() => {
     if (isOpen) {
-      form.reset({ title: '' }); // Always reset to empty title when dialog opens
+      form.reset({ title: '' });
     }
   }, [isOpen, form]);
 
-  const effectiveDialogTitle = dialogTitle || // Use passed dialogTitle if available
+  const effectiveDialogTitle = dialogTitle ||
     (parentStepTitle
       ? `Add Sub-step to "${parentStepTitle}"`
       : "Add New Roadmap Step");
@@ -437,7 +435,7 @@ const ViewPlanPage = () => {
   const [roadmapSteps, setRoadmapSteps] = useState<RoadmapStep[]>([]);
   const [isAddStepDialogOpen, setIsAddStepDialogOpen] = useState(false);
   const [currentParentStepForDialog, setCurrentParentStepForDialog] = useState<{ id: string; title: string } | null>(null);
-  const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{ sourceStepId: string; sourceAnchor: 'N' | 'S' | 'E' | 'W'; sourceYOffset?: number; } | null>(null);
+  const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{ sourceStepId: string; sourceAnchor: 'N' | 'S' | 'E' | 'W'; } | null>(null);
   const [isSubmittingStep, setIsSubmittingStep] = useState(false);
 
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
@@ -528,15 +526,15 @@ const ViewPlanPage = () => {
             title: newStepTitle,
             description: null,
             subSteps: [],
-            x: 0, // Placeholder
-            y: 0, // Placeholder
+            x: 0,
+            y: 0,
             sourceNodeId: sourceStep.id,
             sourceAnchor: sourceAnchor,
             sourceLineYOffset: sourceYOffset,
         };
         const newCardDynamicHeight = getEstimatedCardHeight(newStepInitial);
 
-        let newX = sourceStep.x - (NODE_WIDTH + 64); // Position to the left
+        let newX = sourceStep.x - (NODE_WIDTH + 64);
         let newY = sourceStep.y + sourceYOffset - (newCardDynamicHeight / 2);
 
         const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
@@ -544,10 +542,12 @@ const ViewPlanPage = () => {
         newStepInitial.y = Math.round(Math.max(0, newY));
 
         const updatedSteps = [...prevSteps, newStepInitial];
-        // Auto-select the newly created step
         setSelectedStepId(newId);
         setSelectedNodeForPanel(newStepInitial);
-        toast({ title: "Step Created", description: `"${newStepTitle}" added from sub-step.` });
+        // Defer toast call
+        setTimeout(() => {
+          toast({ title: "Step Created", description: `"${newStepTitle}" added from sub-step.` });
+        }, 0);
         return updatedSteps;
     });
   }, [setRoadmapSteps, setSelectedStepId, setSelectedNodeForPanel, toast, canvasRef]);
@@ -596,7 +596,6 @@ const ViewPlanPage = () => {
                 let newY = 20;
                 let stepSourceNodeId: string | undefined = undefined;
                 let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
-                let stepSourceLineYOffset: number | undefined = undefined;
 
                 const newMainStepInitial: RoadmapStep = {
                     ...newStepBase,
@@ -612,8 +611,6 @@ const ViewPlanPage = () => {
                         if (sourceStep) {
                             stepSourceNodeId = sourceStep.id;
                             stepSourceAnchor = pendingNodeFromDotInfo.sourceAnchor;
-                            // sourceYOffset on pendingNodeFromDotInfo is for *sub-step* dot clicks (now handled separately)
-                            // For N/S/E/W dots, sourceLineYOffset is implicitly center of that edge.
                             const sourceCardHeight = getEstimatedCardHeight(sourceStep);
                             const newCardDynamicHeight = getEstimatedCardHeight(newMainStepInitial);
                             switch (pendingNodeFromDotInfo.sourceAnchor) {
@@ -641,20 +638,19 @@ const ViewPlanPage = () => {
                     newMainStepInitial.y = Math.round(Math.max(0, newY));
                     if(stepSourceNodeId) newMainStepInitial.sourceNodeId = stepSourceNodeId;
                     if(stepSourceAnchor) newMainStepInitial.sourceAnchor = stepSourceAnchor;
-                    // sourceLineYOffset is not set here as it's implicitly center for N/S/E/W dots
                 }
                 return [...prevSteps, newMainStepInitial];
             }
         });
         toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
-        setIsAddStepDialogOpen(false); // Request dialog to close
+        setIsAddStepDialogOpen(false);
     } catch (error) {
         console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
         toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
     } finally {
-        setIsSubmittingStep(false); // Reset submitting state in finally
+        setIsSubmittingStep(false);
     }
-  }, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]); // Removed pendingNodeInitialTitle dependency
+  }, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]);
 
 
   const processDragMovementLoop = useCallback(() => {
@@ -871,10 +867,10 @@ const ViewPlanPage = () => {
 
   const isOwner = currentUser?.uid === plan.ownerId;
 
-  let dialogTitleForAddStep = "Add New Roadmap Step"; // Default for main canvas button
-  if (currentParentStepForDialog) { // For "Add Sub-step" button on a card
+  let dialogTitleForAddStep = "Add New Roadmap Step";
+  if (currentParentStepForDialog) {
     dialogTitleForAddStep = `Add Sub-step to "${currentParentStepForDialog.title}"`;
-  } else if (pendingNodeFromDotInfo) { // For N,S,E,W dots on a card
+  } else if (pendingNodeFromDotInfo) {
     const sourceStepTitle = roadmapSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title || "Selected Step";
     dialogTitleForAddStep = `Add New Step from "${sourceStepTitle}"`;
   }
@@ -936,7 +932,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={false} // Always enabled as per request
+              disabled={false}
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
