@@ -532,82 +532,88 @@ const ViewPlanPage = () => {
   }, []);
 
   const handleAddRoadmapStepSubmit = useCallback(async (formData: AddRoadmapStepDialogFormDataInternal) => {
-    if (isSubmittingStep) { console.warn("[ViewPlanPage] handleAddRoadmapStepSubmit: Already submitting, ignoring additional call."); return; }
+    if (isSubmittingStep) {
+        console.warn("[ViewPlanPage] handleAddRoadmapStepSubmit: Already submitting, ignoring call.");
+        return;
+    }
     setIsSubmittingStep(true);
     try {
-      const newStepBase = {
-        id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
-        title: formData.title,
-        description: null,
-      };
+        setRoadmapSteps(prevSteps => {
+            const newStepBase = {
+                id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                title: formData.title,
+                description: null,
+            };
+            if (currentParentStepForDialog) {
+                return prevSteps.map(step =>
+                    step.id === currentParentStepForDialog.id
+                    ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id } as RoadmapSubStep] }
+                    : step
+                );
+            } else {
+                let newX = 20;
+                let newY = 20;
+                let stepSourceNodeId: string | undefined = undefined;
+                let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
+                let stepSourceLineYOffset: number | undefined = undefined;
 
-      setRoadmapSteps(prevSteps => {
-        if (currentParentStepForDialog) {
-          return prevSteps.map(step =>
-            step.id === currentParentStepForDialog.id
-              ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id } as RoadmapSubStep] }
-              : step
-          );
-        } else {
-          let newX = 20;
-          let newY = 20;
-          let stepSourceNodeId: string | undefined = undefined;
-          let stepSourceAnchor: 'N' | 'S' | 'E' | 'W' | undefined = undefined;
-          let stepSourceLineYOffset: number | undefined = undefined;
+                const newMainStepInitial: RoadmapStep = {
+                    ...newStepBase,
+                    subSteps: [],
+                    x: newX,
+                    y: newY,
+                };
 
-          if (canvasRef.current) {
-            const currentCanvasClientWidth = canvasRef.current.clientWidth;
-            if (pendingNodeFromDotInfo) {
-              const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
-              if (sourceStep) {
-                stepSourceNodeId = sourceStep.id;
-                stepSourceAnchor = pendingNodeFromDotInfo.sourceAnchor;
-                stepSourceLineYOffset = pendingNodeFromDotInfo.sourceYOffset;
-                const sourceCardHeight = getEstimatedCardHeight(sourceStep);
-                const newCardDynamicHeight = getEstimatedCardHeight({ ...newStepBase, subSteps: [] } as RoadmapStep);
-                switch (pendingNodeFromDotInfo.sourceAnchor) {
-                  case 'N': newX = sourceStep.x; newY = sourceStep.y - (newCardDynamicHeight + 64); break;
-                  case 'S': newX = sourceStep.x; newY = sourceStep.y + sourceCardHeight + 64; break;
-                  case 'E': newX = sourceStep.x + NODE_WIDTH + 64; newY = sourceStep.y + (stepSourceLineYOffset ? (stepSourceLineYOffset - newCardDynamicHeight / 2) : (sourceCardHeight / 2 - newCardDynamicHeight / 2)); break;
-                  case 'W': newX = sourceStep.x - (NODE_WIDTH + 64); newY = sourceStep.y + (stepSourceLineYOffset ? (stepSourceLineYOffset - newCardDynamicHeight / 2) : (sourceCardHeight / 2 - newCardDynamicHeight / 2)); break;
+                if (canvasRef.current) {
+                    const currentCanvasClientWidth = canvasRef.current.clientWidth;
+                    if (pendingNodeFromDotInfo) {
+                        const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
+                        if (sourceStep) {
+                            stepSourceNodeId = sourceStep.id;
+                            stepSourceAnchor = pendingNodeFromDotInfo.sourceAnchor;
+                            stepSourceLineYOffset = pendingNodeFromDotInfo.sourceYOffset;
+                            const sourceCardHeight = getEstimatedCardHeight(sourceStep);
+                            const newCardDynamicHeight = getEstimatedCardHeight(newMainStepInitial);
+                            switch (pendingNodeFromDotInfo.sourceAnchor) {
+                                case 'N': newX = sourceStep.x; newY = sourceStep.y - (newCardDynamicHeight + 64); break;
+                                case 'S': newX = sourceStep.x; newY = sourceStep.y + sourceCardHeight + 64; break;
+                                case 'E': newX = sourceStep.x + NODE_WIDTH + 64; newY = sourceStep.y + (stepSourceLineYOffset !== undefined ? (stepSourceLineYOffset - newCardDynamicHeight / 2) : (sourceCardHeight / 2 - newCardDynamicHeight / 2)); break;
+                                case 'W': newX = sourceStep.x - (NODE_WIDTH + 64); newY = sourceStep.y + (stepSourceLineYOffset !== undefined ? (stepSourceLineYOffset - newCardDynamicHeight / 2) : (sourceCardHeight / 2 - newCardDynamicHeight / 2)); break;
+                            }
+                        }
+                    } else if (prevSteps.length > 0) {
+                        const mainSteps = prevSteps.filter(step => !step.sourceNodeId); // Consider only root steps for default positioning
+                        if (mainSteps.length > 0) {
+                             const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
+                             newX = 20; // Default X for new unlinked steps
+                             newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
+                        } else { // If all steps are linked, place below the lowest step
+                             const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0] || {y: -84}); // Fallback if prevSteps was empty but then became non-empty
+                             newX = 20;
+                             newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
+                        }
+                    } // Else, it's the very first step, (20,20) is fine.
+                    
+                    const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
+                    newMainStepInitial.x = Math.round(Math.max(0, Math.min(newX, maxX)));
+                    newMainStepInitial.y = Math.round(Math.max(0, newY));
+                    if(stepSourceNodeId) newMainStepInitial.sourceNodeId = stepSourceNodeId;
+                    if(stepSourceAnchor) newMainStepInitial.sourceAnchor = stepSourceAnchor;
+                    if(stepSourceLineYOffset !== undefined) newMainStepInitial.sourceLineYOffset = stepSourceLineYOffset;
+
                 }
-              }
-            } else if (prevSteps.length > 0) {
-              const mainSteps = prevSteps;
-              if (mainSteps.length > 0) {
-                const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
-                newX = 20;
-                newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
-              } else {
-                const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0]);
-                newX = 20;
-                newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
-              }
+                return [...prevSteps, newMainStepInitial];
             }
-            const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
-            newX = Math.round(Math.max(0, Math.min(newX, maxX)));
-            newY = Math.round(Math.max(0, newY));
-          }
-          const newMainStep: RoadmapStep = {
-            ...newStepBase,
-            subSteps: [],
-            x: newX,
-            y: newY,
-            sourceNodeId: stepSourceNodeId,
-            sourceAnchor: stepSourceAnchor,
-            sourceLineYOffset: stepSourceLineYOffset,
-          };
-          return [...prevSteps, newMainStep];
-        }
-      });
-      toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
-      setIsAddStepDialogOpen(false);
+        });
+        toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
+        setIsAddStepDialogOpen(false);
     } catch (error) {
-      console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
-      toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
-      setIsSubmittingStep(false); // Only reset if there's an error here, otherwise onOpenChange handles it
+        console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
+    } finally {
+        setIsSubmittingStep(false);
     }
-  }, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, toast, setRoadmapSteps, setIsSubmittingStep, setIsAddStepDialogOpen, setCurrentParentStepForDialog, setPendingNodeFromDotInfo]);
+}, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, setIsSubmittingStep, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]); // Added canvasRef
 
 
   const processDragMovementLoop = useCallback(() => {
@@ -904,7 +910,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={false}
+              disabled={false} // Always enabled as per last request
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
@@ -990,9 +996,9 @@ const ViewPlanPage = () => {
           onOpenChange={(open) => {
             setIsAddStepDialogOpen(open);
             if (!open) {
-              setIsSubmittingStep(false);
-              setCurrentParentStepForDialog(null);
-              setPendingNodeFromDotInfo(null);
+                // isSubmittingStep is now reset in the finally block of handleAddRoadmapStepSubmit
+                setCurrentParentStepForDialog(null);
+                setPendingNodeFromDotInfo(null);
             }
           }}
           onSubmit={handleAddRoadmapStepSubmit}
