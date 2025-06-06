@@ -449,7 +449,6 @@ const ViewPlanPage = () => {
   const [isSavingRoadmap, setIsSavingRoadmap] = useState(false);
 
   const [confirmDeleteNodeInfo, setConfirmDeleteNodeInfo] = useState<{ id: string; title: string } | null>(null);
-  const [isAddStepButtonCoolingDown, setIsAddStepButtonCoolingDown] = useState(false);
 
 
   const isPlanIdValidUid = React.useMemo(() => {
@@ -510,15 +509,12 @@ const ViewPlanPage = () => {
   }, []);
 
   const openAddMainStepDialog = useCallback(() => {
-    if (isAddStepButtonCoolingDown) return;
-    setIsAddStepButtonCoolingDown(true);
     setSelectedStepId(null);
     setSelectedNodeForPanel(null);
     setCurrentParentStepForDialog(null);
     setPendingNodeFromDotInfo(null);
     setIsAddStepDialogOpen(true);
-    setTimeout(() => setIsAddStepButtonCoolingDown(false), 1000);
-  }, [isAddStepButtonCoolingDown]);
+  }, []);
 
   const openAddSubStepDialog = useCallback((event: React.MouseEvent, parentId: string, parentTitle: string) => {
     event.stopPropagation();
@@ -536,10 +532,7 @@ const ViewPlanPage = () => {
   }, []);
 
   const handleAddRoadmapStepSubmit = useCallback(async (formData: AddRoadmapStepDialogFormDataInternal) => {
-    if (isSubmittingStep) {
-      console.warn("[ViewPlanPage] handleAddRoadmapStepSubmit: Already submitting, ignoring additional call.");
-      return;
-    }
+    if (isSubmittingStep) { console.warn("[ViewPlanPage] handleAddRoadmapStepSubmit: Already submitting, ignoring additional call."); return; }
     setIsSubmittingStep(true);
     try {
       const newStepBase = {
@@ -608,14 +601,13 @@ const ViewPlanPage = () => {
         }
       });
       toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
-      setIsAddStepDialogOpen(false); // Request to close the dialog
+      setIsAddStepDialogOpen(false);
     } catch (error) {
       console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
       toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
-      setIsSubmittingStep(false); // Reset if there's an error *before* closing dialog
+      setIsSubmittingStep(false);
     }
-    // isSubmittingStep is reset when the dialog closes (see onOpenChange for AddRoadmapStepDialogInternal)
-  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast, isSubmittingStep, roadmapSteps]);
+  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast, isSubmittingStep, roadmapSteps, setIsAddStepDialogOpen, setIsSubmittingStep, setRoadmapSteps]);
 
 
   const processDragMovementLoop = useCallback(() => {
@@ -912,7 +904,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={isAddStepButtonCoolingDown || isAddStepDialogOpen || !isOwner || isSubmittingStep}
+              disabled={isAddStepDialogOpen || !isOwner || isSubmittingStep}
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
@@ -1012,21 +1004,23 @@ const ViewPlanPage = () => {
         />
       )}
 
-      <Sheet open={!!selectedNodeForPanel} onOpenChange={(open) => { if (!open) setSelectedNodeForPanel(null); }}>
+       <Sheet open={!!selectedNodeForPanel} onOpenChange={(open) => { if (!open) setSelectedNodeForPanel(null); }}>
         <SheetContent className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col">
-          <SheetHeader className="p-4 border-b">
-            <SheetTitle className="truncate" title={selectedNodeForPanel?.title || "Node Details"}>
-              {selectedNodeForPanel ? `Editing: ${selectedNodeForPanel.title}` : "Node Details"}
-            </SheetTitle>
-            <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
-          </SheetHeader>
           {selectedNodeForPanel && (
-            <RoadmapStepDetailPanel
-              step={selectedNodeForPanel}
-              onDescriptionChange={handleStepDescriptionChange}
-              onTitleChange={handleStepTitleChange}
-              isOwner={isOwner}
-            />
+            <>
+              <SheetHeader className="p-4 border-b">
+                <SheetTitle className="truncate" title={selectedNodeForPanel.title}>
+                  Editing: {selectedNodeForPanel.title}
+                </SheetTitle>
+                <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
+              </SheetHeader>
+              <RoadmapStepDetailPanel
+                step={selectedNodeForPanel}
+                onDescriptionChange={handleStepDescriptionChange}
+                onTitleChange={handleStepTitleChange}
+                isOwner={isOwner}
+              />
+            </>
           )}
         </SheetContent>
       </Sheet>
