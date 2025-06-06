@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'; // Corrected import
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import {
@@ -15,19 +15,23 @@ import {
   ChevronLeft,
   AlertTriangle,
   Map,
-  Plus, // Added Plus icon
+  Plus,
 } from 'lucide-react';
 
 import { getPlanById, updatePlanRoadmap } from '@/services/planService';
-import type { ClientPlan, RoadmapStep } from '@/types/plan';
+import type { ClientPlan, RoadmapStep, NewPlanData } from '@/types/plan'; // Added NewPlanData
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { cn, IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import Link from 'next/link';
-
-// AddRoadmapStepDialog and related types/state removed as per previous request
+import { v4 as uuidv4 } from 'uuid'; // For generating unique IDs for new steps
 
 const MIN_CANVAS_PADDING = 20;
+const NODE_WIDTH = 200; // Example width
+const NODE_HEIGHT = 100; // Example height
+const NODE_SPACING_X = 50;
+const NODE_SPACING_Y = 30;
+
 
 export default function PlanDetailPage() {
   const params = useParams();
@@ -41,15 +45,24 @@ export default function PlanDetailPage() {
 
   const [isSavingRoadmap, setIsSavingRoadmap] = useState(false);
   const [canvasMinHeight, setCanvasMinHeight] = useState<number | string>('100vh');
-  // State for AddRoadmapStepDialog removed
+  const [editableRoadmap, setEditableRoadmap] = useState<RoadmapStep[]>([]);
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
-  const { data: planData, isLoading: isLoadingPlan, error: planError } = useQuery<ClientPlan | null>({
+  const { data: planData, isLoading: isLoadingPlan, error: planError, refetch: refetchPlanData } = useQuery<ClientPlan | null>({
     queryKey: ['plan', planId],
     queryFn: async () => (planId && isValidPlanId) ? getPlanById(planId) : null,
     enabled: !!planId && isValidPlanId && !authLoading,
   });
+
+  useEffect(() => {
+    if (planData) {
+      setEditableRoadmap(planData.roadmap || []);
+    } else {
+      setEditableRoadmap([]);
+    }
+  }, [planData]);
+
 
   useEffect(() => {
     if (canvasRef.current) {
@@ -60,7 +73,6 @@ export default function PlanDetailPage() {
 
   const isOwner = useMemo(() => !!user && !!planData && user.uid === planData.ownerId, [user, planData]);
 
-  // saveRoadmapChanges now saves an empty roadmap or the current (potentially empty) planData.roadmap
   const saveRoadmapChanges = async () => {
     if (!planData || !user || !planId || !isOwner) {
       toast({ variant: "destructive", title: "Error", description: "Cannot save: Plan data, user authentication, or ownership missing." });
@@ -68,8 +80,7 @@ export default function PlanDetailPage() {
     }
     setIsSavingRoadmap(true);
     try {
-      // Saves the current state of planData.roadmap, which is empty after previous modifications
-      await updatePlanRoadmap(planId, user.uid, planData.roadmap || []);
+      await updatePlanRoadmap(planId, user.uid, editableRoadmap); // Save the editableRoadmap
       toast({ title: "Plan State Saved", description: "The current plan state has been saved." });
       queryClient.invalidateQueries({ queryKey: ['plan', planId] });
     } catch (error: any) {
@@ -88,15 +99,37 @@ export default function PlanDetailPage() {
     }
   };
 
-  // handleAddRoadmapStepSubmit and related logic removed
-
   const handleAddNewNodeClick = () => {
-    if (!isOwner) return;
+    if (!isOwner || !planData) return; // Ensure planData exists to calculate position
     console.log("'+ Node' button clicked. Owner action.");
-    // Here you would typically open a dialog or initiate node creation logic.
-    // For now, it just logs.
-    toast({ title: "Action: + Node", description: "Functionality to add node to be implemented."});
-    // Example: setIsAddStepDialogOpen(true);
+
+    let initialX = 100;
+    let initialY = 100;
+
+    // Try to position the new node relative to the last node or center of canvas
+    if (editableRoadmap.length > 0) {
+        const lastNode = editableRoadmap[editableRoadmap.length - 1];
+        initialX = lastNode.x + NODE_WIDTH + NODE_SPACING_X;
+        initialY = lastNode.y; // Or adjust Y as well
+    } else if (canvasRef.current) {
+        initialX = canvasRef.current.scrollWidth / 2 - NODE_WIDTH / 2;
+        initialY = canvasRef.current.scrollHeight / 2 - NODE_HEIGHT / 2;
+    }
+    
+    // Ensure new node is within reasonable bounds initially
+    initialX = Math.max(NODE_SPACING_X, initialX);
+    initialY = Math.max(NODE_SPACING_Y, initialY);
+
+    const newNode: RoadmapStep = {
+      id: `step-${Date.now()}-${uuidv4().substring(0, 8)}`, // More robust unique ID
+      title: "New Step",
+      description: "",
+      x: initialX,
+      y: initialY,
+      subSteps: [],
+    };
+    setEditableRoadmap(prev => [...prev, newNode]);
+    toast({ title: "Node Added", description: "A new node has been added to the plan. Remember to save." });
   };
 
 
@@ -181,14 +214,38 @@ export default function PlanDetailPage() {
           className="flex-1 grid-background relative overflow-auto p-4 md:p-6"
           style={{ minHeight: canvasMinHeight }}
         >
-          <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none">
-              <Map className="h-16 w-16 mb-4"/>
-              <p className="text-lg font-medium">Collaboration Plan Area</p>
-              <p className="text-sm mt-1">Roadmap content has been cleared. Use header controls if you are the owner.</p>
-          </div>
+          {editableRoadmap.length === 0 && (
+            <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none">
+                <Map className="h-16 w-16 mb-4"/>
+                <p className="text-lg font-medium">Collaboration Plan Area</p>
+                <p className="text-sm mt-1">
+                    {isOwner ? "Click '+ Node' in the header to add your first step." : "This plan currently has no steps defined."}
+                </p>
+            </div>
+          )}
+          {/* Render nodes from editableRoadmap */}
+          {editableRoadmap.map(step => (
+            <div
+              key={step.id}
+              className="absolute bg-card border border-border rounded-lg shadow-md p-3 w-[200px] min-h-[80px] cursor-grab" // Basic styling
+              style={{
+                left: `${step.x}px`,
+                top: `${step.y}px`,
+                width: `${NODE_WIDTH}px`,
+                // minHeight: `${NODE_HEIGHT}px`, // If you want a min height
+              }}
+              // Draggability will be added later
+            >
+              <h3 className="text-sm font-semibold text-foreground truncate mb-1">{step.title}</h3>
+              {step.description && <p className="text-xs text-muted-foreground line-clamp-2">{step.description}</p>}
+              {/* Sub-steps rendering can be added here later if needed */}
+            </div>
+          ))}
+           {/* SVG area for lines can be re-added here later */}
         </main>
       </div>
-      {/* Dialogs for AddStep, StepDetail, Node Deletion were removed */}
     </div>
   );
 }
+
+    
