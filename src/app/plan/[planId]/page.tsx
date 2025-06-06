@@ -160,20 +160,22 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         const relativeYOffset = (dotRect.top - cardRect.top) + (dotRect.height / 2);
         onAutoCreateStepFromSubStep(e, step.id, 'W', relativeYOffset, subStepTitle, subStep.id);
       } else {
-        onAutoCreateStepFromSubStep(e, step.id, 'W', 0, subStepTitle, subStep.id);
+        // Fallback if refs aren't ready, though they should be.
+        // Adjust Y offset or handle as an error if needed. Default to 0 or center.
+        onAutoCreateStepFromSubStep(e, step.id, 'W', getEstimatedCardHeight(step) / 2, subStepTitle, subStep.id);
       }
     };
 
     return (
       <span
         ref={dotRef}
-        onMouseDown={handleSubStepDotClick}
+        onMouseDown={handleSubStepDotClick} // Changed to onMouseDown to be consistent if we switch to drag-to-create later
         className={cn(
           "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-pointer",
-          "h-2 w-2",
+          "h-2 w-2", // Small dot
           "transition-all duration-150 ease-in-out",
-          "hover:bg-green-500 hover:ring-2 hover:ring-green-300",
-          "hover:scale-150 active:scale-125"
+          "hover:bg-green-500 hover:ring-2 hover:ring-green-300", // Visual feedback on hover
+          "hover:scale-150 active:scale-125" // Interaction feedback
         )}
         title={`Create new step: "${subStepTitle}" (to the left)`}
       ></span>
@@ -186,7 +188,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       data-step-id={step.id}
       className={cn(
         "absolute bg-card border rounded-lg shadow-md w-64 cursor-default select-none z-10",
-        "flex flex-col",
+        "flex flex-col", // Ensure card content flows vertically
         isSelected && "ring-2 ring-primary shadow-primary/30 z-20"
       )}
       style={{ left: `${Math.round(step.x)}px`, top: `${Math.round(step.y)}px` }}
@@ -196,18 +198,18 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         onMouseDown={handleHeaderMouseDown}
       >
         <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
-        <div className="flex-grow min-w-0 pointer-events-none card-body-content">
+        <div className="flex-grow min-w-0 pointer-events-none card-body-content"> {/* Added card-body-content for consistency if styles are applied */}
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
         </div>
       </CardHeader>
 
-      <CardContent className="p-2.5 pt-1.5 border-t card-body-content">
+      <CardContent className="p-2.5 pt-1.5 border-t card-body-content"> {/* Added card-body-content */}
         {step.subSteps && step.subSteps.length > 0 && (
           <>
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
-            <ul className="list-none space-y-0.5 pl-0 ml-0">
+            <ul className="list-none space-y-0.5 pl-0 ml-0"> {/* Removed pl-4, dot will manage its position */}
               {step.subSteps.map((subStep) => (
-                <li key={subStep.id} className="relative flex items-center gap-1.5 text-xs pl-4">
+                <li key={subStep.id} className="relative flex items-center gap-1.5 text-xs pl-4"> {/* Added relative and pl-4 for dot positioning */}
                   <SubStepDot subStep={subStep} subStepTitle={subStep.title} />
                   <span className="text-muted-foreground truncate" title={subStep.title}>
                     {subStep.title}
@@ -251,11 +253,13 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         </Button>
       </CardFooter>
 
+      {/* Connection Dots for Main Step */}
       {isSelected && (
         <>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'N')} title="Add step above"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'S')} title="Add step below"><Plus className="h-3 w-3" /></Button>
           <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'E')} title="Add step to the right"><Plus className="h-3 w-3" /></Button>
+          {/* Only show West dot if there are no sub-steps, as sub-steps now handle left creation */}
           {(!step.subSteps || step.subSteps.length === 0) && (
               <Button variant="outline" size="icon" className="absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30" style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)`, width: DOT_SIZE, height: DOT_SIZE, padding: 0 }} onClick={(e) => handleDotClick(e, 'W')} title="Add step to the left"><Plus className="h-3 w-3" /></Button>
           )}
@@ -377,7 +381,7 @@ const AddRoadmapStepDialogInternal: React.FC<AddRoadmapStepDialogInternalProps> 
 
   React.useEffect(() => {
     if (isOpen) {
-      form.reset({ title: '' });
+      form.reset({ title: '' }); // Always reset to blank when dialog opens
     }
   }, [isOpen, form]);
 
@@ -546,8 +550,8 @@ const ViewPlanPage = () => {
         const updatedSteps = [...prevSteps, newStepInitial];
         setSelectedStepId(newId);
         setSelectedNodeForPanel(newStepInitial);
-        setTimeout(() => {
-          toast({ title: "Step Created", description: `"${newStepTitle}" added from sub-step.` });
+        setTimeout(() => { // Defer toast to next tick
+            toast({ title: "Step Created", description: `"${newStepTitle}" added from sub-step.` });
         }, 0);
         return updatedSteps;
     });
@@ -585,7 +589,7 @@ const ViewPlanPage = () => {
                 id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
                 title: formData.title,
                 description: null,
-                originatingSubStepInfo: null, // Main steps added via dialog don't originate from sub-steps
+                originatingSubStepInfo: null,
             };
             if (currentParentStepForDialog) {
                 return prevSteps.map(step =>
@@ -671,15 +675,28 @@ const ViewPlanPage = () => {
     const newY = Math.round(Math.max(0, nodeInitialCanvasPosRef.current.y + dy));
 
     setRoadmapSteps(prevSteps => {
-      const currentDraggingStep = prevSteps.find(s => s.id === draggingNodeIdRef.current);
-      if (currentDraggingStep && currentDraggingStep.x === newX && currentDraggingStep.y === newY) {
+      const stepIndex = prevSteps.findIndex(s => s.id === draggingNodeIdRef.current);
+
+      if (stepIndex === -1) {
+        if (draggingNodeIdRef.current) {
+            console.warn(`[processDragMovementLoop] Dragged step with ID ${draggingNodeIdRef.current} not found in prevSteps. Stopping drag operation.`);
+            if (dragUpdateFrameRef.current) {
+                cancelAnimationFrame(dragUpdateFrameRef.current);
+                dragUpdateFrameRef.current = null;
+            }
+        }
         return prevSteps;
       }
-      return prevSteps.map(step =>
-        step.id === draggingNodeIdRef.current
-          ? { ...step, x: newX, y: newY }
-          : step
-      );
+
+      const currentDraggingStep = prevSteps[stepIndex];
+
+      if (currentDraggingStep.x === newX && currentDraggingStep.y === newY) {
+        return prevSteps;
+      }
+
+      const newSteps = [...prevSteps];
+      newSteps[stepIndex] = { ...currentDraggingStep, x: newX, y: newY };
+      return newSteps;
     });
 
     dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
@@ -774,39 +791,32 @@ const ViewPlanPage = () => {
 
   const handleStepTitleChange = useCallback((stepId: string, newTitle: string) => {
     setRoadmapSteps(prevSteps => {
-        const mainStepIndex = prevSteps.findIndex(s => s.id === stepId);
-        if (mainStepIndex === -1) return prevSteps;
+        let stepsCopy = [...prevSteps];
+        const mainStepIndex = stepsCopy.findIndex(s => s.id === stepId);
+        
+        if (mainStepIndex === -1) return prevSteps; // Should not happen
 
-        const mainStepToUpdate = { ...prevSteps[mainStepIndex], title: newTitle };
-        let stepsAfterMainUpdate = [
-            ...prevSteps.slice(0, mainStepIndex),
-            mainStepToUpdate,
-            ...prevSteps.slice(mainStepIndex + 1),
-        ];
+        const mainStepToUpdate = { ...stepsCopy[mainStepIndex], title: newTitle };
+        stepsCopy[mainStepIndex] = mainStepToUpdate;
 
         // If the main step being edited originated from a sub-step, update the sub-step's title too
         if (mainStepToUpdate.originatingSubStepInfo) {
             const { sourceCardId, subStepId } = mainStepToUpdate.originatingSubStepInfo;
-            const parentCardIndex = stepsAfterMainUpdate.findIndex(s => s.id === sourceCardId);
+            const parentCardIndex = stepsCopy.findIndex(s => s.id === sourceCardId);
 
             if (parentCardIndex !== -1) {
-                const parentCard = { ...stepsAfterMainUpdate[parentCardIndex] };
+                const parentCard = { ...stepsCopy[parentCardIndex] }; // Create a copy to modify
                 const subStepIndex = (parentCard.subSteps || []).findIndex(sub => sub.id === subStepId);
 
                 if (subStepIndex !== -1) {
                     const updatedSubSteps = [...(parentCard.subSteps || [])];
                     updatedSubSteps[subStepIndex] = { ...updatedSubSteps[subStepIndex], title: newTitle };
                     parentCard.subSteps = updatedSubSteps;
-
-                    stepsAfterMainUpdate = [
-                        ...stepsAfterMainUpdate.slice(0, parentCardIndex),
-                        parentCard,
-                        ...stepsAfterMainUpdate.slice(parentCardIndex + 1),
-                    ];
+                    stepsCopy[parentCardIndex] = parentCard; // Replace the parent card in the copied array
                 }
             }
         }
-        return stepsAfterMainUpdate;
+        return stepsCopy;
     });
   }, []);
 
@@ -824,9 +834,8 @@ const ViewPlanPage = () => {
         if (step.sourceNodeId === stepIdToDelete) {
           return { ...step, sourceNodeId: undefined, sourceAnchor: undefined, sourceLineYOffset: undefined };
         }
-        // Also check if the deleted node was a parent of a sub-step origin
         if (step.originatingSubStepInfo && step.originatingSubStepInfo.sourceCardId === stepIdToDelete) {
-          return { ...step, originatingSubStepInfo: null }; // Or handle differently, e.g., convert to normal step
+          return { ...step, originatingSubStepInfo: null };
         }
         return step;
       });
@@ -939,8 +948,9 @@ const ViewPlanPage = () => {
               <span className="sm:hidden">Save</span>
             </Button>
           )}
-          <Button variant="ghost" size="icon" className="h-8 w-8"><MessageSquare className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8"><Presentation className="h-4 w-4" /></Button>
+          {/* Placeholder for future Message and Presentation buttons */}
+          {/* <Button variant="ghost" size="icon" className="h-8 w-8"><MessageSquare className="h-4 w-4" /></Button> */}
+          {/* <Button variant="ghost" size="icon" className="h-8 w-8"><Presentation className="h-4 w-4" /></Button> */}
           <Button variant="default" size="sm" className="h-8">
             <Share2 className="h-4 w-4 mr-1.5 sm:mr-2" />
             <span className="hidden sm:inline">Share</span>
@@ -968,7 +978,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={false} 
+              disabled={false}
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
