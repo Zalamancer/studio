@@ -9,7 +9,7 @@ import { getPlanById, updatePlanRoadmap } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep } from '@/types/plan';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Move, GripVertical, X, Eye, Save, Trash2, Twitter, Linkedin, Facebook, Mail, Link as LinkIconLucide } from 'lucide-react'; // Added social icons and LinkIconLucide
+import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Move, GripVertical, X, Eye, Save, Trash2, Twitter, Linkedin, Facebook, Mail, Link as LinkIconLucide, Send, MessageCircle } from 'lucide-react'; // Added Send, MessageCircle
 import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
@@ -32,7 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"; // Added DropdownMenu components
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogClose as AddStepDialogClose,
@@ -998,6 +998,28 @@ const ViewPlanPage = () => {
               >
                 <Facebook className="mr-2 h-4 w-4 text-[#1877F2]" />
                 Share on Facebook
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  const planUrl = window.location.href;
+                  const text = `Check out this collaboration plan: ${plan.name}\n\n${planUrl}`;
+                  window.open(`https://t.me/share/url?url=${encodeURIComponent(planUrl)}&text=${encodeURIComponent(text)}`, '_blank');
+                }}
+                className="cursor-pointer"
+              >
+                <Send className="mr-2 h-4 w-4 text-[#0088cc]" />
+                Share on Telegram
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onSelect={() => {
+                  const planUrl = window.location.href;
+                  const text = `Check out this collaboration plan: ${plan.name}`;
+                  window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text + ' ' + planUrl)}`, '_blank');
+                }}
+                className="cursor-pointer"
+              >
+                <MessageCircle className="mr-2 h-4 w-4 text-[#25D366]" />
+                Share on WhatsApp
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem
