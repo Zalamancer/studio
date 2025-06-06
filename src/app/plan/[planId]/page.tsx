@@ -46,7 +46,6 @@ import { useToast } from '@/hooks/use-toast';
 import { cn, IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import Link from 'next/link';
 import { v4 as uuidv4 } from 'uuid';
-// Removed: import { RoadmapNodeCard } from '@/components/plan/RoadmapNodeCard';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -55,12 +54,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 
 
 const MIN_CANVAS_PADDING = 20;
-const NODE_BASE_WIDTH = 220; // Base width for a node
-const NODE_BASE_MIN_HEIGHT = 100; // Base min-height
-const NODE_HEADER_HEIGHT = 40; // Approx height of header
-const SUBSTEP_ITEM_HEIGHT = 24; // Approx height of a sub-step list item
-const NODE_CONTENT_PADDING_Y = 16; // Py-2 for content = 8px top + 8px bottom
-const NODE_FOOTER_HEIGHT = 44; // Approx height of footer if present
+const NODE_BASE_WIDTH = 220;
+const NODE_BASE_MIN_HEIGHT = 100;
+const NODE_HEADER_HEIGHT = 40;
+const SUBSTEP_ITEM_HEIGHT = 24;
+const NODE_CONTENT_PADDING_Y = 16;
+const NODE_FOOTER_HEIGHT = 44;
 
 const DOT_SIZE = 12;
 const DOT_OFFSET = -(DOT_SIZE / 2);
@@ -68,24 +67,21 @@ const CONNECTION_LINE_COLOR = "hsl(var(--border))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
 
-const SUBSTEP_DOT_SIZE = 10; // Slightly smaller for sub-steps
-const SUBSTEP_DOT_OFFSET = -(SUBSTEP_DOT_SIZE / 2);
+const SUBSTEP_SPAN_DOT_SIZE_H = 8; // h-2
+const SUBSTEP_SPAN_DOT_SIZE_W = 8; // w-2
 
 
-// Helper function to calculate dynamic height of a node
 const calculateNodeHeight = (step: RoadmapStep): number => {
   let height = NODE_BASE_MIN_HEIGHT;
-  height = Math.max(height, NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y); // Ensure base height covers header and padding
+  height = Math.max(height, NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y);
 
   if (step.description && step.description.trim().length > 0) {
     const lineCount = (step.description.match(/\n/g) || []).length + 1;
-    height = Math.max(height, NODE_HEADER_HEIGHT + (lineCount * 15) + NODE_CONTENT_PADDING_Y); // Rough estimate for description lines
+    height = Math.max(height, NODE_HEADER_HEIGHT + (lineCount * 15) + NODE_CONTENT_PADDING_Y);
   }
   if (step.subSteps && step.subSteps.length > 0) {
-    height = Math.max(height, NODE_HEADER_HEIGHT + (step.subSteps.length * SUBSTEP_ITEM_HEIGHT) + NODE_CONTENT_PADDING_Y + 10); // Add some space for sub-steps list
+    height = Math.max(height, NODE_HEADER_HEIGHT + (step.subSteps.length * SUBSTEP_ITEM_HEIGHT) + NODE_CONTENT_PADDING_Y + 10);
   }
-  // Add footer height if applicable (e.g., for action buttons)
-  // height += NODE_FOOTER_HEIGHT; 
   return height;
 };
 
@@ -97,8 +93,8 @@ interface RoadmapStepCardProps {
     parentStepId: string,
     anchor: 'N' | 'S' | 'E' | 'W',
     interactionType: 'down' | 'up',
-    event: React.MouseEvent<HTMLButtonElement>,
-    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLButtonElement> }
+    event: React.MouseEvent<HTMLElement>, // Changed to HTMLElement for span
+    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLElement> } // Changed to HTMLElement
   ) => void;
   isSelected?: boolean;
   isSubmitting: boolean;
@@ -128,8 +124,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     isSubmitting: boolean;
     style?: React.CSSProperties;
     className?: string;
-    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLButtonElement> };
-  }> = ({ anchor, parentStepId, isSubmitting, style, className, subStepOriginContext }) => {
+  }> = ({ anchor, parentStepId, isSubmitting, style, className }) => {
     const dotButtonRef = useRef<HTMLButtonElement>(null);
     return (
       <button
@@ -147,13 +142,13 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         }}
         onMouseDown={(e) => {
           if (isSubmitting) return;
-          e.stopPropagation(); // Prevent card drag
-          onConnectionDotInteraction(parentStepId, anchor, 'down', e, subStepOriginContext ? {...subStepOriginContext, dotElementRef: dotButtonRef } : undefined);
+          e.stopPropagation();
+          onConnectionDotInteraction(parentStepId, anchor, 'down', e);
         }}
         onMouseUp={(e) => {
            if (isSubmitting) return;
            e.stopPropagation();
-           onConnectionDotInteraction(parentStepId, anchor, 'up', e, subStepOriginContext ? {...subStepOriginContext, dotElementRef: dotButtonRef } : undefined);
+           onConnectionDotInteraction(parentStepId, anchor, 'up', e);
         }}
         disabled={isSubmitting}
       />
@@ -173,7 +168,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         left: `${step.x}px`,
         top: `${step.y}px`,
         width: `${NODE_BASE_WIDTH}px`,
-        minHeight: `${dynamicHeight}px`, // Use dynamic height
+        minHeight: `${dynamicHeight}px`,
         touchAction: 'none',
       }}
       onMouseDown={(e) => onNodeMouseDown(step.id, e)}
@@ -211,39 +206,29 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
             {step.subSteps.map((subStep) => {
-                const subStepDotButtonRef = useRef<HTMLButtonElement>(null);
+                const subStepDotSpanRef = useRef<HTMLSpanElement>(null); // Ref for the span
                 return (
                   <li key={subStep.id} className="text-xs text-muted-foreground/90 flex items-center relative pl-4 py-0.5 group/substep">
-                    {/* Sub-step Connection Dot - Now on the Left */}
-                    <button
-                        ref={subStepDotButtonRef}
-                        aria-label={`Connect from sub-step ${subStep.title}`}
+                    <span
+                        ref={subStepDotSpanRef}
+                        title={`Create new step: "${subStep.title}" (to the left)`}
                         className={cn(
-                          "absolute rounded-full border-2 border-primary bg-background transition-all duration-150 z-10",
-                          "cursor-pointer hover:scale-125 hover:bg-green-500 hover:border-green-700", // Added hover effects
-                          isSubmitting && "cursor-not-allowed opacity-50"
+                            "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-grab h-2 w-2 transition-all duration-150 ease-in-out hover:bg-green-500 hover:ring-2 hover:ring-green-300 active:bg-green-600 hover:scale-150 active:scale-125",
+                            isSubmitting && "cursor-not-allowed opacity-50"
                         )}
-                        style={{
-                          width: DOT_SIZE,
-                          height: DOT_SIZE,
-                          left: DOT_OFFSET, // Position on the left
-                          top: `calc(50% - ${DOT_SIZE / 2}px)`, // Vertically center
-                        }}
                         onMouseDown={(e) => {
                           if (isSubmitting) return;
                           e.stopPropagation();
-                          onConnectionDotInteraction(step.id, 'E', 'down', e, { subStepId: subStep.id, subStepTitle: subStep.title, dotElementRef: subStepDotButtonRef });
+                          onConnectionDotInteraction(step.id, 'W', 'down', e, { subStepId: subStep.id, subStepTitle: subStep.title, dotElementRef: subStepDotSpanRef });
                         }}
                         onMouseUp={(e) => {
                           if (isSubmitting) return;
                           e.stopPropagation();
-                          onConnectionDotInteraction(step.id, 'E', 'up', e, { subStepId: subStep.id, subStepTitle: subStep.title, dotElementRef: subStepDotButtonRef });
+                          onConnectionDotInteraction(step.id, 'W', 'up', e, { subStepId: subStep.id, subStepTitle: subStep.title, dotElementRef: subStepDotSpanRef });
                         }}
-                        disabled={isSubmitting}
+                        aria-disabled={isSubmitting}
                     />
                     <span className="truncate flex-grow" title={subStep.title}>{subStep.title}</span>
-                    {/* Placeholder for sub-step specific actions if needed in future */}
-                    {/* <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 opacity-0 group-hover/substep:opacity-100 ml-auto"><MoreVertical className="h-3 w-3"/></Button> */}
                   </li>
                 );
             })}
@@ -254,7 +239,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         )}
       </div>
 
-      {/* Main Connection Dots */}
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)` }} />
       <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)` }} />
       <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)` }} />
@@ -264,31 +248,27 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
 });
 RoadmapStepCard.displayName = "RoadmapStepCard";
 
-
-// Type for storing drag operation state for main nodes
 interface DraggingNodeInfo {
   nodeId: string;
   offsetX: number;
   offsetY: number;
 }
 
-// Type for storing information about a connection drag operation
 interface ConnectionDragStateType {
   isDragging: boolean;
   sourceStepId: string | null;
   sourceAnchor: 'N' | 'S' | 'E' | 'W' | null;
-  sourceSubStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLButtonElement> } | null; // For visual start of line
+  sourceSubStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLElement> } | null;
   startX: number;
   startY: number;
   currentX: number;
   currentY: number;
 }
 
-// Type for storing info about the click that might initiate node creation
 interface ClickStartInfoType {
   parentStepId: string | null;
   anchor: 'N' | 'S' | 'E' | 'W' | null;
-  subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLButtonElement> } | null;
+  subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLElement> } | null;
   clientX: number;
   clientY: number;
 }
@@ -323,7 +303,6 @@ export default function PlanDetailPage() {
   });
   const clickStartInfoRef = useRef<ClickStartInfoType | null>(null);
 
-
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
   const { data: planData, isLoading: isLoadingPlan, error: planError, refetch: refetchPlanData } = useQuery<ClientPlan | null>({
@@ -343,7 +322,6 @@ export default function PlanDetailPage() {
       toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan." });
     }
   });
-
 
   useEffect(() => {
     if (planData) {
@@ -387,10 +365,9 @@ export default function PlanDetailPage() {
 
   const handleAddRoadmapStepSubmit = useCallback((data: AddRoadmapStepFormData) => {
     if (!isOwner) return;
-
-    const newStepBase: Omit<RoadmapStep, 'id' | 'x' | 'y' | 'subSteps'> = {
+    const newStepBase: Partial<RoadmapStep> = { // Use Partial for initial construction
       title: data.title,
-      description: null,
+      description: null, // Default empty description
     };
     
     let newStepX = 100;
@@ -401,43 +378,44 @@ export default function PlanDetailPage() {
       if (sourceNode) {
         const sourceNodeHeight = calculateNodeHeight(sourceNode);
         const sourceNodeWidth = NODE_BASE_WIDTH;
-        const spacing = 50; // Spacing between nodes
+        const spacing = 50;
+        const newNodeApproxHeight = calculateNodeHeight(newStepBase as RoadmapStep); // Estimate height
 
         switch(pendingNodeFromDotInfo.sourceAnchor) {
           case 'N':
             newStepX = sourceNode.x + (sourceNodeWidth / 2) - (NODE_BASE_WIDTH / 2);
-            newStepY = sourceNode.y - calculateNodeHeight(newStepBase as RoadmapStep) - spacing;
+            newStepY = sourceNode.y - newNodeApproxHeight - spacing;
+            newStepBase.sourceNodeId = pendingNodeFromDotInfo.sourceStepId;
+            newStepBase.sourceAnchor = 'S'; // New node's South connects to source's North
             break;
           case 'S':
             newStepX = sourceNode.x + (sourceNodeWidth / 2) - (NODE_BASE_WIDTH / 2);
             newStepY = sourceNode.y + sourceNodeHeight + spacing;
+            newStepBase.sourceNodeId = pendingNodeFromDotInfo.sourceStepId;
+            newStepBase.sourceAnchor = 'N'; // New node's North connects to source's South
             break;
           case 'E':
             newStepX = sourceNode.x + sourceNodeWidth + spacing;
-            newStepY = sourceNode.y + (sourceNodeHeight / 2) - (calculateNodeHeight(newStepBase as RoadmapStep) / 2);
+            newStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2);
+            newStepBase.sourceNodeId = pendingNodeFromDotInfo.sourceStepId;
+            newStepBase.sourceAnchor = 'W'; // New node's West connects to source's East
             break;
           case 'W':
             newStepX = sourceNode.x - NODE_BASE_WIDTH - spacing;
-            newStepY = sourceNode.y + (sourceNodeHeight / 2) - (calculateNodeHeight(newStepBase as RoadmapStep) / 2);
+            newStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2);
+            newStepBase.sourceNodeId = pendingNodeFromDotInfo.sourceStepId;
+            newStepBase.sourceAnchor = 'E'; // New node's East connects to source's West
             break;
         }
-        newStepBase.sourceNodeId = pendingNodeFromDotInfo.sourceStepId;
-        newStepBase.sourceAnchor = pendingNodeFromDotInfo.sourceAnchor === 'N' ? 'S' : pendingNodeFromDotInfo.sourceAnchor === 'S' ? 'N' : pendingNodeFromDotInfo.sourceAnchor === 'E' ? 'W' : 'E';
         
         if (pendingNodeFromDotInfo.creatingFromSubStepId) {
           newStepBase.originatingSubStepInfo = {
             sourceCardId: pendingNodeFromDotInfo.sourceStepId,
             subStepId: pendingNodeFromDotInfo.creatingFromSubStepId,
           };
-          // For sub-step origins, always connect from East of parent to West of new node
-          newStepBase.sourceNodeId = pendingNodeFromDotInfo.sourceStepId;
-          newStepBase.sourceAnchor = 'W'; // New node's West anchor connects to parent's East
-
-          // Adjust positioning to be East of parent, aligned with where the sub-step might have been
-           const subStepDotYOffset = 0; // Placeholder: In a real scenario, you might pass Y offset of sub-step dot
-           newStepX = sourceNode.x + sourceNodeWidth + spacing;
-           newStepY = sourceNode.y + subStepDotYOffset - (calculateNodeHeight(newStepBase as RoadmapStep) / 2);
-
+          // If from sub-step (which are on West or East edge), new node is placed respective of that edge.
+          // The `pendingNodeFromDotInfo.sourceAnchor` would be 'W' for left sub-step dot.
+          // So `newStepBase.sourceAnchor` should be 'E' (new node's East connects to parent's West)
         } else {
           newStepBase.originatingSubStepInfo = null;
         }
@@ -456,7 +434,7 @@ export default function PlanDetailPage() {
       x: newStepX,
       y: newStepY,
       subSteps: [],
-    };
+    } as RoadmapStep; // Ensure all required fields are present
 
     setEditableRoadmap(prev => [...prev, newNode]);
     setIsAddStepDialogOpen(false);
@@ -485,8 +463,8 @@ export default function PlanDetailPage() {
     if (draggingNodeInfo) {
       let newX = event.clientX - canvasRect.left - draggingNodeInfo.offsetX + canvasRef.current.scrollLeft;
       let newY = event.clientY - canvasRect.top - draggingNodeInfo.offsetY + canvasRef.current.scrollTop;
-      newX = Math.max(0, newX); // Ensure X is not negative
-      newY = Math.max(0, newY); // Ensure Y is not negative
+      newX = Math.max(0, newX);
+      newY = Math.max(0, newY);
 
       setEditableRoadmap(prevRoadmap =>
         prevRoadmap.map(step =>
@@ -515,8 +493,8 @@ export default function PlanDetailPage() {
     parentStepId: string,
     anchor: 'N' | 'S' | 'E' | 'W',
     interactionType: 'down' | 'up',
-    event: React.MouseEvent<HTMLButtonElement>,
-    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLButtonElement> }
+    event: React.MouseEvent<HTMLElement>, // Changed to HTMLElement
+    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLElement> } // Changed to HTMLElement
   ) => {
     if (!isOwner || !canvasRef.current) return;
     event.stopPropagation();
@@ -524,7 +502,7 @@ export default function PlanDetailPage() {
     const dotElement = event.currentTarget;
     const dotRect = dotElement.getBoundingClientRect();
 
-    const getDotCenter = (rect: DOMRect) => ({
+    const getElementCenter = (rect: DOMRect) => ({
         x: rect.left + rect.width / 2 - canvasRect.left + canvasRef.current!.scrollLeft,
         y: rect.top + rect.height / 2 - canvasRect.top + canvasRef.current!.scrollTop,
     });
@@ -532,23 +510,22 @@ export default function PlanDetailPage() {
     let sourceDotX: number, sourceDotY: number;
     if (subStepOriginContext && subStepOriginContext.dotElementRef.current) {
         const subDotRect = subStepOriginContext.dotElementRef.current.getBoundingClientRect();
-        const subDotCenter = getDotCenter(subDotRect);
+        const subDotCenter = getElementCenter(subDotRect);
         sourceDotX = subDotCenter.x;
         sourceDotY = subDotCenter.y;
     } else {
-        const mainDotCenter = getDotCenter(dotRect);
+        const mainDotCenter = getElementCenter(dotRect);
         sourceDotX = mainDotCenter.x;
         sourceDotY = mainDotCenter.y;
     }
-
 
     if (interactionType === 'down') {
       clickStartInfoRef.current = { parentStepId, anchor, clientX: event.clientX, clientY: event.clientY, subStepOriginContext };
       setActiveConnectionDragOperation({
         isDragging: true,
         sourceStepId: parentStepId,
-        sourceAnchor: anchor, // This is the anchor on the sourceStepId card itself
-        sourceSubStepOriginContext: subStepOriginContext, // Store if drag initiated from sub-step
+        sourceAnchor: anchor,
+        sourceSubStepOriginContext: subStepOriginContext,
         startX: sourceDotX,
         startY: sourceDotY,
         currentX: sourceDotX,
@@ -557,7 +534,7 @@ export default function PlanDetailPage() {
     } else if (interactionType === 'up' && clickStartInfoRef.current) {
         const dx = Math.abs(event.clientX - clickStartInfoRef.current.clientX);
         const dy = Math.abs(event.clientY - clickStartInfoRef.current.clientY);
-        const isClick = dx < 5 && dy < 5; // Threshold for click vs drag
+        const isClick = dx < 5 && dy < 5;
 
         if (isClick) {
             setPendingNodeFromDotInfo({
@@ -568,24 +545,24 @@ export default function PlanDetailPage() {
             });
             setIsAddStepDialogOpen(true);
         } else {
-            // Handle drag-to-connect logic
             const targetElement = document.elementFromPoint(event.clientX, event.clientY);
             const targetNodeElement = targetElement?.closest('[data-node-id]');
             const targetNodeId = targetNodeElement?.getAttribute('data-node-id');
-            const targetDotElement = targetElement?.closest('button[aria-label*="Connect from"]');
+            const targetDotElement = targetElement?.closest('button[aria-label*="Connect from"], span[title*="Create new step"]'); // Include span
             
             let targetAnchor: 'N' | 'S' | 'E' | 'W' | null = null;
             if (targetDotElement) {
-                const label = targetDotElement.getAttribute('aria-label');
-                if (label?.includes("N anchor")) targetAnchor = 'N';
-                else if (label?.includes("S anchor")) targetAnchor = 'S';
-                else if (label?.includes("E anchor")) targetAnchor = 'E';
-                else if (label?.includes("W anchor")) targetAnchor = 'W';
+                const label = targetDotElement.getAttribute('aria-label') || targetDotElement.getAttribute('title');
+                if (label?.includes("N anchor") || (label?.includes("top") && targetDotElement.tagName === 'BUTTON')) targetAnchor = 'N';
+                else if (label?.includes("S anchor") || (label?.includes("bottom") && targetDotElement.tagName === 'BUTTON')) targetAnchor = 'S';
+                else if (label?.includes("E anchor") || (label?.includes("right") && targetDotElement.tagName === 'BUTTON')) targetAnchor = 'E';
+                else if (label?.includes("W anchor") || (label?.includes("left") && targetDotElement.tagName === 'BUTTON')) targetAnchor = 'W';
             }
             
             if (targetNodeId && targetNodeId !== parentStepId && targetAnchor && activeConnectionDragOperation.sourceStepId) {
-                const sourceIdForConnection = parentStepId; // Always use parent card for connection
-                const sourceAnchorForConnection = subStepOriginContext ? 'E' : activeConnectionDragOperation.sourceAnchor; // If from sub-step, parent's E edge
+                const sourceIdForConnection = parentStepId;
+                // If drag starts from sub-step dot (always 'W' or 'E' logically for parent), connection comes from parent's edge
+                const sourceAnchorForConnection = subStepOriginContext ? (anchor === 'W' ? 'W' : 'E') : activeConnectionDragOperation.sourceAnchor;
 
                 setEditableRoadmap(prev => prev.map(step => {
                     if (step.id === targetNodeId) {
@@ -600,7 +577,6 @@ export default function PlanDetailPage() {
         setActiveConnectionDragOperation({ isDragging: false, sourceStepId: null, sourceAnchor: null, sourceSubStepOriginContext: null, startX: 0, startY: 0, currentX: 0, currentY: 0 });
     }
   }, [isOwner, activeConnectionDragOperation.sourceAnchor, activeConnectionDragOperation.sourceStepId, toast]);
-
 
   const getAnchorPoint = (step: RoadmapStep, anchor: 'N' | 'S' | 'E' | 'W') => {
     const nodeHeight = calculateNodeHeight(step);
@@ -620,19 +596,22 @@ export default function PlanDetailPage() {
         const sourceNode = editableRoadmap.find(s => s.id === step.sourceNodeId);
         if (!sourceNode) return null;
 
-        let startPoint = getAnchorPoint(sourceNode, step.sourceAnchor === 'N' ? 'S' : step.sourceAnchor === 'S' ? 'N' : step.sourceAnchor === 'E' ? 'W' : 'E'); // Opposite for clarity
-        let endPoint = getAnchorPoint(step, step.sourceAnchor);
+        let startPoint, endPoint;
+        // Default: target's specified anchor connects to source's opposite
+        const oppositeSourceAnchor = step.sourceAnchor === 'N' ? 'S' : step.sourceAnchor === 'S' ? 'N' : step.sourceAnchor === 'E' ? 'W' : 'E';
+        startPoint = getAnchorPoint(sourceNode, oppositeSourceAnchor); 
+        endPoint = getAnchorPoint(step, step.sourceAnchor);
 
-        // If the source was a sub-step, adjust startPoint to parent's E edge conceptually
-        if (step.originatingSubStepInfo && step.sourceNodeId === step.originatingSubStepInfo.sourceCardId) {
-            startPoint = getAnchorPoint(sourceNode, 'E');
-            // The target (step) anchor should be 'W' if created from sub-step E-dot
-            endPoint = getAnchorPoint(step, 'W');
+        if (step.originatingSubStepInfo && sourceNode.id === step.originatingSubStepInfo.sourceCardId) {
+          // If created from a sub-step (which uses 'W' or 'E' on parent for line connection)
+          // The new node (step) will have its sourceAnchor set to connect TO the parent's 'W' or 'E' edge.
+          // e.g., if sub-step dot was 'W' on parent, new node's sourceAnchor is 'E' to connect to parent's 'W'.
+          startPoint = getAnchorPoint(sourceNode, step.sourceAnchor === 'E' ? 'W' : 'E'); // Parent's edge
+          endPoint = getAnchorPoint(step, step.sourceAnchor); // New node's connecting edge
         } else {
-             // Default connection logic: source's specified anchor to target's opposite anchor
-             const oppositeTargetAnchor = step.sourceAnchor === 'N' ? 'S' : step.sourceAnchor === 'S' ? 'N' : step.sourceAnchor === 'E' ? 'W' : 'E';
-             startPoint = getAnchorPoint(sourceNode, step.sourceAnchor);
-             endPoint = getAnchorPoint(step, oppositeTargetAnchor);
+          // Standard connection: target's specified anchor connects to source's opposite
+           startPoint = getAnchorPoint(sourceNode, oppositeSourceAnchor);
+           endPoint = getAnchorPoint(step, step.sourceAnchor);
         }
 
         const pathData = `M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}`;
@@ -662,10 +641,9 @@ export default function PlanDetailPage() {
   };
 
   const handleAddSubStepToParent = useCallback((parentStepId: string, parentStepTitle: string) => {
-    setPendingNodeFromDotInfo({ sourceStepId: parentStepId, sourceAnchor: 'E', creatingFromSubStepTitle: `Sub-step for ${parentStepTitle}` });
-    setIsAddStepDialogOpen(true); // Re-use the add step dialog for sub-steps for now
-  }, []);
-
+    setEditingStep(editableRoadmap.find(s => s.id === parentStepId) || null);
+    setIsStepDetailSheetOpen(true);
+  }, [editableRoadmap]);
 
   const handleDeleteStep = useCallback((stepId: string, stepTitle: string) => {
     setStepToDelete({id: stepId, title: stepTitle});
@@ -682,7 +660,6 @@ export default function PlanDetailPage() {
     toast({ title: "Step Deleted", description: `"${stepToDelete.title}" removed from plan. Save to persist.`});
     setStepToDelete(null);
   }, [stepToDelete, toast]);
-
 
   if (authLoading || (isLoadingPlan && isValidPlanId)) {
     return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -717,7 +694,6 @@ export default function PlanDetailPage() {
       </div>
     );
   }
-
 
   return (
     <div className="flex flex-col flex-1 w-full overflow-hidden">
@@ -819,7 +795,7 @@ export default function PlanDetailPage() {
         onSubmit={handleAddRoadmapStepSubmit}
         isSubmitting={saveRoadmapMutation.isPending}
         parentStepTitle={pendingNodeFromDotInfo?.sourceStepId ? editableRoadmap.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title : null}
-        dialogTitle={pendingNodeFromDotInfo?.creatingFromSubStepTitle ? `New Main Step from "${pendingNodeFromDotInfo.creatingFromSubStepTitle}"` : undefined}
+        dialogTitle={pendingNodeFromDotInfo?.creatingFromSubStepTitle ? `New Main Step from "${pendingNodeFromDotInfo.creatingFromSubStepTitle}" (Anchor: ${pendingNodeFromDotInfo.sourceAnchor})` : undefined}
       />
       <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) setEditingStep(null); setIsStepDetailSheetOpen(open); }}>
         <SheetContent className="sm:max-w-md">
@@ -850,7 +826,57 @@ export default function PlanDetailPage() {
                   disabled={saveRoadmapMutation.isPending}
                 />
               </div>
-              {/* Sub-step management can be added here */}
+              {/* Sub-step management */}
+              <div className="space-y-2">
+                <Label>Sub-steps</Label>
+                {editingStep.subSteps && editingStep.subSteps.length > 0 && (
+                  <ul className="space-y-1">
+                    {editingStep.subSteps.map((sub, index) => (
+                      <li key={sub.id} className="flex items-center gap-2 text-xs">
+                        <Input
+                          value={sub.title}
+                          onChange={(e) => {
+                            const newSubSteps = [...(editingStep.subSteps || [])];
+                            newSubSteps[index] = { ...newSubSteps[index], title: e.target.value };
+                            setEditingStep(prev => prev ? { ...prev, subSteps: newSubSteps } : null);
+                          }}
+                          className="flex-grow h-7 text-xs"
+                          disabled={saveRoadmapMutation.isPending}
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="h-6 w-6 p-1 text-destructive hover:text-destructive"
+                          onClick={() => {
+                            const newSubSteps = (editingStep.subSteps || []).filter((_, i) => i !== index);
+                            setEditingStep(prev => prev ? { ...prev, subSteps: newSubSteps } : null);
+                          }}
+                          disabled={saveRoadmapMutation.isPending}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="xs"
+                  onClick={() => {
+                    const newSubStep: RoadmapSubStep = {
+                      id: `sub-${Date.now()}-${uuidv4().substring(0,6)}`,
+                      parentId: editingStep.id,
+                      title: "New Sub-step"
+                    };
+                    setEditingStep(prev => prev ? { ...prev, subSteps: [...(prev.subSteps || []), newSubStep] } : null);
+                  }}
+                  disabled={saveRoadmapMutation.isPending}
+                >
+                  <Plus className="mr-1 h-3.5 w-3.5" /> Add Sub-step
+                </Button>
+              </div>
             </div>
           )}
           <SheetFooter>
