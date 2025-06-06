@@ -17,7 +17,7 @@ import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose } from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetClose, SheetFooter } from "@/components/ui/sheet";
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { useToast } from '@/hooks/use-toast';
@@ -28,7 +28,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
   Dialog,
-  DialogClose as AddStepDialogClose,
+  DialogClose as AddStepDialogClose, // Renamed to avoid conflict with SheetClose
   DialogContent as AddStepDialogContent,
   DialogDescription as AddStepDialogDescription,
   DialogFooter as AddStepDialogFooter,
@@ -39,7 +39,7 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent as ConfirmDialogContent,
+  AlertDialogContent as ConfirmDialogContent, // Distinct alias for AlertDialog's Content
   AlertDialogDescription as ConfirmDialogDescription,
   AlertDialogFooter as ConfirmDialogFooter,
   AlertDialogHeader as ConfirmDialogHeader,
@@ -167,8 +167,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         ref={dotRef}
         onMouseDown={handleSubStepDotClick}
         className={cn(
-          "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-pointer", // Positioning the dot
-          "h-2 w-2",
+          "inline-block rounded-full bg-muted-foreground cursor-pointer", // Reverted to inline-block
+          "h-2 w-2 mr-1.5", // Reverted: Dot was before the text with a right margin
           "transition-all duration-150 ease-in-out",
           "hover:bg-green-500 hover:ring-2 hover:ring-green-300",
           "hover:scale-150 active:scale-125"
@@ -205,7 +205,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
             <ul className="list-none space-y-0.5 pl-0 ml-0">
               {step.subSteps.map((subStep, index) => (
-                <li key={subStep.id} className="relative flex items-center gap-1.5 text-xs pl-4"> {/* Added relative and pl-4 */}
+                <li key={subStep.id} className="flex items-center gap-1.5 text-xs"> {/* Reverted li class */}
                   <SubStepDot subStepIndex={index} />
                   <span className="text-muted-foreground truncate" title={subStep.title}>
                     {subStep.title}
@@ -601,13 +601,13 @@ const ViewPlanPage = () => {
         }
       });
       toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
-      setIsAddStepDialogOpen(false); // This will trigger onOpenChange for the dialog
+      setIsAddStepDialogOpen(false); 
     } catch (error) {
       console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
       toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
-      setIsSubmittingStep(false); // Only reset if error before dialog close
+      setIsSubmittingStep(false);
     }
-  }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast, isSubmittingStep, roadmapSteps, setIsAddStepDialogOpen, setIsSubmittingStep, setRoadmapSteps]);
+  }, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, toast, roadmapSteps, setIsSubmittingStep, setIsAddStepDialogOpen, setRoadmapSteps, setCurrentParentStepForDialog, setPendingNodeFromDotInfo]);
 
 
   const processDragMovementLoop = useCallback(() => {
@@ -939,9 +939,7 @@ const ViewPlanPage = () => {
                 case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break;
                 default: return null;
               }
-
               const isSubStepLine = targetStep.sourceLineYOffset !== undefined;
-
               return (
                 <line
                   key={`line-${sourceStep.id}-${targetStep.id}`}
@@ -1009,7 +1007,7 @@ const ViewPlanPage = () => {
             {selectedNodeForPanel && (
               <>
                 <SheetHeader className="p-4 border-b">
-                  <SheetTitle className="truncate" title={selectedNodeForPanel.title}>
+                  <SheetTitle className="truncate">
                     Editing: {selectedNodeForPanel.title}
                   </SheetTitle>
                   <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
@@ -1020,7 +1018,7 @@ const ViewPlanPage = () => {
                   onTitleChange={handleStepTitleChange}
                   isOwner={isOwner}
                 />
-                <SheetFooter className="p-4 border-t">
+                <SheetFooter className="p-4 border-t mt-auto">
                    <SheetClose asChild>
                        <Button type="button" variant="outline">Close</Button>
                    </SheetClose>
