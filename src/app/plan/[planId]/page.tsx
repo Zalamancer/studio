@@ -605,7 +605,7 @@ const ViewPlanPage = () => {
     } catch (error) {
       console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
       toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
-      setIsSubmittingStep(false);
+      setIsSubmittingStep(false); // Only reset if there's an error here, otherwise onOpenChange handles it
     }
   }, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, toast, setRoadmapSteps, setIsSubmittingStep, setIsAddStepDialogOpen, setCurrentParentStepForDialog, setPendingNodeFromDotInfo]);
 
@@ -904,7 +904,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={isAddStepDialogOpen || !isOwner || isSubmittingStep}
+              disabled={false}
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
