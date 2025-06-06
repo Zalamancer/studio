@@ -9,7 +9,7 @@ import { getPlanById, updatePlanRoadmap } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep } from '@/types/plan';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, AlertTriangle, Brain, Share2, Presentation, MessageSquare, Plus, Undo, Redo, Layers, Minus, HelpCircle, User, MapPin, MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Move, GripVertical, X, Eye, Save, Trash2, Twitter, Linkedin, Facebook, Mail, Link as LinkIconLucide, Send, MessageCircle } from 'lucide-react'; // Added Send, MessageCircle
+import { Loader2, AlertTriangle, Brain, Share2, MessageSquare, Plus, Layers, Minus, Eye, Save, Trash2, Twitter, Linkedin, Facebook, Mail, Link as LinkIconLucide, Send } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
@@ -202,7 +202,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         className="p-2.5 bg-muted/50 rounded-t-lg cursor-grab active:cursor-grabbing flex flex-row items-center flex-shrink-0"
         onMouseDown={handleHeaderMouseDown}
       >
-        <GripVertical className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
+        <Layers className="h-4 w-4 text-muted-foreground mr-1.5 flex-shrink-0 pointer-events-none" />
         <div className="flex-grow min-w-0 pointer-events-none card-body-content">
           <CardTitle className="text-sm font-semibold truncate" title={step.title}>{step.title}</CardTitle>
         </div>
@@ -384,7 +384,7 @@ const AddRoadmapStepDialogInternal: React.FC<AddRoadmapStepDialogInternalProps> 
 
   React.useEffect(() => {
     if (isOpen) {
-      form.reset({ title: '' });
+      form.reset({ title: '' }); // Always reset title to empty when dialog opens
     }
   }, [isOpen, form]);
 
@@ -584,7 +584,6 @@ const ViewPlanPage = () => {
   }, []);
 
   const handleAddRoadmapStepSubmit = useCallback(async (formData: AddRoadmapStepDialogFormDataInternal) => {
-    if (isSubmittingStep) return;
     setIsSubmittingStep(true);
     try {
         setRoadmapSteps(prevSteps => {
@@ -659,7 +658,7 @@ const ViewPlanPage = () => {
     } finally {
         setIsSubmittingStep(false);
     }
-  }, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]);
+  }, [currentParentStepForDialog, pendingNodeFromDotInfo, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]);
 
 
   const processDragMovementLoop = useCallback(() => {
@@ -880,6 +879,18 @@ const ViewPlanPage = () => {
     }
   };
 
+  const handleShareToDiscord = async () => {
+    if (typeof window !== 'undefined') {
+      try {
+        await navigator.clipboard.writeText(window.location.href);
+        toast({ title: "Link Copied!", description: "Paste it into Discord." });
+        window.open('https://discord.com/app', '_blank');
+      } catch (err) {
+        toast({ variant: "destructive", title: "Action Failed", description: "Could not copy link or open Discord." });
+      }
+    }
+  };
+
 
   if (authLoading || (isLoading && isPlanIdValidUid)) {
     return (
@@ -1000,6 +1011,14 @@ const ViewPlanPage = () => {
                 Share on Facebook
               </DropdownMenuItem>
               <DropdownMenuItem
+                onSelect={handleShareToDiscord}
+                className="cursor-pointer"
+              >
+                <MessageSquare className="mr-2 h-4 w-4 text-[#5865F2]" />
+                Share on Discord
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
                 onSelect={() => {
                   const planUrl = window.location.href;
                   const text = `Check out this collaboration plan: ${plan.name}\n\n${planUrl}`;
@@ -1018,10 +1037,9 @@ const ViewPlanPage = () => {
                 }}
                 className="cursor-pointer"
               >
-                <MessageCircle className="mr-2 h-4 w-4 text-[#25D366]" />
+                <MessageSquare className="mr-2 h-4 w-4 text-[#25D366]" />
                 Share on WhatsApp
               </DropdownMenuItem>
-              <DropdownMenuSeparator />
               <DropdownMenuItem
                 onSelect={() => {
                   const planUrl = window.location.href;
@@ -1034,6 +1052,7 @@ const ViewPlanPage = () => {
                 <Mail className="mr-2 h-4 w-4" />
                 Share via Email
               </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onSelect={handleCopyLink} className="cursor-pointer">
                 <LinkIconLucide className="mr-2 h-4 w-4" />
                 Copy Link
@@ -1063,7 +1082,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={false}
+              disabled={false} 
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
@@ -1128,7 +1147,7 @@ const ViewPlanPage = () => {
 
           {roadmapSteps.length === 0 && !isAddStepDialogOpen && (
             <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none">
-              <StickyNote className="h-10 w-10 mb-2" />
+              <Layers className="h-10 w-10 mb-2" />
               <p className="text-sm font-medium">Roadmap is empty.</p>
               {isOwner && <p className="text-xs">Click "Add Roadmap Step" to begin planning.</p>}
             </div>
@@ -1205,4 +1224,5 @@ const ViewPlanPage = () => {
 
 export default ViewPlanPage;
     
+
 
