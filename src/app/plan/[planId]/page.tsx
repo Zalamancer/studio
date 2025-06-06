@@ -56,7 +56,7 @@ import {
 const NODE_WIDTH = 256; // width of RoadmapStepCard
 const DOT_SIZE = 12;
 const DOT_OFFSET = - (DOT_SIZE / 2);
-const DOT_HIT_RADIUS = 10; // Increased slightly for easier targeting
+const DOT_HIT_RADIUS = 10; 
 
 const HEADER_PADDING_TOP = 10;
 const HEADER_PADDING_BOTTOM = 10;
@@ -76,10 +76,9 @@ const FOOTER_CONTENT_HEIGHT = 28;
 const INTERNAL_BORDER_HEIGHT = 1;
 const NODE_END_PADDING = 50;
 
-// Click vs Drag thresholds
-const CLICK_TIME_THRESHOLD_MS = 250; // Max time for a click
-const CLICK_MOVE_THRESHOLD_PX = 5;   // Max mouse move for a click
-const SNAP_RADIUS = 20; // Radius for snapping to connection dots
+const CLICK_TIME_THRESHOLD_MS = 250; 
+const CLICK_MOVE_THRESHOLD_PX = 5;   
+const SNAP_RADIUS = 20; 
 
 
 type AnchorPoint = 'N' | 'S' | 'E' | 'W';
@@ -381,7 +380,7 @@ type ConnectionDragStateType = {
   currentX: number;
   currentY: number;
   targetHotspot: { stepId: string; anchor: AnchorPoint } | null;
-  isPotentialClick: boolean; // New field
+  isPotentialClick: boolean; 
 };
 
 type ClickStartInfoType = {
@@ -409,12 +408,16 @@ const ViewPlanPage = () => {
   const [isSubmittingStep, setIsSubmittingStep] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
+  
   const draggingNodeIdRef = useRef<string | null>(null);
-  const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null); // For node position dragging
-  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null); // For node position dragging
+  const dragOperationStartRef = useRef<{ clientX: number; clientY: number } | null>(null); 
+  const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null); 
   const latestMousePositionRef = useRef<{ x: number; y: number; clientX: number; clientY: number; } | null>(null);
   const dragUpdateFrameRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
+  const dragContextRef = useRef<{ maxX: number } | null>(null);
+
+
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
   const [isSavingRoadmap, setIsSavingRoadmap] = useState(false);
   const [confirmDeleteNodeInfo, setConfirmDeleteNodeInfo] = useState<{ id: string; title: string } | null>(null);
@@ -462,86 +465,102 @@ const ViewPlanPage = () => {
           if (nodeBottom > maxBottomY) maxBottomY = nodeBottom;
         });
       }
-      const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight;
+      const calculatedMinHeight = maxBottomY + NODE_END_PADDING + window.innerHeight; // Add window height for buffer
       setDynamicCanvasMinHeight(calculatedMinHeight < window.innerHeight ? window.innerHeight : calculatedMinHeight);
     }
-  }, [roadmapSteps]); // Depend on roadmapSteps to recalculate when they change
+  }, [roadmapSteps]); 
+
 
   const processConnectionLineDragLoop = useCallback(() => {
-    if (!connectionDragState || !latestMousePositionRef.current || !canvasRef.current) {
-      if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
-      rAFConnectionDragLoopRef.current = null;
-      return;
-    }
+    if (!rAFConnectionDragLoopRef.current) return; // Loop was cancelled
 
-    const { x: mouseCanvasX, y: mouseCanvasY, clientX: mouseClientX, clientY: mouseClientY } = latestMousePositionRef.current;
-    let newCalculatedCurrentX = mouseCanvasX;
-    let newCalculatedCurrentY = mouseCanvasY;
-    let newCalculatedTargetHotspot: ConnectionDragStateType['targetHotspot'] = null;
-    let newIsPotentialClick = connectionDragState.isPotentialClick;
-
-    if (newIsPotentialClick && clickStartInfoRef.current) {
-      const moveX = Math.abs(mouseClientX - clickStartInfoRef.current.clientX);
-      const moveY = Math.abs(mouseClientY - clickStartInfoRef.current.clientY);
-      if (moveX > CLICK_MOVE_THRESHOLD_PX || moveY > CLICK_MOVE_THRESHOLD_PX) {
-        newIsPotentialClick = false;
+    setConnectionDragState(currentDragState => {
+      if (!currentDragState || !currentDragState.isActive || !latestMousePositionRef.current || !canvasRef.current) {
+        if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+        rAFConnectionDragLoopRef.current = null;
+        return null; 
       }
-    }
 
-    let minDistance = SNAP_RADIUS;
-    for (const targetStep of roadmapStepsRef.current) {
-      if (targetStep.id === connectionDragState.sourceStepId) continue;
-      const targetCardElement = canvasRef.current.querySelector(`[data-step-id="${targetStep.id}"]`);
-      if (!targetCardElement) continue;
-      const targetCardRect = targetCardElement.getBoundingClientRect();
-      const targetCardHeight = getEstimatedCardHeight(targetStep);
-      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const { x: mouseCanvasX, y: mouseCanvasY, clientX: mouseClientX, clientY: mouseClientY } = latestMousePositionRef.current;
+      let newCalculatedCurrentX = mouseCanvasX;
+      let newCalculatedCurrentY = mouseCanvasY;
+      let newCalculatedTargetHotspot: ConnectionDragStateType['targetHotspot'] = null;
+      let newIsPotentialClick = currentDragState.isPotentialClick;
 
-      const targetAnchors: AnchorPoint[] = ['N', 'S', 'E', 'W'];
-      for (const targetAnchor of targetAnchors) {
-        if (targetAnchor === 'W' && targetStep.subSteps && targetStep.subSteps.length > 0) continue;
-        let dotX = 0, dotY = 0;
-        switch (targetAnchor) {
-          case 'N': dotX = targetCardRect.left + NODE_WIDTH / 2; dotY = targetCardRect.top; break;
-          case 'S': dotX = targetCardRect.left + NODE_WIDTH / 2; dotY = targetCardRect.bottom; break;
-          case 'E': dotX = targetCardRect.right; dotY = targetCardRect.top + targetCardHeight / 2; break;
-          case 'W': dotX = targetCardRect.left; dotY = targetCardRect.top + targetCardHeight / 2; break;
-        }
-        const dotCanvasX = dotX - canvasRect.left + canvasRef.current.scrollLeft;
-        const dotCanvasY = dotY - canvasRect.top + canvasRef.current.scrollTop;
-        const dist = Math.sqrt(Math.pow(mouseCanvasX - dotCanvasX, 2) + Math.pow(mouseCanvasY - dotCanvasY, 2));
-        if (dist < minDistance) {
-          minDistance = dist;
-          newCalculatedTargetHotspot = { stepId: targetStep.id, anchor: targetAnchor };
-          newCalculatedCurrentX = dotCanvasX;
-          newCalculatedCurrentY = dotCanvasY;
+      if (newIsPotentialClick && clickStartInfoRef.current) {
+        const moveX = Math.abs(mouseClientX - clickStartInfoRef.current.clientX);
+        const moveY = Math.abs(mouseClientY - clickStartInfoRef.current.clientY);
+        if (moveX > CLICK_MOVE_THRESHOLD_PX || moveY > CLICK_MOVE_THRESHOLD_PX) {
+          newIsPotentialClick = false;
         }
       }
-    }
-    
-    setConnectionDragState(prevState => {
-      if (!prevState || !prevState.isActive) return prevState;
+
+      let minDistance = SNAP_RADIUS;
+      for (const targetStep of roadmapStepsRef.current) {
+        if (targetStep.id === currentDragState.sourceStepId) continue;
+        const targetCardElement = canvasRef.current.querySelector(`[data-step-id="${targetStep.id}"]`);
+        if (!targetCardElement) continue;
+        
+        const targetCardRect = targetCardElement.getBoundingClientRect();
+        const targetCardHeight = getEstimatedCardHeight(targetStep);
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+
+        const targetAnchors: AnchorPoint[] = ['N', 'S', 'E', 'W'];
+        for (const targetAnchor of targetAnchors) {
+          if (targetAnchor === 'W' && targetStep.subSteps && targetStep.subSteps.length > 0) continue;
+          let dotX = 0, dotY = 0;
+          switch (targetAnchor) {
+            case 'N': dotX = targetCardRect.left + NODE_WIDTH / 2; dotY = targetCardRect.top; break;
+            case 'S': dotX = targetCardRect.left + NODE_WIDTH / 2; dotY = targetCardRect.bottom; break;
+            case 'E': dotX = targetCardRect.right; dotY = targetCardRect.top + targetCardHeight / 2; break;
+            case 'W': dotX = targetCardRect.left; dotY = targetCardRect.top + targetCardHeight / 2; break;
+          }
+          const dotCanvasX = dotX - canvasRect.left + canvasRef.current.scrollLeft;
+          const dotCanvasY = dotY - canvasRect.top + canvasRef.current.scrollTop;
+          const dist = Math.sqrt(Math.pow(mouseCanvasX - dotCanvasX, 2) + Math.pow(mouseCanvasY - dotCanvasY, 2));
+          if (dist < minDistance) {
+            minDistance = dist;
+            newCalculatedTargetHotspot = { stepId: targetStep.id, anchor: targetAnchor };
+            newCalculatedCurrentX = dotCanvasX;
+            newCalculatedCurrentY = dotCanvasY;
+          }
+        }
+      }
+      
       if (
-        Math.round(newCalculatedCurrentX) === Math.round(prevState.currentX) &&
-        Math.round(newCalculatedCurrentY) === Math.round(prevState.currentY) &&
-        JSON.stringify(newCalculatedTargetHotspot) === JSON.stringify(prevState.targetHotspot) &&
-        newIsPotentialClick === prevState.isPotentialClick
+        Math.round(newCalculatedCurrentX) === Math.round(currentDragState.currentX) &&
+        Math.round(newCalculatedCurrentY) === Math.round(currentDragState.currentY) &&
+        JSON.stringify(newCalculatedTargetHotspot) === JSON.stringify(currentDragState.targetHotspot) &&
+        newIsPotentialClick === currentDragState.isPotentialClick
       ) {
-        return prevState;
+        // No change, schedule next frame if still active
+        if (currentDragState.isActive) {
+          rAFConnectionDragLoopRef.current = requestAnimationFrame(processConnectionLineDragLoop);
+        } else {
+          if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+          rAFConnectionDragLoopRef.current = null;
+        }
+        return currentDragState;
       }
+      
+      // If still active after update, schedule next frame
+      if (currentDragState.isActive) {
+        rAFConnectionDragLoopRef.current = requestAnimationFrame(processConnectionLineDragLoop);
+      } else {
+        // Drag ended (e.g. mouseup on canvas), ensure loop stops
+        if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+        rAFConnectionDragLoopRef.current = null;
+      }
+
       return {
-        ...prevState,
+        ...currentDragState,
         currentX: newCalculatedCurrentX,
         currentY: newCalculatedCurrentY,
         targetHotspot: newCalculatedTargetHotspot,
         isPotentialClick: newIsPotentialClick,
       };
     });
-
-    if (connectionDragState?.isActive) {
-      rAFConnectionDragLoopRef.current = requestAnimationFrame(processConnectionLineDragLoop);
-    }
-  }, [connectionDragState, setConnectionDragState]);
+  }, [setConnectionDragState, roadmapStepsRef, canvasRef, latestMousePositionRef, clickStartInfoRef]);
 
 
   const handleConnectionDotInteraction = useCallback((
@@ -596,21 +615,27 @@ const ViewPlanPage = () => {
       rAFConnectionDragLoopRef.current = requestAnimationFrame(processConnectionLineDragLoop);
 
     } else if (interactionType === 'up' && clickStartInfoRef.current && clickStartInfoRef.current.stepId === stepId && clickStartInfoRef.current.anchor === anchor) {
+      // This mouseup is on the *same dot* where mousedown occurred.
       const timeDiff = Date.now() - clickStartInfoRef.current.time;
       const moveX = Math.abs(event.clientX - clickStartInfoRef.current.clientX);
       const moveY = Math.abs(event.clientY - clickStartInfoRef.current.clientY);
+      const localConnectionDragState = connectionDragState; // Capture current state
 
-      if (timeDiff < CLICK_TIME_THRESHOLD_MS && moveX < CLICK_MOVE_THRESHOLD_PX && moveY < CLICK_MOVE_THRESHOLD_PX) {
-        if (connectionDragState?.isPotentialClick) { // Double check from state
-          setPendingNodeFromDotInfo({ sourceStepId: stepId, sourceAnchor: anchor });
-          setIsAddStepDialogOpen(true);
-          // Stop any dragging visual state and logic immediately because it was a click
-          if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
-          rAFConnectionDragLoopRef.current = null;
-          setConnectionDragState(null);
-        }
+      if (localConnectionDragState?.isPotentialClick && timeDiff < CLICK_TIME_THRESHOLD_MS && moveX < CLICK_MOVE_THRESHOLD_PX && moveY < CLICK_MOVE_THRESHOLD_PX) {
+        // It's a click on the dot
+        setPendingNodeFromDotInfo({ sourceStepId: stepId, sourceAnchor: anchor });
+        setIsAddStepDialogOpen(true);
+        
+        // Stop any dragging visual state and logic immediately because it was a click
+        if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+        rAFConnectionDragLoopRef.current = null;
+        setConnectionDragState(null); // Crucial: nullify drag state so canvas mouseup doesn't process it as a drag end
+      } else {
+         // If it wasn't a click (i.e., it was a drag that ended on the same dot, or thresholds were exceeded),
+         // let the canvasMouseUp handler deal with it.
+         // For now, we just clear clickStartInfo here if it's not a click.
       }
-      clickStartInfoRef.current = null; // Clear click info after mouse up on the dot
+      clickStartInfoRef.current = null;
     }
   }, [canvasRef, setConnectionDragState, setSelectedStepId, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setIsAddStepDialogOpen, processConnectionLineDragLoop, connectionDragState]);
 
@@ -708,38 +733,55 @@ const ViewPlanPage = () => {
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]);
 
   const processDragMovementLoop = useCallback(() => {
-    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current) {
+    // Guard for refs
+    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current || !dragContextRef.current) {
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
       dragUpdateFrameRef.current = null;
       return;
     }
+
+    // Calculate new positions based on latest mouse data and initial drag state
     const dx = latestMousePositionRef.current.clientX - dragOperationStartRef.current.clientX;
     const dy = latestMousePositionRef.current.clientY - dragOperationStartRef.current.clientY;
-    const currentCanvasClientWidth = canvasRef.current?.clientWidth || window.innerWidth;
-    const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
-    const newCalculatedX = Math.round(Math.max(0, Math.min(nodeInitialCanvasPosRef.current.x + dx, maxX)));
-    const newCalculatedY = Math.round(Math.max(0, nodeInitialCanvasPosRef.current.y + dy));
+    const newCalculatedXUnclamped = nodeInitialCanvasPosRef.current.x + dx;
+    const newCalculatedYUnclamped = nodeInitialCanvasPosRef.current.y + dy;
+    const finalNewCalculatedX = Math.round(Math.max(0, Math.min(newCalculatedXUnclamped, dragContextRef.current.maxX)));
+    const finalNewCalculatedY = Math.round(Math.max(0, newCalculatedYUnclamped)); // Y is clamped at 0
 
     setRoadmapSteps(prevSteps => {
-      const stepIndex = prevSteps.findIndex(s => s.id === draggingNodeIdRef.current);
-      if (stepIndex === -1) { 
+      const currentDraggingId = draggingNodeIdRef.current;
+      if (!currentDraggingId) { // Drag might have been cancelled
         if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
         dragUpdateFrameRef.current = null;
-        return prevSteps; 
-      }
-      const nodeToUpdate = prevSteps[stepIndex];
-      if (nodeToUpdate.x === newCalculatedX && nodeToUpdate.y === newCalculatedY) {
         return prevSteps;
       }
+
+      const stepIndex = prevSteps.findIndex(s => s.id === currentDraggingId);
+      if (stepIndex === -1) { // Node being dragged was removed from list
+        if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
+        dragUpdateFrameRef.current = null;
+        return prevSteps;
+      }
+      const nodeToUpdate = prevSteps[stepIndex];
+
+      // Only update if position actually changed
+      if (nodeToUpdate.x === finalNewCalculatedX && nodeToUpdate.y === finalNewCalculatedY) {
+        return prevSteps; // No change, return previous state to prevent re-render
+      }
+
       const newSteps = [...prevSteps];
-      newSteps[stepIndex] = { ...nodeToUpdate, x: newCalculatedX, y: newCalculatedY };
+      newSteps[stepIndex] = { ...nodeToUpdate, x: finalNewCalculatedX, y: finalNewCalculatedY };
       return newSteps;
     });
 
-    if (draggingNodeIdRef.current) {
+    if (draggingNodeIdRef.current) { // Continue loop if drag is still active
       dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
+    } else { // Drag ended externally
+      if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
+      dragUpdateFrameRef.current = null;
     }
-  }, [setRoadmapSteps]);
+  // Stable dependencies: state setter and refs
+  }, [setRoadmapSteps, dragUpdateFrameRef, draggingNodeIdRef, latestMousePositionRef, dragOperationStartRef, nodeInitialCanvasPosRef, dragContextRef]);
 
 
   const autoScrollLoop = useCallback(() => {
@@ -750,17 +792,28 @@ const ViewPlanPage = () => {
     if (!draggedNode || typeof draggedNode.x !== 'number' || typeof draggedNode.y !== 'number') { autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop); return; }
     const nodeHeight = getEstimatedCardHeight(draggedNode); const nodeCanvasCenterY = draggedNode.y + (nodeHeight / 2); const viewportCenterY = window.innerHeight / 2; const currentCanvasScrollTop = canvasRef.current.scrollTop; const targetScrollTop = nodeCanvasCenterY - viewportCenterY; const scrollDiff = targetScrollTop - currentCanvasScrollTop; const SMOOTHING_FACTOR_CENTERING = 0.15; const SCROLL_THRESHOLD_FOR_CENTERING = 2;
     if (Math.abs(scrollDiff) > SCROLL_THRESHOLD_FOR_CENTERING) { const scrollAdjustment = scrollDiff * SMOOTHING_FACTOR_CENTERING; canvasRef.current.scrollTop += scrollAdjustment; }
-    autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
-  }, []);
+    
+    if (draggingNodeIdRef.current) {
+      autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
+    } else {
+      if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current);
+      autoScrollFrameRef.current = null;
+    }
+  }, [canvasRef, draggingNodeIdRef, autoScrollFrameRef, getEstimatedCardHeight, roadmapStepsRef]);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
-    if (draggingNodeIdRef.current) return; event.stopPropagation(); setSelectedStepId(stepId);
-    const currentRoadmapSteps = roadmapStepsRef.current;
-    const stepToDrag = currentRoadmapSteps.find(s => s.id === stepId);
+    if (draggingNodeIdRef.current) return; 
+    event.stopPropagation(); 
+    setSelectedStepId(stepId);
+    
+    const currentSteps = roadmapStepsRef.current; // Use ref for latest steps
+    const stepToDrag = currentSteps.find(s => s.id === stepId);
+
     if (stepToDrag && typeof stepToDrag.x === 'number' && typeof stepToDrag.y === 'number') {
       draggingNodeIdRef.current = stepId; 
-      dragOperationStartRef.current = { x: event.clientX, y: event.clientY }; 
+      dragOperationStartRef.current = { clientX: event.clientX, clientY: event.clientY }; 
       nodeInitialCanvasPosRef.current = { x: stepToDrag.x, y: stepToDrag.y }; 
+      
       if (canvasRef.current) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
         latestMousePositionRef.current = { 
@@ -769,16 +822,22 @@ const ViewPlanPage = () => {
             clientX: event.clientX,
             clientY: event.clientY,
         };
+        dragContextRef.current = { maxX: canvasRef.current.scrollWidth > NODE_WIDTH ? canvasRef.current.scrollWidth - NODE_WIDTH - NODE_END_PADDING : 0 };
+      } else {
+        dragContextRef.current = { maxX: window.innerWidth - NODE_WIDTH - NODE_END_PADDING };
       }
+      
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current); 
       dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
+      
       if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current); 
       autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
     }
-  }, [processDragMovementLoop, autoScrollLoop, canvasRef]);
+  }, [processDragMovementLoop, autoScrollLoop, canvasRef, setSelectedStepId, roadmapStepsRef]); // Added roadmapStepsRef to deps
 
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
-    if ((draggingNodeIdRef.current || connectionDragState?.isActive) && canvasRef.current) {
+    if (!canvasRef.current) return; 
+    if (draggingNodeIdRef.current || connectionDragState?.isActive) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
         latestMousePositionRef.current = {
             x: event.clientX - canvasRect.left + canvasRef.current.scrollLeft,
@@ -787,16 +846,22 @@ const ViewPlanPage = () => {
             clientY: event.clientY,
         };
     }
-  }, [connectionDragState?.isActive]);
+  }, [connectionDragState?.isActive, canvasRef]); 
 
   const handleCanvasMouseUpForConnection = useCallback(() => {
-    if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
-    rAFConnectionDragLoopRef.current = null;
+    if (rAFConnectionDragLoopRef.current) {
+      cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+      rAFConnectionDragLoopRef.current = null;
+    }
 
-    if (connectionDragState?.isActive && !connectionDragState.isPotentialClick) { // Only process if it was a drag, not a click
-      if (connectionDragState.targetHotspot) {
-        const { sourceStepId, sourceAnchor } = connectionDragState;
-        const { stepId: targetStepId, anchor: targetSnapAnchor } = connectionDragState.targetHotspot;
+    const localConnectionDragState = connectionDragState; // Capture current state for this handler
+    setConnectionDragState(null); // Always reset drag state on mouse up
+    clickStartInfoRef.current = null; // Clear click info
+
+    if (localConnectionDragState?.isActive && !localConnectionDragState.isPotentialClick) { 
+      if (localConnectionDragState.targetHotspot) {
+        const { sourceStepId, sourceAnchor } = localConnectionDragState;
+        const { stepId: targetStepId, anchor: targetSnapAnchor } = localConnectionDragState.targetHotspot;
 
         setRoadmapSteps(prevSteps => {
           const sourceNode = prevSteps.find(s => s.id === sourceStepId);
@@ -806,42 +871,53 @@ const ViewPlanPage = () => {
           const targetNode = prevSteps[targetNodeIndex];
           let sourceLineYOffsetVal: number | undefined = undefined;
           
-          if (clickStartInfoRef.current?.dotRef?.current && (sourceAnchor === 'E' || sourceAnchor === 'W')) {
-              const sourceDotElement = clickStartInfoRef.current.dotRef.current;
-              const sourceCardElement = sourceDotElement.closest(`[data-step-id="${sourceStepId}"]`);
-              if (sourceCardElement) {
-                  const sourceCardRect = sourceCardElement.getBoundingClientRect();
-                  const dotRect = sourceDotElement.getBoundingClientRect();
-                  const sourceCardCenterY = sourceCardRect.top + sourceCardRect.height / 2; // Canvas relative center
-                  sourceLineYOffsetVal = Math.round(((dotRect.top + dotRect.height / 2) - sourceCardCenterY));
-              }
+          // If the source anchor was E or W, we need to calculate the Y offset
+          // based on the original dot's position on the source card.
+          if (anchor === 'E' || anchor === 'W') { // 'anchor' here should be localConnectionDragState.sourceAnchor
+            const sourceCardElement = canvasRef.current?.querySelector(`[data-step-id="${sourceStepId}"]`);
+            const sourceDotElement = clickStartInfoRef.current?.dotRef?.current; // This might be null if drag started too fast
+            
+            if (sourceCardElement && sourceDotElement) {
+                const sourceCardRect = sourceCardElement.getBoundingClientRect();
+                const dotRect = sourceDotElement.getBoundingClientRect();
+                // Calculate Y offset relative to the center of the source card's edge
+                const sourceCardCenterYOnEdge = sourceCardRect.top + getEstimatedCardHeight(sourceNode) / 2;
+                sourceLineYOffsetVal = Math.round(((dotRect.top + dotRect.height / 2) - sourceCardCenterYOnEdge));
+            } else if (sourceAnchor === 'E' || sourceAnchor === 'W') {
+                // Fallback if dotRef wasn't captured, or card element not found
+                // This case needs careful handling - for now, assume center of edge (offset 0)
+                sourceLineYOffsetVal = 0; 
+            }
           }
+
 
           const updatedSteps = [...prevSteps];
           updatedSteps[targetNodeIndex] = { 
             ...targetNode, 
             sourceNodeId, 
             sourceAnchor, 
-            sourceLineYOffset: sourceLineYOffsetVal, // Use calculated or undefined
-            originatingSubStepInfo: null // Clear if it was previously from a sub-step
+            sourceLineYOffset: sourceLineYOffsetVal, 
+            originatingSubStepInfo: null 
           };
           return updatedSteps;
         });
         toast({ title: "Connection Created", description: `Linked step to ${roadmapStepsRef.current.find(s=>s.id === targetStepId)?.title || 'target'}.`});
       }
     }
-    setConnectionDragState(null);
-    clickStartInfoRef.current = null;
-  }, [connectionDragState, toast, setRoadmapSteps]);
+  }, [connectionDragState, toast, setRoadmapSteps, roadmapStepsRef, canvasRef]); // Added canvasRef
 
   const handleMouseUpGlobal = useCallback(() => {
     if (draggingNodeIdRef.current) {
         if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current); autoScrollFrameRef.current = null;
         if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current); dragUpdateFrameRef.current = null;
-        draggingNodeIdRef.current = null; dragOperationStartRef.current = null; nodeInitialCanvasPosRef.current = null;
+        
+        draggingNodeIdRef.current = null; 
+        dragOperationStartRef.current = null; 
+        nodeInitialCanvasPosRef.current = null; 
+        dragContextRef.current = null;
     }
     if (connectionDragState?.isActive) {
-        handleCanvasMouseUpForConnection(); // Also finalize connection if drag was active
+        handleCanvasMouseUpForConnection(); 
     }
   }, [connectionDragState, handleCanvasMouseUpForConnection]);
 
@@ -958,7 +1034,7 @@ const ViewPlanPage = () => {
             ref={canvasRef}
             className="flex-1 grid-background relative overflow-auto p-4 md:p-6" 
             onMouseMove={handleMouseMoveOnCanvas}
-            onMouseUp={handleCanvasMouseUpForConnection} // Changed from handleMouseUpOnCanvas
+            onMouseUp={handleCanvasMouseUpForConnection} 
             onClick={handleCanvasClick}
             style={{ minHeight: dynamicCanvasMinHeight ? `${dynamicCanvasMinHeight}px` : '100vh' }}
         >
@@ -970,53 +1046,35 @@ const ViewPlanPage = () => {
             {roadmapSteps.map(targetStep => {
               if (!targetStep.sourceNodeId || !targetStep.sourceAnchor) return null;
               const sourceStep = roadmapStepsRef.current.find(s => s.id === targetStep.sourceNodeId);
+              
               if (!sourceStep || 
-                  isNaN(sourceStep.x) || 
-                  isNaN(sourceStep.y) || 
-                  isNaN(targetStep.x) || 
-                  isNaN(targetStep.y)) {
-                console.warn("Skipping line render: Missing source/target step or NaN coordinates", { 
-                  sourceStepId: targetStep.sourceNodeId,
-                  sourceStepFound: !!sourceStep,
-                  sourceX: sourceStep?.x,
-                  sourceY: sourceStep?.y,
-                  targetStepId: targetStep.id,
-                  targetX: targetStep.x,
-                  targetY: targetStep.y,
-                });
-                return null;
-              }
+                  isNaN(sourceStep.x) || isNaN(sourceStep.y) || 
+                  isNaN(targetStep.x) || isNaN(targetStep.y)
+              ) { return null; }
 
               const sourceCardHeight = getEstimatedCardHeight(sourceStep);
               const targetCardHeight = getEstimatedCardHeight(targetStep);
 
-              if (isNaN(sourceCardHeight) || isNaN(targetCardHeight)) {
-                console.warn("Skipping line render: NaN card height", { sourceCardHeight, targetCardHeight, sourceStep, targetStep });
-                return null;
-              }
+              if (isNaN(sourceCardHeight) || isNaN(targetCardHeight)) return null;
+
 
               let x1=0, y1=0, x2=0, y2=0;
               const yOffset = targetStep.sourceLineYOffset !== undefined ? targetStep.sourceLineYOffset : 0;
               
-              // Calculate source coordinates (x1, y1) based on the sourceAnchor on the sourceStep
-              switch (targetStep.sourceAnchor) { // This targetStep.sourceAnchor is the anchor *on the source node*
+              switch (targetStep.sourceAnchor) { 
                 case 'N': x1 = sourceStep.x + NODE_WIDTH / 2; y1 = sourceStep.y; break;
                 case 'S': x1 = sourceStep.x + NODE_WIDTH / 2; y1 = sourceStep.y + sourceCardHeight; break;
                 case 'E': x1 = sourceStep.x + NODE_WIDTH; y1 = sourceStep.y + sourceCardHeight / 2 + yOffset; break;
                 case 'W': x1 = sourceStep.x; y1 = sourceStep.y + sourceCardHeight / 2 + yOffset; break;
-                default: console.warn("Invalid sourceAnchor for line calc (x1,y1)", targetStep.sourceAnchor); return null;
+                default: return null;
               }
 
-              // Calculate target coordinates (x2, y2) - this line connects *to* the targetStep.
-              // We need to determine which side of the targetStep the line should connect to.
-              // This is often the opposite of the sourceAnchor, or could be determined by where the user dropped the line.
-              // For now, let's assume it connects to the side that makes most sense given the sourceAnchor
               switch (targetStep.sourceAnchor) { 
-                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break; // Line from Top of source connects to Bottom of target
-                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break; // Line from Bottom of source connects to Top of target
-                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break; // Line from Right of source connects to Left of target
-                case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break; // Line from Left of source connects to Right of target
-                default: console.warn("Invalid sourceAnchor for line calc (x2,y2)", targetStep.sourceAnchor); return null;
+                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break; 
+                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break; 
+                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break; 
+                case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break; 
+                default: return null;
               }
 
               const isSubStepLine = targetStep.sourceLineYOffset !== undefined && targetStep.originatingSubStepInfo;
@@ -1051,4 +1109,3 @@ const ViewPlanPage = () => {
   );
 };
 export default ViewPlanPage;
-
