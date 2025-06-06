@@ -105,7 +105,7 @@ interface RoadmapStepCardProps {
   onAddSubStep: (event: React.MouseEvent, parentId: string, parentTitle: string) => void;
   onOpenDetails: (event: React.MouseEvent, step: RoadmapStep) => void;
   onInitiateNodeFromDot: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W') => void;
-  onAutoCreateStepFromSubStep: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset: number, newStepTitle: string) => void;
+  onAutoCreateStepFromSubStep: (event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset: number, newStepTitle: string, originatingSubStepId: string) => void;
   isSelected: boolean;
   isSubmitting: boolean;
   onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void;
@@ -158,9 +158,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         const cardRect = cardDivRef.current.getBoundingClientRect();
         const dotRect = dotRef.current.getBoundingClientRect();
         const relativeYOffset = (dotRect.top - cardRect.top) + (dotRect.height / 2);
-        onAutoCreateStepFromSubStep(e, step.id, 'W', relativeYOffset, subStepTitle);
+        onAutoCreateStepFromSubStep(e, step.id, 'W', relativeYOffset, subStepTitle, subStep.id);
       } else {
-        onAutoCreateStepFromSubStep(e, step.id, 'W', 0, subStepTitle);
+        onAutoCreateStepFromSubStep(e, step.id, 'W', 0, subStepTitle, subStep.id);
       }
     };
 
@@ -477,6 +477,7 @@ const ViewPlanPage = () => {
         subSteps: step.subSteps || [],
         sourceLineYOffset: step.sourceLineYOffset,
         description: step.description || null,
+        originatingSubStepInfo: step.originatingSubStepInfo || null,
       }));
       setRoadmapSteps(initializedSteps);
     } else if (plan && !plan.roadmap) {
@@ -511,7 +512,7 @@ const ViewPlanPage = () => {
     setIsAddStepDialogOpen(true);
   }, []);
 
-  const handleAutoCreateStepFromSubStep = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset: number, newStepTitle: string) => {
+  const handleAutoCreateStepFromSubStep = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: 'N' | 'S' | 'E' | 'W', sourceYOffset: number, newStepTitle: string, originatingSubStepId: string) => {
     event.stopPropagation();
     if (!canvasRef.current) return;
     const currentCanvasClientWidth = canvasRef.current.clientWidth;
@@ -531,6 +532,7 @@ const ViewPlanPage = () => {
             sourceNodeId: sourceStep.id,
             sourceAnchor: sourceAnchor,
             sourceLineYOffset: sourceYOffset,
+            originatingSubStepInfo: { sourceCardId: sourceStep.id, subStepId: originatingSubStepId },
         };
         const newCardDynamicHeight = getEstimatedCardHeight(newStepInitial);
 
@@ -544,7 +546,6 @@ const ViewPlanPage = () => {
         const updatedSteps = [...prevSteps, newStepInitial];
         setSelectedStepId(newId);
         setSelectedNodeForPanel(newStepInitial);
-        // Defer toast call
         setTimeout(() => {
           toast({ title: "Step Created", description: `"${newStepTitle}" added from sub-step.` });
         }, 0);
@@ -584,6 +585,7 @@ const ViewPlanPage = () => {
                 id: `step-${Date.now()}-${Math.random().toString(16).slice(2)}`,
                 title: formData.title,
                 description: null,
+                originatingSubStepInfo: null, // Main steps added via dialog don't originate from sub-steps
             };
             if (currentParentStepForDialog) {
                 return prevSteps.map(step =>
@@ -771,11 +773,41 @@ const ViewPlanPage = () => {
   }, []);
 
   const handleStepTitleChange = useCallback((stepId: string, newTitle: string) => {
-    setRoadmapSteps(prevSteps =>
-      prevSteps.map(step =>
-        step.id === stepId ? { ...step, title: newTitle } : step
-      )
-    );
+    setRoadmapSteps(prevSteps => {
+        const mainStepIndex = prevSteps.findIndex(s => s.id === stepId);
+        if (mainStepIndex === -1) return prevSteps;
+
+        const mainStepToUpdate = { ...prevSteps[mainStepIndex], title: newTitle };
+        let stepsAfterMainUpdate = [
+            ...prevSteps.slice(0, mainStepIndex),
+            mainStepToUpdate,
+            ...prevSteps.slice(mainStepIndex + 1),
+        ];
+
+        // If the main step being edited originated from a sub-step, update the sub-step's title too
+        if (mainStepToUpdate.originatingSubStepInfo) {
+            const { sourceCardId, subStepId } = mainStepToUpdate.originatingSubStepInfo;
+            const parentCardIndex = stepsAfterMainUpdate.findIndex(s => s.id === sourceCardId);
+
+            if (parentCardIndex !== -1) {
+                const parentCard = { ...stepsAfterMainUpdate[parentCardIndex] };
+                const subStepIndex = (parentCard.subSteps || []).findIndex(sub => sub.id === subStepId);
+
+                if (subStepIndex !== -1) {
+                    const updatedSubSteps = [...(parentCard.subSteps || [])];
+                    updatedSubSteps[subStepIndex] = { ...updatedSubSteps[subStepIndex], title: newTitle };
+                    parentCard.subSteps = updatedSubSteps;
+
+                    stepsAfterMainUpdate = [
+                        ...stepsAfterMainUpdate.slice(0, parentCardIndex),
+                        parentCard,
+                        ...stepsAfterMainUpdate.slice(parentCardIndex + 1),
+                    ];
+                }
+            }
+        }
+        return stepsAfterMainUpdate;
+    });
   }, []);
 
   const handleDeleteNodeClick = useCallback((stepId: string, stepTitle: string) => {
@@ -791,6 +823,10 @@ const ViewPlanPage = () => {
       const finalSteps = updatedSteps.map(step => {
         if (step.sourceNodeId === stepIdToDelete) {
           return { ...step, sourceNodeId: undefined, sourceAnchor: undefined, sourceLineYOffset: undefined };
+        }
+        // Also check if the deleted node was a parent of a sub-step origin
+        if (step.originatingSubStepInfo && step.originatingSubStepInfo.sourceCardId === stepIdToDelete) {
+          return { ...step, originatingSubStepInfo: null }; // Or handle differently, e.g., convert to normal step
         }
         return step;
       });
@@ -932,7 +968,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={false}
+              disabled={false} 
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
