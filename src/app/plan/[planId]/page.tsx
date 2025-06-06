@@ -1,4 +1,3 @@
-
 // src/app/plan/[planId]/page.tsx
 "use client";
 
@@ -517,7 +516,7 @@ const ViewPlanPage = () => {
         if (timeDiff < CLICK_TIME_THRESHOLD_MS && moveX < CLICK_MOVE_THRESHOLD_PX && moveY < CLICK_MOVE_THRESHOLD_PX) {
           setPendingNodeFromDotInfo({ sourceStepId: stepId, sourceAnchor: anchor });
           setIsAddStepDialogOpen(true);
-          setConnectionDragState(null); // It's a click, stop drag state
+          setConnectionDragState(null); 
         }
       }
       clickStartInfoRef.current = null;
@@ -535,8 +534,10 @@ const ViewPlanPage = () => {
 
     const currentClientX = event.clientX;
     const currentClientY = event.clientY;
+    
+    const currentState = connectionDragState; // Capture for comparison
 
-    let newIsPotentialClick = connectionDragState.isPotentialClick;
+    let newIsPotentialClick = currentState.isPotentialClick;
     if (newIsPotentialClick && clickStartInfoRef.current) {
       const moveX = Math.abs(currentClientX - clickStartInfoRef.current.clientX);
       const moveY = Math.abs(currentClientY - clickStartInfoRef.current.clientY);
@@ -552,7 +553,7 @@ const ViewPlanPage = () => {
 
     let minDistance = SNAP_RADIUS;
     for (const targetStep of roadmapSteps) {
-      if (targetStep.id === connectionDragState.sourceStepId) continue;
+      if (targetStep.id === currentState.sourceStepId) continue;
       const targetCardElement = canvasRef.current.querySelector(`[data-step-id="${targetStep.id}"]`);
       if (!targetCardElement) continue;
       const targetCardRect = targetCardElement.getBoundingClientRect();
@@ -583,8 +584,6 @@ const ViewPlanPage = () => {
       }
     }
     
-    // Only update state if values have actually changed
-    const currentState = connectionDragState; // Capture current state for comparison
     if (
       newCalculatedCurrentX !== currentState.currentX ||
       newCalculatedCurrentY !== currentState.currentY ||
@@ -599,7 +598,7 @@ const ViewPlanPage = () => {
         isPotentialClick: newIsPotentialClick,
       }) : null);
     }
-  }, [connectionDragState, roadmapSteps, canvasRef]);
+  }, [connectionDragState, roadmapSteps, canvasRef, setConnectionDragState]);
 
 
   const handleCanvasMouseUpForConnection = useCallback(() => {
@@ -650,7 +649,7 @@ const ViewPlanPage = () => {
     }
     setConnectionDragState(null);
     clickStartInfoRef.current = null;
-  }, [connectionDragState, roadmapSteps, toast]);
+  }, [connectionDragState, roadmapSteps, toast, setRoadmapSteps, setConnectionDragState]);
 
 
   useEffect(() => {
@@ -755,8 +754,8 @@ const ViewPlanPage = () => {
     }
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]);
 
-  const processDragMovementLoop = useCallback(() => {
-    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current) {
+ const processDragMovementLoop = useCallback(() => {
+    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current || !canvasRef.current) {
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
       dragUpdateFrameRef.current = null;
       return;
@@ -764,34 +763,35 @@ const ViewPlanPage = () => {
 
     const dx = latestMousePositionRef.current.x - dragOperationStartRef.current.x;
     const dy = latestMousePositionRef.current.y - dragOperationStartRef.current.y;
-    const currentCanvasClientWidth = canvasRef.current?.clientWidth || window.innerWidth;
+    const currentCanvasClientWidth = canvasRef.current.clientWidth || window.innerWidth;
     const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
     
     const newCalculatedX = Math.round(Math.max(0, Math.min(nodeInitialCanvasPosRef.current.x + dx, maxX)));
     const newCalculatedY = Math.round(Math.max(0, nodeInitialCanvasPosRef.current.y + dy));
 
-    const currentDraggingNodeInState = roadmapSteps.find(s => s.id === draggingNodeIdRef.current);
+    setRoadmapSteps(prevSteps => {
+      const stepIndex = prevSteps.findIndex(s => s.id === draggingNodeIdRef.current);
 
-    if (!currentDraggingNodeInState) {
-      if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
-      dragUpdateFrameRef.current = null;
-      return;
-    }
+      if (stepIndex === -1) { 
+        if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
+        dragUpdateFrameRef.current = null;
+        return prevSteps; 
+      }
+      
+      const nodeToUpdate = prevSteps[stepIndex];
+      if (nodeToUpdate.x === newCalculatedX && nodeToUpdate.y === newCalculatedY) {
+        return prevSteps; 
+      }
 
-    if (currentDraggingNodeInState.x !== newCalculatedX || currentDraggingNodeInState.y !== newCalculatedY) {
-      setRoadmapSteps(prevSteps => {
-        const stepIndex = prevSteps.findIndex(s => s.id === draggingNodeIdRef.current);
-        if (stepIndex === -1) { 
-          return prevSteps;
-        }
-        const newSteps = [...prevSteps];
-        newSteps[stepIndex] = { ...newSteps[stepIndex], x: newCalculatedX, y: newCalculatedY };
-        return newSteps;
-      });
+      const newSteps = [...prevSteps];
+      newSteps[stepIndex] = { ...nodeToUpdate, x: newCalculatedX, y: newCalculatedY };
+      return newSteps;
+    });
+
+    if (draggingNodeIdRef.current) {
+      dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
     }
-    
-    dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
-  }, [roadmapSteps, canvasRef, setRoadmapSteps]);
+  }, [canvasRef, setRoadmapSteps]);
 
 
   const autoScrollLoop = useCallback(() => {
@@ -881,7 +881,7 @@ const ViewPlanPage = () => {
     if (selectedStepId === stepIdToDelete) { setSelectedStepId(null); setSelectedNodeForPanel(null); }
     toast({ title: "Node Deleted", description: `Step "${confirmDeleteNodeInfo.title}" and its connections removed.` });
     setConfirmDeleteNodeInfo(null);
-  }, [confirmDeleteNodeInfo, selectedStepId, toast]);
+  }, [confirmDeleteNodeInfo, selectedStepId, toast, setRoadmapSteps, setSelectedStepId, setSelectedNodeForPanel]);
 
   const handleSaveRoadmap = async () => {
     if (!plan || !currentUser || !planId) { toast({ variant: "destructive", title: "Error", description: "Plan data or user authentication missing." }); return; }
@@ -1000,5 +1000,3 @@ const ViewPlanPage = () => {
 };
 export default ViewPlanPage;
 
-
-    
