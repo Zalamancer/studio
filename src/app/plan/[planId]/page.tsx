@@ -9,7 +9,7 @@ import { getPlanById, updatePlanRoadmap } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep } from '@/types/plan';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { Loader2, AlertTriangle, Brain, Share2, MessageSquare, Plus, Layers, Minus, Eye, Save, Trash2, Twitter, Linkedin, Facebook, Mail, Link as LinkIconLucide, Send, MousePointerSquare } from 'lucide-react';
+import { Loader2, AlertTriangle, Brain, Share2, MessageSquare, Plus, Layers, Minus, Eye, Save, Trash2, Twitter, Linkedin, Facebook, Mail, Link as LinkIconLucide, Send, MousePointerSquareDashed } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import Link from 'next/link';
@@ -174,9 +174,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     return (
       <span
         ref={dotRef}
-        onMouseDown={handleSubStepDotClick} // Changed from onClick to onMouseDown
+        onMouseDown={handleSubStepDotClick} 
         className={cn(
-          "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-grab", // Changed cursor
+          "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-grab", 
           "h-2 w-2",
           "transition-all duration-150 ease-in-out",
           "hover:bg-green-500 hover:ring-2 hover:ring-green-300 active:bg-green-600",
@@ -209,7 +209,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
       onMouseLeave={(e) => { e.stopPropagation(); onConnectionDotMouseLeave(e); }}
       title={`Drag to connect from ${anchor === 'N' ? 'top' : anchor === 'S' ? 'bottom' : anchor === 'E' ? 'right' : 'left'}`}
     >
-      <MousePointerSquare className="h-3 w-3 opacity-70" />
+      <MousePointerSquareDashed className="h-3 w-3 opacity-70" />
     </Button>
   );
 
@@ -539,7 +539,7 @@ const ViewPlanPage = () => {
           sourceNodeId: sourceStepId,
           sourceAnchor: sourceAnchor,
           sourceLineYOffset: sourceLineYOffset,
-          originatingSubStepInfo: null, // Connecting manually breaks sub-step origin link
+          originatingSubStepInfo: null, 
         };
         return updatedSteps;
       });
@@ -666,14 +666,18 @@ const ViewPlanPage = () => {
     const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
     const newX = Math.round(Math.max(0, Math.min(nodeInitialCanvasPosRef.current.x + dx, maxX)));
     const newY = Math.round(Math.max(0, nodeInitialCanvasPosRef.current.y + dy));
+    
     setRoadmapSteps(prevSteps => {
       const stepIndex = prevSteps.findIndex(s => s.id === draggingNodeIdRef.current);
       if (stepIndex === -1) {
         if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
-        dragUpdateFrameRef.current = null; return prevSteps;
+        dragUpdateFrameRef.current = null;
+        return prevSteps; 
       }
       const currentDraggingStep = prevSteps[stepIndex];
-      if (currentDraggingStep.x === newX && currentDraggingStep.y === newY) return prevSteps;
+      if (currentDraggingStep.x === newX && currentDraggingStep.y === newY) {
+        return prevSteps; 
+      }
       const newSteps = [...prevSteps];
       newSteps[stepIndex] = { ...currentDraggingStep, x: newX, y: newY };
       return newSteps;
@@ -828,10 +832,10 @@ const ViewPlanPage = () => {
                 case 'W': x1 = sourceStep.x; y1 = sourceStep.y + sourceCardHeight / 2 + yOffset; break;
               }
               switch (targetStep.sourceAnchor) { // This determines where the line connects TO on the target node
-                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break; // From North of source, connects to South of target
-                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break; // From South of source, connects to North of target
-                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break; // From East of source, connects to West of target
-                case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break; // From West of source, connects to East of target
+                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break; 
+                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break; 
+                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break; 
+                case 'W': x2 = targetStep.x + NODE_WIDTH; y2 = targetStep.y + targetCardHeight / 2; break; 
                 default: return null;
               }
               const isSubStepLine = targetStep.sourceLineYOffset !== undefined && targetStep.originatingSubStepInfo;
