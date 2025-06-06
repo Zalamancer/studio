@@ -67,10 +67,6 @@ const CONNECTION_LINE_COLOR = "hsl(var(--border))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
 
-// const SUBSTEP_SPAN_DOT_SIZE_H = 8; // h-2 unused
-// const SUBSTEP_SPAN_DOT_SIZE_W = 8; // w-2 unused
-
-
 const calculateNodeHeight = (step: RoadmapStep): number => {
   let height = NODE_BASE_MIN_HEIGHT;
   height = Math.max(height, NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y);
@@ -94,7 +90,7 @@ interface RoadmapStepCardProps {
     anchor: 'N' | 'S' | 'E' | 'W',
     interactionType: 'down' | 'up',
     event: React.MouseEvent<HTMLElement>,
-    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLElement> }
+    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLSpanElement } // Updated here
   ) => void;
   isSelected?: boolean;
   isSubmitting: boolean;
@@ -124,7 +120,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     isSubmitting: boolean;
     style?: React.CSSProperties;
     className?: string;
-  }> = ({ anchor, parentStepId, isSubmitting, style, className }) => {
+  }> = ({ anchor, parentStepId, isSubmitting: propIsSubmitting, style, className }) => {
     const dotButtonRef = useRef<HTMLButtonElement>(null);
     return (
       <button
@@ -132,7 +128,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         aria-label={`Connect from ${anchor} anchor of step ${step.title}`}
         className={cn(
           "absolute rounded-full border-2 border-primary bg-background transition-colors duration-150 hover:bg-primary/20 z-10",
-          isSubmitting && "cursor-not-allowed opacity-50",
+          propIsSubmitting && "cursor-not-allowed opacity-50",
           className
         )}
         style={{
@@ -141,16 +137,16 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
           ...style
         }}
         onMouseDown={(e) => {
-          if (isSubmitting) return;
+          if (propIsSubmitting) return;
           e.stopPropagation();
           onConnectionDotInteraction(parentStepId, anchor, 'down', e);
         }}
         onMouseUp={(e) => {
-           if (isSubmitting) return;
+           if (propIsSubmitting) return;
            e.stopPropagation();
            onConnectionDotInteraction(parentStepId, anchor, 'up', e);
         }}
-        disabled={isSubmitting}
+        disabled={propIsSubmitting}
       />
     );
   };
@@ -206,11 +202,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
             {step.subSteps.map((subStep) => {
-                const subStepDotSpanRef = useRef<HTMLSpanElement>(null);
+                // REMOVED: const subStepDotSpanRef = useRef<HTMLSpanElement>(null);
                 return (
                   <li key={subStep.id} className="text-xs text-muted-foreground/90 flex items-center relative pl-4 py-0.5 group/substep">
                     <span
-                        ref={subStepDotSpanRef}
+                        // REMOVED: ref={subStepDotSpanRef}
                         title={`Create new step: "${subStep.title}" (to the left)`}
                         className={cn(
                             "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-grab h-2 w-2 transition-all duration-150 ease-in-out hover:bg-green-500 hover:ring-2 hover:ring-green-300 active:bg-green-600 hover:scale-150 active:scale-125",
@@ -219,12 +215,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                         onMouseDown={(e) => {
                           if (isSubmitting) return;
                           e.stopPropagation();
-                          onConnectionDotInteraction(step.id, 'W', 'down', e, { subStepId: subStep.id, subStepTitle: subStep.title, dotElementRef: subStepDotSpanRef });
+                          onConnectionDotInteraction(step.id, 'W', 'down', e, { subStepId: subStep.id, subStepTitle: subStep.title, dotElement: e.currentTarget });
                         }}
                         onMouseUp={(e) => {
                           if (isSubmitting) return;
                           e.stopPropagation();
-                          onConnectionDotInteraction(step.id, 'W', 'up', e, { subStepId: subStep.id, subStepTitle: subStep.title, dotElementRef: subStepDotSpanRef });
+                          onConnectionDotInteraction(step.id, 'W', 'up', e, { subStepId: subStep.id, subStepTitle: subStep.title, dotElement: e.currentTarget });
                         }}
                         aria-disabled={isSubmitting}
                     />
@@ -258,7 +254,7 @@ interface ConnectionDragStateType {
   isDragging: boolean;
   sourceStepId: string | null;
   sourceAnchor: 'N' | 'S' | 'E' | 'W' | null;
-  sourceSubStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLElement> } | null;
+  sourceSubStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLSpanElement } | null; // Updated
   startX: number;
   startY: number;
   currentX: number;
@@ -268,7 +264,7 @@ interface ConnectionDragStateType {
 interface ClickStartInfoType {
   parentStepId: string | null;
   anchor: 'N' | 'S' | 'E' | 'W' | null;
-  subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLElement> } | null;
+  subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLSpanElement } | null; // Updated
   clientX: number;
   clientY: number;
 }
@@ -491,27 +487,27 @@ export default function PlanDetailPage() {
     anchor: 'N' | 'S' | 'E' | 'W',
     interactionType: 'down' | 'up',
     event: React.MouseEvent<HTMLElement>,
-    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElementRef: React.RefObject<HTMLElement> }
+    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLSpanElement } // Updated
   ) => {
     if (!isOwner || !canvasRef.current) return;
     event.stopPropagation();
     const canvasRect = canvasRef.current.getBoundingClientRect();
-    const dotElement = event.currentTarget;
-    const dotRect = dotElement.getBoundingClientRect();
-
-    const getElementCenter = (rect: DOMRect) => ({
-        x: rect.left + rect.width / 2 - canvasRect.left + canvasRef.current!.scrollLeft,
-        y: rect.top + rect.height / 2 - canvasRect.top + canvasRef.current!.scrollTop,
-    });
     
     let sourceDotX: number, sourceDotY: number;
-    if (subStepOriginContext && subStepOriginContext.dotElementRef.current) {
-        const subDotRect = subStepOriginContext.dotElementRef.current.getBoundingClientRect();
+
+    const getElementCenter = (domRect: DOMRect) => ({
+        x: domRect.left + domRect.width / 2 - canvasRect.left + canvasRef.current!.scrollLeft,
+        y: domRect.top + domRect.height / 2 - canvasRect.top + canvasRef.current!.scrollTop,
+    });
+    
+    if (subStepOriginContext) { 
+        const subDotRect = subStepOriginContext.dotElement.getBoundingClientRect();
         const subDotCenter = getElementCenter(subDotRect);
         sourceDotX = subDotCenter.x;
         sourceDotY = subDotCenter.y;
-    } else {
-        const mainDotCenter = getElementCenter(dotRect);
+    } else { 
+        const mainDotRect = event.currentTarget.getBoundingClientRect(); 
+        const mainDotCenter = getElementCenter(mainDotRect);
         sourceDotX = mainDotCenter.x;
         sourceDotY = mainDotCenter.y;
     }
@@ -553,7 +549,6 @@ export default function PlanDetailPage() {
                 if (label?.includes("N anchor")) targetAnchor = 'N';
                 else if (label?.includes("S anchor")) targetAnchor = 'S';
                 else if (label?.includes("E anchor")) targetAnchor = 'E';
-                // West dot was removed from main card, so no 'W' target here from main card dots.
             }
             
             if (targetNodeId && targetNodeId !== parentStepId && targetAnchor && activeConnectionDragOperation.sourceStepId) {
