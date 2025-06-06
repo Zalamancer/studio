@@ -582,17 +582,17 @@ const ViewPlanPage = () => {
                             }
                         }
                     } else if (prevSteps.length > 0) {
-                        const mainSteps = prevSteps.filter(step => !step.sourceNodeId); // Consider only root steps for default positioning
+                        const mainSteps = prevSteps.filter(step => !step.sourceNodeId); 
                         if (mainSteps.length > 0) {
                              const lastMainStep = mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0]);
-                             newX = 20; // Default X for new unlinked steps
+                             newX = 20; 
                              newY = lastMainStep.y + getEstimatedCardHeight(lastMainStep) + 64;
-                        } else { // If all steps are linked, place below the lowest step
-                             const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0] || {y: -84}); // Fallback if prevSteps was empty but then became non-empty
+                        } else { 
+                             const lastStep = prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), prevSteps[0] || {y: -84}); 
                              newX = 20;
                              newY = lastStep.y + getEstimatedCardHeight(lastStep) + 64;
                         }
-                    } // Else, it's the very first step, (20,20) is fine.
+                    } 
                     
                     const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
                     newMainStepInitial.x = Math.round(Math.max(0, Math.min(newX, maxX)));
@@ -611,9 +611,9 @@ const ViewPlanPage = () => {
         console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
         toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
     } finally {
-        setIsSubmittingStep(false);
+        setIsSubmittingStep(false); 
     }
-}, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, setIsSubmittingStep, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]); // Added canvasRef
+}, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]);
 
 
   const processDragMovementLoop = useCallback(() => {
@@ -829,7 +829,6 @@ const ViewPlanPage = () => {
   }
 
   const isOwner = currentUser?.uid === plan.ownerId;
-  const toolbarIcons = [ MousePointer2, LayoutGrid, StickyNote, Type, ShareIcon, PenTool, Square, Frame, Plus, Undo, Redo ];
 
   let dialogTitleForAddStep = "Add New Roadmap Step";
   if (currentParentStepForDialog) {
@@ -883,20 +882,7 @@ const ViewPlanPage = () => {
       </header>
 
       <div className="flex flex-1 overflow-hidden">
-        <aside className="w-12 sm:w-14 bg-card border-r border-border flex flex-col items-center py-3 space-y-1 flex-shrink-0 shadow-sm">
-          {toolbarIcons.slice(0,8).map((Icon, index) => (
-            <Button key={index} variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 text-muted-foreground hover:text-primary hover:bg-primary/10">
-              <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          ))}
-          <div className="flex-grow"></div>
-           {toolbarIcons.slice(8).map((Icon, index) => (
-            <Button key={`bottom-${index}`} variant="ghost" size="icon" className="h-8 w-8 sm:h-9 sm:w-9 text-muted-foreground hover:text-primary hover:bg-primary/10">
-              <Icon className="h-4 w-4 sm:h-5 sm:w-5" />
-            </Button>
-          ))}
-        </aside>
-
+        {/* Left Toolbar Removed */}
         <main
             ref={canvasRef}
             className="flex-1 grid-background relative overflow-y-auto overflow-x-hidden p-4 md:p-6"
@@ -910,7 +896,7 @@ const ViewPlanPage = () => {
             <Button
               variant="outline"
               onClick={(e) => { e.stopPropagation(); openAddMainStepDialog(); }}
-              disabled={false} // Always enabled as per last request
+              disabled={false} // Button always enabled as per latest request
               className="shadow-md bg-card hover:bg-muted"
             >
               <Plus className="h-4 w-4 mr-2" /> Add Roadmap Step
@@ -980,13 +966,7 @@ const ViewPlanPage = () => {
             </div>
           )}
 
-          <div className="absolute bottom-4 right-4 bg-card border border-border rounded-lg shadow-md flex items-center p-0.5 space-x-0.5 z-20">
-            <Button variant="ghost" size="icon" className="h-7 w-7"><Layers className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7"><Minus className="h-4 w-4" /></Button>
-            <span className="text-xs px-2 text-muted-foreground">100%</span>
-            <Button variant="ghost" size="icon" className="h-7 w-7"><Plus className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" className="h-7 w-7"><HelpCircle className="h-4 w-4" /></Button>
-          </div>
+          {/* Bottom Zoom Controls Removed */}
         </main>
       </div>
 
@@ -996,7 +976,6 @@ const ViewPlanPage = () => {
           onOpenChange={(open) => {
             setIsAddStepDialogOpen(open);
             if (!open) {
-                // isSubmittingStep is now reset in the finally block of handleAddRoadmapStepSubmit
                 setCurrentParentStepForDialog(null);
                 setPendingNodeFromDotInfo(null);
             }
@@ -1060,4 +1039,3 @@ const ViewPlanPage = () => {
 
 export default ViewPlanPage;
     
-
