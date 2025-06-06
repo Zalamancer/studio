@@ -65,6 +65,8 @@ const SNAP_THRESHOLD = 20;
 const CONNECTION_LINE_COLOR = "hsl(var(--border))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
+const ARROWHEAD_LENGTH = 10; // Length of the arrowhead marker
+const DOT_RADIUS = DOT_SIZE / 2;
 
 
 const calculateNodeHeight = (step: RoadmapStep): number => {
@@ -209,7 +211,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                             "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-grab h-2 w-2 transition-all duration-150 ease-in-out hover:bg-green-500 hover:ring-2 hover:ring-green-300 active:bg-green-600 hover:scale-150 active:scale-125",
                             isSubmitting && "cursor-not-allowed opacity-50"
                         )}
-                        style={{ left: DOT_OFFSET + (DOT_SIZE / 2) }}
                         onMouseDown={(e) => {
                           if (isSubmitting) return;
                           e.stopPropagation();
@@ -497,7 +498,7 @@ export default function PlanDetailPage() {
     }
     const yOffset = NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y / 2 + (subStepIndex * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
     return {
-      x: parentStep.x + DOT_OFFSET + (DOT_SIZE/2),
+      x: parentStep.x, // The dot is now on the left edge
       y: parentStep.y + yOffset
     };
   };
@@ -571,10 +572,14 @@ export default function PlanDetailPage() {
                     const dist = Math.sqrt(Math.pow(releaseX - targetDotPos.x, 2) + Math.pow(releaseY - targetDotPos.y, 2));
 
                     if (dist <= SNAP_THRESHOLD) {
-                        // Check if targetStep already has a sourceNodeId
                         if (targetStep.sourceNodeId && targetStep.sourceNodeId !== activeConnectionDragOperation.sourceStepId) {
                             toast({ variant: "destructive", title: "Connection Exists", description: `Node "${targetStep.title}" is already connected from another source. Remove existing connection first.` });
-                            snapped = true; // Treat as snapped to prevent further processing, but don't make new connection
+                            snapped = true;
+                            break;
+                        }
+                        if (targetStep.sourceNodeId === activeConnectionDragOperation.sourceStepId) {
+                            toast({ variant: "default", title: "Already Connected", description: `Node "${targetStep.title}" is already connected to this source.` });
+                            snapped = true;
                             break;
                         }
 
@@ -605,25 +610,55 @@ export default function PlanDetailPage() {
   }, [isOwner, toast, editableRoadmap, activeConnectionDragOperation]);
 
   const drawConnectionLines = () => {
+    const START_OFFSET = DOT_RADIUS; // Line starts from the edge of the source dot
+    const END_OFFSET = ARROWHEAD_LENGTH + DOT_RADIUS; // Line ends before the target dot's edge, making arrow visible
+
     return editableRoadmap.map(step => {
       if (step.sourceNodeId && step.sourceAnchor) {
         const sourceNode = editableRoadmap.find(s => s.id === step.sourceNodeId);
         if (!sourceNode) return null;
 
-        let startPoint, endPoint;
+        let rawStartPoint: { x: number, y: number };
+        let rawEndPoint: { x: number, y: number };
         
         if (step.originatingSubStepInfo && step.originatingSubStepInfo.sourceCardId === sourceNode.id && step.originatingSubStepInfo.subStepId) {
-          startPoint = getSubStepDotAnchorPoint(sourceNode, step.originatingSubStepInfo.subStepId);
-          endPoint = getAnchorPoint(step, step.sourceAnchor);
+          rawStartPoint = getSubStepDotAnchorPoint(sourceNode, step.originatingSubStepInfo.subStepId);
         } else {
-          const sourceNodeAnchor = step.sourceAnchor === 'N' ? 'S' :
-                                   step.sourceAnchor === 'S' ? 'N' :
-                                   step.sourceAnchor === 'E' ? 'W' : 'E';
-          startPoint = getAnchorPoint(sourceNode, sourceNodeAnchor);
-          endPoint = getAnchorPoint(step, step.sourceAnchor);
+          // Determine the anchor on the sourceNode based on the targetNode's connection
+          const sourceNodeAnchor = 
+            step.sourceAnchor === 'N' ? 'S' :
+            step.sourceAnchor === 'S' ? 'N' :
+            step.sourceAnchor === 'E' ? 'W' : 'E';
+          rawStartPoint = getAnchorPoint(sourceNode, sourceNodeAnchor);
+        }
+        rawEndPoint = getAnchorPoint(step, step.sourceAnchor);
+
+        const dx = rawEndPoint.x - rawStartPoint.x;
+        const dy = rawEndPoint.y - rawStartPoint.y;
+        const length = Math.sqrt(dx * dx + dy * dy);
+
+        if (length === 0) return null; // Avoid division by zero
+
+        const ux = dx / length; // Unit vector x
+        const uy = dy / length; // Unit vector y
+
+        let adjStartPoint = { ...rawStartPoint };
+        let adjEndPoint = { ...rawEndPoint };
+
+        if (length > START_OFFSET + END_OFFSET) {
+            adjStartPoint.x = rawStartPoint.x + ux * START_OFFSET;
+            adjStartPoint.y = rawStartPoint.y + uy * START_OFFSET;
+            adjEndPoint.x = rawEndPoint.x - ux * END_OFFSET;
+            adjEndPoint.y = rawEndPoint.y - uy * END_OFFSET;
+        } else {
+            // If nodes are too close, just draw directly or partially offset
+            // For simplicity, draw directly for now if too close, arrow might overlap
+            adjStartPoint = rawStartPoint;
+            adjEndPoint = rawEndPoint;
         }
 
-        const pathData = `M ${startPoint.x} ${startPoint.y} L ${endPoint.x} ${endPoint.y}`;
+
+        const pathData = `M ${adjStartPoint.x} ${adjStartPoint.y} L ${adjEndPoint.x} ${adjEndPoint.y}`;
         return (
           <path
             key={`${step.sourceNodeId}-${step.id}`}
@@ -928,4 +963,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
