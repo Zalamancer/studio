@@ -69,6 +69,9 @@ const SUBSTEPS_LABEL_TEXT_HEIGHT = 16;
 const SUBSTEPS_LABEL_MARGIN_BOTTOM = 4;
 const SUBSTEP_ITEM_LINE_HEIGHT = 16;
 const SUBSTEP_INTER_ITEM_SPACING = 2;
+const SUBSTEP_DOT_SIZE = 10; // Slightly smaller for sub-steps
+const SUBSTEP_DOT_OFFSET = -(SUBSTEP_DOT_SIZE / 2);
+
 
 const FOOTER_PADDING_TOP = 8;
 const FOOTER_PADDING_BOTTOM = 8;
@@ -77,16 +80,15 @@ const FOOTER_CONTENT_HEIGHT = 28;
 const INTERNAL_BORDER_HEIGHT = 1;
 const NODE_END_PADDING = 50;
 
-// Constants for node placement when clicking a dot
-const NODE_SPACING_X = NODE_WIDTH + 60; // Horizontal space between connected nodes
-const NODE_SPACING_Y = 60; // Vertical space for N/S connections
+const NODE_SPACING_X = NODE_WIDTH + 60;
+const NODE_SPACING_Y = 60;
 
 const CLICK_TIME_THRESHOLD_MS = 250;
 const CLICK_MOVE_THRESHOLD_PX = 5;
 const SNAP_RADIUS = 20;
 
 
-type AnchorPoint = 'N' | 'S' | 'E'; // West ('W') dot removed
+type AnchorPoint = 'N' | 'S' | 'E';
 
 const getEstimatedCardHeight = (step: RoadmapStep): number => {
   let calculatedHeight = 0;
@@ -123,9 +125,23 @@ interface RoadmapStepCardProps {
   isSubmitting: boolean;
   onMouseDownOnNode: (event: React.MouseEvent<HTMLDivElement>, stepId: string) => void;
   onDeleteNode: (stepId: string, stepTitle: string) => void;
-  onConnectionDotInteraction: (event: React.MouseEvent, stepId: string, anchor: AnchorPoint, interactionType: 'down' | 'up', dotRef: React.RefObject<HTMLButtonElement>) => void;
+  onConnectionDotInteraction: (
+    event: React.MouseEvent,
+    parentStepId: string, // ID of the main card
+    anchor: AnchorPoint,
+    interactionType: 'down' | 'up',
+    dotRef: React.RefObject<HTMLButtonElement>,
+    subStepOriginContext?: SubStepDotContextArgs // Optional context for sub-step dots
+  ) => void;
   isPotentialConnectionTarget: (stepId: string, anchor: AnchorPoint) => boolean;
 }
+
+interface SubStepDotContextArgs {
+  subStepId: string;
+  subStepTitle: string;
+  dotElementRef: React.RefObject<HTMLButtonElement>;
+}
+
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   step,
@@ -142,7 +158,17 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
   const northDotRef = useRef<HTMLButtonElement>(null);
   const southDotRef = useRef<HTMLButtonElement>(null);
   const eastDotRef = useRef<HTMLButtonElement>(null);
-  // West dot ref removed
+
+  // Refs for sub-step dots - will need to create dynamically or manage an array
+  const subStepDotRefs = useRef<Map<string, React.RefObject<HTMLButtonElement>>>(new Map());
+  if (step.subSteps) {
+    step.subSteps.forEach(subStep => {
+      if (!subStepDotRefs.current.has(subStep.id)) {
+        subStepDotRefs.current.set(subStep.id, React.createRef<HTMLButtonElement>());
+      }
+    });
+  }
+
 
   const handleHeaderMouseDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
     onMouseDownOnNode(e, step.id);
@@ -163,30 +189,67 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
     onDeleteNode(step.id, step.title);
   }, [onDeleteNode, step.id, step.title]);
 
-  const ConnectionDot: React.FC<{ anchor: AnchorPoint; dotRef: React.RefObject<HTMLButtonElement> }> = ({ anchor, dotRef }) => (
-    <Button
-      ref={dotRef}
-      variant="outline"
-      size="icon"
-      className={cn(
-        "absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30 cursor-grab active:cursor-grabbing",
-        "transition-all duration-150 ease-in-out",
-        isPotentialConnectionTarget(step.id, anchor) ? "ring-2 ring-green-500 bg-green-200 border-green-500 scale-125" : "hover:scale-110",
-      )}
-      style={{
-        width: DOT_SIZE, height: DOT_SIZE, padding: 0,
-        ...(anchor === 'N' && { top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)` }),
-        ...(anchor === 'S' && { bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)` }),
-        ...(anchor === 'E' && { right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)` }),
-        // Style for West dot removed
-      }}
-      onMouseDown={(e) => { e.stopPropagation(); onConnectionDotInteraction(e, step.id, anchor, 'down', dotRef); }}
-      onMouseUp={(e) => { e.stopPropagation(); onConnectionDotInteraction(e, step.id, anchor, 'up', dotRef); }}
-      title={`Drag to connect, or click to create a new step from ${anchor === 'N' ? 'top' : anchor === 'S' ? 'bottom' : 'right'}`}
-    >
-      <MousePointerSquareDashed className="h-3 w-3 opacity-70" />
-    </Button>
-  );
+  const ConnectionDot: React.FC<{
+    anchor: AnchorPoint;
+    dotRef: React.RefObject<HTMLButtonElement>;
+    isSubStepDot?: boolean;
+    subStepId?: string;
+    subStepTitle?: string;
+  }> = ({ anchor, dotRef, isSubStepDot = false, subStepId, subStepTitle }) => {
+    const dotSize = isSubStepDot ? SUBSTEP_DOT_SIZE : DOT_SIZE;
+    const dotOffset = isSubStepDot ? SUBSTEP_DOT_OFFSET : DOT_OFFSET;
+    
+    let style: React.CSSProperties = {};
+    if (isSubStepDot) {
+        style = { right: dotOffset, top: `calc(50% - ${dotSize / 2}px)` }; // Always right for sub-step
+    } else {
+        style = {
+            ...(anchor === 'N' && { top: dotOffset, left: `calc(50% - ${dotSize / 2}px)` }),
+            ...(anchor === 'S' && { bottom: dotOffset, left: `calc(50% - ${dotSize / 2}px)` }),
+            ...(anchor === 'E' && { right: dotOffset, top: `calc(50% - ${dotSize / 2}px)` }),
+        };
+    }
+
+    return (
+        <Button
+          ref={dotRef}
+          variant="outline"
+          size="icon"
+          className={cn(
+            "absolute rounded-full bg-background hover:bg-primary/10 border-primary text-primary z-30 cursor-grab active:cursor-grabbing",
+            "transition-all duration-150 ease-in-out",
+            isPotentialConnectionTarget(step.id, anchor) && !isSubStepDot ? "ring-2 ring-green-500 bg-green-200 border-green-500 scale-125" : "hover:scale-110",
+            isSubStepDot && "border-purple-500 text-purple-500 hover:border-purple-600 hover:text-purple-600"
+          )}
+          style={{ width: dotSize, height: dotSize, padding: 0, ...style }}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+            onConnectionDotInteraction(
+              e,
+              step.id, // Parent step ID
+              isSubStepDot ? 'E' : anchor, // Conceptual anchor for sub-step dots is 'E'
+              'down',
+              dotRef,
+              isSubStepDot && subStepId && subStepTitle ? { subStepId, subStepTitle, dotElementRef: dotRef } : undefined
+            );
+          }}
+          onMouseUp={(e) => {
+            e.stopPropagation();
+            onConnectionDotInteraction(
+              e,
+              step.id,
+              isSubStepDot ? 'E' : anchor,
+              'up',
+              dotRef,
+              isSubStepDot && subStepId && subStepTitle ? { subStepId, subStepTitle, dotElementRef: dotRef } : undefined
+            );
+          }}
+          title={isSubStepDot ? `Drag or click to connect/create from sub-step "${subStepTitle}"` : `Drag or click to connect/create from ${anchor === 'N' ? 'top' : anchor === 'S' ? 'bottom' : 'right'}`}
+        >
+          <MousePointerSquareDashed className={cn(isSubStepDot ? "h-2.5 w-2.5" : "h-3 w-3", "opacity-70")} />
+        </Button>
+    );
+  };
 
   return (
     <div
@@ -214,10 +277,19 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
             <ul className="list-none space-y-0.5 ml-0">
               {step.subSteps.map((subStep) => (
-                <li key={subStep.id} className="relative flex items-center gap-1.5 text-xs">
+                <li key={subStep.id} className="relative flex items-center gap-1.5 text-xs pr-3"> {/* Added pr-3 for dot space */}
                   <span className="text-muted-foreground truncate" title={subStep.title}>
                     {subStep.title}
                   </span>
+                  {isSelected && !isSubmitting && (
+                    <ConnectionDot
+                        anchor="E" // Conceptually East, even though on a sub-step
+                        dotRef={subStepDotRefs.current.get(subStep.id)!}
+                        isSubStepDot={true}
+                        subStepId={subStep.id}
+                        subStepTitle={subStep.title}
+                    />
+                  )}
                 </li>
               ))}
             </ul>
@@ -241,7 +313,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
           <ConnectionDot anchor="N" dotRef={northDotRef} />
           <ConnectionDot anchor="S" dotRef={southDotRef} />
           <ConnectionDot anchor="E" dotRef={eastDotRef} />
-          {/* West dot removed */}
         </>
       )}
     </div>
@@ -344,22 +415,24 @@ const AddRoadmapStepDialogInternal: React.FC<AddRoadmapStepDialogInternalProps> 
 
 type ConnectionDragStateType = {
   isActive: boolean;
-  sourceStepId: string;
-  sourceAnchor: AnchorPoint;
-  startX: number;
-  startY: number;
-  currentX: number;
-  currentY: number;
+  sourceStepId: string; // ID of the parent card
+  sourceAnchor: AnchorPoint; // N, S, E of the parent card (or 'E' if from sub-step dot)
+  startX: number; // Canvas X where drag line starts
+  startY: number; // Canvas Y where drag line starts
+  currentX: number; // Current canvas X of mouse for line end
+  currentY: number; // Current canvas Y of mouse for line end
   targetHotspot: { stepId: string; anchor: AnchorPoint } | null;
+  subStepOriginContext?: SubStepDotContextArgs; // If drag started from a sub-step dot
 };
 
 type ClickStartInfoType = {
   time: number;
   clientX: number;
   clientY: number;
-  stepId: string;
-  anchor: AnchorPoint;
+  parentStepId: string; // ID of the parent card
+  anchor: AnchorPoint;   // N, S, E of parent card (or 'E' if from sub-step dot)
   dotRef: React.RefObject<HTMLButtonElement>;
+  subStepOriginContext?: SubStepDotContextArgs; // If click was on a sub-step dot
 } | null;
 
 const hotspotsAreEqual = (
@@ -384,7 +457,14 @@ const ViewPlanPage = () => {
   const [roadmapSteps, setRoadmapSteps] = useState<RoadmapStep[]>([]);
   const [isAddStepDialogOpen, setIsAddStepDialogOpen] = useState(false);
   const [currentParentStepForDialog, setCurrentParentStepForDialog] = useState<{ id: string; title: string } | null>(null);
-  const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{ sourceStepId: string; sourceAnchor: AnchorPoint; } | null>(null);
+
+  const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{
+    sourceStepId: string; // ID of the parent card
+    sourceAnchor: AnchorPoint; // N, S, E of parent card (or 'E' if from sub-step dot)
+    creatingFromSubStepId?: string; // ID of the sub-step if created from one
+    creatingFromSubStepTitle?: string;
+  } | null>(null);
+
   const [isSubmittingStep, setIsSubmittingStep] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [selectedNodeForPanel, setSelectedNodeForPanel] = useState<RoadmapStep | null>(null);
@@ -407,7 +487,14 @@ const ViewPlanPage = () => {
 
   const clickStartInfoRef = useRef<ClickStartInfoType>(null);
   const rAFConnectionDragLoopRef = useRef<number | null>(null);
-  const activeConnectionDragOperationRef = useRef<{ sourceStepId: string; sourceAnchor: AnchorPoint; startX: number; startY: number; } | null>(null);
+
+  const activeConnectionDragOperationRef = useRef<{
+    parentStepId: string; // ID of the parent card
+    sourceAnchor: AnchorPoint; // N, S, E of parent (or 'E' for sub-step dot)
+    startX: number; // Canvas X
+    startY: number; // Canvas Y
+    subStepOriginContext?: SubStepDotContextArgs; // Context if from sub-step
+  } | null>(null);
 
 
   const roadmapStepsRef = useRef(roadmapSteps);
@@ -466,23 +553,24 @@ const ViewPlanPage = () => {
     let newCalculatedTargetHotspot: ConnectionDragStateType['targetHotspot'] = null;
     let minDistance = SNAP_RADIUS;
     const currentRoadmapSteps = roadmapStepsRef.current;
-    const sourceStepIdForLoop = activeConnectionDragOperationRef.current.sourceStepId;
+    const sourceParentStepIdForLoop = activeConnectionDragOperationRef.current.parentStepId;
 
     for (const targetStep of currentRoadmapSteps) {
-      if (targetStep.id === sourceStepIdForLoop) continue;
+      // Prevent connecting a card to itself OR its own sub-step dots (sub-steps don't have their own "connection dots" for snapping to, only for originating a drag)
+      if (targetStep.id === sourceParentStepIdForLoop) continue;
+
       const targetCardElement = canvasRef.current.querySelector(`[data-step-id="${targetStep.id}"]`);
       if (!targetCardElement) continue;
       const targetCardRect = targetCardElement.getBoundingClientRect();
       const targetCardHeight = getEstimatedCardHeight(targetStep);
       const canvasRectLocal = canvasRef.current.getBoundingClientRect();
-      const targetAnchors: AnchorPoint[] = ['N', 'S', 'E']; // Only N, S, E
+      const targetAnchors: AnchorPoint[] = ['N', 'S', 'E'];
       for (const targetAnchor of targetAnchors) {
         let dotX = 0, dotY = 0;
         switch (targetAnchor) {
           case 'N': dotX = targetCardRect.left + NODE_WIDTH / 2; dotY = targetCardRect.top; break;
           case 'S': dotX = targetCardRect.left + NODE_WIDTH / 2; dotY = targetCardRect.bottom; break;
           case 'E': dotX = targetCardRect.right; dotY = targetCardRect.top + targetCardHeight / 2; break;
-          // Case for 'W' removed
         }
         const dotCanvasX = dotX - canvasRectLocal.left + canvasRef.current.scrollLeft;
         const dotCanvasY = dotY - canvasRectLocal.top + canvasRef.current.scrollTop;
@@ -515,56 +603,57 @@ const ViewPlanPage = () => {
 
   const handleConnectionDotInteraction = useCallback((
     event: React.MouseEvent,
-    stepId: string,
-    anchor: AnchorPoint,
+    parentStepId: string,
+    anchor: AnchorPoint, // N, S, E from main card, or 'E' conceptual if from sub-step
     interactionType: 'down' | 'up',
-    dotRef: React.RefObject<HTMLButtonElement>
+    dotRef: React.RefObject<HTMLButtonElement>,
+    subStepOriginContext?: SubStepDotContextArgs
   ) => {
     event.preventDefault();
     event.stopPropagation();
 
     if (interactionType === 'down') {
       if (!canvasRef.current || !dotRef.current) return;
-      clickStartInfoRef.current = { time: Date.now(), clientX: event.clientX, clientY: event.clientY, stepId, anchor, dotRef };
+      clickStartInfoRef.current = { time: Date.now(), clientX: event.clientX, clientY: event.clientY, parentStepId, anchor, dotRef, subStepOriginContext };
       const canvasRect = canvasRef.current.getBoundingClientRect();
-      const dotRect = dotRef.current.getBoundingClientRect();
-      let startX = 0, startY = 0;
-      switch (anchor) {
-        case 'N': startX = dotRect.left + dotRect.width / 2 - canvasRect.left; startY = dotRect.top - canvasRect.top; break;
-        case 'S': startX = dotRect.left + dotRect.width / 2 - canvasRect.left; startY = dotRect.bottom - canvasRect.top; break;
-        case 'E': startX = dotRect.right - canvasRect.left; startY = dotRect.top + dotRect.height / 2 - canvasRect.top; break;
-        // Case for 'W' removed
-      }
+      const dotRect = dotRef.current.getBoundingClientRect(); // Use the actual dot element's rect
+
+      let startX = dotRect.left + dotRect.width / 2 - canvasRect.left;
+      let startY = dotRect.top + dotRect.height / 2 - canvasRect.top;
+
       const lineStartX = startX + canvasRef.current.scrollLeft;
       const lineStartY = startY + canvasRef.current.scrollTop;
-
-      activeConnectionDragOperationRef.current = { sourceStepId: stepId, sourceAnchor: anchor, startX: lineStartX, startY: lineStartY };
+      
+      activeConnectionDragOperationRef.current = { parentStepId, sourceAnchor: anchor, startX: lineStartX, startY: lineStartY, subStepOriginContext };
       setConnectionDragState({
-        isActive: true, sourceStepId: stepId, sourceAnchor: anchor,
-        startX: lineStartX, startY: lineStartY, currentX: lineStartX, currentY: lineStartY, targetHotspot: null
+        isActive: true, sourceStepId: parentStepId, sourceAnchor: anchor,
+        startX: lineStartX, startY: lineStartY, currentX: lineStartX, currentY: lineStartY, targetHotspot: null,
+        subStepOriginContext
       });
       setSelectedStepId(null); setSelectedNodeForPanel(null);
       if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
       rAFConnectionDragLoopRef.current = requestAnimationFrame(processConnectionLineDragLoop);
 
-    } else if (interactionType === 'up' && clickStartInfoRef.current && clickStartInfoRef.current.stepId === stepId && clickStartInfoRef.current.anchor === anchor) {
+    } else if (interactionType === 'up' && clickStartInfoRef.current && clickStartInfoRef.current.parentStepId === parentStepId && clickStartInfoRef.current.anchor === anchor && clickStartInfoRef.current.subStepOriginContext?.subStepId === subStepOriginContext?.subStepId) {
       const timeDiff = Date.now() - clickStartInfoRef.current.time;
       const moveX = Math.abs(event.clientX - clickStartInfoRef.current.clientX);
       const moveY = Math.abs(event.clientY - clickStartInfoRef.current.clientY);
       const localClickStartInfo = { ...clickStartInfoRef.current };
-      clickStartInfoRef.current = null; // Clear click info after processing
+      clickStartInfoRef.current = null;
 
       if (timeDiff < CLICK_TIME_THRESHOLD_MS && moveX < CLICK_MOVE_THRESHOLD_PX && moveY < CLICK_MOVE_THRESHOLD_PX) {
-        // It's a CLICK
         event.stopPropagation();
-        setPendingNodeFromDotInfo({ sourceStepId: localClickStartInfo.stepId, sourceAnchor: localClickStartInfo.anchor });
+        setPendingNodeFromDotInfo({
+            sourceStepId: localClickStartInfo.parentStepId,
+            sourceAnchor: localClickStartInfo.anchor, // This will be 'E' if from a sub-step dot
+            creatingFromSubStepId: localClickStartInfo.subStepOriginContext?.subStepId,
+            creatingFromSubStepTitle: localClickStartInfo.subStepOriginContext?.subStepTitle,
+        });
         setIsAddStepDialogOpen(true);
-        // Cancel any drag operation that might have been tentatively started
         if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
         activeConnectionDragOperationRef.current = null;
         setConnectionDragState(null);
       }
-      // If it wasn't a click, the global mouseup on canvas (handleCanvasMouseUpForConnection) will handle it as a drag end.
     }
   }, [processConnectionLineDragLoop, setConnectionDragState, setSelectedStepId, setSelectedNodeForPanel, setIsAddStepDialogOpen, setPendingNodeFromDotInfo]);
 
@@ -599,54 +688,67 @@ const ViewPlanPage = () => {
           subSteps: [],
         };
 
-        if (currentParentStepForDialog) { // Adding as sub-step
+        if (currentParentStepForDialog) {
           return prevSteps.map(step =>
             step.id === currentParentStepForDialog.id
               ? { ...step, subSteps: [...(step.subSteps || []), { ...newStepBase, parentId: step.id } as RoadmapSubStep] }
               : step
           );
-        } else if (pendingNodeFromDotInfo) { // Adding from a dot click
+        } else if (pendingNodeFromDotInfo) {
           const sourceStep = prevSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
           if (!sourceStep) {
             console.error("Source step not found for dot click creation");
-            return prevSteps; // Or handle error appropriately
+            return prevSteps;
           }
           let newX = 0, newY = 0;
           const sourceCardHeight = getEstimatedCardHeight(sourceStep);
-          const newCardDynamicHeight = getEstimatedCardHeight(newStepBase as RoadmapStep); // Cast needed
+          const newCardDynamicHeight = getEstimatedCardHeight(newStepBase as RoadmapStep);
 
-          switch (pendingNodeFromDotInfo.sourceAnchor) {
-            case 'N':
-              newX = sourceStep.x + NODE_WIDTH / 2 - NODE_WIDTH / 2; // Centered below/above
-              newY = sourceStep.y - newCardDynamicHeight - NODE_SPACING_Y;
-              break;
-            case 'S':
-              newX = sourceStep.x + NODE_WIDTH / 2 - NODE_WIDTH / 2;
-              newY = sourceStep.y + sourceCardHeight + NODE_SPACING_Y;
-              break;
-            case 'E':
-              newX = sourceStep.x + NODE_WIDTH + NODE_SPACING_X;
-              newY = sourceStep.y + sourceCardHeight / 2 - newCardDynamicHeight / 2; // Vertically centered
-              break;
-            // West case removed
+          if (pendingNodeFromDotInfo.creatingFromSubStepId) { // Node created from a sub-step dot
+            newX = sourceStep.x + NODE_WIDTH + NODE_SPACING_X; // Always to the East of parent card
+            newY = sourceStep.y + sourceCardHeight / 2 - newCardDynamicHeight / 2; // Vertically align with parent card's center
+            const newMainStepWithPos: RoadmapStep = {
+              ...newStepBase,
+              x: Math.round(Math.max(0, newX)),
+              y: Math.round(Math.max(0, newY)),
+              sourceNodeId: pendingNodeFromDotInfo.sourceStepId, // Link to parent card
+              sourceAnchor: 'E', // Line from parent's East edge
+              originatingSubStepInfo: {
+                sourceCardId: pendingNodeFromDotInfo.sourceStepId,
+                subStepId: pendingNodeFromDotInfo.creatingFromSubStepId,
+              }
+            };
+            return [...prevSteps, newMainStepWithPos];
+          } else { // Node created from a main card's N, S, E dot
+            switch (pendingNodeFromDotInfo.sourceAnchor) {
+              case 'N':
+                newX = sourceStep.x + NODE_WIDTH / 2 - NODE_WIDTH / 2;
+                newY = sourceStep.y - newCardDynamicHeight - NODE_SPACING_Y;
+                break;
+              case 'S':
+                newX = sourceStep.x + NODE_WIDTH / 2 - NODE_WIDTH / 2;
+                newY = sourceStep.y + sourceCardHeight + NODE_SPACING_Y;
+                break;
+              case 'E':
+                newX = sourceStep.x + NODE_WIDTH + NODE_SPACING_X;
+                newY = sourceStep.y + sourceCardHeight / 2 - newCardDynamicHeight / 2;
+                break;
+            }
+            const newMainStepWithPos: RoadmapStep = {
+              ...newStepBase,
+              x: Math.round(Math.max(0, newX)),
+              y: Math.round(Math.max(0, newY)),
+              sourceNodeId: pendingNodeFromDotInfo.sourceStepId,
+              sourceAnchor: pendingNodeFromDotInfo.sourceAnchor,
+            };
+            return [...prevSteps, newMainStepWithPos];
           }
-          const newMainStepWithPos: RoadmapStep = {
-            ...newStepBase,
-            x: Math.round(Math.max(0, newX)),
-            y: Math.round(Math.max(0, newY)),
-            sourceNodeId: pendingNodeFromDotInfo.sourceStepId,
-            sourceAnchor: pendingNodeFromDotInfo.sourceAnchor,
-          };
-          return [...prevSteps, newMainStepWithPos];
-        } else { // Adding as a general new step
+        } else { // General new step (from main "Add Roadmap Step" button)
           let newX = 20, newY = 20;
           if (prevSteps.length > 0) {
-            const mainSteps = prevSteps.filter(step => !step.sourceNodeId);
-            const lastMainStep = mainSteps.length > 0
-              ? mainSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), mainSteps[0])
-              : prevSteps.reduce((latest, current) => (current.y > latest.y ? current : latest), { y: -(NODE_SPACING_Y + getEstimatedCardHeight(newStepBase as RoadmapStep)), subSteps: [] } as RoadmapStep);
-
-            newY = (typeof lastMainStep.y === 'number' && !isNaN(lastMainStep.y) ? lastMainStep.y : 0) + getEstimatedCardHeight(lastMainStep) + NODE_SPACING_Y;
+             const lastStepOverall = prevSteps.reduce((latest, current) => ((current.y + getEstimatedCardHeight(current)) > (latest.y + getEstimatedCardHeight(latest)) ? current : latest), prevSteps[0]);
+             newY = (typeof lastStepOverall.y === 'number' && !isNaN(lastStepOverall.y) ? lastStepOverall.y : 0) + getEstimatedCardHeight(lastStepOverall) + NODE_SPACING_Y;
+             newX = (typeof lastStepOverall.x === 'number' && !isNaN(lastStepOverall.x) ? lastStepOverall.x : 0);
           }
           if (canvasRef.current) {
             const maxX = canvasRef.current.clientWidth > NODE_WIDTH ? canvasRef.current.clientWidth - NODE_WIDTH : 0;
@@ -756,8 +858,6 @@ const processDragMovementLoop = useCallback(() => {
   }, [canvasRef]);
 
   const handleCanvasMouseUpForConnection = useCallback(() => {
-    // This function is called when mouseup occurs ANYWHERE on the canvas
-    // It should only act if a drag from a dot was in progress AND was not a click
     if (rAFConnectionDragLoopRef.current) {
       cancelAnimationFrame(rAFConnectionDragLoopRef.current);
       rAFConnectionDragLoopRef.current = null;
@@ -766,34 +866,31 @@ const processDragMovementLoop = useCallback(() => {
     const localActiveDragOp = activeConnectionDragOperationRef.current;
     const localConnectionDragState = connectionDragStateRef.current;
 
-    // Only proceed if a drag operation from a dot was truly active
     if (localActiveDragOp && localConnectionDragState?.isActive) {
       if (localConnectionDragState.targetHotspot) {
-        const { sourceStepId, sourceAnchor } = localActiveDragOp;
+        const { parentStepId: dragOriginStepId, sourceAnchor: dragOriginAnchor } = localActiveDragOp;
         const { stepId: targetStepId, anchor: targetSnapAnchor } = localConnectionDragState.targetHotspot;
 
         setRoadmapSteps(prevSteps => {
-          const sourceNode = prevSteps.find(s => s.id === sourceStepId);
+          const sourceNode = prevSteps.find(s => s.id === dragOriginStepId);
           const targetNodeIndex = prevSteps.findIndex(s => s.id === targetStepId);
           if (!sourceNode || targetNodeIndex === -1) return prevSteps;
           const targetNode = prevSteps[targetNodeIndex];
-
           const updatedSteps = [...prevSteps];
           updatedSteps[targetNodeIndex] = {
             ...targetNode,
-            sourceNodeId: sourceStepId,
-            sourceAnchor: sourceAnchor, // Store the source anchor from which the drag started
-            originatingSubStepInfo: null
+            sourceNodeId: dragOriginStepId, // The ID of the card the drag originated from
+            sourceAnchor: dragOriginAnchor, // The N, S, E anchor OF THE SOURCE CARD (or 'E' if from sub-step)
+            // originatingSubStepInfo is NOT set here for drag-to-connect
           };
           return updatedSteps;
         });
         toast({ title: "Connection Created", description: `Linked nodes.`});
       }
     }
-    // Always clear drag states on any canvas mouseup
     activeConnectionDragOperationRef.current = null;
     setConnectionDragState(null);
-    clickStartInfoRef.current = null; // Also clear click info, as this mouseup ends any dot interaction
+    clickStartInfoRef.current = null;
   }, [toast, setRoadmapSteps, roadmapStepsRef]);
 
   const handleMouseUpGlobal = useCallback(() => {
@@ -805,10 +902,7 @@ const processDragMovementLoop = useCallback(() => {
         nodeInitialCanvasPosRef.current = null;
         dragContextRef.current = null;
     }
-    // The activeConnectionDragOperationRef clearing is now primarily handled
-    // by handleCanvasMouseUpForConnection (for drags) or by the dot's own mouseup (for clicks).
-    // However, having it in handleCanvasMouseUpForConnection which is called by this global one is okay.
-  }, [handleCanvasMouseUpForConnection]);
+  }, []);
 
   useEffect(() => {
     window.addEventListener('mouseup', handleMouseUpGlobal);
@@ -871,7 +965,15 @@ const processDragMovementLoop = useCallback(() => {
   const isOwner = currentUser?.uid === plan.ownerId;
   let dialogTitleForAddStep = "Add New Roadmap Step";
   if (currentParentStepForDialog) dialogTitleForAddStep = `Add Sub-step to "${currentParentStepForDialog.title}"`;
-  else if (pendingNodeFromDotInfo) { const sourceStepTitle = roadmapStepsRef.current.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title || "Selected Step"; dialogTitleForAddStep = `Add New Step from "${sourceStepTitle}"`; }
+  else if (pendingNodeFromDotInfo) {
+    const sourceStepTitle = roadmapStepsRef.current.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title;
+    if (pendingNodeFromDotInfo.creatingFromSubStepId && pendingNodeFromDotInfo.creatingFromSubStepTitle) {
+      dialogTitleForAddStep = `New Step from Sub-step: "${pendingNodeFromDotInfo.creatingFromSubStepTitle}" (in ${sourceStepTitle || 'Parent'})`;
+    } else if (sourceStepTitle) {
+      dialogTitleForAddStep = `New Step from "${sourceStepTitle}"`;
+    }
+  }
+
 
   return (
     <div className="flex flex-col flex-1 w-full overflow-hidden">
@@ -907,7 +1009,7 @@ const processDragMovementLoop = useCallback(() => {
             ref={canvasRef}
             className="flex-1 grid-background relative overflow-auto p-4 md:p-6"
             onMouseMove={handleMouseMoveOnCanvas}
-            onMouseUp={handleCanvasMouseUpForConnection}
+            onMouseUp={handleCanvasMouseUpForConnection} // This handles drag-from-dot completion
             onClick={handleCanvasClick}
             style={{ minHeight: dynamicCanvasMinHeight ? `${dynamicCanvasMinHeight}px` : '100vh' }}
         >
@@ -929,21 +1031,17 @@ const processDragMovementLoop = useCallback(() => {
 
               let x1=0, y1=0, x2=0, y2=0;
 
-              // Calculate (x1, y1) based on sourceStep and its sourceAnchor
               switch (targetStep.sourceAnchor) {
                 case 'N': x1 = sourceStep.x + NODE_WIDTH / 2; y1 = sourceStep.y; break;
                 case 'S': x1 = sourceStep.x + NODE_WIDTH / 2; y1 = sourceStep.y + sourceCardHeight; break;
                 case 'E': x1 = sourceStep.x + NODE_WIDTH; y1 = sourceStep.y + sourceCardHeight / 2; break;
-                // West case removed
                 default: return null;
               }
 
-              // Calculate (x2, y2) based on targetStep, connecting to the opposite side of sourceAnchor
               switch (targetStep.sourceAnchor) {
-                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break; // Connect to South of target
-                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break; // Connect to North of target
-                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break; // Connect to West of target (center of left edge)
-                // If sourceAnchor was West, this would connect to East of target
+                case 'N': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y + targetCardHeight; break;
+                case 'S': x2 = targetStep.x + NODE_WIDTH / 2; y2 = targetStep.y; break;
+                case 'E': x2 = targetStep.x; y2 = targetStep.y + targetCardHeight / 2; break;
                 default: return null;
               }
 
