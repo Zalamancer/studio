@@ -373,9 +373,6 @@ const AddRoadmapStepDialogInternal: React.FC<AddRoadmapStepDialogInternalProps> 
 
 type ConnectionDragStateType = {
   isActive: boolean;
-  isPotentialClick: boolean;
-  sourceStepId: string;
-  sourceAnchor: AnchorPoint;
   startX: number;
   startY: number;
   currentX: number;
@@ -390,6 +387,13 @@ type ClickStartInfoType = {
   stepId: string;
   anchor: AnchorPoint;
   dotRef: React.RefObject<HTMLButtonElement>;
+} | null;
+
+type ActiveConnectionDragOperationType = {
+  sourceStepId: string;
+  sourceAnchor: AnchorPoint;
+  clickStartInfo: NonNullable<ClickStartInfoType>; // clickStartInfo should not be null when a drag operation is active
+  isPotentialClick: boolean;
 } | null;
 
 
@@ -412,14 +416,17 @@ const ViewPlanPage = () => {
   const draggingNodeIdRef = useRef<string | null>(null);
   const dragOperationStartRef = useRef<{ x: number; y: number } | null>(null);
   const nodeInitialCanvasPosRef = useRef<{ x: number; y: number } | null>(null);
-  const latestMousePositionRef = useRef<{ x: number; y: number } | null>(null);
+  const latestMousePositionRef = useRef<{ x: number; y: number; clientX: number; clientY: number; } | null>(null);
   const dragUpdateFrameRef = useRef<number | null>(null);
   const autoScrollFrameRef = useRef<number | null>(null);
   const [dynamicCanvasMinHeight, setDynamicCanvasMinHeight] = useState<number | null>(null);
   const [isSavingRoadmap, setIsSavingRoadmap] = useState(false);
   const [confirmDeleteNodeInfo, setConfirmDeleteNodeInfo] = useState<{ id: string; title: string } | null>(null);
+  
   const [connectionDragState, setConnectionDragState] = useState<ConnectionDragStateType | null>(null);
-  const clickStartInfoRef = useRef<ClickStartInfoType>(null);
+  const activeConnectionDragOperationRef = useRef<ActiveConnectionDragOperationType>(null);
+  const rAFConnectionDragLoopRef = useRef<number | null>(null);
+  const roadmapStepsRef = useRef(roadmapSteps);
 
 
   const isPlanIdValidUid = React.useMemo(() => { if (!planId) return false; return IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20; }, [planId]);
@@ -447,6 +454,10 @@ const ViewPlanPage = () => {
   }, [plan]);
 
   useEffect(() => {
+    roadmapStepsRef.current = roadmapSteps;
+  }, [roadmapSteps]);
+
+  useEffect(() => {
     if (typeof window !== 'undefined' && canvasRef.current) {
       let maxBottomY = 0;
       if (roadmapSteps.length > 0) {
@@ -461,99 +472,34 @@ const ViewPlanPage = () => {
     }
   }, [roadmapSteps]);
 
-  const handleConnectionDotInteraction = useCallback((
-    event: React.MouseEvent,
-    stepId: string,
-    anchor: AnchorPoint,
-    interactionType: 'down' | 'up',
-    dotRef: React.RefObject<HTMLButtonElement>
-  ) => {
-    event.preventDefault();
-    event.stopPropagation();
-
-    if (interactionType === 'down') {
-      clickStartInfoRef.current = {
-        time: Date.now(),
-        clientX: event.clientX,
-        clientY: event.clientY,
-        stepId,
-        anchor,
-        dotRef,
-      };
-
-      if (!canvasRef.current || !dotRef.current) return;
-      const canvasRect = canvasRef.current.getBoundingClientRect();
-      const dotRect = dotRef.current.getBoundingClientRect();
-      let startX = 0, startY = 0;
-      switch(anchor) {
-        case 'N': startX = dotRect.left + dotRect.width / 2 - canvasRect.left; startY = dotRect.top - canvasRect.top; break;
-        case 'S': startX = dotRect.left + dotRect.width / 2 - canvasRect.left; startY = dotRect.bottom - canvasRect.top; break;
-        case 'E': startX = dotRect.right - canvasRect.left; startY = dotRect.top + dotRect.height / 2 - canvasRect.top; break;
-        case 'W': startX = dotRect.left - canvasRect.left; startY = dotRect.top + dotRect.height / 2 - canvasRect.top; break;
-      }
-      const canvasScrollLeft = canvasRef.current.scrollLeft;
-      const canvasScrollTop = canvasRef.current.scrollTop;
-      setConnectionDragState({
-        isActive: true,
-        isPotentialClick: true,
-        sourceStepId: stepId,
-        sourceAnchor: anchor,
-        startX: startX + canvasScrollLeft,
-        startY: startY + canvasScrollTop,
-        currentX: startX + canvasScrollLeft,
-        currentY: startY + canvasScrollTop,
-        targetHotspot: null,
-      });
-      setSelectedStepId(null);
-      setSelectedNodeForPanel(null);
-    } else if (interactionType === 'up' && clickStartInfoRef.current) {
-      const clickInfo = clickStartInfoRef.current;
-      if (clickInfo.stepId === stepId && clickInfo.anchor === anchor) {
-        const timeDiff = Date.now() - clickInfo.time;
-        const moveX = Math.abs(event.clientX - clickInfo.clientX);
-        const moveY = Math.abs(event.clientY - clickInfo.clientY);
-
-        if (timeDiff < CLICK_TIME_THRESHOLD_MS && moveX < CLICK_MOVE_THRESHOLD_PX && moveY < CLICK_MOVE_THRESHOLD_PX) {
-          setPendingNodeFromDotInfo({ sourceStepId: stepId, sourceAnchor: anchor });
-          setIsAddStepDialogOpen(true);
-          setConnectionDragState(null); 
-        }
-      }
-      clickStartInfoRef.current = null;
+  const processConnectionLineDragLoop = useCallback(() => {
+    if (!activeConnectionDragOperationRef.current || !latestMousePositionRef.current || !canvasRef.current) {
+      if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+      rAFConnectionDragLoopRef.current = null;
+      return;
     }
-  }, [canvasRef, setConnectionDragState, setSelectedStepId, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setIsAddStepDialogOpen]);
 
-  const isPotentialConnectionTarget = useCallback((stepId: string, anchor: AnchorPoint): boolean => {
-    return connectionDragState?.isActive === true &&
-           connectionDragState?.targetHotspot?.stepId === stepId &&
-           connectionDragState?.targetHotspot?.anchor === anchor;
-  }, [connectionDragState]);
+    const dragOp = activeConnectionDragOperationRef.current;
+    const mousePos = latestMousePositionRef.current;
 
-  const handleCanvasMouseMoveForConnection = useCallback((event: React.MouseEvent) => {
-    if (!connectionDragState?.isActive || !canvasRef.current) return;
-
-    const currentClientX = event.clientX;
-    const currentClientY = event.clientY;
-    
-    const currentState = connectionDragState; // Capture for comparison
-
-    let newIsPotentialClick = currentState.isPotentialClick;
-    if (newIsPotentialClick && clickStartInfoRef.current) {
-      const moveX = Math.abs(currentClientX - clickStartInfoRef.current.clientX);
-      const moveY = Math.abs(currentClientY - clickStartInfoRef.current.clientY);
+    let newIsPotentialClick = dragOp.isPotentialClick;
+    if (newIsPotentialClick && dragOp.clickStartInfo) {
+      const moveX = Math.abs(mousePos.clientX - dragOp.clickStartInfo.clientX);
+      const moveY = Math.abs(mousePos.clientY - dragOp.clickStartInfo.clientY);
       if (moveX > CLICK_MOVE_THRESHOLD_PX || moveY > CLICK_MOVE_THRESHOLD_PX) {
         newIsPotentialClick = false;
       }
     }
+    activeConnectionDragOperationRef.current = { ...dragOp, isPotentialClick: newIsPotentialClick };
 
     const canvasRect = canvasRef.current.getBoundingClientRect();
-    let newCalculatedCurrentX = currentClientX - canvasRect.left + canvasRef.current.scrollLeft;
-    let newCalculatedCurrentY = currentClientY - canvasRect.top + canvasRef.current.scrollTop;
+    let newCalculatedCurrentX = mousePos.x; // Already canvas-relative
+    let newCalculatedCurrentY = mousePos.y; // Already canvas-relative
     let newCalculatedTargetHotspot: ConnectionDragStateType['targetHotspot'] = null;
 
     let minDistance = SNAP_RADIUS;
-    for (const targetStep of roadmapSteps) {
-      if (targetStep.id === currentState.sourceStepId) continue;
+    for (const targetStep of roadmapStepsRef.current) {
+      if (targetStep.id === dragOp.sourceStepId) continue;
       const targetCardElement = canvasRef.current.querySelector(`[data-step-id="${targetStep.id}"]`);
       if (!targetCardElement) continue;
       const targetCardRect = targetCardElement.getBoundingClientRect();
@@ -583,90 +529,114 @@ const ViewPlanPage = () => {
         }
       }
     }
-    
-    if (
-      newCalculatedCurrentX !== currentState.currentX ||
-      newCalculatedCurrentY !== currentState.currentY ||
-      JSON.stringify(newCalculatedTargetHotspot) !== JSON.stringify(currentState.targetHotspot) ||
-      newIsPotentialClick !== currentState.isPotentialClick
-    ) {
-      setConnectionDragState(prev => prev ? ({
-        ...prev,
+
+    setConnectionDragState(prevState => {
+      if (!prevState || !prevState.isActive) return prevState; // Should not happen if loop is running
+
+      if (
+        Math.round(newCalculatedCurrentX) === Math.round(prevState.currentX) &&
+        Math.round(newCalculatedCurrentY) === Math.round(prevState.currentY) &&
+        JSON.stringify(newCalculatedTargetHotspot) === JSON.stringify(prevState.targetHotspot)
+      ) {
+        return prevState;
+      }
+      return {
+        ...prevState,
         currentX: newCalculatedCurrentX,
         currentY: newCalculatedCurrentY,
         targetHotspot: newCalculatedTargetHotspot,
-        isPotentialClick: newIsPotentialClick,
-      }) : null);
+      };
+    });
+
+    if (activeConnectionDragOperationRef.current) { // Check if still active
+      rAFConnectionDragLoopRef.current = requestAnimationFrame(processConnectionLineDragLoop);
     }
-  }, [connectionDragState, roadmapSteps, canvasRef, setConnectionDragState]);
+  }, [setConnectionDragState, canvasRef]);
 
 
-  const handleCanvasMouseUpForConnection = useCallback(() => {
-    if (!connectionDragState?.isActive) return;
-    if (connectionDragState.isPotentialClick && clickStartInfoRef.current) {
-        clickStartInfoRef.current = null;
-        setConnectionDragState(null);
-        return;
-    }
+  const handleConnectionDotInteraction = useCallback((
+    event: React.MouseEvent,
+    stepId: string,
+    anchor: AnchorPoint,
+    interactionType: 'down' | 'up',
+    dotRef: React.RefObject<HTMLButtonElement>
+  ) => {
+    event.preventDefault();
+    event.stopPropagation();
 
-    if (connectionDragState.targetHotspot) {
-      const { sourceStepId, sourceAnchor, targetHotspot } = connectionDragState;
-      const { stepId: targetStepId, anchor: targetSnapAnchor } = targetHotspot;
+    if (interactionType === 'down') {
+      if (!canvasRef.current || !dotRef.current) return;
 
-      setRoadmapSteps(prevSteps => {
-        const sourceNode = prevSteps.find(s => s.id === sourceStepId);
-        const targetNodeIndex = prevSteps.findIndex(s => s.id === targetStepId);
-
-        if (!sourceNode || targetNodeIndex === -1) return prevSteps;
-        const targetNode = prevSteps[targetNodeIndex];
-        
-        let sourceLineYOffset: number | undefined = undefined;
-        const sourceDotElement = clickStartInfoRef.current?.dotRef.current;
-        
-        if (sourceDotElement) {
-            const sourceCardElement = sourceDotElement.closest(`[data-step-id="${sourceStepId}"]`);
-            if (sourceCardElement) {
-                const sourceCardRect = sourceCardElement.getBoundingClientRect();
-                const dotRect = sourceDotElement.getBoundingClientRect();
-                if (sourceAnchor === 'E' || sourceAnchor === 'W') {
-                    const sourceCardCenterY = sourceCardRect.top + sourceCardRect.height / 2;
-                    sourceLineYOffset = Math.round(((dotRect.top + dotRect.height / 2) - sourceCardCenterY));
-                }
-            }
-        }
-        
-        const updatedSteps = [...prevSteps];
-        updatedSteps[targetNodeIndex] = {
-          ...targetNode,
-          sourceNodeId: sourceStepId,
-          sourceAnchor: sourceAnchor,
-          sourceLineYOffset: sourceLineYOffset,
-          originatingSubStepInfo: null, 
-        };
-        return updatedSteps;
-      });
-      toast({ title: "Connection Created", description: `Linked step to ${roadmapSteps.find(s=>s.id === targetStepId)?.title || 'target'}.`});
-    }
-    setConnectionDragState(null);
-    clickStartInfoRef.current = null;
-  }, [connectionDragState, roadmapSteps, toast, setRoadmapSteps, setConnectionDragState]);
-
-
-  useEffect(() => {
-    const handleGlobalMouseUp = () => {
-      if (connectionDragState?.isActive) {
-        handleCanvasMouseUpForConnection();
+      const clickInfo: NonNullable<ClickStartInfoType> = {
+        time: Date.now(),
+        clientX: event.clientX,
+        clientY: event.clientY,
+        stepId,
+        anchor,
+        dotRef,
+      };
+      activeConnectionDragOperationRef.current = {
+        sourceStepId: stepId,
+        sourceAnchor: anchor,
+        clickStartInfo,
+        isPotentialClick: true,
+      };
+      
+      const canvasRect = canvasRef.current.getBoundingClientRect();
+      const dotRect = dotRef.current.getBoundingClientRect();
+      let startX = 0, startY = 0;
+      switch(anchor) {
+        case 'N': startX = dotRect.left + dotRect.width / 2 - canvasRect.left; startY = dotRect.top - canvasRect.top; break;
+        case 'S': startX = dotRect.left + dotRect.width / 2 - canvasRect.left; startY = dotRect.bottom - canvasRect.top; break;
+        case 'E': startX = dotRect.right - canvasRect.left; startY = dotRect.top + dotRect.height / 2 - canvasRect.top; break;
+        case 'W': startX = dotRect.left - canvasRect.left; startY = dotRect.top + dotRect.height / 2 - canvasRect.top; break;
       }
-      clickStartInfoRef.current = null;
-    };
-    if (connectionDragState?.isActive || clickStartInfoRef.current) {
-      window.addEventListener('mouseup', handleGlobalMouseUp);
-    }
-    return () => {
-      window.removeEventListener('mouseup', handleGlobalMouseUp);
-    };
-  }, [connectionDragState, handleCanvasMouseUpForConnection]);
+      const canvasScrollLeft = canvasRef.current.scrollLeft;
+      const canvasScrollTop = canvasRef.current.scrollTop;
+      const lineStartX = startX + canvasScrollLeft;
+      const lineStartY = startY + canvasScrollTop;
 
+      setConnectionDragState({
+        isActive: true,
+        startX: lineStartX,
+        startY: lineStartY,
+        currentX: lineStartX,
+        currentY: lineStartY,
+        targetHotspot: null,
+      });
+      setSelectedStepId(null);
+      setSelectedNodeForPanel(null);
+
+      if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+      rAFConnectionDragLoopRef.current = requestAnimationFrame(processConnectionLineDragLoop);
+
+    } else if (interactionType === 'up' && activeConnectionDragOperationRef.current) {
+      const dragOp = activeConnectionDragOperationRef.current;
+      if (dragOp.sourceStepId === stepId && dragOp.sourceAnchor === anchor) { // Mouse up on the same dot
+        const timeDiff = Date.now() - dragOp.clickStartInfo.time;
+        const moveX = Math.abs(event.clientX - dragOp.clickStartInfo.clientX);
+        const moveY = Math.abs(event.clientY - dragOp.clickStartInfo.clientY);
+
+        if (timeDiff < CLICK_TIME_THRESHOLD_MS && moveX < CLICK_MOVE_THRESHOLD_PX && moveY < CLICK_MOVE_THRESHOLD_PX) {
+          // It's a click!
+          setPendingNodeFromDotInfo({ sourceStepId: stepId, sourceAnchor: anchor });
+          setIsAddStepDialogOpen(true);
+          // Stop any dragging visual state immediately
+          if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+          rAFConnectionDragLoopRef.current = null;
+          setConnectionDragState(null);
+          activeConnectionDragOperationRef.current = null; // Crucial: Mark operation as handled by click
+        }
+      }
+    }
+  }, [canvasRef, setConnectionDragState, setSelectedStepId, setSelectedNodeForPanel, setPendingNodeFromDotInfo, setIsAddStepDialogOpen, processConnectionLineDragLoop]);
+
+
+  const isPotentialConnectionTarget = useCallback((stepId: string, anchor: AnchorPoint): boolean => {
+    return connectionDragState?.isActive === true &&
+           connectionDragState?.targetHotspot?.stepId === stepId &&
+           connectionDragState?.targetHotspot?.anchor === anchor;
+  }, [connectionDragState]);
 
   const handleAutoCreateStepFromSubStep = useCallback((event: React.MouseEvent, sourceStepId: string, sourceAnchor: AnchorPoint, sourceYOffset: number, newStepTitle: string, originatingSubStepId: string) => {
     event.stopPropagation();
@@ -755,24 +725,24 @@ const ViewPlanPage = () => {
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, setRoadmapSteps, toast, setIsAddStepDialogOpen, canvasRef]);
 
  const processDragMovementLoop = useCallback(() => {
-    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current || !canvasRef.current) {
+    if (!draggingNodeIdRef.current || !latestMousePositionRef.current || !dragOperationStartRef.current || !nodeInitialCanvasPosRef.current) {
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
       dragUpdateFrameRef.current = null;
       return;
     }
 
-    const dx = latestMousePositionRef.current.x - dragOperationStartRef.current.x;
-    const dy = latestMousePositionRef.current.y - dragOperationStartRef.current.y;
-    const currentCanvasClientWidth = canvasRef.current.clientWidth || window.innerWidth;
+    const dx = latestMousePositionRef.current.clientX - dragOperationStartRef.current.clientX;
+    const dy = latestMousePositionRef.current.clientY - dragOperationStartRef.current.clientY;
+    const currentCanvasClientWidth = canvasRef.current?.clientWidth || window.innerWidth;
     const maxX = currentCanvasClientWidth > NODE_WIDTH ? currentCanvasClientWidth - NODE_WIDTH : 0;
-    
+
     const newCalculatedX = Math.round(Math.max(0, Math.min(nodeInitialCanvasPosRef.current.x + dx, maxX)));
     const newCalculatedY = Math.round(Math.max(0, nodeInitialCanvasPosRef.current.y + dy));
-
+    
     setRoadmapSteps(prevSteps => {
       const stepIndex = prevSteps.findIndex(s => s.id === draggingNodeIdRef.current);
-
       if (stepIndex === -1) { 
+        // Node being dragged was removed, stop loop
         if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current);
         dragUpdateFrameRef.current = null;
         return prevSteps; 
@@ -780,7 +750,7 @@ const ViewPlanPage = () => {
       
       const nodeToUpdate = prevSteps[stepIndex];
       if (nodeToUpdate.x === newCalculatedX && nodeToUpdate.y === newCalculatedY) {
-        return prevSteps; 
+        return prevSteps; // No change, return same state reference
       }
 
       const newSteps = [...prevSteps];
@@ -788,51 +758,109 @@ const ViewPlanPage = () => {
       return newSteps;
     });
 
-    if (draggingNodeIdRef.current) {
+    if (draggingNodeIdRef.current) { // Check if drag is still active
       dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
     }
-  }, [canvasRef, setRoadmapSteps]);
+  }, [setRoadmapSteps, canvasRef]);
 
 
   const autoScrollLoop = useCallback(() => {
     if (!draggingNodeIdRef.current || !canvasRef.current) { if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current); autoScrollFrameRef.current = null; return; }
-    const draggedNode = roadmapSteps.find(s => s.id === draggingNodeIdRef.current);
+    const currentRoadmapSteps = roadmapStepsRef.current;
+    const draggedNode = currentRoadmapSteps.find(s => s.id === draggingNodeIdRef.current);
+
     if (!draggedNode || typeof draggedNode.x !== 'number' || typeof draggedNode.y !== 'number') { autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop); return; }
     const nodeHeight = getEstimatedCardHeight(draggedNode); const nodeCanvasCenterY = draggedNode.y + (nodeHeight / 2); const viewportCenterY = window.innerHeight / 2; const currentCanvasScrollTop = canvasRef.current.scrollTop; const targetScrollTop = nodeCanvasCenterY - viewportCenterY; const scrollDiff = targetScrollTop - currentCanvasScrollTop; const SMOOTHING_FACTOR_CENTERING = 0.15; const SCROLL_THRESHOLD_FOR_CENTERING = 2;
     if (Math.abs(scrollDiff) > SCROLL_THRESHOLD_FOR_CENTERING) { const scrollAdjustment = scrollDiff * SMOOTHING_FACTOR_CENTERING; canvasRef.current.scrollTop += scrollAdjustment; }
     autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
-  }, [draggingNodeIdRef, roadmapSteps]);
+  }, []);
 
   const handleMouseDownOnNode = useCallback((event: React.MouseEvent<HTMLDivElement>, stepId: string) => {
     if (draggingNodeIdRef.current) return; event.stopPropagation(); setSelectedStepId(stepId);
-    const stepToDrag = roadmapSteps.find(s => s.id === stepId);
+    const currentRoadmapSteps = roadmapStepsRef.current;
+    const stepToDrag = currentRoadmapSteps.find(s => s.id === stepId);
     if (stepToDrag && typeof stepToDrag.x === 'number' && typeof stepToDrag.y === 'number') {
-      draggingNodeIdRef.current = stepId; dragOperationStartRef.current = { x: event.clientX, y: event.clientY }; nodeInitialCanvasPosRef.current = { x: stepToDrag.x, y: stepToDrag.y }; latestMousePositionRef.current = { x: event.clientX, y: event.clientY };
-      if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current); dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
-      if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current); autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
+      draggingNodeIdRef.current = stepId; 
+      dragOperationStartRef.current = { x: event.clientX, y: event.clientY }; 
+      nodeInitialCanvasPosRef.current = { x: stepToDrag.x, y: stepToDrag.y }; 
+      if (canvasRef.current) {
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        latestMousePositionRef.current = { 
+            x: event.clientX - canvasRect.left + canvasRef.current.scrollLeft, 
+            y: event.clientY - canvasRect.top + canvasRef.current.scrollTop,
+            clientX: event.clientX,
+            clientY: event.clientY,
+        };
+      }
+
+
+      if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current); 
+      dragUpdateFrameRef.current = requestAnimationFrame(processDragMovementLoop);
+      if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current); 
+      autoScrollFrameRef.current = requestAnimationFrame(autoScrollLoop);
     }
-  }, [roadmapSteps, processDragMovementLoop, autoScrollLoop]);
+  }, [processDragMovementLoop, autoScrollLoop, canvasRef]);
 
   const handleMouseMoveOnCanvas = useCallback((event: React.MouseEvent) => {
-    if (draggingNodeIdRef.current) {
-        latestMousePositionRef.current = { x: event.clientX, y: event.clientY };
+    if ((draggingNodeIdRef.current || activeConnectionDragOperationRef.current?.isActive) && canvasRef.current) {
+        const canvasRect = canvasRef.current.getBoundingClientRect();
+        latestMousePositionRef.current = {
+            x: event.clientX - canvasRect.left + canvasRef.current.scrollLeft,
+            y: event.clientY - canvasRect.top + canvasRef.current.scrollTop,
+            clientX: event.clientX,
+            clientY: event.clientY,
+        };
     }
-    if(connectionDragState?.isActive) {
-        handleCanvasMouseMoveForConnection(event);
-    }
-  }, [draggingNodeIdRef, connectionDragState, handleCanvasMouseMoveForConnection]);
+  }, []);
 
   const handleMouseUpOnCanvas = useCallback(() => {
     if (draggingNodeIdRef.current) {
       if (autoScrollFrameRef.current) cancelAnimationFrame(autoScrollFrameRef.current); autoScrollFrameRef.current = null;
       if (dragUpdateFrameRef.current) cancelAnimationFrame(dragUpdateFrameRef.current); dragUpdateFrameRef.current = null;
-      draggingNodeIdRef.current = null; dragOperationStartRef.current = null; nodeInitialCanvasPosRef.current = null; latestMousePositionRef.current = null;
+      draggingNodeIdRef.current = null; dragOperationStartRef.current = null; nodeInitialCanvasPosRef.current = null;
     }
-    if(connectionDragState?.isActive) {
-        handleCanvasMouseUpForConnection();
+    
+    if (rAFConnectionDragLoopRef.current) cancelAnimationFrame(rAFConnectionDragLoopRef.current);
+    rAFConnectionDragLoopRef.current = null;
+
+    if (activeConnectionDragOperationRef.current?.isActive) {
+      const dragOp = activeConnectionDragOperationRef.current;
+      const finalTargetHotspot = connectionDragState?.targetHotspot; // Use the visual state for the target
+
+      if (finalTargetHotspot) { // If snapped to a target
+        const { sourceStepId, sourceAnchor } = dragOp;
+        const { stepId: targetStepId, anchor: targetSnapAnchor } = finalTargetHotspot;
+
+        setRoadmapSteps(prevSteps => {
+          const sourceNode = prevSteps.find(s => s.id === sourceStepId);
+          const targetNodeIndex = prevSteps.findIndex(s => s.id === targetStepId);
+          if (!sourceNode || targetNodeIndex === -1) return prevSteps;
+          const targetNode = prevSteps[targetNodeIndex];
+          
+          let sourceLineYOffset: number | undefined = undefined;
+          const sourceDotElement = dragOp.clickStartInfo?.dotRef.current;
+          if (sourceDotElement) {
+              const sourceCardElement = sourceDotElement.closest(`[data-step-id="${sourceStepId}"]`);
+              if (sourceCardElement) {
+                  const sourceCardRect = sourceCardElement.getBoundingClientRect();
+                  const dotRect = sourceDotElement.getBoundingClientRect();
+                  if (sourceAnchor === 'E' || sourceAnchor === 'W') {
+                      const sourceCardCenterY = sourceCardRect.top + sourceCardRect.height / 2;
+                      sourceLineYOffset = Math.round(((dotRect.top + dotRect.height / 2) - sourceCardCenterY));
+                  }
+              }
+          }
+
+          const updatedSteps = [...prevSteps];
+          updatedSteps[targetNodeIndex] = { ...targetNode, sourceNodeId, sourceAnchor, sourceLineYOffset, originatingSubStepInfo: null };
+          return updatedSteps;
+        });
+        toast({ title: "Connection Created", description: `Linked step to ${roadmapStepsRef.current.find(s=>s.id === targetStepId)?.title || 'target'}.`});
+      }
     }
-    clickStartInfoRef.current = null;
-  }, [connectionDragState, handleCanvasMouseUpForConnection]);
+    setConnectionDragState(null);
+    activeConnectionDragOperationRef.current = null;
+  }, [connectionDragState, toast, setRoadmapSteps]);
 
 
   const handleCanvasClick = useCallback((event: React.MouseEvent<HTMLDivElement>) => { if (event.target === event.currentTarget) { setSelectedStepId(null); setSelectedNodeForPanel(null); } }, []);
@@ -886,7 +914,7 @@ const ViewPlanPage = () => {
   const handleSaveRoadmap = async () => {
     if (!plan || !currentUser || !planId) { toast({ variant: "destructive", title: "Error", description: "Plan data or user authentication missing." }); return; }
     setIsSavingRoadmap(true);
-    try { await updatePlanRoadmap(planId, currentUser.uid, roadmapSteps); toast({ title: "Roadmap Saved", description: "Your changes have been saved successfully." }); queryClient.invalidateQueries({ queryKey: ['plan', planId] }); }
+    try { await updatePlanRoadmap(planId, currentUser.uid, roadmapStepsRef.current); toast({ title: "Roadmap Saved", description: "Your changes have been saved successfully." }); queryClient.invalidateQueries({ queryKey: ['plan', planId] }); }
     catch (error: any) { toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save roadmap." }); }
     finally { setIsSavingRoadmap(false); }
   };
@@ -901,7 +929,7 @@ const ViewPlanPage = () => {
   const isOwner = currentUser?.uid === plan.ownerId;
   let dialogTitleForAddStep = "Add New Roadmap Step";
   if (currentParentStepForDialog) dialogTitleForAddStep = `Add Sub-step to "${currentParentStepForDialog.title}"`;
-  else if (pendingNodeFromDotInfo) { const sourceStepTitle = roadmapSteps.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title || "Selected Step"; dialogTitleForAddStep = `Add New Step from "${sourceStepTitle}"`; }
+  else if (pendingNodeFromDotInfo) { const sourceStepTitle = roadmapStepsRef.current.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title || "Selected Step"; dialogTitleForAddStep = `Add New Step from "${sourceStepTitle}"`; }
 
   return (
     <div className="flex flex-col flex-1 w-full overflow-hidden">
@@ -949,7 +977,7 @@ const ViewPlanPage = () => {
           <svg className="absolute inset-0 w-full h-full pointer-events-none z-0">
             {roadmapSteps.map(targetStep => {
               if (!targetStep.sourceNodeId || !targetStep.sourceAnchor) return null;
-              const sourceStep = roadmapSteps.find(s => s.id === targetStep.sourceNodeId);
+              const sourceStep = roadmapStepsRef.current.find(s => s.id === targetStep.sourceNodeId);
               if (!sourceStep || typeof sourceStep.x !== 'number' || typeof sourceStep.y !== 'number' || typeof targetStep.x !== 'number' || typeof targetStep.y !== 'number') return null;
               const sourceCardHeight = getEstimatedCardHeight(sourceStep); const targetCardHeight = getEstimatedCardHeight(targetStep);
               let x1=0, y1=0, x2=0, y2=0;
@@ -999,4 +1027,3 @@ const ViewPlanPage = () => {
   );
 };
 export default ViewPlanPage;
-
