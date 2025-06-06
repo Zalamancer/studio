@@ -44,7 +44,7 @@ import {
   AlertDialogFooter as ConfirmDialogFooter,
   AlertDialogHeader as ConfirmDialogHeader,
   AlertDialogTitle as ConfirmDialogTitle,
-} from '@/components/ui/alert-dialog';
+} from '@/components/ui/alert-dialog'; // Corrected import for AlertDialog
 
 const NODE_WIDTH = 256; // width of RoadmapStepCard
 const DOT_SIZE = 8;
@@ -167,7 +167,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         ref={dotRef}
         onMouseDown={handleSubStepDotClick}
         className={cn(
-          "inline-block rounded-full bg-muted-foreground cursor-pointer",
+          "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-pointer", // Positioning the dot
           "h-2 w-2",
           "transition-all duration-150 ease-in-out",
           "hover:bg-green-500 hover:ring-2 hover:ring-green-300",
@@ -205,7 +205,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
             <ul className="list-none space-y-0.5 pl-0 ml-0">
               {step.subSteps.map((subStep, index) => (
-                <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
+                <li key={subStep.id} className="relative flex items-center gap-1.5 text-xs pl-4"> {/* Added relative and pl-4 */}
                   <SubStepDot subStepIndex={index} />
                   <span className="text-muted-foreground truncate" title={subStep.title}>
                     {subStep.title}
@@ -601,11 +601,11 @@ const ViewPlanPage = () => {
         }
       });
       toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
-      setIsAddStepDialogOpen(false);
+      setIsAddStepDialogOpen(false); // This will trigger onOpenChange for the dialog
     } catch (error) {
       console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
       toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
-      setIsSubmittingStep(false);
+      setIsSubmittingStep(false); // Only reset if error before dialog close
     }
   }, [currentParentStepForDialog, pendingNodeFromDotInfo, toast, isSubmittingStep, roadmapSteps, setIsAddStepDialogOpen, setIsSubmittingStep, setRoadmapSteps]);
 
@@ -1004,26 +1004,32 @@ const ViewPlanPage = () => {
         />
       )}
 
-       <Sheet open={!!selectedNodeForPanel} onOpenChange={(open) => { if (!open) setSelectedNodeForPanel(null); }}>
-        <SheetContent className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col">
-          {selectedNodeForPanel && (
-            <>
-              <SheetHeader className="p-4 border-b">
-                <SheetTitle className="truncate" title={selectedNodeForPanel.title}>
-                  Editing: {selectedNodeForPanel.title}
-                </SheetTitle>
-                <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
-              </SheetHeader>
-              <RoadmapStepDetailPanel
-                step={selectedNodeForPanel}
-                onDescriptionChange={handleStepDescriptionChange}
-                onTitleChange={handleStepTitleChange}
-                isOwner={isOwner}
-              />
-            </>
-          )}
-        </SheetContent>
-      </Sheet>
+       <Sheet open={!!selectedNodeForPanel} onOpenChange={(open) => { if (!open) { setSelectedNodeForPanel(null); setSelectedStepId(null); } }}>
+          <SheetContent className="w-full sm:max-w-md md:max-w-lg p-0 flex flex-col" side="right">
+            {selectedNodeForPanel && (
+              <>
+                <SheetHeader className="p-4 border-b">
+                  <SheetTitle className="truncate" title={selectedNodeForPanel.title}>
+                    Editing: {selectedNodeForPanel.title}
+                  </SheetTitle>
+                  <SheetDescription>View or edit details for this roadmap step.</SheetDescription>
+                </SheetHeader>
+                <RoadmapStepDetailPanel
+                  step={selectedNodeForPanel}
+                  onDescriptionChange={handleStepDescriptionChange}
+                  onTitleChange={handleStepTitleChange}
+                  isOwner={isOwner}
+                />
+                <SheetFooter className="p-4 border-t">
+                   <SheetClose asChild>
+                       <Button type="button" variant="outline">Close</Button>
+                   </SheetClose>
+                </SheetFooter>
+              </>
+            )}
+          </SheetContent>
+       </Sheet>
+
 
       {confirmDeleteNodeInfo && (
         <AlertDialog open={!!confirmDeleteNodeInfo} onOpenChange={() => setConfirmDeleteNodeInfo(null)}>
@@ -1049,5 +1055,4 @@ const ViewPlanPage = () => {
 };
 
 export default ViewPlanPage;
-
     
