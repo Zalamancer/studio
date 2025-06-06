@@ -54,36 +54,30 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
-const NODE_BASE_MIN_HEIGHT = 100; // Base minimum height
-const NODE_HEADER_HEIGHT = 40; // Approximate height of the header (padding + text)
-const SUBSTEP_ITEM_HEIGHT = 24; // Approximate height of one sub-step list item (text + padding/margin)
-const NODE_CONTENT_PADDING_Y = 16; // Sum of top and bottom padding within the content area (p-2 means 8px top, 8px bottom)
-const NODE_FOOTER_HEIGHT = 44; // If there's a footer, estimate its height
+const NODE_BASE_MIN_HEIGHT = 100;
+const NODE_HEADER_HEIGHT = 40;
+const SUBSTEP_ITEM_HEIGHT = 24;
+const NODE_CONTENT_PADDING_Y = 16;
 
 const DOT_SIZE = 12;
-const DOT_OFFSET = -(DOT_SIZE / 2); // For centering dots on the border
-const SNAP_THRESHOLD = 20; // Pixels for snapping connections
+const DOT_OFFSET = -(DOT_SIZE / 2);
+const SNAP_THRESHOLD = 20;
 const CONNECTION_LINE_COLOR = "hsl(var(--border))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
 
 
 const calculateNodeHeight = (step: RoadmapStep): number => {
-  let height = NODE_BASE_MIN_HEIGHT; // Start with a base minimum
-
-  // Header height is always there
-  height = Math.max(height, NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y); // Ensure space for header + content padding
+  let height = NODE_BASE_MIN_HEIGHT;
+  height = Math.max(height, NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y);
 
   if (step.description && step.description.trim().length > 0) {
-    // Estimate height based on line breaks for description
-    // This is a rough estimate, actual rendered height can vary
     const lineCount = (step.description.match(/\n/g) || []).length + 1;
-    height = Math.max(height, NODE_HEADER_HEIGHT + (lineCount * 15) + NODE_CONTENT_PADDING_Y); // 15px per line approx
+    height = Math.max(height, NODE_HEADER_HEIGHT + (lineCount * 15) + NODE_CONTENT_PADDING_Y);
   }
 
   if (step.subSteps && step.subSteps.length > 0) {
-    // Add height for sub-steps
-    height = Math.max(height, NODE_HEADER_HEIGHT + (step.subSteps.length * SUBSTEP_ITEM_HEIGHT) + NODE_CONTENT_PADDING_Y + 10); // Add some extra padding for sub-step list
+    height = Math.max(height, NODE_HEADER_HEIGHT + (step.subSteps.length * SUBSTEP_ITEM_HEIGHT) + NODE_CONTENT_PADDING_Y + 10);
   }
   return height;
 };
@@ -206,7 +200,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         )}
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
-            {step.subSteps.map((subStep, index) => {
+            {step.subSteps.map((subStep) => {
                 return (
                   <li key={subStep.id} className="text-xs text-muted-foreground/90 flex items-center relative pl-4 py-0.5 group/substep">
                     <span
@@ -215,7 +209,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                             "absolute top-1/2 left-1 -translate-y-1/2 rounded-full bg-muted-foreground cursor-grab h-2 w-2 transition-all duration-150 ease-in-out hover:bg-green-500 hover:ring-2 hover:ring-green-300 active:bg-green-600 hover:scale-150 active:scale-125",
                             isSubmitting && "cursor-not-allowed opacity-50"
                         )}
-                        style={{ left: DOT_OFFSET + (DOT_SIZE / 2) }} // Adjust for left alignment of the dot itself
+                        style={{ left: DOT_OFFSET + (DOT_SIZE / 2) }}
                         onMouseDown={(e) => {
                           if (isSubmitting) return;
                           e.stopPropagation();
@@ -242,7 +236,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% + ${DOT_OFFSET}px)` }} />
       <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% + ${DOT_OFFSET}px)` }} />
       <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% + ${DOT_OFFSET}px)` }} />
-      {/* West connection dot on main card removed */}
     </div>
   );
 });
@@ -480,10 +473,10 @@ export default function PlanDetailPage() {
   const handleCanvasMouseUpOrLeave = useCallback(() => {
     if (draggingNodeInfo) setDraggingNodeInfo(null);
     if (activeConnectionDragOperation.isDragging) {
-      // The snap logic is now inside onConnectionDotInteraction's 'up' event
+      // Snap logic is in onConnectionDotInteraction's 'up' event
     }
     clickStartInfoRef.current = null;
-  }, [draggingNodeInfo, activeConnectionDragOperation.isDragging]); // Removed setActiveConnectionDragOperation from here
+  }, [draggingNodeInfo, activeConnectionDragOperation.isDragging]);
 
   const getAnchorPoint = (step: RoadmapStep, anchor: 'N' | 'S' | 'E' | 'W'): { x: number, y: number } => {
     const nodeHeight = calculateNodeHeight(step);
@@ -500,17 +493,11 @@ export default function PlanDetailPage() {
   const getSubStepDotAnchorPoint = (parentStep: RoadmapStep, subStepId: string): { x: number, y: number } => {
     const subStepIndex = parentStep.subSteps?.findIndex(ss => ss.id === subStepId) ?? -1;
     if (subStepIndex === -1) {
-      // Fallback if sub-step not found, connect to parent's West center
       return getAnchorPoint(parentStep, 'W');
     }
-    // Calculate Y position relative to the parent card's top
-    const yOffset = NODE_HEADER_HEIGHT + // Height of the main card header
-                    NODE_CONTENT_PADDING_Y / 2 + // Top padding of content area
-                    (subStepIndex * SUBSTEP_ITEM_HEIGHT) + // Offset for preceding sub-steps
-                    (SUBSTEP_ITEM_HEIGHT / 2); // Center of the current sub-step
-  
+    const yOffset = NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y / 2 + (subStepIndex * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
     return {
-      x: parentStep.x + DOT_OFFSET + (DOT_SIZE/2), // Aligns with the visual position of the sub-step dot
+      x: parentStep.x + DOT_OFFSET + (DOT_SIZE/2),
       y: parentStep.y + yOffset
     };
   };
@@ -535,7 +522,7 @@ export default function PlanDetailPage() {
         };
     };
     
-    if (subStepOriginContext) { 
+    if (subStepOriginContext && subStepOriginContext.dotElement) { 
         const subDotCenter = getElementCenter(subStepOriginContext.dotElement);
         sourceDotX = subDotCenter.x;
         sourceDotY = subDotCenter.y;
@@ -570,13 +557,13 @@ export default function PlanDetailPage() {
                 creatingFromSubStepTitle: subStepOriginContext?.subStepTitle
             });
             setIsAddStepDialogOpen(true);
-        } else { // It's a drag release
+        } else { 
             const releaseX = event.clientX - canvasRect.left + canvasRef.current.scrollLeft;
             const releaseY = event.clientY - canvasRect.top + canvasRef.current.scrollTop;
             let snapped = false;
 
             for (const targetStep of editableRoadmap) {
-                if (targetStep.id === activeConnectionDragOperation.sourceStepId) continue; // Can't connect to self
+                if (targetStep.id === activeConnectionDragOperation.sourceStepId) continue;
 
                 const anchors: ('N'|'S'|'E'|'W')[] = ['N', 'S', 'E', 'W'];
                 for (const targetAnchor of anchors) {
@@ -584,12 +571,19 @@ export default function PlanDetailPage() {
                     const dist = Math.sqrt(Math.pow(releaseX - targetDotPos.x, 2) + Math.pow(releaseY - targetDotPos.y, 2));
 
                     if (dist <= SNAP_THRESHOLD) {
+                        // Check if targetStep already has a sourceNodeId
+                        if (targetStep.sourceNodeId && targetStep.sourceNodeId !== activeConnectionDragOperation.sourceStepId) {
+                            toast({ variant: "destructive", title: "Connection Exists", description: `Node "${targetStep.title}" is already connected from another source. Remove existing connection first.` });
+                            snapped = true; // Treat as snapped to prevent further processing, but don't make new connection
+                            break;
+                        }
+
                         setEditableRoadmap(prev => prev.map(step => {
                             if (step.id === targetStep.id) {
                                 return { 
                                     ...step, 
                                     sourceNodeId: activeConnectionDragOperation.sourceStepId!, 
-                                    sourceAnchor: targetAnchor, // Anchor on the target node where it connects FROM the source
+                                    sourceAnchor: targetAnchor,
                                     originatingSubStepInfo: activeConnectionDragOperation.sourceSubStepOriginContext 
                                         ? { sourceCardId: activeConnectionDragOperation.sourceStepId!, subStepId: activeConnectionDragOperation.sourceSubStepOriginContext.subStepId } 
                                         : null 
@@ -618,14 +612,10 @@ export default function PlanDetailPage() {
 
         let startPoint, endPoint;
         
-        if (step.originatingSubStepInfo && step.originatingSubStepInfo.sourceCardId === sourceNode.id) {
-          // Line originates from a specific sub-step dot on the source node
+        if (step.originatingSubStepInfo && step.originatingSubStepInfo.sourceCardId === sourceNode.id && step.originatingSubStepInfo.subStepId) {
           startPoint = getSubStepDotAnchorPoint(sourceNode, step.originatingSubStepInfo.subStepId);
-          endPoint = getAnchorPoint(step, step.sourceAnchor); // Target node connects at its 'sourceAnchor'
+          endPoint = getAnchorPoint(step, step.sourceAnchor);
         } else {
-          // Line originates from a main dot on the source node
-          // The target node's `sourceAnchor` tells us which side of ITSELF it connects TO.
-          // So, the source node connects from the OPPOSITE side.
           const sourceNodeAnchor = step.sourceAnchor === 'N' ? 'S' :
                                    step.sourceAnchor === 'S' ? 'N' :
                                    step.sourceAnchor === 'E' ? 'W' : 'E';
@@ -938,3 +928,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
