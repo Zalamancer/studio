@@ -67,8 +67,8 @@ const CONNECTION_LINE_COLOR = "hsl(var(--border))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
 
-const SUBSTEP_SPAN_DOT_SIZE_H = 8; // h-2
-const SUBSTEP_SPAN_DOT_SIZE_W = 8; // w-2
+// const SUBSTEP_SPAN_DOT_SIZE_H = 8; // h-2 unused
+// const SUBSTEP_SPAN_DOT_SIZE_W = 8; // w-2 unused
 
 
 const calculateNodeHeight = (step: RoadmapStep): number => {
@@ -242,7 +242,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)` }} />
       <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE / 2}px)` }} />
       <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE / 2}px)` }} />
-      {/* West connection dot removed from main card */}
+      {/* West connection dot on main card is removed */}
     </div>
   );
 });
@@ -400,7 +400,7 @@ export default function PlanDetailPage() {
             newStepBase.sourceNodeId = pendingNodeFromDotInfo.sourceStepId;
             newStepBase.sourceAnchor = 'W';
             break;
-          case 'W': // From sub-step dot, or potentially a (now removed) West dot of main card
+          case 'W': 
             newStepX = sourceNode.x - NODE_BASE_WIDTH - spacing;
             newStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2);
             newStepBase.sourceNodeId = pendingNodeFromDotInfo.sourceStepId;
@@ -536,17 +536,16 @@ export default function PlanDetailPage() {
         if (isClick) {
             setPendingNodeFromDotInfo({
                 sourceStepId: parentStepId,
-                sourceAnchor: anchor, // This anchor will be used to determine new node placement relative to source.
+                sourceAnchor: anchor,
                 creatingFromSubStepId: subStepOriginContext?.subStepId,
                 creatingFromSubStepTitle: subStepOriginContext?.subStepTitle
             });
             setIsAddStepDialogOpen(true);
         } else {
-            // Drag ended, try to connect
             const targetElement = document.elementFromPoint(event.clientX, event.clientY);
             const targetNodeElement = targetElement?.closest('[data-node-id]');
             const targetNodeId = targetNodeElement?.getAttribute('data-node-id');
-            const targetDotElement = targetElement?.closest('button[aria-label*="Connect from"]'); // Only main node dots can be targets
+            const targetDotElement = targetElement?.closest('button[aria-label*="Connect from"]');
             
             let targetAnchor: 'N' | 'S' | 'E' | 'W' | null = null;
             if (targetDotElement) {
@@ -560,8 +559,6 @@ export default function PlanDetailPage() {
             if (targetNodeId && targetNodeId !== parentStepId && targetAnchor && activeConnectionDragOperation.sourceStepId) {
                 setEditableRoadmap(prev => prev.map(step => {
                     if (step.id === targetNodeId) {
-                        // When dragging from sub-step ('W' anchor relative to sub-step), it means parent's 'W' edge.
-                        // When dragging from main card's N,S,E dot, it's that edge.
                         const finalSourceAnchorForTarget = activeConnectionDragOperation.sourceAnchor;
                         return { ...step, sourceNodeId: activeConnectionDragOperation.sourceStepId, sourceAnchor: targetAnchor };
                     }
@@ -594,19 +591,13 @@ export default function PlanDetailPage() {
         if (!sourceNode) return null;
 
         let startPoint, endPoint;
-        // Target's sourceAnchor tells which of its sides connects.
-        // Source's connection point is opposite to that, or based on originatingSubStepInfo.
         
         let sourceEdgeToConnectFrom: 'N' | 'S' | 'E' | 'W';
         if (step.originatingSubStepInfo && sourceNode.id === step.originatingSubStepInfo.sourceCardId) {
-          // If new node was created from a sub-step dot (always 'W' for sub-step dot interaction for new node direction)
-          // The sub-step's parent card (sourceNode) connects from its 'W' edge.
-          // The new node (step) connects with its 'E' edge (as set in handleAddRoadmapStepSubmit).
           sourceEdgeToConnectFrom = 'W';
           startPoint = getAnchorPoint(sourceNode, sourceEdgeToConnectFrom);
-          endPoint = getAnchorPoint(step, step.sourceAnchor); // step.sourceAnchor should be 'E' here
+          endPoint = getAnchorPoint(step, step.sourceAnchor);
         } else {
-          // Standard connection: target's specified anchor connects to source's opposite
           const oppositeSourceAnchor = step.sourceAnchor === 'N' ? 'S' : step.sourceAnchor === 'S' ? 'N' : step.sourceAnchor === 'E' ? 'W' : 'E';
           sourceEdgeToConnectFrom = oppositeSourceAnchor;
           startPoint = getAnchorPoint(sourceNode, sourceEdgeToConnectFrom);
@@ -641,7 +632,7 @@ export default function PlanDetailPage() {
 
   const handleAddSubStepToParent = useCallback((parentStepId: string, parentStepTitle: string) => {
     setEditingStep(editableRoadmap.find(s => s.id === parentStepId) || null);
-    setIsStepDetailSheetOpen(true); // Open sheet to manage sub-steps
+    setIsStepDetailSheetOpen(true);
   }, [editableRoadmap]);
 
   const handleDeleteStep = useCallback((stepId: string, stepTitle: string) => {
@@ -917,3 +908,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
