@@ -28,7 +28,7 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import {
   Dialog,
-  DialogClose as AddStepDialogClose, // Renamed to avoid conflict with SheetClose
+  DialogClose as AddStepDialogClose,
   DialogContent as AddStepDialogContent,
   DialogDescription as AddStepDialogDescription,
   DialogFooter as AddStepDialogFooter,
@@ -39,12 +39,12 @@ import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
-  AlertDialogContent as ConfirmDialogContent, // Distinct alias for AlertDialog's Content
+  AlertDialogContent as ConfirmDialogContent,
   AlertDialogDescription as ConfirmDialogDescription,
   AlertDialogFooter as ConfirmDialogFooter,
   AlertDialogHeader as ConfirmDialogHeader,
   AlertDialogTitle as ConfirmDialogTitle,
-} from '@/components/ui/alert-dialog'; // Corrected import for AlertDialog
+} from "@/components/ui/alert-dialog";
 
 const NODE_WIDTH = 256; // width of RoadmapStepCard
 const DOT_SIZE = 8;
@@ -167,8 +167,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
         ref={dotRef}
         onMouseDown={handleSubStepDotClick}
         className={cn(
-          "inline-block rounded-full bg-muted-foreground cursor-pointer", // Reverted to inline-block
-          "h-2 w-2 mr-1.5", // Reverted: Dot was before the text with a right margin
+          "inline-block rounded-full bg-muted-foreground cursor-pointer",
+          "h-2 w-2 mr-1.5",
           "transition-all duration-150 ease-in-out",
           "hover:bg-green-500 hover:ring-2 hover:ring-green-300",
           "hover:scale-150 active:scale-125"
@@ -205,7 +205,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = ({
             <p className="text-xs font-medium mb-1 text-muted-foreground">Sub-steps:</p>
             <ul className="list-none space-y-0.5 pl-0 ml-0">
               {step.subSteps.map((subStep, index) => (
-                <li key={subStep.id} className="flex items-center gap-1.5 text-xs"> {/* Reverted li class */}
+                <li key={subStep.id} className="flex items-center gap-1.5 text-xs">
                   <SubStepDot subStepIndex={index} />
                   <span className="text-muted-foreground truncate" title={subStep.title}>
                     {subStep.title}
@@ -352,7 +352,7 @@ export type AddRoadmapStepDialogFormDataInternal = z.infer<typeof addRoadmapStep
 interface AddRoadmapStepDialogInternalProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  onSubmit: (data: AddRoadmapStepDialogFormDataInternal) => void;
+  onSubmit: (data: AddRoadmapStepDialogFormDataInternal) => Promise<void>;
   isSubmitting: boolean;
   parentStepTitle?: string | null;
   dialogTitle?: string;
@@ -601,13 +601,13 @@ const ViewPlanPage = () => {
         }
       });
       toast({ title: "Step Added", description: `"${formData.title}" added to the roadmap.` });
-      setIsAddStepDialogOpen(false); 
+      setIsAddStepDialogOpen(false);
     } catch (error) {
       console.error("Error in handleAddRoadmapStepSubmit (synchronous part):", error);
       toast({ variant: "destructive", title: "Error", description: "Could not add step locally." });
       setIsSubmittingStep(false);
     }
-  }, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, toast, roadmapSteps, setIsSubmittingStep, setIsAddStepDialogOpen, setRoadmapSteps, setCurrentParentStepForDialog, setPendingNodeFromDotInfo]);
+  }, [isSubmittingStep, currentParentStepForDialog, pendingNodeFromDotInfo, toast, setRoadmapSteps, setIsSubmittingStep, setIsAddStepDialogOpen, setCurrentParentStepForDialog, setPendingNodeFromDotInfo]);
 
 
   const processDragMovementLoop = useCallback(() => {
@@ -1054,3 +1054,4 @@ const ViewPlanPage = () => {
 
 export default ViewPlanPage;
     
+
