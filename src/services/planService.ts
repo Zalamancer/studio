@@ -44,7 +44,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
       const sanitizedSubSteps = (step.subSteps || []).map(sub => ({
         id: typeof sub.id === 'string' && sub.id.trim() !== '' ? sub.id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
         parentId: typeof sub.parentId === 'string' && sub.parentId.trim() !== '' ? sub.parentId : (step.id || ""),
-        title: typeof sub.title === 'string' ? sub.title : "", // Default to empty string if null/undefined
+        title: typeof sub.title === 'string' ? sub.title : "",
       }));
       const sanitizedConnections = (step.incomingConnections || []).map(conn => {
         const finalConnection: IncomingConnection = {
@@ -52,7 +52,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
             sourceNodeId: typeof conn.sourceNodeId === 'string' ? conn.sourceNodeId : "",
             targetAnchor: conn.targetAnchor || 'N',
             lineType: conn.lineType || 'straight',
-            label: (typeof conn.label === 'string' && conn.label.trim() !== "") ? conn.label.trim() : undefined,
+            label: (typeof conn.label === 'string' && conn.label.trim() !== "") ? conn.label.trim() : null, // Changed undefined to null
         };
         if (conn.originatingSubStepContext && conn.originatingSubStepContext.sourceCardId && conn.originatingSubStepContext.subStepId) {
             finalConnection.originatingSubStepContext = {
@@ -120,10 +120,10 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
         roadmap: (data.roadmap || []).map(step => ({
           ...step,
-          description: step.description || null, // Ensure null if undefined
+          description: step.description || null, 
           subSteps: (step.subSteps || []).map(sub => ({
             ...sub,
-            title: sub.title || "", // Ensure title is string
+            title: sub.title || "", 
           })),
           incomingConnections: (step.incomingConnections || []).map(conn => ({
             ...conn,
@@ -131,7 +131,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
             sourceNodeId: conn.sourceNodeId || '',
             targetAnchor: conn.targetAnchor || 'N',
             lineType: conn.lineType || 'straight',
-            label: conn.label || undefined,
+            label: conn.label || undefined, // This is fine for client side, as undefined means no label
             originatingSubStepContext: conn.originatingSubStepContext || null,
           })),
         })),
@@ -169,7 +169,7 @@ export const updatePlanRoadmap = async (planId: string, ownerId: string, updated
     const sanitizedSubSteps = (step.subSteps || []).map(subStep => ({
       id: typeof subStep.id === 'string' && subStep.id.trim() !== '' ? subStep.id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       parentId: typeof subStep.parentId === 'string' && subStep.parentId.trim() !== '' ? subStep.parentId : (step.id || ""),
-      title: typeof subStep.title === 'string' ? subStep.title : "", // Default to empty string if null/undefined
+      title: typeof subStep.title === 'string' ? subStep.title : "",
     }));
 
     const sanitizedConnections = (step.incomingConnections || []).map(conn => {
@@ -178,7 +178,7 @@ export const updatePlanRoadmap = async (planId: string, ownerId: string, updated
           sourceNodeId: typeof conn.sourceNodeId === 'string' ? conn.sourceNodeId : "",
           targetAnchor: conn.targetAnchor || 'N',
           lineType: conn.lineType || 'straight',
-          label: (typeof conn.label === 'string' && conn.label.trim() !== "") ? conn.label.trim() : undefined,
+          label: (typeof conn.label === 'string' && conn.label.trim() !== "") ? conn.label.trim() : null, // Changed undefined to null
       };
       if (conn.originatingSubStepContext && conn.originatingSubStepContext.sourceCardId && conn.originatingSubStepContext.subStepId) {
           finalConnection.originatingSubStepContext = {
@@ -255,7 +255,7 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
             sourceNodeId: conn.sourceNodeId || '',
             targetAnchor: conn.targetAnchor || 'N',
             lineType: conn.lineType || 'straight',
-            label: conn.label || undefined,
+            label: conn.label || undefined, // Fine for client, will be null for DB if empty
             originatingSubStepContext: conn.originatingSubStepContext || null,
           })),
         })),
@@ -276,4 +276,4 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
     throw new Error(`Failed to fetch recent plans: ${error.message || 'Unknown error'}`);
   }
 };
-
+    
