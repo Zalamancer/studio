@@ -239,7 +239,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% + ${DOT_OFFSET}px)` }} />
       <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% + ${DOT_OFFSET}px)` }} />
       <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% + ${DOT_OFFSET}px)` }} />
-      <ConnectionDot anchor="W" parentStepId={step.id} isSubmitting={isSubmitting} style={{ left: DOT_OFFSET, top: `calc(50% + ${DOT_OFFSET}px)` }} />
+      {/* West dot removed from main node card */}
     </div>
   );
 });
@@ -271,8 +271,8 @@ interface ClickStartInfoType {
 }
 
 interface ConnectionToDeleteInfo {
-  parentNodeId: string; // The ID of the node whose dot was clicked (the target node)
-  connectionToActuallyDelete: IncomingConnection; // The specific incoming connection object to remove
+  parentNodeId: string; 
+  connectionToActuallyDelete: IncomingConnection;
 }
 
 export default function PlanDetailPage() {
@@ -479,12 +479,9 @@ export default function PlanDetailPage() {
   const handleCanvasMouseUpOrLeave = useCallback(() => {
     if (draggingNodeInfo) setDraggingNodeInfo(null);
     if (activeConnectionDragOperation.isDragging) {
-       // Reset drag operation, snapping logic is handled in onConnectionDotInteraction's 'up'
-    }
-    clickStartInfoRef.current = null;
-    if (activeConnectionDragOperation.isDragging) {
        setActiveConnectionDragOperation({ isDragging: false, sourceStepId: null, sourceAnchor: null, sourceSubStepOriginContext: null, startX: 0, startY: 0, currentX: 0, currentY: 0 });
     }
+    clickStartInfoRef.current = null;
   }, [draggingNodeInfo, activeConnectionDragOperation.isDragging]);
 
 
@@ -503,7 +500,7 @@ export default function PlanDetailPage() {
   const getSubStepDotAnchorPoint = (parentStep: RoadmapStep, subStepId: string): { x: number, y: number } => {
     const subStepIndex = parentStep.subSteps?.findIndex(ss => ss.id === subStepId) ?? -1;
     if (subStepIndex === -1) {
-      return getAnchorPoint(parentStep, 'W');
+      return getAnchorPoint(parentStep, 'W'); 
     }
     const yOffsetWithinCard = NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y / 2 + (subStepIndex * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
     return {
@@ -513,8 +510,8 @@ export default function PlanDetailPage() {
   };
 
   const handleConnectionDotInteraction = useCallback((
-    parentNodeId: string, // ID of the card where the dot was clicked
-    clickedAnchor: 'N' | 'S' | 'E' | 'W', // Anchor on the parentNode where click/drag originated or targeted
+    parentNodeId: string,
+    clickedAnchor: 'N' | 'S' | 'E' | 'W',
     interactionType: 'down' | 'up',
     event: React.MouseEvent<HTMLElement>,
     subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLElement }
@@ -567,19 +564,16 @@ export default function PlanDetailPage() {
             return;
           }
           
-          // Check if the clicked dot is already a target for an incoming connection
           const existingConnectionTargetingThisDot = (parentNode.incomingConnections || []).find(
             conn => conn.targetAnchor === clickedAnchor
           );
 
           if (existingConnectionTargetingThisDot) {
-            // If so, set up to delete THIS specific incoming connection
             setConnectionToDeleteInfo({
               parentNodeId: parentNodeId,
               connectionToActuallyDelete: existingConnectionTargetingThisDot,
             });
           } else {
-            // If not, it's an empty dot, set up to create a new node from this dot
             setPendingNodeFromDotInfo({
                 sourceStepId: parentNodeId,
                 sourceAnchor: clickedAnchor,
@@ -602,10 +596,10 @@ export default function PlanDetailPage() {
                     const dist = Math.sqrt(Math.pow(releaseX - targetDotPos.x, 2) + Math.pow(releaseY - targetDotPos.y, 2));
 
                     if (dist <= SNAP_THRESHOLD) {
-                        const alreadyConnectedFromThisSource = (targetStep.incomingConnections || []).some(
+                        const alreadyConnectedFromThisSourceToThisTarget = (targetStep.incomingConnections || []).some(
                             conn => conn.sourceNodeId === activeConnectionDragOperation.sourceStepId
                         );
-                        if (alreadyConnectedFromThisSource) {
+                        if (alreadyConnectedFromThisSourceToThisTarget) {
                             toast({ variant: "default", title: "Already Connected", description: `Node "${targetStep.title}" is already connected from this source.` });
                             snapped = true;
                             break;
@@ -657,14 +651,14 @@ export default function PlanDetailPage() {
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
-          sourceNodeAnchor = 'W'; // Sub-steps are on the West
+          // Sub-step dots are effectively 'W' originators from the card's perspective
         } else {
           switch (incomingConn.targetAnchor) {
               case 'N': sourceNodeAnchor = 'S'; break;
               case 'S': sourceNodeAnchor = 'N'; break;
               case 'E': sourceNodeAnchor = 'W'; break;
               case 'W': sourceNodeAnchor = 'E'; break;
-              default: sourceNodeAnchor = 'S'; // Fallback
+              default: sourceNodeAnchor = 'S'; 
           }
           rawStartPoint = getAnchorPoint(sourceNode, sourceNodeAnchor);
         }
@@ -689,7 +683,6 @@ export default function PlanDetailPage() {
             adjEndPoint.x = rawEndPoint.x - ux * END_OFFSET;
             adjEndPoint.y = rawEndPoint.y - uy * END_OFFSET;
         }
-        // else: for very short lines, draw directly between raw points, arrow might be obscured.
 
         const pathData = `M ${adjStartPoint.x} ${adjStartPoint.y} L ${adjEndPoint.x} ${adjEndPoint.y}`;
         return (
