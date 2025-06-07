@@ -20,8 +20,8 @@ import {
   Edit2,
   MoreVertical,
   Trash2,
-  Type as TypeIcon, 
-  MessageSquare as LineLabelIcon, 
+  Type as TypeIcon,
+  MessageSquare as LineLabelIcon,
   MinusCircle,
 } from 'lucide-react';
 import {
@@ -64,21 +64,21 @@ const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
 const NODE_BASE_MIN_HEIGHT = 100;
 const NODE_HEADER_HEIGHT = 40;
-const SUBSTEP_ITEM_HEIGHT = 24; 
-const NODE_CONTENT_PADDING_Y = 16; 
-const FINAL_BUFFER_CARD_HEIGHT = 20;
+const SUBSTEP_ITEM_HEIGHT = 24;
+const NODE_CONTENT_PADDING_Y = 16;
+const FINAL_BUFFER_CARD_HEIGHT = 20; // Increased buffer
 
-const DOT_SIZE = 12; // This is the clickable area and basis for offset
+const DOT_SIZE = 12;
 const DOT_RADIUS = DOT_SIZE / 2;
-const DOT_OFFSET = -DOT_RADIUS;
+const DOT_OFFSET = -DOT_RADIUS; // For positioning dots partially outside the card
 const SNAP_THRESHOLD = 20;
 const CONNECTION_LINE_COLOR = "hsl(var(--border))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
 const ARROWHEAD_LENGTH = 10;
-const NECK_LENGTH = ARROWHEAD_LENGTH * 2;
-const START_POINT_OFFSET_FROM_DOT = DOT_RADIUS + (CONNECTION_LINE_THICKNESS / 2); // How far from dot center line starts
-const MIN_MAIN_PATH_LENGTH = 10; // Minimum length for the actual curved/acute segment between necks
+const NECK_LENGTH = ARROWHEAD_LENGTH * 2; // Length of straight "neck" from dot
+const START_OFFSET_FROM_DOT = DOT_RADIUS + (CONNECTION_LINE_THICKNESS / 2);
+const MIN_MAIN_PATH_LENGTH = 10; // Min length for the curved/acute segment between necks (if applicable)
 
 
 const calculateNodeHeight = (step: RoadmapStep): number => {
@@ -93,12 +93,13 @@ const calculateNodeHeight = (step: RoadmapStep): number => {
 
   let subStepsHeight = 0;
   if (step.subSteps && step.subSteps.length > 0) {
-    subStepsHeight = (step.subSteps.length * SUBSTEP_ITEM_HEIGHT) + 8;
+    // Height for each sub-step item + a small buffer for the last dot to be fully visible
+    subStepsHeight = (step.subSteps.length * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
   }
-  
+
   const contentHeight = Math.max(descriptionHeight, subStepsHeight);
   height += contentHeight;
-  height += FINAL_BUFFER_CARD_HEIGHT; 
+  height += FINAL_BUFFER_CARD_HEIGHT;
 
   return Math.max(NODE_BASE_MIN_HEIGHT, height);
 };
@@ -143,15 +144,15 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     className?: string;
     subStepContext?: { subStepId: string; subStepTitle: string };
   }> = ({ anchor, parentStepId: localParentStepId, isSubmitting: propIsSubmitting, style, className, subStepContext }) => {
-    const dotClickableSize = DOT_SIZE; // Interaction area
+    const dotClickableSize = DOT_SIZE;
 
     return (
       <button
         aria-label={`Connect from ${anchor} anchor of step ${step.title}${subStepContext ? ` (sub-step: ${subStepContext.subStepTitle})` : ''}`}
         className={cn(
-          "absolute rounded-full z-10 transition-all duration-150 ease-in-out shadow-sm", // Common styles
+          "absolute rounded-full z-10 transition-all duration-150 ease-in-out shadow-sm",
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          className // Specific styles passed via prop
+          className
         )}
         style={{
           width: dotClickableSize,
@@ -188,7 +189,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         width: `${NODE_BASE_WIDTH}px`,
         height: `${dynamicHeight}px`,
         touchAction: 'none',
-        overflow: 'visible',
+        overflow: 'visible', // Ensure dots aren't clipped
       }}
       onMouseDown={(e) => onNodeMouseDown(step.id, e)}
       data-node-id={step.id}
@@ -218,6 +219,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+      {/* Removed overflow-y-auto from here */}
       <div className="p-2 text-xs text-muted-foreground flex-grow min-h-0">
         {step.description && (
           <p className="whitespace-pre-wrap line-clamp-3 mb-1.5">{step.description}</p>
@@ -236,7 +238,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         )}
       </div>
 
-      {/* Sub-step External Dots */}
       {step.subSteps && step.subSteps.map((subStep, index) => (
         <ConnectionDot
           key={`subdot-ext-${subStep.id}`}
@@ -252,11 +253,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         />
       ))}
 
-      {/* Main Node Dots */}
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% + ${DOT_OFFSET}px)` }} className="border-2 border-primary bg-card hover:bg-primary/20 hover:scale-110" />
       <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% + ${DOT_OFFSET}px)` }} className="border-2 border-primary bg-card hover:bg-primary/20 hover:scale-110" />
       <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% + ${DOT_OFFSET}px)` }} className="border-2 border-primary bg-card hover:bg-primary/20 hover:scale-110" />
-      {/* West dot for main node removed */}
     </div>
   );
 });
@@ -430,9 +429,9 @@ export default function PlanDetailPage() {
             newStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2);
             targetAnchorOnNewNode = 'W';
             break;
-          case 'W': 
-            newStepX = sourceNode.x - NODE_BASE_WIDTH - spacing; 
-            let baseSubStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2); 
+          case 'W':
+            newStepX = sourceNode.x - NODE_BASE_WIDTH - spacing;
+            let baseSubStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2);
             if(pendingNodeFromDotInfo.creatingFromSubStepId){
                 const subStepIndex = sourceNode.subSteps?.findIndex(ss => ss.id === pendingNodeFromDotInfo.creatingFromSubStepId) ?? -1;
                 if(subStepIndex !== -1){
@@ -548,7 +547,7 @@ export default function PlanDetailPage() {
     }
     const yCenterOfSubStepTextLine = NODE_HEADER_HEIGHT + (NODE_CONTENT_PADDING_Y / 2) + (subStepIndex * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
     return {
-      x: parentStep.x + DOT_OFFSET + DOT_RADIUS, 
+      x: parentStep.x + DOT_OFFSET + DOT_RADIUS,
       y: parentStep.y + yCenterOfSubStepTextLine
     };
   };
@@ -602,16 +601,16 @@ export default function PlanDetailPage() {
           }
 
           const connectionAtThisDot = (parentNode.incomingConnections || []).find(conn => conn.targetAnchor === clickedAnchor);
-          
+
           if (subStepOriginContextFromDot) {
              setPendingNodeFromDotInfo({
                 sourceStepId: parentNode.id,
-                sourceAnchor: 'W', 
+                sourceAnchor: 'W',
                 creatingFromSubStepId: subStepOriginContextFromDot.subStepId,
                 creatingFromSubStepTitle: subStepOriginContextFromDot.subStepTitle,
              });
              setIsAddStepDialogOpen(true);
-          } else { 
+          } else {
             if (connectionAtThisDot) {
               setConnectionToDeleteInfo({ parentNodeId: parentNode.id, connectionToActuallyDelete: connectionAtThisDot });
             } else {
@@ -622,7 +621,7 @@ export default function PlanDetailPage() {
               setIsAddStepDialogOpen(true);
             }
           }
-        } else { 
+        } else {
             const releaseX = event.clientX - canvasRect.left + canvasRef.current.scrollLeft;
             const releaseY = event.clientY - canvasRect.top + canvasRef.current.scrollTop;
             let snapped = false;
@@ -784,14 +783,14 @@ export default function PlanDetailPage() {
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
-          sourceVisualAnchor = 'W'; 
+          sourceVisualAnchor = 'W';
         } else {
           switch (incomingConn.targetAnchor) {
             case 'N': sourceVisualAnchor = 'S'; break;
             case 'S': sourceVisualAnchor = 'N'; break;
             case 'E': sourceVisualAnchor = 'W'; break;
             case 'W': sourceVisualAnchor = 'E'; break;
-            default: sourceVisualAnchor = 'S'; 
+            default: sourceVisualAnchor = 'S';
           }
           rawStartPoint = getAnchorPoint(sourceNode, sourceVisualAnchor);
         }
@@ -802,64 +801,57 @@ export default function PlanDetailPage() {
         const dy = rawEndPoint.y - rawStartPoint.y;
         const length = Math.sqrt(dx * dx + dy * dy);
 
-        if (length < 1) return null; // Avoid division by zero or tiny lines
+        if (length < 1) return null;
 
         const ux = dx / length;
         const uy = dy / length;
-        
-        let pathData;
+
+        const lineStartPoint = { x: rawStartPoint.x + ux * START_OFFSET_FROM_DOT, y: rawStartPoint.y + uy * START_OFFSET_FROM_DOT };
+        const lineEndPointForArrow = { x: rawEndPoint.x - ux * ARROWHEAD_LENGTH, y: rawEndPoint.y - uy * ARROWHEAD_LENGTH };
+
+        let pathData = "";
         const lineType = incomingConn.lineType || 'straight';
-        
-        // Calculate if line is too short for full neck treatment
-        const isTooShortForNecks = length < (START_POINT_OFFSET_FROM_DOT + NECK_LENGTH + MIN_MAIN_PATH_LENGTH + NECK_LENGTH + ARROWHEAD_LENGTH);
 
-        if (isTooShortForNecks) {
-            const startDrawPoint = { x: rawStartPoint.x + ux * START_POINT_OFFSET_FROM_DOT, y: rawStartPoint.y + uy * START_POINT_OFFSET_FROM_DOT };
-            pathData = `M ${startDrawPoint.x} ${startDrawPoint.y} L ${rawEndPoint.x} ${rawEndPoint.y}`;
-        } else {
-            const lineStartPoint = { x: rawStartPoint.x + ux * START_POINT_OFFSET_FROM_DOT, y: rawStartPoint.y + uy * START_POINT_OFFSET_FROM_DOT };
-            const pathSegmentStart = { x: lineStartPoint.x + ux * NECK_LENGTH, y: lineStartPoint.y + uy * NECK_LENGTH };
-            const pathSegmentEnd = { x: rawEndPoint.x - ux * NECK_LENGTH, y: rawEndPoint.y - uy * NECK_LENGTH };
-            let middlePathData = "";
+        switch (lineType) {
+          case 'straight':
+            pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
+            break;
+          case 'curved':
+            const effectiveLengthForCurve = length - START_OFFSET_FROM_DOT - ARROWHEAD_LENGTH;
+            if (effectiveLengthForCurve < (NECK_LENGTH * 2 + MIN_MAIN_PATH_LENGTH)) { // Too short for necks and curve
+              pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
+            } else {
+              const curveStartPoint = { x: lineStartPoint.x + ux * NECK_LENGTH, y: lineStartPoint.y + uy * NECK_LENGTH };
+              const curveEndPoint = { x: lineEndPointForArrow.x - ux * NECK_LENGTH, y: lineEndPointForArrow.y - uy * NECK_LENGTH };
 
-            switch (lineType) {
-              case 'acute':
-                const deltaAcuteX = pathSegmentEnd.x - pathSegmentStart.x;
-                const deltaAcuteY = pathSegmentEnd.y - pathSegmentStart.y;
-                if (Math.abs(deltaAcuteX) >= Math.abs(deltaAcuteY)) { // Horizontal first
-                  middlePathData = `L ${pathSegmentEnd.x} ${pathSegmentStart.y} L ${pathSegmentEnd.x} ${pathSegmentEnd.y}`;
-                } else { // Vertical first
-                  middlePathData = `L ${pathSegmentStart.x} ${pathSegmentEnd.y} L ${pathSegmentEnd.x} ${pathSegmentEnd.y}`;
-                }
-                break;
-              case 'curved':
-                const mx = (pathSegmentStart.x + pathSegmentEnd.x) / 2;
-                const my = (pathSegmentStart.y + pathSegmentEnd.y) / 2;
-                const perpDx = -(pathSegmentEnd.y - pathSegmentStart.y);
-                const perpDy = pathSegmentEnd.x - pathSegmentStart.x;
-                const segmentLength = Math.sqrt(Math.pow(pathSegmentEnd.x - pathSegmentStart.x, 2) + Math.pow(pathSegmentEnd.y - pathSegmentStart.y, 2));
-                
-                let curveFactor = 0.2; 
-                if ((sourceVisualAnchor === 'W' && incomingConn.targetAnchor === 'E') ||
-                    (sourceVisualAnchor === 'E' && incomingConn.targetAnchor === 'W')) {
-                   curveFactor = 0.1;
-                }
-                if (segmentLength === 0) { 
-                    middlePathData = `L ${pathSegmentEnd.x} ${pathSegmentEnd.y}`;
-                } else {
-                    const controlPointX = mx + (perpDx / segmentLength) * segmentLength * curveFactor;
-                    const controlPointY = my + (perpDy / segmentLength) * segmentLength * curveFactor;
-                    middlePathData = `Q ${controlPointX} ${controlPointY}, ${pathSegmentEnd.x} ${pathSegmentEnd.y}`;
-                }
-                break;
-              case 'straight':
-              default:
-                middlePathData = `L ${pathSegmentEnd.x} ${pathSegmentEnd.y}`;
-                break;
+              const mx = (curveStartPoint.x + curveEndPoint.x) / 2;
+              const my = (curveStartPoint.y + curveEndPoint.y) / 2;
+              const perpDx = -(curveEndPoint.y - curveStartPoint.y);
+              const perpDy = curveEndPoint.x - curveStartPoint.x;
+              const segmentLength = Math.sqrt(Math.pow(curveEndPoint.x - curveStartPoint.x, 2) + Math.pow(curveEndPoint.y - curveStartPoint.y, 2));
+              let curveFactor = 0.2;
+              if ((sourceVisualAnchor === 'W' && incomingConn.targetAnchor === 'E') || (sourceVisualAnchor === 'E' && incomingConn.targetAnchor === 'W')) {
+                 curveFactor = 0.1;
+              }
+              const controlPointX = segmentLength === 0 ? mx : mx + (perpDx / segmentLength) * segmentLength * curveFactor;
+              const controlPointY = segmentLength === 0 ? my : my + (perpDy / segmentLength) * segmentLength * curveFactor;
+              pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${curveStartPoint.x} ${curveStartPoint.y} Q ${controlPointX} ${controlPointY}, ${curveEndPoint.x} ${curveEndPoint.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
             }
-            pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${pathSegmentStart.x} ${pathSegmentStart.y} ${middlePathData} L ${rawEndPoint.x} ${rawEndPoint.y}`;
+            break;
+          case 'acute':
+            const deltaAcuteX = lineEndPointForArrow.x - lineStartPoint.x;
+            const deltaAcuteY = lineEndPointForArrow.y - lineStartPoint.y;
+            if (Math.abs(deltaAcuteX) >= Math.abs(deltaAcuteY)) { // Horizontal first
+              pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${lineEndPointForArrow.x} ${lineStartPoint.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
+            } else { // Vertical first
+              pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${lineStartPoint.x} ${lineEndPointForArrow.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
+            }
+            break;
+          default:
+            pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
+            break;
         }
-        
+
         const labelMidX = (rawStartPoint.x + rawEndPoint.x) / 2;
         const labelMidY = (rawStartPoint.y + rawEndPoint.y) / 2;
 
@@ -868,11 +860,11 @@ export default function PlanDetailPage() {
             <path
               d={pathData}
               stroke="transparent"
-              strokeWidth={CONNECTION_LINE_THICKNESS + 12} 
+              strokeWidth={CONNECTION_LINE_THICKNESS + 12}
               fill="none"
               className="cursor-pointer"
               onClick={(e) => handleLineClick(e, targetStep.id, incomingConn.id!)}
-              style={{pointerEvents: "stroke"}} 
+              style={{pointerEvents: "stroke"}}
             />
             <path
               d={pathData}
@@ -880,7 +872,7 @@ export default function PlanDetailPage() {
               strokeWidth={CONNECTION_LINE_THICKNESS}
               fill="none"
               markerEnd="url(#arrowhead)"
-              style={{pointerEvents: "none"}} 
+              style={{pointerEvents: "none"}}
             />
             {incomingConn.label && (
               <text
@@ -889,7 +881,7 @@ export default function PlanDetailPage() {
                 fill="hsl(var(--foreground))"
                 fontSize="10"
                 textAnchor="middle"
-                dominantBaseline="central" // Changed from middle for potentially better centering
+                dominantBaseline="central"
                 className="pointer-events-none select-none"
               >
                 {incomingConn.label}
@@ -1043,7 +1035,7 @@ export default function PlanDetailPage() {
         >
            <svg ref={svgRef} className="absolute inset-0 w-full h-full pointer-events-none z-0">
              <defs>
-                <marker id="arrowhead" markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * 0.7} refX={ARROWHEAD_LENGTH} refY={ARROWHEAD_LENGTH * 0.35} orient="auto" markerUnits="strokeWidth">
+                <marker id="arrowhead" markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * 0.7} refX={ARROWHEAD_LENGTH} refY={ARROWHEAD_LENGTH * 0.35} orient="auto" markerUnits="userSpaceOnUse">
                     <polygon points={`0 0, ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * 0.35}, 0 ${ARROWHEAD_LENGTH * 0.7}`} fill={CONNECTION_LINE_COLOR} />
                 </marker>
              </defs>
