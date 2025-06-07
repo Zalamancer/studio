@@ -250,7 +250,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       {step.subSteps && step.subSteps.map((subStep, index) => (
         <ConnectionDot
           key={`subdot-ext-${subStep.id}`}
-          anchor="W" // These are effectively West-side dots for sub-steps
+          anchor="W"
           parentStepId={step.id}
           isSubmitting={isSubmitting}
           style={{
@@ -316,7 +316,7 @@ export default function PlanDetailPage() {
   const planId = params?.planId as string | undefined;
 
   const [canvasMinHeight, setCanvasMinHeight] = useState<number>(
-    typeof window !== 'undefined' ? window.innerHeight : 800 // Default for SSR or if window undefined early
+    typeof window !== 'undefined' ? window.innerHeight : 800
   );
   const [editableRoadmap, setEditableRoadmap] = useState<RoadmapStep[]>([]);
   const [draggingNodeInfo, setDraggingNodeInfo] = useState<DraggingNodeInfo | null>(null);
@@ -618,7 +618,7 @@ export default function PlanDetailPage() {
           if (subStepOriginContextFromDot) {
              setPendingNodeFromDotInfo({
                 sourceStepId: parentNode.id,
-                sourceAnchor: 'W', // Sub-steps always connect from West for new nodes
+                sourceAnchor: 'W', 
                 creatingFromSubStepId: subStepOriginContextFromDot.subStepId,
                 creatingFromSubStepTitle: subStepOriginContextFromDot.subStepTitle,
              });
@@ -788,7 +788,7 @@ export default function PlanDetailPage() {
       case 'S': return { x: 0, y: 1 };
       case 'E': return { x: 1, y: 0 };
       case 'W': return { x: -1, y: 0 };
-      default: return { x: 0, y: 0 }; // Should not happen
+      default: return { x: 0, y: 0 };
     }
   };
 
@@ -812,7 +812,7 @@ export default function PlanDetailPage() {
           let bestAnchor: 'N' | 'S' | 'E' | 'W' = 'S';
           let minDistanceSq = Infinity;
           (['N', 'S', 'E', 'W'] as const).forEach(anchor => {
-            if ((sourceNode.subSteps && sourceNode.subSteps.length > 0) && anchor === 'W') return; // Skip West if sub-steps exist
+            if ((sourceNode.subSteps && sourceNode.subSteps.length > 0) && anchor === 'W') return; 
             const tempRawStart = getAnchorPoint(sourceNode, anchor);
             const distSq = Math.pow(tempRawEndPoint.x - tempRawStart.x, 2) + Math.pow(tempRawEndPoint.y - tempRawStart.y, 2);
             if (distSq < minDistanceSq) {
@@ -839,22 +839,19 @@ export default function PlanDetailPage() {
         let pathData = "";
         const lineType = incomingConn.lineType || 'straight';
         
-        if (isTooShortForNecks && (lineType === 'curved' || lineType === 'acute')) {
+        if (isTooShortForNecks || lineType === 'straight') {
             pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
         } else {
             switch (lineType) {
-                case 'straight':
-                    pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
-                    break;
                 case 'curved':
                     const neck1EndCurved = { x: lineStartPoint.x + sourceAxisVec.x * NECK_LENGTH, y: lineStartPoint.y + sourceAxisVec.y * NECK_LENGTH };
                     const neck2StartCurved = { x: lineEndPointForArrow.x - targetAxisVec.x * NECK_LENGTH, y: lineEndPointForArrow.y - targetAxisVec.y * NECK_LENGTH };
                     const curveMidX = (neck1EndCurved.x + neck2StartCurved.x) / 2;
                     const curveMidY = (neck1EndCurved.y + neck2StartCurved.y) / 2;
-                    const controlDx = -(neck2StartCurved.y - neck1EndCurved.y); 
+                    const controlDx = -(neck2StartCurved.y - neck1EndCurved.y);
                     const controlDy = neck2StartCurved.x - neck1EndCurved.x;
                     const curveSegmentLength = Math.sqrt(Math.pow(neck2StartCurved.x - neck1EndCurved.x, 2) + Math.pow(neck2StartCurved.y - neck1EndCurved.y, 2));
-                    const curveFactor = 0.25; 
+                    const curveFactor = 0.4; // Increased for more "ExpoInOut" feel
                     const controlX = curveSegmentLength === 0 ? curveMidX : curveMidX + (controlDx / curveSegmentLength) * curveSegmentLength * curveFactor;
                     const controlY = curveSegmentLength === 0 ? curveMidY : curveMidY + (controlDy / curveSegmentLength) * curveSegmentLength * curveFactor;
                     pathData = `M ${lineStartPoint.x} ${lineStartPoint.y} L ${neck1EndCurved.x} ${neck1EndCurved.y} Q ${controlX} ${controlY}, ${neck2StartCurved.x} ${neck2StartCurved.y} L ${lineEndPointForArrow.x} ${lineEndPointForArrow.y}`;
@@ -888,7 +885,7 @@ export default function PlanDetailPage() {
             <path
               d={pathData}
               stroke="transparent"
-              strokeWidth={CONNECTION_LINE_THICKNESS + 12} // Wider invisible path for easier clicking
+              strokeWidth={CONNECTION_LINE_THICKNESS + 12}
               fill="none"
               className="cursor-pointer"
               onClick={(e) => handleLineClick(e, targetStep.id, incomingConn.id!)}
@@ -900,7 +897,7 @@ export default function PlanDetailPage() {
               strokeWidth={CONNECTION_LINE_THICKNESS}
               fill="none"
               markerEnd="url(#arrowhead)"
-              style={{pointerEvents: "none"}} // Ensure visible line doesn't block click on transparent one
+              style={{pointerEvents: "none"}}
             />
             {incomingConn.label && (
               <text
@@ -1321,4 +1318,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
