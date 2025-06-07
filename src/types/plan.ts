@@ -1,4 +1,3 @@
-
 // src/types/plan.ts
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
@@ -9,20 +8,23 @@ export interface RoadmapSubStep {
   // Potentially add: description, status, assignee, dates, etc.
 }
 
+export interface IncomingConnection {
+  sourceNodeId: string; // ID of the node this connection comes FROM
+  targetAnchor: 'N' | 'S' | 'E' | 'W'; // Anchor point on THIS (target) node where the line connects
+  originatingSubStepContext?: { // If the connection started from a sub-step on the sourceNode
+    sourceCardId: string; // This should be the same as sourceNodeId in this context
+    subStepId: string;
+  } | null;
+}
+
 export interface RoadmapStep {
   id: string;
   title: string;
   subSteps?: RoadmapSubStep[]; // Optional array of sub-steps
   x: number; // X coordinate for positioning on canvas
   y: number; // Y coordinate for positioning on canvas
-  sourceNodeId?: string; // Optional: ID of the node this step was created from OR connected TO
-  sourceAnchor?: 'N' | 'S' | 'E' | 'W'; // Optional: Anchor point on the source node the line comes FROM
-  sourceLineYOffset?: number; // Optional: Y-offset relative to sourceNode's anchor for line start (used for sub-step origins or specific dot connections)
   description?: string | null;
-  originatingSubStepInfo?: { // Link to the sub-step if this main step was created from one
-    sourceCardId: string; // ID of the card that contains the originating sub-step
-    subStepId: string;    // ID of the originating sub-step itself
-  } | null;
+  incomingConnections?: IncomingConnection[]; // Array for multiple incoming connections
 }
 
 
@@ -58,5 +60,3 @@ export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
   updatedAt: number; // Milliseconds since epoch
   roadmap?: RoadmapStep[];
 }
-
-    
