@@ -141,9 +141,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <button
         aria-label={`Connect from ${anchor} anchor of step ${step.title}${subStepContext ? ` (sub-step: ${subStepContext.subStepTitle})` : ''}`}
         className={cn(
-          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out shadow-sm flex items-center justify-center border-2 border-transparent",
+          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out shadow-sm flex items-center justify-center border-2", // Base border
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          isSubStepDot ? "hover:border-green-500/30" : "hover:border-primary/30"
+          isSubStepDot ? "hover:border-green-500/50 border-transparent" : "hover:border-primary/50 border-transparent" // Transparent base, colored on hover
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -224,29 +224,30 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
 });
 RoadmapStepCard.displayName = "RoadmapStepCard";
 
+// Ref types for drag information
 interface NodeDragInfo {
   nodeId: string;
   offsetX: number;
   offsetY: number;
 }
-interface ConnectionDragInfo {
+interface ConnectionDotDragInfo {
   sourceStepId: string;
   sourceAnchor: 'N' | 'S' | 'E' | 'W';
-  startX: number;
-  startY: number;
+  startX: number; // Canvas-relative start X
+  startY: number; // Canvas-relative start Y
   sourceSubStepContext: { subStepId: string; subStepTitle: string } | null;
 }
-
-interface ClickStartInfo {
+// General click/tap start information
+interface PointerStartInfo {
   clientX: number;
   clientY: number;
   timestamp: number;
   targetType: 'node' | 'dot';
-  nodeId?: string; // For node clicks or dot clicks (parent node)
-  dotAnchor?: 'N' | 'S' | 'E' | 'W'; // For dot clicks
-  dotSubStepContext?: { subStepId: string; subStepTitle: string }; // For sub-step dot clicks
+  targetElement: EventTarget | null; // Store the actual element mousedown/touchstart occurred on
+  nodeId?: string;
+  dotAnchor?: 'N' | 'S' | 'E' | 'W';
+  dotSubStepContext?: { subStepId: string; subStepTitle: string };
 }
-
 interface ConnectionToDeleteInfo {
   parentNodeId: string;
   connectionToActuallyDelete: IncomingConnection;
@@ -254,6 +255,7 @@ interface ConnectionToDeleteInfo {
 interface LineContextMenuState {
   isOpen: boolean; x: number; y: number; targetNodeId: string; connectionId: string;
 }
+
 
 export default function PlanDetailPage() {
   const params = useParams();
@@ -278,13 +280,13 @@ export default function PlanDetailPage() {
   const [currentLineEditLabel, setCurrentLineEditLabel] = useState("");
   const lineLabelInputRef = useRef<HTMLInputElement>(null);
 
-  const [isPointerDown, setIsPointerDown] = useState(false);
+  const [isPointerDownState, setIsPointerDown] = useState(false); // State to manage global listeners
   const nodeDragInfoRef = useRef<NodeDragInfo | null>(null);
-  const connectionDragInfoRef = useRef<ConnectionDragInfo | null>(null);
-  const clickStartInfoRef = useRef<ClickStartInfo | null>(null);
-  const isDraggingRef = useRef<boolean>(false); // To distinguish drag from click
-  const [activeConnectionLinePreview, setActiveConnectionLinePreview] = useState<{startX: number, startY: number, currentX: number, currentY: number} | null>(null);
+  const connectionDragInfoRef = useRef<ConnectionDotDragInfo | null>(null);
+  const clickStartInfoRef = useRef<PointerStartInfo | null>(null); // Stores info on mousedown/touchstart
+  const isActuallyDraggingRef = useRef<boolean>(false); // True if pointer moved beyond threshold
 
+  const [activeConnectionLinePreview, setActiveConnectionLinePreview] = useState<{startX: number, startY: number, currentX: number, currentY: number} | null>(null);
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
@@ -441,83 +443,22 @@ export default function PlanDetailPage() {
     toast({ title: "Connection Removed", description: "Line deleted. Save to persist changes."}); setConnectionToDeleteInfo(null);
   }, [connectionToDeleteInfo, toast]);
 
-  const handleNodeInteractionStart = useCallback((nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    if (('button' in event && (event as React.MouseEvent).button !== 0) || !isOwner || !canvasRef.current) return;
-    const { clientX, clientY } = getPointerCoords(event);
-    const nodeElement = event.currentTarget as HTMLDivElement;
-    const nodeRect = nodeElement.getBoundingClientRect();
-    const offsetX = clientX - nodeRect.left;
-    const offsetY = clientY - nodeRect.top;
-
-    nodeDragInfoRef.current = { nodeId, offsetX, offsetY };
-    clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetType: 'node', nodeId };
-    isDraggingRef.current = false;
-    setIsPointerDown(true);
-  }, [isOwner, getPointerCoords]);
-
-  const handleNodeInteractionEnd = useCallback((nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
-    if (!isDraggingRef.current && clickStartInfoRef.current?.targetType === 'node' && clickStartInfoRef.current.nodeId === nodeId) {
-      const { clientX, clientY } = getPointerCoords(event);
-      const timeElapsed = Date.now() - clickStartInfoRef.current.timestamp;
-      const deltaX = clientX - clickStartInfoRef.current.clientX;
-      const deltaY = clientY - clickStartInfoRef.current.clientY;
-      if ((deltaX * deltaX + deltaY * deltaY) < CLICK_MOVE_THRESHOLD_PX_SQ && timeElapsed < CLICK_TIME_THRESHOLD_MS) {
-        const clickedStep = editableRoadmap.find(s => s.id === nodeId);
-        if (clickedStep) handleEditStep(clickedStep);
-      }
-    }
-    // Global up handler will reset isPointerDown
-  }, [editableRoadmap, handleEditStep, getPointerCoords]);
-
-  const handleDotInteractionStart = useCallback((parentNodeId: string, clickedAnchor: 'N' | 'S' | 'E' | 'W', event: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>, subStepOriginContextFromDot?: { subStepId: string; subStepTitle: string }) => {
-    if (('button' in event && (event as React.MouseEvent).button !== 0) || !isOwner || !canvasRef.current) return;
-    const { clientX, clientY } = getPointerCoords(event);
-    const dotElement = event.currentTarget as HTMLElement;
-    const dotCenterCanvas = getElementCenter(dotElement);
-
-    connectionDragInfoRef.current = { sourceStepId: parentNodeId, sourceAnchor: clickedAnchor, startX: dotCenterCanvas.x, startY: dotCenterCanvas.y, sourceSubStepContext: subStepOriginContextFromDot || null };
-    clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetType: 'dot', nodeId: parentNodeId, dotAnchor: clickedAnchor, dotSubStepContext: subStepOriginContextFromDot };
-    isDraggingRef.current = false;
-    setIsPointerDown(true);
-  }, [isOwner, getElementCenter, getPointerCoords]);
-
-  const handleDotInteractionEnd = useCallback((parentNodeId: string, clickedAnchor: 'N' | 'S' | 'E' | 'W', event: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>, subStepOriginContextFromDot?: { subStepId: string; subStepTitle: string }) => {
-    if (!isDraggingRef.current && clickStartInfoRef.current?.targetType === 'dot' && clickStartInfoRef.current.nodeId === parentNodeId && clickStartInfoRef.current.dotAnchor === clickedAnchor) {
-      const { clientX, clientY } = getPointerCoords(event);
-      const timeElapsed = Date.now() - clickStartInfoRef.current.timestamp;
-      const deltaX = clientX - clickStartInfoRef.current.clientX;
-      const deltaY = clientY - clickStartInfoRef.current.clientY;
-      if ((deltaX * deltaX + deltaY * deltaY) < CLICK_MOVE_THRESHOLD_PX_SQ && timeElapsed < CLICK_TIME_THRESHOLD_MS) {
-        const parentNode = editableRoadmap.find(s => s.id === parentNodeId);
-        if (parentNode) {
-          if (subStepOriginContextFromDot && clickedAnchor === 'W') {
-            setPendingNodeFromDotInfo({ sourceStepId: parentNode.id, sourceAnchor: 'W', creatingFromSubStepId: subStepOriginContextFromDot.subStepId, creatingFromSubStepTitle: subStepOriginContextFromDot.subStepTitle });
-            setIsAddStepDialogOpen(true);
-          } else {
-            const connectionToThisDot = (parentNode.incomingConnections || []).find(conn => conn.targetAnchor === clickedAnchor && (!subStepOriginContextFromDot && !conn.originatingSubStepContext));
-            if (connectionToThisDot) { setConnectionToDeleteInfo({ parentNodeId: parentNode.id, connectionToActuallyDelete: connectionToThisDot }); }
-            else { setPendingNodeFromDotInfo({ sourceStepId: parentNode.id, sourceAnchor: clickedAnchor }); setIsAddStepDialogOpen(true); }
-          }
-        }
-      }
-    }
-    // Global up handler will reset isPointerDown and other states
-  }, [editableRoadmap, getPointerCoords, setPendingNodeFromDotInfo, setIsAddStepDialogOpen, setConnectionToDeleteInfo]);
-
-  const handleGlobalMove = useCallback((event: MouseEvent | TouchEvent) => {
-    if (!isPointerDown || !canvasRef.current) return;
+  // --- Global Event Handlers ---
+  const handleGlobalPointerMove = useCallback((event: MouseEvent | TouchEvent) => {
+    if (!isPointerDownState || !canvasRef.current) return;
     if (event.cancelable) event.preventDefault();
 
     const { clientX, clientY } = getPointerCoords(event);
-    if (clickStartInfoRef.current && !isDraggingRef.current) {
+
+    if (clickStartInfoRef.current && !isActuallyDraggingRef.current) {
       const deltaX = clientX - clickStartInfoRef.current.clientX;
       const deltaY = clientY - clickStartInfoRef.current.clientY;
       if ((deltaX * deltaX + deltaY * deltaY) > CLICK_MOVE_THRESHOLD_PX_SQ) {
-        isDraggingRef.current = true;
+        isActuallyDraggingRef.current = true;
       }
     }
 
-    if (isDraggingRef.current) {
+    if (isActuallyDraggingRef.current) {
       const canvasRect = canvasRef.current.getBoundingClientRect();
       const currentX = clientX - canvasRect.left + canvasRef.current.scrollLeft;
       const currentY = clientY - canvasRect.top + canvasRef.current.scrollTop;
@@ -528,19 +469,18 @@ export default function PlanDetailPage() {
         newX = Math.max(MIN_CANVAS_PADDING, newX); newY = Math.max(MIN_CANVAS_PADDING, newY);
         setEditableRoadmap(prev => prev.map(step => step.id === nodeId ? { ...step, x: newX, y: newY } : step));
       } else if (connectionDragInfoRef.current) {
-        const { startX, startY } = connectionDragInfoRef.current;
-        setActiveConnectionLinePreview({ startX, startY, currentX, currentY });
+        setActiveConnectionLinePreview({ startX: connectionDragInfoRef.current.startX, startY: connectionDragInfoRef.current.startY, currentX, currentY });
       }
     }
-  }, [isPointerDown, getPointerCoords, setEditableRoadmap, setActiveConnectionLinePreview]);
+  }, [isPointerDownState, getPointerCoords, setEditableRoadmap, setActiveConnectionLinePreview]);
 
-  const handleGlobalUp = useCallback((event: MouseEvent | TouchEvent) => {
-    if (!isPointerDown) return;
+  const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent) => {
+    if (!isPointerDownState) return;
 
     const finalCoords = getPointerCoords(event);
 
-    if (nodeDragInfoRef.current) { // Was a node interaction
-      if (!isDraggingRef.current && clickStartInfoRef.current?.targetType === 'node' && clickStartInfoRef.current.nodeId === nodeDragInfoRef.current.nodeId) {
+    if (nodeDragInfoRef.current) { // Node interaction
+      if (!isActuallyDraggingRef.current && clickStartInfoRef.current && clickStartInfoRef.current.targetType === 'node' && clickStartInfoRef.current.nodeId === nodeDragInfoRef.current.nodeId) {
         const timeElapsed = Date.now() - clickStartInfoRef.current.timestamp;
         const deltaX = finalCoords.clientX - clickStartInfoRef.current.clientX;
         const deltaY = finalCoords.clientY - clickStartInfoRef.current.clientY;
@@ -549,9 +489,9 @@ export default function PlanDetailPage() {
           if (clickedStep) handleEditStep(clickedStep);
         }
       }
-    } else if (connectionDragInfoRef.current) { // Was a connection dot interaction
+    } else if (connectionDragInfoRef.current) { // Connection dot interaction
       const { sourceStepId, sourceAnchor, sourceSubStepContext } = connectionDragInfoRef.current;
-      if (isDraggingRef.current && canvasRef.current) { // A line was actually dragged
+      if (isActuallyDraggingRef.current && canvasRef.current) { // A line was actually dragged
         const canvasRect = canvasRef.current.getBoundingClientRect();
         const releaseX = finalCoords.clientX - canvasRect.left + canvasRef.current.scrollLeft;
         const releaseY = finalCoords.clientY - canvasRect.top + canvasRef.current.scrollTop;
@@ -574,7 +514,7 @@ export default function PlanDetailPage() {
           if (snapped) break;
         }
       } else if (clickStartInfoRef.current?.targetType === 'dot' && clickStartInfoRef.current.nodeId === sourceStepId && clickStartInfoRef.current.dotAnchor === sourceAnchor) {
-        // This was a click/tap on a dot (not a drag)
+        // This was a click/tap on a dot
         const parentNode = editableRoadmap.find(s => s.id === sourceStepId);
         if (parentNode) {
           if (sourceSubStepContext && sourceAnchor === 'W') {
@@ -587,34 +527,131 @@ export default function PlanDetailPage() {
           }
         }
       }
+      // Explicitly clear line-specific drag state here
+      connectionDragInfoRef.current = null;
+      setActiveConnectionLinePreview(null);
     }
 
-    // Cleanup all drag-related states
+    // General cleanup
     nodeDragInfoRef.current = null;
-    connectionDragInfoRef.current = null;
-    clickStartInfoRef.current = null;
-    isDraggingRef.current = false;
-    setActiveConnectionLinePreview(null);
-    setIsPointerDown(false); // This will trigger useEffect to remove global listeners
-  }, [isPointerDown, editableRoadmap, handleEditStep, toast, getAnchorPoint, setEditableRoadmap, setPendingNodeFromDotInfo, setIsAddStepDialogOpen, setConnectionToDeleteInfo, setActiveConnectionLinePreview, setIsPointerDown, getPointerCoords]);
+    // Ensure connectionDragInfoRef is null if not handled above
+    if (connectionDragInfoRef.current) connectionDragInfoRef.current = null;
+    // Ensure activeConnectionLinePreview is null if not handled above
+    if (activeConnectionLinePreview) setActiveConnectionLinePreview(null);
 
+    clickStartInfoRef.current = null;
+    isActuallyDraggingRef.current = false;
+    setIsPointerDown(false); // This triggers useEffect to remove global listeners
+  }, [
+    isPointerDownState, editableRoadmap, handleEditStep, toast, getAnchorPoint, setEditableRoadmap,
+    setIsAddStepDialogOpen, setPendingNodeFromDotInfo, setConnectionToDeleteInfo, getPointerCoords,
+    setActiveConnectionLinePreview, activeConnectionLinePreview // Added activeConnectionLinePreview to dependencies
+  ]);
 
   useEffect(() => {
-    if (isPointerDown) {
-      window.addEventListener('mousemove', handleGlobalMove, { passive: false });
-      window.addEventListener('mouseup', handleGlobalUp);
-      window.addEventListener('touchmove', handleGlobalMove, { passive: false });
-      window.addEventListener('touchend', handleGlobalUp);
-      window.addEventListener('touchcancel', handleGlobalUp);
-      return () => {
-        window.removeEventListener('mousemove', handleGlobalMove);
-        window.removeEventListener('mouseup', handleGlobalUp);
-        window.removeEventListener('touchmove', handleGlobalMove);
-        window.removeEventListener('touchend', handleGlobalUp);
-        window.removeEventListener('touchcancel', handleGlobalUp);
-      };
+    const moveHandler = (e: MouseEvent | TouchEvent) => handleGlobalPointerMove(e);
+    const upHandler = (e: MouseEvent | TouchEvent) => handleGlobalPointerUp(e);
+
+    if (isPointerDownState) {
+      window.addEventListener('mousemove', moveHandler, { passive: false });
+      window.addEventListener('touchmove', moveHandler, { passive: false });
+      window.addEventListener('mouseup', upHandler);
+      window.addEventListener('touchend', upHandler);
+      window.addEventListener('touchcancel', upHandler);
     }
-  }, [isPointerDown, handleGlobalMove, handleGlobalUp]);
+
+    return () => {
+      window.removeEventListener('mousemove', moveHandler);
+      window.removeEventListener('touchmove', moveHandler);
+      window.removeEventListener('mouseup', upHandler);
+      window.removeEventListener('touchend', upHandler);
+      window.removeEventListener('touchcancel', upHandler);
+    };
+  }, [isPointerDownState, handleGlobalPointerMove, handleGlobalPointerUp]); // These handlers must be stable callbacks
+
+  // --- Node Interaction Start ---
+  const handleNodeInteractionStart = useCallback((nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (('button' in event && (event as React.MouseEvent).button !== 0) || !isOwner || !canvasRef.current) return;
+    if (lineContextMenu?.isOpen) setLineContextMenu(null); // Close line context menu if open
+
+    const { clientX, clientY } = getPointerCoords(event);
+    const nodeElement = event.currentTarget as HTMLDivElement;
+    const nodeRect = nodeElement.getBoundingClientRect();
+    const offsetX = clientX - nodeRect.left;
+    const offsetY = clientY - nodeRect.top;
+
+    nodeDragInfoRef.current = { nodeId, offsetX, offsetY };
+    connectionDragInfoRef.current = null; // Ensure no dot drag active
+    clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetType: 'node', targetElement: event.currentTarget, nodeId };
+    isActuallyDraggingRef.current = false;
+    setIsPointerDown(true);
+  }, [isOwner, getPointerCoords]);
+  
+  // --- Node Interaction End (for click/tap detection on node itself) ---
+  const handleNodeInteractionEnd = useCallback((nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    // This function is now mainly for if a click/tap was completed *on the node*.
+    // The global up handler (`handleGlobalPointerUp`) manages the end of actual drags.
+    if (!isActuallyDraggingRef.current && clickStartInfoRef.current?.targetType === 'node' && clickStartInfoRef.current.nodeId === nodeId) {
+      const { clientX, clientY } = getPointerCoords(event);
+      const timeElapsed = Date.now() - clickStartInfoRef.current.timestamp;
+      const deltaX = clientX - clickStartInfoRef.current.clientX;
+      const deltaY = clientY - clickStartInfoRef.current.clientY;
+      if ((deltaX * deltaX + deltaY * deltaY) < CLICK_MOVE_THRESHOLD_PX_SQ && timeElapsed < CLICK_TIME_THRESHOLD_MS) {
+        // It's a click on the node, handled by handleGlobalPointerUp if it gets there
+        // But if the mouseup happens *on the node* this is another place to trigger it.
+        // The main handleGlobalPointerUp should ideally cover this too.
+      }
+    }
+    // If it was a drag, handleGlobalPointerUp has already managed it.
+    // No need to setIsPointerDown(false) here, global handler does that.
+  }, [getPointerCoords]);
+
+  // --- Connection Dot Interaction Start ---
+  const handleDotInteractionStart = useCallback((parentNodeId: string, clickedAnchor: 'N' | 'S' | 'E' | 'W', event: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>, subStepOriginContextFromDot?: { subStepId: string; subStepTitle: string }) => {
+    if (('button' in event && (event as React.MouseEvent).button !== 0) || !isOwner || !canvasRef.current) return;
+    if (lineContextMenu?.isOpen) setLineContextMenu(null);
+
+    const { clientX, clientY } = getPointerCoords(event);
+    const dotElement = event.currentTarget as HTMLElement;
+    const dotCenterCanvas = getElementCenter(dotElement);
+
+    nodeDragInfoRef.current = null; // Ensure no node drag active
+    connectionDragInfoRef.current = { sourceStepId: parentNodeId, sourceAnchor: clickedAnchor, startX: dotCenterCanvas.x, startY: dotCenterCanvas.y, sourceSubStepContext: subStepOriginContextFromDot || null };
+    clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetType: 'dot', targetElement: event.currentTarget, nodeId: parentNodeId, dotAnchor: clickedAnchor, dotSubStepContext: subStepOriginContextFromDot };
+    isActuallyDraggingRef.current = false;
+    setIsPointerDown(true);
+  }, [isOwner, getElementCenter, getPointerCoords]);
+  
+  // --- Connection Dot Interaction End (for click/tap on dot) ---
+  const handleDotInteractionEnd = useCallback((parentNodeId: string, clickedAnchor: 'N' | 'S' | 'E' | 'W', event: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>, subStepOriginContextFromDot?: { subStepId: string; subStepTitle: string }) => {
+    // This function is for clicks/taps completed *on the dot*.
+    // Actual line drag releases are handled by handleGlobalPointerUp.
+    if (!isActuallyDraggingRef.current && clickStartInfoRef.current?.targetType === 'dot' && clickStartInfoRef.current.nodeId === parentNodeId && clickStartInfoRef.current.dotAnchor === clickedAnchor) {
+      const { clientX, clientY } = getPointerCoords(event);
+      const timeElapsed = Date.now() - clickStartInfoRef.current.timestamp;
+      const deltaX = clientX - clickStartInfoRef.current.clientX;
+      const deltaY = clientY - clickStartInfoRef.current.clientY;
+      if ((deltaX * deltaX + deltaY * deltaY) < CLICK_MOVE_THRESHOLD_PX_SQ && timeElapsed < CLICK_TIME_THRESHOLD_MS) {
+        // This was a click on the dot. This logic is duplicated in handleGlobalPointerUp.
+        // The global handler should catch this if mouseup happens outside the dot.
+        // Redundant for safety if mouseup is on the dot.
+        const parentNode = editableRoadmap.find(s => s.id === parentNodeId);
+        if (parentNode) {
+          if (subStepOriginContextFromDot && clickedAnchor === 'W') {
+            setPendingNodeFromDotInfo({ sourceStepId: parentNode.id, sourceAnchor: 'W', creatingFromSubStepId: subStepOriginContextFromDot.subStepId, creatingFromSubStepTitle: subStepOriginContextFromDot.subStepTitle });
+            setIsAddStepDialogOpen(true);
+          } else {
+            const connectionToThisDot = (parentNode.incomingConnections || []).find(conn => conn.targetAnchor === clickedAnchor && (!subStepOriginContextFromDot && !conn.originatingSubStepContext));
+            if (connectionToThisDot) { setConnectionToDeleteInfo({ parentNodeId: parentNode.id, connectionToActuallyDelete: connectionToThisDot }); }
+            else { setPendingNodeFromDotInfo({ sourceStepId: parentNode.id, sourceAnchor: clickedAnchor }); setIsAddStepDialogOpen(true); }
+          }
+        }
+      }
+    }
+    // If it was a drag, handleGlobalPointerUp has already managed it.
+    // No need to setIsPointerDown(false) here.
+  }, [editableRoadmap, getPointerCoords, setPendingNodeFromDotInfo, setIsAddStepDialogOpen, setConnectionToDeleteInfo]);
+
 
   const getAnchorAxisVector = (anchor: 'N' | 'S' | 'E' | 'W'): { x: number, y: number } => {
     switch (anchor) { case 'N': return { x: 0, y: -1 }; case 'S': return { x: 0, y: 1 }; case 'E': return { x: 1, y: 0 }; case 'W': return { x: -1, y: 0 }; default: return { x: 0, y: 0 }; }
@@ -698,10 +735,10 @@ export default function PlanDetailPage() {
               onNodeInteractionEnd={handleNodeInteractionEnd}
               onDotInteractionStart={handleDotInteractionStart}
               onDotInteractionEnd={handleDotInteractionEnd}
-              isSelected={editingStep?.id === step.id || pendingNodeFromDotInfo?.sourceStepId === step.id || connectionToDeleteInfo?.parentNodeId === step.id || connectionDragInfoRef.current?.sourceStepId === step.id}
+              isSelected={editingStep?.id === step.id || pendingNodeFromDotInfo?.sourceStepId === step.id || connectionToDeleteInfo?.parentNodeId === step.id || (connectionDragInfoRef.current?.sourceStepId === step.id)}
               isSubmitting={saveRoadmapMutation.isPending}
               onEditStep={handleEditStep} onDeleteStep={handleDeleteStep} onAddSubStep={handleAddSubStepToParent}
-              isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}
+              isActuallyDraggingThisNode={isActuallyDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}
             />
           ))}
           <Popover open={lineContextMenu?.isOpen || false} onOpenChange={(open) => { if (!open) setLineContextMenu(null); }}><PopoverTrigger asChild><div className="fixed" style={{ left: `${lineContextMenu?.x || 0}px`, top: `${lineContextMenu?.y || 0}px`, width: 0, height: 0 }} /></PopoverTrigger><PopoverContent className="w-auto p-1" side="right" align="start" sideOffset={5}>{lineContextMenu && isOwner && (<div className="flex flex-col gap-1"><Button variant="ghost" size="sm" className="justify-start text-xs" onClick={() => handleDeleteLine(lineContextMenu.targetNodeId, lineContextMenu.connectionId)}><MinusCircle className="mr-2 h-3.5 w-3.5 text-destructive"/> Delete Line</Button><DropdownMenu modal={false}><DropdownMenuTrigger asChild><Button variant="ghost" size="sm" className="justify-start text-xs"><TypeIcon className="mr-2 h-3.5 w-3.5"/> Set Line Type</Button></DropdownMenuTrigger><DropdownMenuContent side="right" align="start" sideOffset={5} className="w-40"><DropdownMenuItem onClick={() => handleSetSelectedLineType(lineContextMenu.targetNodeId, lineContextMenu.connectionId, 'straight')}>Straight</DropdownMenuItem><DropdownMenuItem onClick={() => handleSetSelectedLineType(lineContextMenu.targetNodeId, lineContextMenu.connectionId, 'curved')}>Curved</DropdownMenuItem><DropdownMenuItem onClick={() => handleSetSelectedLineType(lineContextMenu.targetNodeId, lineContextMenu.connectionId, 'acute')}>Acute (Elbow)</DropdownMenuItem></DropdownMenuContent></DropdownMenu><Button variant="ghost" size="sm" className="justify-start text-xs" onClick={handleOpenSetLineLabelDialog}><LineLabelIcon className="mr-2 h-3.5 w-3.5"/> Add/Edit Label</Button></div>)}</PopoverContent></Popover>
@@ -715,3 +752,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+    
