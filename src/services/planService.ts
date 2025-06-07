@@ -15,7 +15,7 @@ import {
   type FieldValue,
   updateDoc,
 } from 'firebase/firestore';
-import type { Plan, NewPlanData, ClientPlan, RoadmapStep, RoadmapSubStep, UpdatePlanRoadmapData } from '@/types/plan';
+import type { Plan, NewPlanData, ClientPlan, RoadmapStep, RoadmapSubStep, UpdatePlanRoadmapData, IncomingConnection } from '@/types/plan';
 
 const PLANS_COLLECTION = 'plans';
 const plansCollectionRef = collection(db, PLANS_COLLECTION);
@@ -40,21 +40,41 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     naicsCode: planData.naicsCode || null,
     createdAt: serverTimestamp() as FieldValue,
     updatedAt: serverTimestamp() as FieldValue,
-    roadmap: (planData.roadmap || []).map(step => ({ // Sanitize initial roadmap as well
-      id: typeof step.id === 'string' ? step.id : `init_step_id_${Date.now()}`,
-      title: typeof step.title === 'string' ? step.title : "",
-      x: typeof step.x === 'number' ? step.x : 0,
-      y: typeof step.y === 'number' ? step.y : 0,
-      description: (step.description === undefined || step.description === '') ? null : step.description,
-      subSteps: (step.subSteps || []).map(sub => ({
-        id: typeof sub.id === 'string' ? sub.id : `init_sub_id_${Date.now()}`,
-        parentId: typeof sub.parentId === 'string' ? sub.parentId : "",
+    roadmap: (planData.roadmap || []).map(step => {
+      const sanitizedSubSteps = (step.subSteps || []).map(sub => ({
+        id: typeof sub.id === 'string' && sub.id.trim() !== '' ? sub.id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        parentId: typeof sub.parentId === 'string' && sub.parentId.trim() !== '' ? sub.parentId : (step.id || ""),
         title: typeof sub.title === 'string' ? sub.title : "",
-      })),
-      ...(step.sourceNodeId !== undefined && { sourceNodeId: step.sourceNodeId }),
-      ...(step.sourceAnchor !== undefined && { sourceAnchor: step.sourceAnchor }),
-      ...(step.sourceLineYOffset !== undefined && { sourceLineYOffset: step.sourceLineYOffset }),
-    })),
+      }));
+      const sanitizedConnections = (step.incomingConnections || []).map(conn => {
+        const finalConnection: IncomingConnection = {
+            id: typeof conn.id === 'string' && conn.id.trim() !== '' ? conn.id : `conn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            sourceNodeId: typeof conn.sourceNodeId === 'string' ? conn.sourceNodeId : "",
+            targetAnchor: conn.targetAnchor || 'N',
+            lineType: conn.lineType || 'straight',
+            label: conn.label && conn.label.trim() !== "" ? conn.label.trim() : undefined,
+        };
+        if (conn.originatingSubStepContext && conn.originatingSubStepContext.sourceCardId && conn.originatingSubStepContext.subStepId) {
+            finalConnection.originatingSubStepContext = {
+                sourceCardId: conn.originatingSubStepContext.sourceCardId,
+                subStepId: conn.originatingSubStepContext.subStepId,
+            };
+        } else {
+            finalConnection.originatingSubStepContext = null;
+        }
+        return finalConnection;
+      }).filter(conn => conn.sourceNodeId.trim() !== "");
+
+      return {
+        id: typeof step.id === 'string' && step.id.trim() !== '' ? step.id : `step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        title: typeof step.title === 'string' ? step.title : "",
+        x: typeof step.x === 'number' ? step.x : 0,
+        y: typeof step.y === 'number' ? step.y : 0,
+        description: (step.description === undefined || step.description.trim() === '') ? null : step.description.trim(),
+        subSteps: sanitizedSubSteps,
+        incomingConnections: sanitizedConnections,
+      };
+    }),
   };
 
   console.log("%c[planService] createPlan: FINAL DATA OBJECT being sent to Firestore:", "color: #FF1493; font-weight: bold;", JSON.parse(JSON.stringify(dataToSave)));
@@ -98,9 +118,18 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
-        roadmap: (data.roadmap || []).map(step => ({ // Ensure subSteps array exists
+        roadmap: (data.roadmap || []).map(step => ({
           ...step,
           subSteps: step.subSteps || [],
+          incomingConnections: (step.incomingConnections || []).map(conn => ({
+            ...conn,
+            id: conn.id || `conn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            sourceNodeId: conn.sourceNodeId || '',
+            targetAnchor: conn.targetAnchor || 'N',
+            lineType: conn.lineType || 'straight',
+            label: conn.label || undefined,
+            originatingSubStepContext: conn.originatingSubStepContext || null,
+          })),
         })),
       };
       console.log(`[planService] Plan ${planId} fetched successfully.`);
@@ -133,30 +162,42 @@ export const updatePlanRoadmap = async (planId: string, ownerId: string, updated
   console.log(`[planService] updatePlanRoadmap: Updating roadmap for plan ID: ${planId} by owner ${ownerId}`);
   
   const sanitizedRoadmap = updatedRoadmap.map(step => {
-    const sanitizedSubSteps = (step.subSteps || []).map(subStep => {
-      const finalSubStep: RoadmapSubStep = {
-        id: typeof subStep.id === 'string' ? subStep.id : `invalid_sub_id_${Date.now()}`,
-        parentId: typeof subStep.parentId === 'string' ? subStep.parentId : "",
-        title: typeof subStep.title === 'string' ? subStep.title : "",
-      };
-      // Do NOT include x, y for sub-steps here if they are not in the RoadmapSubStep type definition.
-      return finalSubStep;
-    });
+    const sanitizedSubSteps = (step.subSteps || []).map(subStep => ({
+      id: typeof subStep.id === 'string' && subStep.id.trim() !== '' ? subStep.id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+      parentId: typeof subStep.parentId === 'string' && subStep.parentId.trim() !== '' ? subStep.parentId : (step.id || ""),
+      title: typeof subStep.title === 'string' ? subStep.title : "",
+    }));
 
-    const finalStep: any = { // Using 'any' to build then casting
-      id: typeof step.id === 'string' ? step.id : `invalid_step_id_${Date.now()}`,
+    const sanitizedConnections = (step.incomingConnections || []).map(conn => {
+      const finalConnection: IncomingConnection = {
+          id: typeof conn.id === 'string' && conn.id.trim() !== '' ? conn.id : `conn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+          sourceNodeId: typeof conn.sourceNodeId === 'string' ? conn.sourceNodeId : "",
+          targetAnchor: conn.targetAnchor || 'N',
+          lineType: conn.lineType || 'straight',
+          label: conn.label && conn.label.trim() !== "" ? conn.label.trim() : undefined,
+      };
+      if (conn.originatingSubStepContext && conn.originatingSubStepContext.sourceCardId && conn.originatingSubStepContext.subStepId) {
+          finalConnection.originatingSubStepContext = {
+              sourceCardId: conn.originatingSubStepContext.sourceCardId,
+              subStepId: conn.originatingSubStepContext.subStepId,
+          };
+      } else {
+          finalConnection.originatingSubStepContext = null;
+      }
+      return finalConnection;
+    }).filter(conn => conn.sourceNodeId.trim() !== "");
+
+    const finalStep: RoadmapStep = {
+      id: typeof step.id === 'string' && step.id.trim() !== '' ? step.id : `step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       title: typeof step.title === 'string' ? step.title : "",
       x: typeof step.x === 'number' ? step.x : 0,
       y: typeof step.y === 'number' ? step.y : 0,
-      description: (step.description === undefined || step.description === '') ? null : step.description,
+      description: (step.description === undefined || step.description.trim() === '') ? null : step.description.trim(),
       subSteps: sanitizedSubSteps,
+      incomingConnections: sanitizedConnections,
     };
-
-    if (step.sourceNodeId !== undefined) finalStep.sourceNodeId = step.sourceNodeId;
-    if (step.sourceAnchor !== undefined) finalStep.sourceAnchor = step.sourceAnchor;
-    if (step.sourceLineYOffset !== undefined) finalStep.sourceLineYOffset = step.sourceLineYOffset;
     
-    return finalStep as RoadmapStep; // Cast to the expected type
+    return finalStep;
   });
 
   const dataToUpdate: UpdatePlanRoadmapData = {
@@ -200,9 +241,18 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
         naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
-        roadmap: (data.roadmap || []).map(step => ({ // Ensure subSteps array exists
+        roadmap: (data.roadmap || []).map(step => ({
           ...step,
           subSteps: step.subSteps || [],
+           incomingConnections: (step.incomingConnections || []).map(conn => ({
+            ...conn,
+            id: conn.id || `conn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            sourceNodeId: conn.sourceNodeId || '',
+            targetAnchor: conn.targetAnchor || 'N',
+            lineType: conn.lineType || 'straight',
+            label: conn.label || undefined,
+            originatingSubStepContext: conn.originatingSubStepContext || null,
+          })),
         })),
       };
     });
