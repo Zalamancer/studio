@@ -68,7 +68,7 @@ const CONNECTION_LINE_THICKNESS = 2;
 const ARROWHEAD_LENGTH = 10;
 const DOT_RADIUS = DOT_SIZE / 2;
 const START_OFFSET = DOT_RADIUS;
-const END_OFFSET = ARROWHEAD_LENGTH + DOT_RADIUS;
+const END_OFFSET = ARROWHEAD_LENGTH;
 
 
 const calculateNodeHeight = (step: RoadmapStep): number => {
@@ -95,7 +95,7 @@ interface RoadmapStepCardProps {
     anchor: 'N' | 'S' | 'E' | 'W',
     interactionType: 'down' | 'up',
     event: React.MouseEvent<HTMLElement>,
-    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLSpanElement }
+    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLElement }
   ) => void;
   isSelected?: boolean;
   isSubmitting: boolean;
@@ -239,7 +239,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% + ${DOT_OFFSET}px)` }} />
       <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% + ${DOT_OFFSET}px)` }} />
       <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% + ${DOT_OFFSET}px)` }} />
-      {/* West dot removed from main card */}
+      <ConnectionDot anchor="W" parentStepId={step.id} isSubmitting={isSubmitting} style={{ left: DOT_OFFSET, top: `calc(50% + ${DOT_OFFSET}px)` }} />
     </div>
   );
 });
@@ -254,8 +254,8 @@ interface DraggingNodeInfo {
 interface ConnectionDragStateType {
   isDragging: boolean;
   sourceStepId: string | null;
-  sourceAnchor: 'N' | 'S' | 'E' | 'W' | null; // Anchor on the source node from where the drag started
-  sourceSubStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLSpanElement } | null;
+  sourceAnchor: 'N' | 'S' | 'E' | 'W' | null;
+  sourceSubStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLElement } | null;
   startX: number;
   startY: number;
   currentX: number;
@@ -265,9 +265,14 @@ interface ConnectionDragStateType {
 interface ClickStartInfoType {
   parentStepId: string | null;
   anchor: 'N' | 'S' | 'E' | 'W' | null;
-  subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLSpanElement } | null;
+  subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLElement } | null;
   clientX: number;
   clientY: number;
+}
+
+interface ConnectionToDeleteInfo {
+  parentNodeId: string; // The ID of the node whose dot was clicked (the target node)
+  connectionToActuallyDelete: IncomingConnection; // The specific incoming connection object to remove
 }
 
 export default function PlanDetailPage() {
@@ -287,13 +292,14 @@ export default function PlanDetailPage() {
   const [isAddStepDialogOpen, setIsAddStepDialogOpen] = useState(false);
   const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{
     sourceStepId: string;
-    sourceAnchor: 'N' | 'S' | 'E' | 'W'; // Anchor on the source node where click originated
+    sourceAnchor: 'N' | 'S' | 'E' | 'W';
     creatingFromSubStepId?: string;
     creatingFromSubStepTitle?: string;
   } | null>(null);
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
   const [stepToDelete, setStepToDelete] = useState<{id: string, title: string} | null>(null);
+  const [connectionToDeleteInfo, setConnectionToDeleteInfo] = useState<ConnectionToDeleteInfo | null>(null);
 
   const [activeConnectionDragOperation, setActiveConnectionDragOperation] = useState<ConnectionDragStateType>({
     isDragging: false, sourceStepId: null, sourceAnchor: null, sourceSubStepOriginContext: null, startX: 0, startY: 0, currentX: 0, currentY: 0
@@ -365,7 +371,7 @@ export default function PlanDetailPage() {
     
     let newStepX = 100;
     let newStepY = 100;
-    let initialIncomingConnection: IncomingConnection | undefined = undefined;
+    let initialIncomingConnections: IncomingConnection[] = [];
 
     if (pendingNodeFromDotInfo && pendingNodeFromDotInfo.sourceStepId) {
       const sourceNode = editableRoadmap.find(s => s.id === pendingNodeFromDotInfo.sourceStepId);
@@ -378,35 +384,35 @@ export default function PlanDetailPage() {
         let targetAnchorOnNewNode: 'N' | 'S' | 'E' | 'W' = 'N';
 
         switch(pendingNodeFromDotInfo.sourceAnchor) {
-          case 'N': // Clicked North dot of source, new node goes ABOVE source
+          case 'N': 
             newStepX = sourceNode.x + (sourceNodeWidth / 2) - (NODE_BASE_WIDTH / 2);
             newStepY = sourceNode.y - newNodeApproxHeight - spacing;
             targetAnchorOnNewNode = 'S';
             break;
-          case 'S': // Clicked South dot of source, new node goes BELOW source
+          case 'S': 
             newStepX = sourceNode.x + (sourceNodeWidth / 2) - (NODE_BASE_WIDTH / 2);
             newStepY = sourceNode.y + sourceNodeHeight + spacing;
             targetAnchorOnNewNode = 'N';
             break;
-          case 'E': // Clicked East dot of source, new node goes RIGHT of source
+          case 'E': 
             newStepX = sourceNode.x + sourceNodeWidth + spacing;
             newStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2);
             targetAnchorOnNewNode = 'W';
             break;
-          case 'W': // Clicked West dot of source (from a sub-step), new node goes LEFT of source
+          case 'W': 
             newStepX = sourceNode.x - NODE_BASE_WIDTH - spacing;
             newStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2);
             targetAnchorOnNewNode = 'E';
             break;
         }
         
-        initialIncomingConnection = {
+        initialIncomingConnections.push({
             sourceNodeId: pendingNodeFromDotInfo.sourceStepId,
             targetAnchor: targetAnchorOnNewNode,
             originatingSubStepContext: pendingNodeFromDotInfo.creatingFromSubStepId
                 ? { sourceCardId: pendingNodeFromDotInfo.sourceStepId, subStepId: pendingNodeFromDotInfo.creatingFromSubStepId }
                 : null,
-        };
+        });
       }
     } else if (canvasRef.current) {
         newStepX = canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2;
@@ -423,7 +429,7 @@ export default function PlanDetailPage() {
       x: newStepX,
       y: newStepY,
       subSteps: [],
-      incomingConnections: initialIncomingConnection ? [initialIncomingConnection] : [],
+      incomingConnections: initialIncomingConnections,
     };
 
     setEditableRoadmap(prev => [...prev, newNode]);
@@ -476,7 +482,6 @@ export default function PlanDetailPage() {
        // Reset drag operation, snapping logic is handled in onConnectionDotInteraction's 'up'
     }
     clickStartInfoRef.current = null;
-    // Ensure activeConnectionDragOperation is fully reset if it was dragging and didn't snap
     if (activeConnectionDragOperation.isDragging) {
        setActiveConnectionDragOperation({ isDragging: false, sourceStepId: null, sourceAnchor: null, sourceSubStepOriginContext: null, startX: 0, startY: 0, currentX: 0, currentY: 0 });
     }
@@ -498,22 +503,21 @@ export default function PlanDetailPage() {
   const getSubStepDotAnchorPoint = (parentStep: RoadmapStep, subStepId: string): { x: number, y: number } => {
     const subStepIndex = parentStep.subSteps?.findIndex(ss => ss.id === subStepId) ?? -1;
     if (subStepIndex === -1) {
-      return getAnchorPoint(parentStep, 'W'); // Fallback, should ideally not happen
+      return getAnchorPoint(parentStep, 'W');
     }
-    // Calculate Y position of the sub-step dot relative to parent card's top-left
     const yOffsetWithinCard = NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y / 2 + (subStepIndex * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
     return {
-      x: parentStep.x, // Dot is on the left edge of the parent card
+      x: parentStep.x, 
       y: parentStep.y + yOffsetWithinCard
     };
   };
 
   const handleConnectionDotInteraction = useCallback((
-    sourceStepId: string, // ID of the card where the drag OR click originated
-    sourceAnchor: 'N' | 'S' | 'E' | 'W', // Anchor on the source card OR 'W' if from sub-step
+    parentNodeId: string, // ID of the card where the dot was clicked
+    clickedAnchor: 'N' | 'S' | 'E' | 'W', // Anchor on the parentNode where click/drag originated or targeted
     interactionType: 'down' | 'up',
     event: React.MouseEvent<HTMLElement>,
-    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLSpanElement }
+    subStepOriginContext?: { subStepId: string; subStepTitle: string; dotElement: HTMLElement }
   ) => {
     if (!isOwner || !canvasRef.current) return;
     event.stopPropagation();
@@ -539,11 +543,11 @@ export default function PlanDetailPage() {
     }
 
     if (interactionType === 'down') {
-      clickStartInfoRef.current = { parentStepId: sourceStepId, anchor: sourceAnchor, clientX: event.clientX, clientY: event.clientY, subStepOriginContext };
+      clickStartInfoRef.current = { parentStepId: parentNodeId, anchor: clickedAnchor, clientX: event.clientX, clientY: event.clientY, subStepOriginContext };
       setActiveConnectionDragOperation({
         isDragging: true,
-        sourceStepId: sourceStepId,
-        sourceAnchor: sourceAnchor, // This is the anchor on the SOURCE node/sub-step
+        sourceStepId: parentNodeId,
+        sourceAnchor: clickedAnchor,
         sourceSubStepOriginContext: subStepOriginContext,
         startX: sourceDotX,
         startY: sourceDotY,
@@ -555,32 +559,53 @@ export default function PlanDetailPage() {
         const dy = Math.abs(event.clientY - clickStartInfoRef.current.clientY);
         const isClick = dx < 5 && dy < 5;
 
-        if (isClick) { // Handle dot click for new node creation
+        if (isClick) {
+          const parentNode = editableRoadmap.find(s => s.id === parentNodeId);
+          if (!parentNode) {
+            clickStartInfoRef.current = null;
+            setActiveConnectionDragOperation({ isDragging: false, sourceStepId: null, sourceAnchor: null, sourceSubStepOriginContext: null, startX: 0, startY: 0, currentX: 0, currentY: 0 });
+            return;
+          }
+          
+          // Check if the clicked dot is already a target for an incoming connection
+          const existingConnectionTargetingThisDot = (parentNode.incomingConnections || []).find(
+            conn => conn.targetAnchor === clickedAnchor
+          );
+
+          if (existingConnectionTargetingThisDot) {
+            // If so, set up to delete THIS specific incoming connection
+            setConnectionToDeleteInfo({
+              parentNodeId: parentNodeId,
+              connectionToActuallyDelete: existingConnectionTargetingThisDot,
+            });
+          } else {
+            // If not, it's an empty dot, set up to create a new node from this dot
             setPendingNodeFromDotInfo({
-                sourceStepId: sourceStepId,
-                sourceAnchor: sourceAnchor, // Anchor on the source node where click originated
+                sourceStepId: parentNodeId,
+                sourceAnchor: clickedAnchor,
                 creatingFromSubStepId: subStepOriginContext?.subStepId,
                 creatingFromSubStepTitle: subStepOriginContext?.subStepTitle
             });
             setIsAddStepDialogOpen(true);
-        } else { // Handle drag release for connection
+          }
+        } else { 
             const releaseX = event.clientX - canvasRect.left + canvasRef.current.scrollLeft;
             const releaseY = event.clientY - canvasRect.top + canvasRef.current.scrollTop;
             let snapped = false;
 
             for (const targetStep of editableRoadmap) {
-                if (targetStep.id === activeConnectionDragOperation.sourceStepId) continue; // Cannot connect to self
+                if (targetStep.id === activeConnectionDragOperation.sourceStepId) continue; 
 
                 const targetAnchors: ('N'|'S'|'E'|'W')[] = ['N', 'S', 'E', 'W'];
-                for (const targetAnchor of targetAnchors) { // targetAnchor is the anchor on the TARGET node
+                for (const targetAnchor of targetAnchors) { 
                     const targetDotPos = getAnchorPoint(targetStep, targetAnchor);
                     const dist = Math.sqrt(Math.pow(releaseX - targetDotPos.x, 2) + Math.pow(releaseY - targetDotPos.y, 2));
 
                     if (dist <= SNAP_THRESHOLD) {
-                        const existingConnectionFromThisSource = (targetStep.incomingConnections || []).find(
+                        const alreadyConnectedFromThisSource = (targetStep.incomingConnections || []).some(
                             conn => conn.sourceNodeId === activeConnectionDragOperation.sourceStepId
                         );
-                        if (existingConnectionFromThisSource) {
+                        if (alreadyConnectedFromThisSource) {
                             toast({ variant: "default", title: "Already Connected", description: `Node "${targetStep.title}" is already connected from this source.` });
                             snapped = true;
                             break;
@@ -588,7 +613,7 @@ export default function PlanDetailPage() {
 
                         const newConnection: IncomingConnection = {
                             sourceNodeId: activeConnectionDragOperation.sourceStepId!,
-                            targetAnchor: targetAnchor, // Anchor on the target node
+                            targetAnchor: targetAnchor,
                             originatingSubStepContext: activeConnectionDragOperation.sourceSubStepOriginContext
                                 ? {
                                     sourceCardId: activeConnectionDragOperation.sourceStepId!,
@@ -614,14 +639,13 @@ export default function PlanDetailPage() {
                 if (snapped) break;
             }
         }
-        clickStartInfoRef.current = null; // Reset click start info
-        // Always reset active connection drag operation state after 'up' event
+        clickStartInfoRef.current = null;
         setActiveConnectionDragOperation({ isDragging: false, sourceStepId: null, sourceAnchor: null, sourceSubStepOriginContext: null, startX: 0, startY: 0, currentX: 0, currentY: 0 });
     }
   }, [isOwner, toast, editableRoadmap, activeConnectionDragOperation.isDragging]);
 
   const drawConnectionLines = () => {
-    return editableRoadmap.flatMap(targetStep => { // targetStep is the node receiving the arrow
+    return editableRoadmap.flatMap(targetStep => {
       if (!targetStep.incomingConnections || targetStep.incomingConnections.length === 0) return [];
       
       return targetStep.incomingConnections.map((incomingConn, index) => {
@@ -629,18 +653,19 @@ export default function PlanDetailPage() {
         if (!sourceNode) return null;
 
         let rawStartPoint: { x: number, y: number };
-        // Determine the anchor on the sourceNode (opposite of targetAnchor on targetStep)
         let sourceNodeAnchor: 'N' | 'S' | 'E' | 'W';
-        switch (incomingConn.targetAnchor) {
-            case 'N': sourceNodeAnchor = 'S'; break;
-            case 'S': sourceNodeAnchor = 'N'; break;
-            case 'E': sourceNodeAnchor = 'W'; break;
-            case 'W': sourceNodeAnchor = 'E'; break;
-        }
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
+          sourceNodeAnchor = 'W'; // Sub-steps are on the West
         } else {
+          switch (incomingConn.targetAnchor) {
+              case 'N': sourceNodeAnchor = 'S'; break;
+              case 'S': sourceNodeAnchor = 'N'; break;
+              case 'E': sourceNodeAnchor = 'W'; break;
+              case 'W': sourceNodeAnchor = 'E'; break;
+              default: sourceNodeAnchor = 'S'; // Fallback
+          }
           rawStartPoint = getAnchorPoint(sourceNode, sourceNodeAnchor);
         }
         
@@ -663,15 +688,13 @@ export default function PlanDetailPage() {
             adjStartPoint.y = rawStartPoint.y + uy * START_OFFSET;
             adjEndPoint.x = rawEndPoint.x - ux * END_OFFSET;
             adjEndPoint.y = rawEndPoint.y - uy * END_OFFSET;
-        } else {
-            adjStartPoint = rawStartPoint;
-            adjEndPoint = rawEndPoint;
         }
+        // else: for very short lines, draw directly between raw points, arrow might be obscured.
 
         const pathData = `M ${adjStartPoint.x} ${adjStartPoint.y} L ${adjEndPoint.x} ${adjEndPoint.y}`;
         return (
           <path
-            key={`${incomingConn.sourceNodeId}-${targetStep.id}-${index}`}
+            key={`${incomingConn.sourceNodeId}-${targetStep.id}-${index}-${incomingConn.targetAnchor}`}
             d={pathData}
             stroke={CONNECTION_LINE_COLOR}
             strokeWidth={CONNECTION_LINE_THICKNESS}
@@ -705,8 +728,8 @@ export default function PlanDetailPage() {
   const confirmDeleteStep = useCallback(() => {
     if (!stepToDelete) return;
     setEditableRoadmap(prev => 
-        prev.filter(s => s.id !== stepToDelete.id) // Remove the deleted step
-            .map(s => ({ // For remaining steps, remove incoming connections from the deleted step
+        prev.filter(s => s.id !== stepToDelete.id)
+            .map(s => ({
                 ...s,
                 incomingConnections: (s.incomingConnections || []).filter(
                     conn => conn.sourceNodeId !== stepToDelete.id
@@ -716,6 +739,31 @@ export default function PlanDetailPage() {
     toast({ title: "Step Deleted", description: `"${stepToDelete.title}" removed from plan. Save to persist.`});
     setStepToDelete(null);
   }, [stepToDelete, toast]);
+  
+  const confirmDeleteConnection = useCallback(() => {
+    if (!connectionToDeleteInfo) return;
+
+    setEditableRoadmap(prev =>
+      prev.map(step => {
+        if (step.id === connectionToDeleteInfo.parentNodeId) {
+          return {
+            ...step,
+            incomingConnections: (step.incomingConnections || []).filter(
+              conn =>
+                !(conn.sourceNodeId === connectionToDeleteInfo.connectionToActuallyDelete.sourceNodeId &&
+                  conn.targetAnchor === connectionToDeleteInfo.connectionToActuallyDelete.targetAnchor &&
+                  JSON.stringify(conn.originatingSubStepContext) === JSON.stringify(connectionToDeleteInfo.connectionToActuallyDelete.originatingSubStepContext)
+                )
+            ),
+          };
+        }
+        return step;
+      })
+    );
+    toast({ title: "Connection Removed", description: "The connection line has been deleted. Save your plan to persist changes." });
+    setConnectionToDeleteInfo(null);
+  }, [connectionToDeleteInfo, toast]);
+
 
   if (authLoading || (isLoadingPlan && isValidPlanId)) {
     return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -835,7 +883,7 @@ export default function PlanDetailPage() {
               step={step}
               onNodeMouseDown={handleNodeMouseDown}
               onConnectionDotInteraction={handleConnectionDotInteraction}
-              isSelected={editingStep?.id === step.id || pendingNodeFromDotInfo?.sourceStepId === step.id}
+              isSelected={editingStep?.id === step.id || pendingNodeFromDotInfo?.sourceStepId === step.id || connectionToDeleteInfo?.parentNodeId === step.id}
               isSubmitting={saveRoadmapMutation.isPending}
               onEditStep={handleEditStep}
               onDeleteStep={handleDeleteStep}
@@ -972,6 +1020,26 @@ export default function PlanDetailPage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      <AlertDialog open={!!connectionToDeleteInfo} onOpenChange={(open) => !open && setConnectionToDeleteInfo(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Connection?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to remove the connection to this step
+              {connectionToDeleteInfo?.connectionToActuallyDelete?.sourceNodeId &&
+                ` from "${editableRoadmap.find(s => s.id === connectionToDeleteInfo.connectionToActuallyDelete.sourceNodeId)?.title || 'another step'}"`}
+              ? This action cannot be undone easily.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setConnectionToDeleteInfo(null)} disabled={saveRoadmapMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmDeleteConnection} className="bg-destructive hover:bg-destructive/90" disabled={saveRoadmapMutation.isPending}>
+              {saveRoadmapMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Delete Connection
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
