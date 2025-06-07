@@ -9,12 +9,15 @@ export interface RoadmapSubStep {
 }
 
 export interface IncomingConnection {
+  id: string; // Unique ID for this specific connection instance
   sourceNodeId: string; // ID of the node this connection comes FROM
   targetAnchor: 'N' | 'S' | 'E' | 'W'; // Anchor point on THIS (target) node where the line connects
   originatingSubStepContext?: { // If the connection started from a sub-step on the sourceNode
     sourceCardId: string; // This should be the same as sourceNodeId in this context
     subStepId: string;
   } | null;
+  lineType?: 'straight' | 'curved' | 'acute'; // Default to 'straight' if undefined
+  label?: string; // Optional text label for the connection line
 }
 
 export interface RoadmapStep {
