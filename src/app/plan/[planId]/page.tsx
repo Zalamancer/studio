@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -23,6 +22,7 @@ import {
   MessageSquare as LineLabelIcon,
   MinusCircle,
   History,
+  RefreshCcw, // Icon for Restore
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -37,7 +37,7 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-import { getPlanById, updatePlanRoadmap, getPlanVersions } from '@/services/planService';
+import { getPlanById, updatePlanRoadmap, getPlanVersions, restorePlanToVersion } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep, UpdatePlanRoadmapData, IncomingConnection, ClientPlanVersion } from '@/types/plan';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
@@ -57,7 +57,7 @@ const NODE_BASE_MIN_HEIGHT = 100;
 const NODE_HEADER_HEIGHT = 40;
 const SUBSTEP_ITEM_HEIGHT = 24;
 const NODE_CONTENT_PADDING_Y = 16;
-const FINAL_BUFFER_CARD_HEIGHT = 8; // Reduced from 16
+const FINAL_BUFFER_CARD_HEIGHT = 8;
 
 const DOT_SIZE = 12;
 const SUB_STEP_DOT_VISUAL_DIAMETER = 8;
@@ -67,7 +67,7 @@ const MAIN_STEP_DOT_VISUAL_RADIUS = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
 
 const DOT_OFFSET = -DOT_SIZE / 2;
 const SNAP_THRESHOLD = 25;
-const CONNECTION_LINE_COLOR = "hsl(var(--foreground))"; // Defined
+const CONNECTION_LINE_COLOR = "hsl(var(--foreground))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
 const CONNECTION_LINE_THICKNESS_MAIN = 3;
@@ -145,7 +145,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         className={cn(
           "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center",
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          isSubStepDot ? "active:scale-125" : "shadow-sm active:scale-110" // Main dots always have shadow
+          isSubStepDot ? "active:scale-125" : "shadow-sm active:scale-110"
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -178,7 +178,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     >
       <div className="p-2 border-b border-border flex items-center justify-between cursor-move bg-muted/30 rounded-t-lg h-[40px]">
         <h3 className="text-sm font-semibold truncate" title={step.title}>{step.title}</h3>
-        {/* DropdownMenu removed from here */}
       </div>
       <div className="p-2 text-xs text-muted-foreground flex-grow min-h-0">
         {step.description && (<p className="whitespace-pre-wrap line-clamp-3 mb-1.5">{step.description}</p>)}
@@ -249,7 +248,7 @@ export default function PlanDetailPage() {
 
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
   const [editingSubStep, setEditingSubStep] = useState<RoadmapSubStep | null>(null);
-  const [currentSubStepTitleEdit, setCurrentSubStepTitleEdit] = useState<string>(""); // For sub-step title input
+  const [currentSubStepTitleEdit, setCurrentSubStepTitleEdit] = useState<string>("");
 
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
   const [isEditingNodeTitle, setIsEditingNodeTitle] = useState(false);
@@ -271,6 +270,9 @@ export default function PlanDetailPage() {
   const [activeConnectionLinePreview, setActiveConnectionLinePreview] = useState<{startX: number, startY: number, currentX: number, currentY: number, isFromSubStep: boolean} | null>(null);
 
   const [isVersionHistorySheetOpen, setIsVersionHistorySheetOpen] = useState(false);
+  const [versionToRestore, setVersionToRestore] = useState<ClientPlanVersion | null>(null);
+  const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
+
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
@@ -290,6 +292,23 @@ export default function PlanDetailPage() {
     mutationFn: (payload: { planId: string; currentUserId: string; roadmap: RoadmapStep[] }) => updatePlanRoadmap(payload.planId, payload.currentUserId, payload.roadmap),
     onSuccess: () => { toast({ title: "Plan State Saved", description: "The current plan state has been saved." }); if (planId) queryClient.invalidateQueries({ queryKey: ['plan', planId] }); queryClient.invalidateQueries({queryKey: ['planVersions', planId]}); },
     onError: (error: Error) => { toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan." }); }
+  });
+
+  const restorePlanMutation = useMutation({
+    mutationFn: (payload: { planId: string; versionIdToRestore: string; currentUserId: string; }) =>
+      restorePlanToVersion(payload.planId, payload.versionIdToRestore, payload.currentUserId),
+    onSuccess: () => {
+      toast({ title: "Plan Restored", description: "The plan has been restored to the selected version." });
+      queryClient.invalidateQueries({ queryKey: ['plan', planId] });
+      queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
+      setIsRestoreConfirmOpen(false);
+      setVersionToRestore(null);
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Restore Failed", description: error.message || "Could not restore plan." });
+      setIsRestoreConfirmOpen(false);
+      setVersionToRestore(null);
+    },
   });
 
   useEffect(() => {
@@ -352,18 +371,18 @@ export default function PlanDetailPage() {
 
   const handleEditStep = useCallback((stepToEdit: RoadmapStep) => {
     setEditingStep(stepToEdit);
-    setEditingSubStep(null); // Ensure we are in main step view
-    setCurrentSubStepTitleEdit(""); // Clear any lingering sub-step edit
+    setEditingSubStep(null);
+    setCurrentSubStepTitleEdit("");
     setIsStepDetailSheetOpen(true);
-    setIsEditingNodeTitle(false); // Reset inline edit states
+    setIsEditingNodeTitle(false);
     setIsEditingNodeDescription(false);
   }, []);
 
   const handleEditSubStep = useCallback((subStepToEdit: RoadmapSubStep, parentStep: RoadmapStep) => {
-    setEditingStep(parentStep); // Parent is needed for context
+    setEditingStep(parentStep);
     setEditingSubStep(subStepToEdit);
-    setCurrentSubStepTitleEdit(subStepToEdit.title); // Populate input for sub-step
-    setIsStepDetailSheetOpen(true); // Open/ensure sheet is open
+    setCurrentSubStepTitleEdit(subStepToEdit.title);
+    setIsStepDetailSheetOpen(true);
   }, []);
 
   const handleAddRoadmapStepSubmit = useCallback((data: AddRoadmapStepFormData) => {
@@ -434,7 +453,7 @@ export default function PlanDetailPage() {
     };
     setEditableRoadmap(prev => prev.map(s => s.id === editingStep.id ? updatedParentStep : s));
     setEditingStep(updatedParentStep);
-    setEditingSubStep(null); // Go back to parent view
+    setEditingSubStep(null);
     setCurrentSubStepTitleEdit("");
     toast({ title: "Sub-step Saved", description: `Changes to sub-step saved. Remember to save the plan.` });
   }, [editingStep, editingSubStep, currentSubStepTitleEdit, canEditPlan, toast]);
@@ -452,11 +471,11 @@ export default function PlanDetailPage() {
     if (updatedParentStep) {
       const newParent = { ...updatedParentStep, subSteps: (updatedParentStep.subSteps || []).filter(ss => ss.id !== subStep.id) };
       setEditableRoadmap(prev => prev.map(s => s.id === parentStepId ? newParent : s));
-      setEditingStep(newParent); // Update editingStep if it's the parent
+      setEditingStep(newParent);
     }
     toast({ title: "Sub-step Deleted", description: `Sub-step "${subStep.title}" removed. Remember to save the plan.` });
     setSubStepToDelete(null);
-    setEditingSubStep(null); // Return to parent view
+    setEditingSubStep(null);
   }, [subStepToDelete, canEditPlan, toast, editableRoadmap]);
 
 
@@ -655,7 +674,7 @@ export default function PlanDetailPage() {
 
   useEffect(() => {
     if (!isStepDetailSheetOpen) {
-      setEditingStep(null); // Also clear main editing step when sheet closes
+      setEditingStep(null);
       setEditingSubStep(null);
       setIsEditingNodeTitle(false);
       setIsEditingNodeDescription(false);
@@ -679,14 +698,14 @@ export default function PlanDetailPage() {
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
-          sourceVisualAnchor = 'W'; // Sub-steps always connect from West for now
+          sourceVisualAnchor = 'W';
           sourceVisualRadius = SUB_STEP_DOT_VISUAL_RADIUS;
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
         } else {
           const tempRawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
           let bestAnchor: 'N' | 'S' | 'E' | 'W' = 'S';
           let minDistanceSq = Infinity;
-          const availableSourceAnchors: ('N'|'S'|'E'|'W')[] = (sourceNode.subSteps && sourceNode.subSteps.length > 0) ? ['N', 'S', 'E'] : ['N', 'S', 'E', 'W']; // Allow West for nodes without sub-steps
+          const availableSourceAnchors: ('N'|'S'|'E'|'W')[] = (sourceNode.subSteps && sourceNode.subSteps.length > 0) ? ['N', 'S', 'E'] : ['N', 'S', 'E', 'W'];
           availableSourceAnchors.forEach(anchor => {
             const tempRawStart = getAnchorPoint(sourceNode, anchor);
             const distSq = Math.pow(tempRawEndPoint.x - tempRawStart.x, 2) + Math.pow(tempRawEndPoint.y - tempRawStart.y, 2);
@@ -700,7 +719,7 @@ export default function PlanDetailPage() {
 
         const rawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
         const targetVisualAnchor = incomingConn.targetAnchor;
-        const targetVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS; // Target dots are always main step dots
+        const targetVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS;
 
         const sourceAxisVec = getAnchorAxisVector(sourceVisualAnchor);
         const targetAxisVec = getAnchorAxisVector(targetVisualAnchor);
@@ -751,6 +770,22 @@ export default function PlanDetailPage() {
       });
     }).filter(path => path !== null);
   };
+
+  const handleRestoreVersion = (version: ClientPlanVersion) => {
+    setVersionToRestore(version);
+    setIsRestoreConfirmOpen(true);
+  };
+
+  const confirmRestore = () => {
+    if (versionToRestore && user && planId) {
+      restorePlanMutation.mutate({
+        planId,
+        versionIdToRestore: versionToRestore.id,
+        currentUserId: user.uid,
+      });
+    }
+  };
+
 
   if (authLoading || (isLoadingPlan && isValidPlanId)) { return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>; }
   if (!planId || !isValidPlanId) { return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Invalid Plan ID</h1><p className="text-muted-foreground">The plan identifier in the URL is not valid.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>); }
@@ -813,11 +848,11 @@ export default function PlanDetailPage() {
               <ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
                 <div>
                     <Label htmlFor="sheet-substep-title">Sub-step Title</Label>
-                    <Input 
-                        id="sheet-substep-title" 
-                        value={currentSubStepTitleEdit} 
-                        onChange={(e) => setCurrentSubStepTitleEdit(e.target.value)} 
-                        disabled={!canEditPlan || saveRoadmapMutation.isPending} 
+                    <Input
+                        id="sheet-substep-title"
+                        value={currentSubStepTitleEdit}
+                        onChange={(e) => setCurrentSubStepTitleEdit(e.target.value)}
+                        disabled={!canEditPlan || saveRoadmapMutation.isPending}
                     />
                 </div>
               </div></ScrollArea>
@@ -871,16 +906,16 @@ export default function PlanDetailPage() {
       <AlertDialog open={!!stepToDelete} onOpenChange={(open) => !open && setStepToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Step: "{stepToDelete?.title}"?</AlertDialogTitle><AlertDialogDescription>This will remove the step and any connections to or from it. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setStepToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteStep} className="bg-destructive hover:bg-destructive/90" disabled={!canEditPlan}>Delete Step</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <AlertDialog open={!!subStepToDelete} onOpenChange={(open) => !open && setSubStepToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Sub-step: "{subStepToDelete?.subStep.title}"?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setSubStepToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteSubStep} className="bg-destructive hover:bg-destructive/90" disabled={!canEditPlan}>Delete Sub-step</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <AlertDialog open={isLineEditLabelAlertOpen} onOpenChange={setIsLineEditLabelAlertOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Edit Line Label</AlertDialogTitle><AlertDialogDescription>Enter a label for this connection (or leave empty to remove an existing label).</AlertDialogDescription></AlertDialogHeader><div className="py-2"><Label htmlFor="line-label-input" className="sr-only">Line Label</Label><Input id="line-label-input" ref={lineLabelInputRef} value={currentLineEditLabel} onChange={(e) => setCurrentLineEditLabel(e.target.value)} placeholder="E.g., Depends on, Blocks, etc." autoFocus /></div><AlertDialogFooter><AlertDialogCancel onClick={() => { setIsLineEditLabelAlertOpen(false); setCurrentLineEditLabel(""); setLineContextMenu(null); }}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleConfirmSetLineLabel} disabled={!canEditPlan}>Set Label</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      
+
       <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen}>
         <SheetContent className="sm:max-w-lg w-[90vw]" side="left">
           <SheetHeader className="border-b pb-4">
-            <SheetTitle>Plan Version History</SheetTitle>
+            <SheetTitle>Plan Version History (v{planData?.version || 1})</SheetTitle>
             <SheetDescription>
-              Review past versions of this plan. Reverting is not yet available.
+              Review past versions of this plan. You can restore to a previous version.
             </SheetDescription>
           </SheetHeader>
-          <ScrollArea className="h-[calc(100%-80px)]"> {/* Adjust height as needed */}
+          <ScrollArea className="h-[calc(100%-100px)]"> {/* Adjusted height */}
             <div className="p-4 space-y-3">
               {isLoadingVersions && (
                 <div className="flex justify-center items-center py-6">
@@ -898,20 +933,34 @@ export default function PlanDetailPage() {
                   No version history found for this plan yet.
                 </p>
               )}
-              {!isLoadingVersions && !versionsError && planVersions.map(version => (
-                <div key={version.id} className="p-3 border rounded-md bg-muted/30 hover:bg-muted/40 transition-colors">
-                  <p className="text-sm font-medium">
-                    Version {version.versionNumber || "(Legacy)"}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Saved by: <span className="font-semibold text-foreground">{version.editorDisplayName || version.editorUid}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}
-                  </p>
-                  {/* Placeholder for future 'Revert' or 'View' button */}
-                </div>
-              ))}
+              {!isLoadingVersions && !versionsError && planVersions.map(version => {
+                const isCurrentActiveVersion = version.versionNumber === planData?.version;
+                return (
+                  <div key={version.id} className={cn("p-3 border rounded-md bg-muted/30 hover:bg-muted/40 transition-colors flex justify-between items-center", isCurrentActiveVersion && "border-primary ring-1 ring-primary")}>
+                    <div>
+                      <p className="text-sm font-medium">
+                        Version {version.versionNumber || "(Legacy)"} {isCurrentActiveVersion && <Badge variant="secondary" className="ml-2 text-xs">Current</Badge>}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Saved by: <span className="font-semibold text-foreground">{version.editorDisplayName || version.editorUid}</span>
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => handleRestoreVersion(version)}
+                      disabled={isCurrentActiveVersion || restorePlanMutation.isPending}
+                      title={isCurrentActiveVersion ? "This is the current version" : `Restore to version ${version.versionNumber || 'this version'}`}
+                    >
+                      <RefreshCcw className="h-3.5 w-3.5 mr-1.5" /> Restore
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           </ScrollArea>
           <SheetFooter className="border-t pt-4 p-4">
@@ -921,8 +970,27 @@ export default function PlanDetailPage() {
           </SheetFooter>
         </SheetContent>
       </Sheet>
+
+      <AlertDialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Restore to Version {versionToRestore?.versionNumber || 'this version'}?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to restore the plan to the state it was in at{' '}
+              {versionToRestore ? format(new Date(versionToRestore.timestamp), "MMM d, yyyy, h:mm a") : 'this version'}?
+              The current state of the roadmap will be saved as a new version before restoring.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => { setIsRestoreConfirmOpen(false); setVersionToRestore(null); }} disabled={restorePlanMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRestore} disabled={restorePlanMutation.isPending} className="bg-primary hover:bg-primary/90">
+              {restorePlanMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Confirm Restore
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
     </div>
   );
 }
-
-    

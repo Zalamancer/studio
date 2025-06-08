@@ -1,3 +1,4 @@
+
 // src/services/planService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -16,7 +17,7 @@ import {
   writeBatch, // Import writeBatch
   increment, // Import increment
 } from 'firebase/firestore';
-import type { Plan, NewPlanData, ClientPlan, RoadmapStep, UpdatePlanRoadmapData, PlanVersionData, ClientPlanVersion, IncomingConnection } from '@/types/plan'; // Added PlanVersionData, ClientPlanVersion
+import type { Plan, NewPlanData, ClientPlan, RoadmapStep, UpdatePlanRoadmapData, PlanVersionData, ClientPlanVersion, IncomingConnection } from '@/types/plan';
 import { fetchUserProfileBasic } from './connectionService'; // For fetching editor display name
 
 const PLANS_COLLECTION = 'plans';
@@ -135,7 +136,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
             sourceNodeId: conn.sourceNodeId || '',
             targetAnchor: conn.targetAnchor || 'N',
             lineType: conn.lineType || 'straight',
-            label: conn.label || null, // Ensure null for empty labels
+            label: conn.label || null,
             originatingSubStepContext: conn.originatingSubStepContext || null,
           })),
         })),
@@ -157,14 +158,9 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
 
 export const updatePlanRoadmap = async (planId: string, currentUserId: string, updatedRoadmap: RoadmapStep[]): Promise<void> => {
   const user = auth.currentUser;
-  // IMPORTANT: This check is changed to allow any authenticated user to save.
-  // Ensure your Firestore security rules for `plans/{planId}` `update` operation
-  // are changed from `request.auth.uid == resource.data.ownerId` to `request.auth != null` (plus other field validations).
   if (!user) {
     throw new Error("User not authenticated. Cannot update plan.");
   }
-  // The currentUserId param is now used for `editorUid` in the version history.
-  // The check against ownerId for permission to save is removed here, relying on security rules.
 
   if (!planId) {
     throw new Error("Plan ID is required to update roadmap.");
@@ -178,7 +174,6 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
   try {
     const batch = writeBatch(db);
 
-    // 1. Get current plan to save its roadmap as a version
     const currentPlanSnap = await getDoc(planDocRef);
     if (!currentPlanSnap.exists()) {
       throw new Error(`Plan with ID ${planId} not found.`);
@@ -186,19 +181,17 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
     const currentPlanData = currentPlanSnap.data() as Plan;
     const currentVersionNumber = currentPlanData.version || 1;
 
-    // 2. Create new version document
-    const newVersionDocRef = doc(versionsCollectionRef); // Auto-generate ID
+    const newVersionDocRef = doc(versionsCollectionRef);
     const versionData: PlanVersionData = {
       planId: planId,
-      roadmap: currentPlanData.roadmap || [], // Save the roadmap *before* this update
+      roadmap: currentPlanData.roadmap || [],
       editorUid: currentUserId,
       timestamp: serverTimestamp() as FieldValue,
-      versionNumber: currentVersionNumber, // Store the version number this history entry represents
+      versionNumber: currentVersionNumber,
     };
     batch.set(newVersionDocRef, versionData);
     console.log(`[planService] Version (v${currentVersionNumber}) of plan ${planId} prepared for saving by user ${currentUserId}.`);
 
-    // 3. Sanitize and prepare the new roadmap for the main plan document
     const sanitizedRoadmap = updatedRoadmap.map(step => {
       const sanitizedSubSteps = (step.subSteps || []).map(subStep => ({
         id: typeof subStep.id === 'string' && subStep.id.trim() !== '' ? subStep.id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -235,16 +228,14 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
       };
     });
 
-    // 4. Update the main plan document with the new roadmap and incremented version
     const dataToUpdateMainPlan: UpdatePlanRoadmapData = {
       roadmap: sanitizedRoadmap,
       updatedAt: serverTimestamp() as FieldValue,
-      version: increment(1) as FieldValue, // Increment version number
+      version: increment(1) as FieldValue,
     };
     batch.update(planDocRef, dataToUpdateMainPlan);
     console.log(`[planService] Main plan ${planId} prepared for update to new version (v${currentVersionNumber + 1}).`);
 
-    // Commit the batch
     await batch.commit();
     console.log(`[planService] Roadmap for plan ${planId} and its version history updated successfully.`);
 
@@ -257,7 +248,6 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
     throw new Error(error.message || "Could not update plan roadmap.");
   }
 };
-
 
 export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
   console.log(`[planService] getRecentPlans: Fetching ${count} recent plans.`);
@@ -291,7 +281,7 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
             sourceNodeId: conn.sourceNodeId || '',
             targetAnchor: conn.targetAnchor || 'N',
             lineType: conn.lineType || 'straight',
-            label: conn.label || null, // Ensure null for empty
+            label: conn.label || null,
             originatingSubStepContext: conn.originatingSubStepContext || null,
           })),
         })),
@@ -313,7 +303,6 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
   }
 };
 
-// New function to fetch plan versions
 export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion[]> => {
   if (!planId) {
     console.warn("[planService] getPlanVersions: No planId provided.");
@@ -325,11 +314,11 @@ export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion
     const q = query(versionsRef, orderBy('timestamp', 'desc'), limit(50));
     const querySnapshot = await getDocs(q);
     const versionsPromises = querySnapshot.docs.map(async (docSnap) => {
-      const data = docSnap.data() as PlanVersionData & { timestamp: Timestamp }; // Add Timestamp type for data.timestamp
-      let editorDisplayName = data.editorUid; // Default to UID
+      const data = docSnap.data() as PlanVersionData & { timestamp: Timestamp };
+      let editorDisplayName = data.editorUid;
       if (data.editorUid) {
         const profile = await fetchUserProfileBasic(data.editorUid);
-        editorDisplayName = profile?.displayName || data.editorUid; // Use fetched name or fallback to UID
+        editorDisplayName = profile?.displayName || data.editorUid;
       }
       return {
         id: docSnap.id,
@@ -337,7 +326,7 @@ export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion
         roadmap: data.roadmap || [],
         editorUid: data.editorUid,
         editorDisplayName: editorDisplayName,
-        timestamp: data.timestamp.toMillis(), // Convert Firestore Timestamp to number
+        timestamp: data.timestamp.toMillis(),
         versionNumber: data.versionNumber,
       } as ClientPlanVersion;
     });
@@ -353,5 +342,79 @@ export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion
       throw new Error("Firestore query requires an index for plan versions. Please create it (e.g., on 'timestamp' desc).");
     }
     throw new Error(error.message || "Could not fetch plan versions.");
+  }
+};
+
+export const restorePlanToVersion = async (planId: string, versionIdToRestore: string, currentUserId: string): Promise<void> => {
+  const user = auth.currentUser;
+  if (!user) {
+    throw new Error("User not authenticated. Cannot restore plan.");
+  }
+  if (user.uid !== currentUserId) { // Ensure the action is performed by the currently logged-in user
+    throw new Error("Authenticated user mismatch. Cannot restore plan.");
+  }
+  if (!planId || !versionIdToRestore) {
+    throw new Error("Plan ID and Version ID are required to restore.");
+  }
+
+  console.log(`[planService] restorePlanToVersion: Restoring plan ${planId} to version ${versionIdToRestore} by user ${currentUserId}`);
+
+  const planDocRef = doc(plansCollectionRef, planId);
+  const versionToRestoreDocRef = doc(db, PLANS_COLLECTION, planId, 'versions', versionIdToRestore);
+  const newVersionHistoryCollectionRef = collection(db, PLANS_COLLECTION, planId, 'versions');
+
+  try {
+    const batch = writeBatch(db);
+
+    // 1. Get the current plan and the version to restore
+    const [currentPlanSnap, versionToRestoreSnap] = await Promise.all([
+      getDoc(planDocRef),
+      getDoc(versionToRestoreDocRef),
+    ]);
+
+    if (!currentPlanSnap.exists()) {
+      throw new Error(`Plan with ID ${planId} not found.`);
+    }
+    if (!versionToRestoreSnap.exists()) {
+      throw new Error(`Version with ID ${versionIdToRestore} not found for plan ${planId}.`);
+    }
+
+    const currentPlanData = currentPlanSnap.data() as Plan;
+    const versionToRestoreData = versionToRestoreSnap.data() as PlanVersionData;
+    const currentPlanVersionNumber = currentPlanData.version || 1;
+
+    // 2. Create a new version document for the *current* state before restoring
+    const newHistoryVersionDocRef = doc(newVersionHistoryCollectionRef); // Auto-generate ID
+    const currentSnapshotVersionData: PlanVersionData = {
+      planId: planId,
+      roadmap: currentPlanData.roadmap || [], // Current roadmap being overwritten
+      editorUid: currentUserId, // User performing the restore action
+      timestamp: serverTimestamp() as FieldValue,
+      versionNumber: currentPlanVersionNumber, // The version number *before* incrementing due to restore
+    };
+    batch.set(newHistoryVersionDocRef, currentSnapshotVersionData);
+    console.log(`[planService] Saved current state (v${currentPlanVersionNumber}) of plan ${planId} as new history entry by ${currentUserId}.`);
+
+    // 3. Update the main plan document with the roadmap from the historical version
+    //    and increment the main plan's version number.
+    const mainPlanUpdateData = {
+      roadmap: versionToRestoreData.roadmap || [],
+      updatedAt: serverTimestamp() as FieldValue,
+      version: increment(1) as FieldValue, // Increment version for this restoration action
+    };
+    batch.update(planDocRef, mainPlanUpdateData);
+    console.log(`[planService] Main plan ${planId} updated to roadmap from version ${versionIdToRestore}. New plan version will be v${currentPlanVersionNumber + 1}.`);
+
+    // Commit the batch
+    await batch.commit();
+    console.log(`[planService] Plan ${planId} successfully restored to version ${versionIdToRestore}.`);
+
+  } catch (error: any) {
+    console.error(`[planService] Error restoring plan ${planId} to version ${versionIdToRestore}:`, error);
+    if (error.code === 'permission-denied') {
+      console.error("Firestore permission denied. Ensure rules allow 'update' on 'plans/{planId}' and 'create' on 'plans/{planId}/versions/{newVersionId}'.");
+      throw new Error('Permission denied restoring plan. Check Firestore rules.');
+    }
+    throw new Error(error.message || "Could not restore plan.");
   }
 };
