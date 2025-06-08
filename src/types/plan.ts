@@ -1,11 +1,14 @@
+
 // src/types/plan.ts
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
 export interface RoadmapSubStep {
   id: string;
-  parentId: string; // ID of the main step it belongs to
+  parentId: string; // ID of the main step or parent sub-step it belongs to
   title: string;
-  // Potentially add: description, status, assignee, dates, etc.
+  description?: string | null; // Added description for sub-steps
+  subSteps?: RoadmapSubStep[]; // Added to allow recursive sub-steps
+  // Potentially add: status, assignee, dates, etc.
 }
 
 export interface IncomingConnection {
@@ -85,3 +88,4 @@ export interface ClientPlanVersion {
   timestamp: number; // Milliseconds since epoch
   versionNumber?: number;
 }
+
