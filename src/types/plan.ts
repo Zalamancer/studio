@@ -17,7 +17,7 @@ export interface IncomingConnection {
     subStepId: string;
   } | null;
   lineType?: 'straight' | 'curved' | 'acute'; // Default to 'straight' if undefined
-  label?: string; // Optional text label for the connection line
+  label?: string | null; // Optional text label for the connection line, use null for DB
 }
 
 export interface RoadmapStep {
@@ -42,9 +42,10 @@ export interface Plan {
   createdAt: Timestamp;
   updatedAt: Timestamp;
   roadmap?: RoadmapStep[];
+  version?: number; // Optional: for simple numeric versioning
 }
 
-export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'roadmap'> {
+export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'roadmap' | 'version'> {
   createdAt?: FieldValue;
   updatedAt?: FieldValue;
   roadmap?: RoadmapStep[];
@@ -54,6 +55,7 @@ export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt'
 export interface UpdatePlanRoadmapData {
   roadmap: RoadmapStep[];
   updatedAt: FieldValue;
+  version?: FieldValue; // For incrementing version
 }
 
 
@@ -62,4 +64,24 @@ export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
   createdAt: number; // Milliseconds since epoch
   updatedAt: number; // Milliseconds since epoch
   roadmap?: RoadmapStep[];
+  version?: number;
+}
+
+// For storing versions of a plan's roadmap
+export interface PlanVersionData { // Data to store for a new version, ID is auto-generated
+  planId: string;
+  roadmap: RoadmapStep[];
+  editorUid: string;
+  timestamp: FieldValue;
+  versionNumber?: number; // Optional: if you also update a version number on the main plan
+}
+
+export interface ClientPlanVersion {
+  id: string; // Firestore document ID of the version
+  planId: string;
+  roadmap: RoadmapStep[];
+  editorUid: string;
+  editorDisplayName?: string; // To be fetched separately
+  timestamp: number; // Milliseconds since epoch
+  versionNumber?: number;
 }

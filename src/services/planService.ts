@@ -1,4 +1,3 @@
-
 // src/services/planService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -14,8 +13,11 @@ import {
   Timestamp,
   type FieldValue,
   updateDoc,
+  writeBatch, // Import writeBatch
+  increment, // Import increment
 } from 'firebase/firestore';
-import type { Plan, NewPlanData, ClientPlan, RoadmapStep, RoadmapSubStep, UpdatePlanRoadmapData, IncomingConnection } from '@/types/plan';
+import type { Plan, NewPlanData, ClientPlan, RoadmapStep, UpdatePlanRoadmapData, PlanVersionData, ClientPlanVersion, IncomingConnection } from '@/types/plan'; // Added PlanVersionData, ClientPlanVersion
+import { fetchUserProfileBasic } from './connectionService'; // For fetching editor display name
 
 const PLANS_COLLECTION = 'plans';
 const plansCollectionRef = collection(db, PLANS_COLLECTION);
@@ -31,7 +33,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
 
   console.log(`[planService] createPlan: Called by UID ${user.uid} with data:`, JSON.stringify(planData, null, 2));
 
-  const dataToSave: Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'roadmap'> & { createdAt: FieldValue, updatedAt: FieldValue, roadmap?: RoadmapStep[] } = {
+  const dataToSave: Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'roadmap' | 'version'> & { createdAt: FieldValue, updatedAt: FieldValue, roadmap?: RoadmapStep[], version: number } = {
     name: planData.name,
     ownerId: planData.ownerId,
     sector: planData.sector,
@@ -40,6 +42,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     naicsCode: planData.naicsCode || null,
     createdAt: serverTimestamp() as FieldValue,
     updatedAt: serverTimestamp() as FieldValue,
+    version: 1, // Initial version
     roadmap: (planData.roadmap || []).map(step => {
       const sanitizedSubSteps = (step.subSteps || []).map(sub => ({
         id: typeof sub.id === 'string' && sub.id.trim() !== '' ? sub.id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -52,7 +55,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
             sourceNodeId: typeof conn.sourceNodeId === 'string' ? conn.sourceNodeId : "",
             targetAnchor: conn.targetAnchor || 'N',
             lineType: conn.lineType || 'straight',
-            label: (typeof conn.label === 'string' && conn.label.trim() !== "") ? conn.label.trim() : null, // Changed undefined to null
+            label: (typeof conn.label === 'string' && conn.label.trim() !== "") ? conn.label.trim() : null,
         };
         if (conn.originatingSubStepContext && conn.originatingSubStepContext.sourceCardId && conn.originatingSubStepContext.subStepId) {
             finalConnection.originatingSubStepContext = {
@@ -118,12 +121,13 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
+        version: data.version || 1,
         roadmap: (data.roadmap || []).map(step => ({
           ...step,
-          description: step.description || null, 
+          description: step.description || null,
           subSteps: (step.subSteps || []).map(sub => ({
             ...sub,
-            title: sub.title || "", 
+            title: sub.title || "",
           })),
           incomingConnections: (step.incomingConnections || []).map(conn => ({
             ...conn,
@@ -131,7 +135,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
             sourceNodeId: conn.sourceNodeId || '',
             targetAnchor: conn.targetAnchor || 'N',
             lineType: conn.lineType || 'straight',
-            label: conn.label || undefined, // This is fine for client side, as undefined means no label
+            label: conn.label || null, // Ensure null for empty labels
             originatingSubStepContext: conn.originatingSubStepContext || null,
           })),
         })),
@@ -151,78 +155,109 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
   }
 };
 
-export const updatePlanRoadmap = async (planId: string, ownerId: string, updatedRoadmap: RoadmapStep[]): Promise<void> => {
+export const updatePlanRoadmap = async (planId: string, currentUserId: string, updatedRoadmap: RoadmapStep[]): Promise<void> => {
   const user = auth.currentUser;
+  // IMPORTANT: This check is changed to allow any authenticated user to save.
+  // Ensure your Firestore security rules for `plans/{planId}` `update` operation
+  // are changed from `request.auth.uid == resource.data.ownerId` to `request.auth != null` (plus other field validations).
   if (!user) {
     throw new Error("User not authenticated. Cannot update plan.");
   }
-  if (user.uid !== ownerId) {
-    throw new Error("Authenticated user does not match plan ownerId. Cannot update.");
-  }
+  // The currentUserId param is now used for `editorUid` in the version history.
+  // The check against ownerId for permission to save is removed here, relying on security rules.
+
   if (!planId) {
     throw new Error("Plan ID is required to update roadmap.");
   }
 
-  console.log(`[planService] updatePlanRoadmap: Updating roadmap for plan ID: ${planId} by owner ${ownerId}`);
-  
-  const sanitizedRoadmap = updatedRoadmap.map(step => {
-    const sanitizedSubSteps = (step.subSteps || []).map(subStep => ({
-      id: typeof subStep.id === 'string' && subStep.id.trim() !== '' ? subStep.id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      parentId: typeof subStep.parentId === 'string' && subStep.parentId.trim() !== '' ? subStep.parentId : (step.id || ""),
-      title: typeof subStep.title === 'string' ? subStep.title : "",
-    }));
-
-    const sanitizedConnections = (step.incomingConnections || []).map(conn => {
-      const finalConnection: IncomingConnection = {
-          id: typeof conn.id === 'string' && conn.id.trim() !== '' ? conn.id : `conn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-          sourceNodeId: typeof conn.sourceNodeId === 'string' ? conn.sourceNodeId : "",
-          targetAnchor: conn.targetAnchor || 'N',
-          lineType: conn.lineType || 'straight',
-          label: (typeof conn.label === 'string' && conn.label.trim() !== "") ? conn.label.trim() : null, // Changed undefined to null
-      };
-      if (conn.originatingSubStepContext && conn.originatingSubStepContext.sourceCardId && conn.originatingSubStepContext.subStepId) {
-          finalConnection.originatingSubStepContext = {
-              sourceCardId: conn.originatingSubStepContext.sourceCardId,
-              subStepId: conn.originatingSubStepContext.subStepId,
-          };
-      } else {
-          finalConnection.originatingSubStepContext = null;
-      }
-      return finalConnection;
-    }).filter(conn => conn.sourceNodeId.trim() !== "");
-
-    const finalStep: RoadmapStep = {
-      id: typeof step.id === 'string' && step.id.trim() !== '' ? step.id : `step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
-      title: typeof step.title === 'string' ? step.title : "",
-      x: typeof step.x === 'number' ? step.x : 0,
-      y: typeof step.y === 'number' ? step.y : 0,
-      description: (typeof step.description === 'string' && step.description.trim() !== '') ? step.description.trim() : null,
-      subSteps: sanitizedSubSteps,
-      incomingConnections: sanitizedConnections,
-    };
-    
-    return finalStep;
-  });
-
-  const dataToUpdate: UpdatePlanRoadmapData = {
-    roadmap: sanitizedRoadmap,
-    updatedAt: serverTimestamp() as FieldValue,
-  };
+  console.log(`[planService] updatePlanRoadmap: Updating roadmap for plan ID: ${planId} by user ${currentUserId}`);
 
   const planDocRef = doc(plansCollectionRef, planId);
+  const versionsCollectionRef = collection(db, PLANS_COLLECTION, planId, 'versions');
 
   try {
-    await updateDoc(planDocRef, dataToUpdate);
-    console.log(`[planService] Roadmap for plan ${planId} updated successfully.`);
+    const batch = writeBatch(db);
+
+    // 1. Get current plan to save its roadmap as a version
+    const currentPlanSnap = await getDoc(planDocRef);
+    if (!currentPlanSnap.exists()) {
+      throw new Error(`Plan with ID ${planId} not found.`);
+    }
+    const currentPlanData = currentPlanSnap.data() as Plan;
+    const currentVersionNumber = currentPlanData.version || 1;
+
+    // 2. Create new version document
+    const newVersionDocRef = doc(versionsCollectionRef); // Auto-generate ID
+    const versionData: PlanVersionData = {
+      planId: planId,
+      roadmap: currentPlanData.roadmap || [], // Save the roadmap *before* this update
+      editorUid: currentUserId,
+      timestamp: serverTimestamp() as FieldValue,
+      versionNumber: currentVersionNumber, // Store the version number this history entry represents
+    };
+    batch.set(newVersionDocRef, versionData);
+    console.log(`[planService] Version (v${currentVersionNumber}) of plan ${planId} prepared for saving by user ${currentUserId}.`);
+
+    // 3. Sanitize and prepare the new roadmap for the main plan document
+    const sanitizedRoadmap = updatedRoadmap.map(step => {
+      const sanitizedSubSteps = (step.subSteps || []).map(subStep => ({
+        id: typeof subStep.id === 'string' && subStep.id.trim() !== '' ? subStep.id : `sub_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        parentId: typeof subStep.parentId === 'string' && subStep.parentId.trim() !== '' ? subStep.parentId : (step.id || ""),
+        title: typeof subStep.title === 'string' ? subStep.title : "",
+      }));
+      const sanitizedConnections = (step.incomingConnections || []).map(conn => {
+        const finalConnection: IncomingConnection = {
+            id: typeof conn.id === 'string' && conn.id.trim() !== '' ? conn.id : `conn_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+            sourceNodeId: typeof conn.sourceNodeId === 'string' ? conn.sourceNodeId : "",
+            targetAnchor: conn.targetAnchor || 'N',
+            lineType: conn.lineType || 'straight',
+            label: (typeof conn.label === 'string' && conn.label.trim() !== "") ? conn.label.trim() : null,
+        };
+        if (conn.originatingSubStepContext && conn.originatingSubStepContext.sourceCardId && conn.originatingSubStepContext.subStepId) {
+            finalConnection.originatingSubStepContext = {
+                sourceCardId: conn.originatingSubStepContext.sourceCardId,
+                subStepId: conn.originatingSubStepContext.subStepId,
+            };
+        } else {
+            finalConnection.originatingSubStepContext = null;
+        }
+        return finalConnection;
+      }).filter(conn => conn.sourceNodeId.trim() !== "");
+
+      return {
+        id: typeof step.id === 'string' && step.id.trim() !== '' ? step.id : `step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        title: typeof step.title === 'string' ? step.title : "",
+        x: typeof step.x === 'number' ? step.x : 0,
+        y: typeof step.y === 'number' ? step.y : 0,
+        description: (typeof step.description === 'string' && step.description.trim() !== '') ? step.description.trim() : null,
+        subSteps: sanitizedSubSteps,
+        incomingConnections: sanitizedConnections,
+      };
+    });
+
+    // 4. Update the main plan document with the new roadmap and incremented version
+    const dataToUpdateMainPlan: UpdatePlanRoadmapData = {
+      roadmap: sanitizedRoadmap,
+      updatedAt: serverTimestamp() as FieldValue,
+      version: increment(1) as FieldValue, // Increment version number
+    };
+    batch.update(planDocRef, dataToUpdateMainPlan);
+    console.log(`[planService] Main plan ${planId} prepared for update to new version (v${currentVersionNumber + 1}).`);
+
+    // Commit the batch
+    await batch.commit();
+    console.log(`[planService] Roadmap for plan ${planId} and its version history updated successfully.`);
+
   } catch (error: any) {
     console.error(`[planService] Error updating roadmap for plan ${planId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error("Firestore permission denied. Ensure security rules allow 'update' on 'plans/{planId}' for the owner, and that 'roadmap' and 'updatedAt' are allowed fields.");
+      console.error("Firestore permission denied. Ensure security rules allow 'update' on 'plans/{planId}' for any authenticated user, and 'create' on 'plans/{planId}/versions/{versionId}'.");
       throw new Error('Permission denied updating plan roadmap. Check Firestore rules.');
     }
     throw new Error(error.message || "Could not update plan roadmap.");
   }
 };
+
 
 export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
   console.log(`[planService] getRecentPlans: Fetching ${count} recent plans.`);
@@ -245,6 +280,7 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
         naicsCode: data.naicsCode || null,
         createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
+        version: data.version || 1,
         roadmap: (data.roadmap || []).map(step => ({
           ...step,
           description: step.description || null,
@@ -255,7 +291,7 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
             sourceNodeId: conn.sourceNodeId || '',
             targetAnchor: conn.targetAnchor || 'N',
             lineType: conn.lineType || 'straight',
-            label: conn.label || undefined, // Fine for client, will be null for DB if empty
+            label: conn.label || null, // Ensure null for empty
             originatingSubStepContext: conn.originatingSubStepContext || null,
           })),
         })),
@@ -276,4 +312,46 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
     throw new Error(`Failed to fetch recent plans: ${error.message || 'Unknown error'}`);
   }
 };
-    
+
+// New function to fetch plan versions
+export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion[]> => {
+  if (!planId) {
+    console.warn("[planService] getPlanVersions: No planId provided.");
+    return [];
+  }
+  console.log(`[planService] getPlanVersions: Fetching versions for plan ID: '${planId}'`);
+  const versionsRef = collection(db, PLANS_COLLECTION, planId, 'versions');
+  try {
+    const q = query(versionsRef, orderBy('timestamp', 'desc'), limit(50));
+    const querySnapshot = await getDocs(q);
+    const versionsPromises = querySnapshot.docs.map(async (docSnap) => {
+      const data = docSnap.data() as PlanVersionData & { timestamp: Timestamp }; // Add Timestamp type for data.timestamp
+      let editorDisplayName = data.editorUid; // Default to UID
+      if (data.editorUid) {
+        const profile = await fetchUserProfileBasic(data.editorUid);
+        editorDisplayName = profile?.displayName || data.editorUid; // Use fetched name or fallback to UID
+      }
+      return {
+        id: docSnap.id,
+        planId: data.planId,
+        roadmap: data.roadmap || [],
+        editorUid: data.editorUid,
+        editorDisplayName: editorDisplayName,
+        timestamp: data.timestamp.toMillis(), // Convert Firestore Timestamp to number
+        versionNumber: data.versionNumber,
+      } as ClientPlanVersion;
+    });
+    const versions = await Promise.all(versionsPromises);
+    console.log(`[planService] Fetched ${versions.length} versions for plan ${planId}.`);
+    return versions;
+  } catch (error: any) {
+    console.error(`[planService] Error fetching versions for plan ${planId}:`, error);
+    if (error.code === 'permission-denied') {
+      throw new Error('Permission denied fetching plan versions. Check Firestore rules.');
+    }
+    if (error.code === 'failed-precondition' && error.message.includes('index')) {
+      throw new Error("Firestore query requires an index for plan versions. Please create it (e.g., on 'timestamp' desc).");
+    }
+    throw new Error(error.message || "Could not fetch plan versions.");
+  }
+};
