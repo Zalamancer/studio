@@ -146,7 +146,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         className={cn(
           "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center",
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          isSubStepDot ? "active:scale-125" : "active:scale-110" // Removed shadow-sm as main card has shadow
+          isSubStepDot ? "active:scale-125" : "active:scale-110"
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -157,7 +157,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
             "rounded-full transition-all duration-150 ease-in-out",
             isSubStepDot
               ? `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300`
-              : `bg-muted-foreground h-2 w-2 group-hover:bg-primary group-hover:scale-150 group-hover:ring-2 group-hover:ring-primary/60` // Main node dot styling
+              : `bg-muted-foreground h-2 w-2 group-hover:bg-primary group-hover:scale-150 group-hover:ring-2 group-hover:ring-primary/60`
         )}/>
       </button>
     );
@@ -190,16 +190,16 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       >
         <h3 className="text-sm font-semibold truncate text-white" title={step.title}>{step.title}</h3>
       </div>
-      <div className="p-2 text-xs flex-grow min-h-0"> {/* Removed text-muted-foreground, sub-steps will have own color */}
+      <div className="p-2 text-xs flex-grow min-h-0">
         {step.description && (<p className="whitespace-pre-wrap line-clamp-3 mb-1.5 text-black">{step.description}</p>)}
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
             {step.subSteps.map((subStep) => (
-              <li key={subStep.id} className="text-xs flex items-center relative py-0.5 group/substep text-black"> {/* Sub-step text color #000000 */}
+              <li key={subStep.id} className="text-xs py-0.5 group/substep text-black">
                  <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); if (onSubStepSelect) onSubStepSelect(step, subStep); }}
-                    className="truncate flex-grow text-left hover:text-primary hover:underline focus:outline-none focus:text-primary focus:underline"
+                    className="truncate text-left hover:text-primary hover:underline focus:outline-none focus:text-primary focus:underline p-0 bg-transparent border-none"
                     title={`View/Edit sub-step: ${subStep.title}`}
                   >
                     {subStep.title}
@@ -712,7 +712,7 @@ export default function PlanDetailPage() {
           sourceVisualAnchor = 'W';
           sourceVisualRadius = SUB_STEP_DOT_VISUAL_DIAMETER / 2;
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
-          currentLineColor = SUBSTEP_CONNECTION_LINE_COLOR;
+          currentLineColor = SUBSTEP_CONNECTION_LINE_COLOR; // #FDD85D
           currentMarkerId = 'url(#arrowhead-substep)';
         } else {
           const tempRawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
@@ -726,9 +726,9 @@ export default function PlanDetailPage() {
           });
           sourceVisualAnchor = bestAnchor;
           rawStartPoint = getAnchorPoint(sourceNode, sourceVisualAnchor);
-          sourceVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 2); // Using SUB_STEP_DOT_VISUAL_DIAMETER for consistency in visual size
+          sourceVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 2);
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS_MAIN;
-          currentLineColor = MAIN_CONNECTION_LINE_COLOR;
+          currentLineColor = MAIN_CONNECTION_LINE_COLOR; // #FDC921
           currentMarkerId = 'url(#arrowhead-main)';
         }
 
@@ -872,11 +872,11 @@ export default function PlanDetailPage() {
                     />
                 </div>
               </div></ScrollArea>
-              <SheetFooter className="p-4 mt-auto border-t pt-4 flex flex-col sm:flex-row sm:justify-between gap-2">
+              <SheetFooter className="p-4 mt-auto border-t pt-4 flex flex-col sm:flex-row sm:justify-between gap-2 items-center">
                 <Button type="button" variant="destructive" onClick={handleDeleteSubStepRequest} disabled={!canEditPlan || saveRoadmapMutation.isPending} className="w-full sm:w-auto"><Trash2 className="mr-2 h-4 w-4" /> Delete Sub-step</Button>
-                <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-                  <Button type="button" variant="outline" onClick={() => {setEditingSubStep(null); setCurrentSubStepTitleEdit(""); }} disabled={saveRoadmapMutation.isPending}>Back to Parent</Button>
-                  <Button type="button" onClick={handleSaveSubStep} disabled={!canEditPlan || saveRoadmapMutation.isPending || !currentSubStepTitleEdit.trim()}>{saveRoadmapMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Sub-step</Button>
+                <div className="flex flex-col-reverse sm:flex-row gap-2 w-full sm:w-auto sm:ml-auto">
+                  <Button type="button" variant="outline" onClick={() => {setEditingSubStep(null); setCurrentSubStepTitleEdit(""); }} disabled={saveRoadmapMutation.isPending} className="w-full sm:w-auto">Back to Parent</Button>
+                  <Button type="button" onClick={handleSaveSubStep} disabled={!canEditPlan || saveRoadmapMutation.isPending || !currentSubStepTitleEdit.trim()} className="w-full sm:w-auto">{saveRoadmapMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Sub-step</Button>
                 </div>
               </SheetFooter>
             </>
@@ -902,7 +902,7 @@ export default function PlanDetailPage() {
                   {(editingStep.subSteps && editingStep.subSteps.length > 0) ? (<ul className="space-y-1">
                       {editingStep.subSteps.map((sub) => (
                         <li key={sub.id} className="flex items-center gap-2 text-xs">
-                          <Button variant="link" className="p-0 h-auto text-xs text-left flex-grow truncate hover:text-primary" onClick={() => handleEditSubStep(sub, editingStep)} title={`Edit sub-step: ${sub.title}`}>{sub.title}</Button>
+                          <Button variant="link" className="p-0 h-auto text-xs text-left truncate hover:text-primary" onClick={() => handleEditSubStep(sub, editingStep)} title={`Edit sub-step: ${sub.title}`}>{sub.title}</Button>
                         </li>))}
                     </ul>) : (<p className="text-xs text-muted-foreground italic">No sub-steps yet.</p>)}
                   {canEditPlan && (<Button type="button" variant="outline" size="xs" onClick={() => { if (!editingStep) return; const newSubStep: RoadmapSubStep = { id: `sub-${Date.now()}-${uuidv4().substring(0,6)}`, parentId: editingStep.id, title: "New Sub-step" }; setEditingStep(prev => prev ? { ...prev, subSteps: [...(prev.subSteps || []), newSubStep] } : null);}} disabled={saveRoadmapMutation.isPending}><Plus className="mr-1 h-3.5 w-3.5" /> Add Sub-step</Button>)}
@@ -1010,3 +1010,5 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
+    
