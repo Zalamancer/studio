@@ -57,7 +57,7 @@ const NODE_BASE_MIN_HEIGHT = 100;
 const NODE_HEADER_HEIGHT = 40;
 const SUBSTEP_ITEM_HEIGHT = 24;
 const NODE_CONTENT_PADDING_Y = 16;
-const FINAL_BUFFER_CARD_HEIGHT = 8;
+const FINAL_BUFFER_CARD_HEIGHT = 8; // Reduced from 16
 
 const DOT_SIZE = 12;
 const SUB_STEP_DOT_VISUAL_DIAMETER = 8;
@@ -67,10 +67,11 @@ const MAIN_STEP_DOT_VISUAL_RADIUS = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
 
 const DOT_OFFSET = -DOT_SIZE / 2;
 const SNAP_THRESHOLD = 25;
-const CONNECTION_LINE_COLOR = "hsl(var(--foreground))";
+const CONNECTION_LINE_COLOR = "hsl(var(--foreground))"; // Defined
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
 const CONNECTION_LINE_THICKNESS_MAIN = 3;
+
 
 const ARROWHEAD_LENGTH = 10;
 const ARROWHEAD_WIDTH_FACTOR = 0.7;
@@ -144,7 +145,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         className={cn(
           "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center",
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          isSubStepDot ? "active:scale-125" : "shadow-sm active:scale-110"
+          isSubStepDot ? "active:scale-125" : "shadow-sm active:scale-110" // Main dots always have shadow
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -177,6 +178,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     >
       <div className="p-2 border-b border-border flex items-center justify-between cursor-move bg-muted/30 rounded-t-lg h-[40px]">
         <h3 className="text-sm font-semibold truncate" title={step.title}>{step.title}</h3>
+        {/* DropdownMenu removed from here */}
       </div>
       <div className="p-2 text-xs text-muted-foreground flex-grow min-h-0">
         {step.description && (<p className="whitespace-pre-wrap line-clamp-3 mb-1.5">{step.description}</p>)}
@@ -247,7 +249,7 @@ export default function PlanDetailPage() {
 
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
   const [editingSubStep, setEditingSubStep] = useState<RoadmapSubStep | null>(null);
-  const [currentSubStepTitleEdit, setCurrentSubStepTitleEdit] = useState<string>("");
+  const [currentSubStepTitleEdit, setCurrentSubStepTitleEdit] = useState<string>(""); // For sub-step title input
 
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
   const [isEditingNodeTitle, setIsEditingNodeTitle] = useState(false);
@@ -350,17 +352,18 @@ export default function PlanDetailPage() {
 
   const handleEditStep = useCallback((stepToEdit: RoadmapStep) => {
     setEditingStep(stepToEdit);
-    setEditingSubStep(null);
+    setEditingSubStep(null); // Ensure we are in main step view
+    setCurrentSubStepTitleEdit(""); // Clear any lingering sub-step edit
     setIsStepDetailSheetOpen(true);
-    setIsEditingNodeTitle(false);
+    setIsEditingNodeTitle(false); // Reset inline edit states
     setIsEditingNodeDescription(false);
   }, []);
 
   const handleEditSubStep = useCallback((subStepToEdit: RoadmapSubStep, parentStep: RoadmapStep) => {
-    setEditingStep(parentStep);
+    setEditingStep(parentStep); // Parent is needed for context
     setEditingSubStep(subStepToEdit);
-    setCurrentSubStepTitleEdit(subStepToEdit.title);
-    setIsStepDetailSheetOpen(true);
+    setCurrentSubStepTitleEdit(subStepToEdit.title); // Populate input for sub-step
+    setIsStepDetailSheetOpen(true); // Open/ensure sheet is open
   }, []);
 
   const handleAddRoadmapStepSubmit = useCallback((data: AddRoadmapStepFormData) => {
@@ -426,14 +429,14 @@ export default function PlanDetailPage() {
     const updatedParentStep = {
       ...editingStep,
       subSteps: (editingStep.subSteps || []).map(ss =>
-        ss.id === editingSubStep.id ? { ...editingSubStep, title: currentSubStepTitleEdit.trim() || "Untitled Sub-step" } : ss
+        ss.id === editingSubStep.id ? { ...ss, title: currentSubStepTitleEdit.trim() || "Untitled Sub-step" } : ss
       ),
     };
     setEditableRoadmap(prev => prev.map(s => s.id === editingStep.id ? updatedParentStep : s));
-    setEditingStep(updatedParentStep); // Update editingStep with the modified sub-steps
-    toast({ title: "Sub-step Updated", description: `Sub-step saved. Remember to save the plan.` });
-    setEditingSubStep(null);
+    setEditingStep(updatedParentStep);
+    setEditingSubStep(null); // Go back to parent view
     setCurrentSubStepTitleEdit("");
+    toast({ title: "Sub-step Saved", description: `Changes to sub-step saved. Remember to save the plan.` });
   }, [editingStep, editingSubStep, currentSubStepTitleEdit, canEditPlan, toast]);
 
   const handleDeleteSubStepRequest = useCallback(() => {
@@ -445,20 +448,16 @@ export default function PlanDetailPage() {
   const confirmDeleteSubStep = useCallback(() => {
     if (!subStepToDelete || !canEditPlan) return;
     const { parentStepId, subStep } = subStepToDelete;
-    setEditableRoadmap(prev =>
-      prev.map(s => {
-        if (s.id === parentStepId) {
-          const updatedParent = { ...s, subSteps: (s.subSteps || []).filter(ss => ss.id !== subStep.id) };
-          if (editingStep?.id === parentStepId) setEditingStep(updatedParent); // Update editingStep if it's the parent
-          return updatedParent;
-        }
-        return s;
-      })
-    );
+    const updatedParentStep = editableRoadmap.find(s => s.id === parentStepId);
+    if (updatedParentStep) {
+      const newParent = { ...updatedParentStep, subSteps: (updatedParentStep.subSteps || []).filter(ss => ss.id !== subStep.id) };
+      setEditableRoadmap(prev => prev.map(s => s.id === parentStepId ? newParent : s));
+      setEditingStep(newParent); // Update editingStep if it's the parent
+    }
     toast({ title: "Sub-step Deleted", description: `Sub-step "${subStep.title}" removed. Remember to save the plan.` });
     setSubStepToDelete(null);
-    setEditingSubStep(null);
-  }, [subStepToDelete, canEditPlan, toast, editingStep]);
+    setEditingSubStep(null); // Return to parent view
+  }, [subStepToDelete, canEditPlan, toast, editableRoadmap]);
 
 
   const saveRoadmapChanges = useCallback(async () => {
@@ -656,9 +655,10 @@ export default function PlanDetailPage() {
 
   useEffect(() => {
     if (!isStepDetailSheetOpen) {
+      setEditingStep(null); // Also clear main editing step when sheet closes
+      setEditingSubStep(null);
       setIsEditingNodeTitle(false);
       setIsEditingNodeDescription(false);
-      setEditingSubStep(null);
       setCurrentSubStepTitleEdit("");
     }
   }, [isStepDetailSheetOpen]);
@@ -679,14 +679,14 @@ export default function PlanDetailPage() {
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
-          sourceVisualAnchor = 'W';
+          sourceVisualAnchor = 'W'; // Sub-steps always connect from West for now
           sourceVisualRadius = SUB_STEP_DOT_VISUAL_RADIUS;
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
         } else {
           const tempRawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
           let bestAnchor: 'N' | 'S' | 'E' | 'W' = 'S';
           let minDistanceSq = Infinity;
-          const availableSourceAnchors: ('N'|'S'|'E'|'W')[] = (sourceNode.subSteps && sourceNode.subSteps.length > 0) ? ['N', 'S', 'E'] : ['N', 'S', 'E', 'W'];
+          const availableSourceAnchors: ('N'|'S'|'E'|'W')[] = (sourceNode.subSteps && sourceNode.subSteps.length > 0) ? ['N', 'S', 'E'] : ['N', 'S', 'E', 'W']; // Allow West for nodes without sub-steps
           availableSourceAnchors.forEach(anchor => {
             const tempRawStart = getAnchorPoint(sourceNode, anchor);
             const distSq = Math.pow(tempRawEndPoint.x - tempRawStart.x, 2) + Math.pow(tempRawEndPoint.y - tempRawStart.y, 2);
@@ -700,7 +700,7 @@ export default function PlanDetailPage() {
 
         const rawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
         const targetVisualAnchor = incomingConn.targetAnchor;
-        const targetVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS;
+        const targetVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS; // Target dots are always main step dots
 
         const sourceAxisVec = getAnchorAxisVector(sourceVisualAnchor);
         const targetAxisVec = getAnchorAxisVector(targetVisualAnchor);
@@ -811,12 +811,20 @@ export default function PlanDetailPage() {
             <>
               <SheetHeader><SheetTitle>Sub-step: {editingSubStep.title}</SheetTitle><SheetDescription>Parent: {editingStep.title}</SheetDescription></SheetHeader>
               <ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
-                <div><Label htmlFor="sheet-substep-title">Sub-step Title</Label><Input id="sheet-substep-title" value={currentSubStepTitleEdit} onChange={(e) => setCurrentSubStepTitleEdit(e.target.value)} disabled={!canEditPlan || saveRoadmapMutation.isPending} /></div>
+                <div>
+                    <Label htmlFor="sheet-substep-title">Sub-step Title</Label>
+                    <Input 
+                        id="sheet-substep-title" 
+                        value={currentSubStepTitleEdit} 
+                        onChange={(e) => setCurrentSubStepTitleEdit(e.target.value)} 
+                        disabled={!canEditPlan || saveRoadmapMutation.isPending} 
+                    />
+                </div>
               </div></ScrollArea>
               <SheetFooter className="p-4 mt-auto border-t pt-4 flex flex-col sm:flex-row sm:justify-between gap-2">
                 <Button type="button" variant="destructive" onClick={handleDeleteSubStepRequest} disabled={!canEditPlan || saveRoadmapMutation.isPending} className="w-full sm:w-auto"><Trash2 className="mr-2 h-4 w-4" /> Delete Sub-step</Button>
                 <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-                  <Button type="button" variant="outline" onClick={() => setEditingSubStep(null)} disabled={saveRoadmapMutation.isPending}>Back to Parent</Button>
+                  <Button type="button" variant="outline" onClick={() => {setEditingSubStep(null); setCurrentSubStepTitleEdit(""); }} disabled={saveRoadmapMutation.isPending}>Back to Parent</Button>
                   <Button type="button" onClick={handleSaveSubStep} disabled={!canEditPlan || saveRoadmapMutation.isPending || !currentSubStepTitleEdit.trim()}>{saveRoadmapMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Sub-step</Button>
                 </div>
               </SheetFooter>
@@ -826,11 +834,17 @@ export default function PlanDetailPage() {
               <SheetHeader><SheetTitle>Step: {editingStep.title}</SheetTitle><SheetDescription>Modify details and sub-steps.</SheetDescription></SheetHeader>
               <ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
                 <div>
-                  <div className="flex items-center justify-between mb-1"><Label htmlFor="sheet-step-title">Title</Label>{canEditPlan && (<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditingNodeTitle(prev => !prev)} title={isEditingNodeTitle ? "Finish Editing Title" : "Edit Title"}><Edit2 className="h-3.5 w-3.5" /></Button>)}</div>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label htmlFor="sheet-step-title">Title</Label>
+                    {canEditPlan && (<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditingNodeTitle(prev => !prev)} title={isEditingNodeTitle ? "Finish Editing Title" : "Edit Title"}><Edit2 className="h-3.5 w-3.5" /></Button>)}
+                  </div>
                   <Input id="sheet-step-title" value={editingStep.title} onChange={(e) => setEditingStep(prev => prev ? { ...prev, title: e.target.value } : null)} disabled={!isEditingNodeTitle || !canEditPlan || saveRoadmapMutation.isPending} />
                 </div>
                 <div>
-                  <div className="flex items-center justify-between mb-1"><Label htmlFor="sheet-step-description">Description</Label>{canEditPlan && (<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditingNodeDescription(prev => !prev)} title={isEditingNodeDescription ? "Finish Editing Description" : "Edit Description"}><Edit2 className="h-3.5 w-3.5" /></Button>)}</div>
+                  <div className="flex items-center justify-between mb-1">
+                    <Label htmlFor="sheet-step-description">Description</Label>
+                    {canEditPlan && (<Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditingNodeDescription(prev => !prev)} title={isEditingNodeDescription ? "Finish Editing Description" : "Edit Description"}><Edit2 className="h-3.5 w-3.5" /></Button>)}
+                  </div>
                   <Textarea id="sheet-step-description" value={editingStep.description || ""} onChange={(e) => setEditingStep(prev => prev ? { ...prev, description: e.target.value } : null)} rows={4} disabled={!isEditingNodeDescription || !canEditPlan || saveRoadmapMutation.isPending} />
                 </div>
                 <div className="space-y-2"><Label>Sub-steps</Label>
@@ -862,33 +876,53 @@ export default function PlanDetailPage() {
         <SheetContent className="sm:max-w-lg w-[90vw]" side="left">
           <SheetHeader className="border-b pb-4">
             <SheetTitle>Plan Version History</SheetTitle>
-            <SheetDescription>Review past versions of this plan. Reverting is not yet available.</SheetDescription>
+            <SheetDescription>
+              Review past versions of this plan. Reverting is not yet available.
+            </SheetDescription>
           </SheetHeader>
-          <ScrollArea className="h-[calc(100%-80px)]">
+          <ScrollArea className="h-[calc(100%-80px)]"> {/* Adjust height as needed */}
             <div className="p-4 space-y-3">
-              {isLoadingVersions && <div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/></div>}
-              {!isLoadingVersions && versionsError && <p className="text-sm text-destructive text-center py-4">Error loading versions: {versionsError.message}</p>}
-              {!isLoadingVersions && !versionsError && planVersions.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No version history found for this plan yet.</p>}
+              {isLoadingVersions && (
+                <div className="flex justify-center items-center py-6">
+                  <Loader2 className="h-6 w-6 animate-spin text-primary"/>
+                  <p className="ml-2 text-muted-foreground">Loading versions...</p>
+                </div>
+              )}
+              {!isLoadingVersions && versionsError && (
+                <p className="text-sm text-destructive text-center py-4">
+                  Error loading versions: {versionsError.message}
+                </p>
+              )}
+              {!isLoadingVersions && !versionsError && planVersions.length === 0 && (
+                <p className="text-sm text-muted-foreground text-center py-4">
+                  No version history found for this plan yet.
+                </p>
+              )}
               {!isLoadingVersions && !versionsError && planVersions.map(version => (
-                <div key={version.id} className="p-3 border rounded-md bg-muted/30">
+                <div key={version.id} className="p-3 border rounded-md bg-muted/30 hover:bg-muted/40 transition-colors">
                   <p className="text-sm font-medium">
-                    Version {version.versionNumber || "(Legacy)"} saved by: <span className="text-primary">{version.editorDisplayName || version.editorUid}</span>
+                    Version {version.versionNumber || "(Legacy)"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Saved by: <span className="font-semibold text-foreground">{version.editorDisplayName || version.editorUid}</span>
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}
                   </p>
+                  {/* Placeholder for future 'Revert' or 'View' button */}
                 </div>
               ))}
             </div>
           </ScrollArea>
-          <SheetFooter className="border-t pt-4">
-            <SheetClose asChild><Button variant="outline">Close</Button></SheetClose>
+          <SheetFooter className="border-t pt-4 p-4">
+            <SheetClose asChild>
+              <Button variant="outline">Close</Button>
+            </SheetClose>
           </SheetFooter>
         </SheetContent>
       </Sheet>
     </div>
   );
 }
-
 
     
