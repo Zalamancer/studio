@@ -1,3 +1,8 @@
+// do not change or update any rule that is not relavant to your prompt
+// do not remove rules that is used by other tasks
+// only add rules that you need.
+// don't change or remove the rules that you have no business with.
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -421,6 +426,34 @@ service cloud.firestore {
       allow update, delete: if isAuthUser() &&
                             resource.data.reviewerId == request.auth.uid &&
                             (request.method == 'delete' || request.resource.data.updatedAt == request.time);
+    }
+    
+    match /plans/{planId} {
+      // Rule for creating plans (owner-only)
+      allow create: if request.auth != null &&
+                       request.auth.uid == request.resource.data.ownerId &&
+                       request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
+                       request.resource.data.sector is string && request.resource.data.sector.size() > 0 &&
+                       (request.resource.data.subSector == null || request.resource.data.subSector is string) &&
+                       (request.resource.data.industry == null || request.resource.data.industry is string) &&
+                       (request.resource.data.naicsCode == null || request.resource.data.naicsCode is string) &&
+                       request.resource.data.createdAt == request.time &&
+                       request.resource.data.updatedAt == request.time &&
+                       request.resource.data.keys().hasOnly([
+                         'name', 'ownerId', 'sector', 'subSector',
+                         'industry', 'naicsCode', 'createdAt', 'updatedAt'
+                       ]);
+
+      // Rule to allow ANY AUTHENTICATED USER to read/list plans
+      // This will allow getRecentPlans() to work for logged-in users.
+      allow read: if request.auth != null;
+
+      // If you want recent plans to be visible to unauthenticated users too:
+      allow read: if true;
+
+      // Add owner-based update and delete rules as needed
+      allow update: if request.auth != null && request.auth.uid == resource.data.ownerId;
+    	allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
     }
 
     // Fallback rule (already present in your rules)

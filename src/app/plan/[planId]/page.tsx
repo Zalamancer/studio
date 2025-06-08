@@ -22,7 +22,7 @@ import {
   Type as TypeIcon,
   MessageSquare as LineLabelIcon,
   MinusCircle,
-  History, // Added History icon
+  History,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -37,8 +37,8 @@ import {
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-import { getPlanById, updatePlanRoadmap, getPlanVersions } from '@/services/planService'; // Added getPlanVersions
-import type { ClientPlan, RoadmapStep, RoadmapSubStep, UpdatePlanRoadmapData, IncomingConnection, ClientPlanVersion } from '@/types/plan'; // Added ClientPlanVersion
+import { getPlanById, updatePlanRoadmap, getPlanVersions } from '@/services/planService';
+import type { ClientPlan, RoadmapStep, RoadmapSubStep, UpdatePlanRoadmapData, IncomingConnection, ClientPlanVersion } from '@/types/plan';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { cn, IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
@@ -49,58 +49,54 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from '@/components/ui/sheet';
-import { format } from 'date-fns'; // For formatting version timestamps
+import { format } from 'date-fns';
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
 const NODE_BASE_MIN_HEIGHT = 100;
 const NODE_HEADER_HEIGHT = 40;
-const SUBSTEP_ITEM_HEIGHT = 24; // Roughly 1.5rem line height + spacing
-const NODE_CONTENT_PADDING_Y = 16; // Sum of top/bottom padding for content area
-const FINAL_BUFFER_CARD_HEIGHT = 8; // Reduced buffer
+const SUBSTEP_ITEM_HEIGHT = 24;
+const NODE_CONTENT_PADDING_Y = 16;
+const FINAL_BUFFER_CARD_HEIGHT = 8;
 
-const DOT_SIZE = 12; // Clickable area for dots
+const DOT_SIZE = 12;
 const SUB_STEP_DOT_VISUAL_DIAMETER = 8;
 const MAIN_STEP_DOT_VISUAL_DIAMETER = 6;
 const SUB_STEP_DOT_VISUAL_RADIUS = SUB_STEP_DOT_VISUAL_DIAMETER / 2;
 const MAIN_STEP_DOT_VISUAL_RADIUS = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
 
-
 const DOT_OFFSET = -DOT_SIZE / 2;
-const SNAP_THRESHOLD = 25; // Pixels for snapping connection lines to dots
+const SNAP_THRESHOLD = 25;
 const CONNECTION_LINE_COLOR = "hsl(var(--foreground))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
-const CONNECTION_LINE_THICKNESS_MAIN = 3; // Thicker for main node connections
+const CONNECTION_LINE_THICKNESS_MAIN = 3;
 
 const ARROWHEAD_LENGTH = 10;
-const ARROWHEAD_WIDTH_FACTOR = 0.7; // Makes arrowhead less wide, more pointy
-const NECK_LENGTH = ARROWHEAD_LENGTH * 2; // Length of straight part of line before curve/elbow
-const MIN_MAIN_PATH_LENGTH = 10; // Min length of the main segment of a curved/elbow line
+const ARROWHEAD_WIDTH_FACTOR = 0.7;
+const NECK_LENGTH = ARROWHEAD_LENGTH * 2;
+const MIN_MAIN_PATH_LENGTH = 10;
 
-// For differentiating click from drag
-const CLICK_MOVE_THRESHOLD_PX_SQ = 25; // (5px)^2
+const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
 const CLICK_TIME_THRESHOLD_MS = 300;
 
 const calculateNodeHeight = (step: RoadmapStep): number => {
-  let height = NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y; // Header + Top/Bottom padding for content
+  let height = NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y;
   let descriptionLineCount = 0;
   if (step.description && step.description.trim().length > 0) {
-    // Approximate lines based on character count (adjust 35 based on font/width)
-    // and explicitly count newline characters for multi-line descriptions
     const lines = Math.ceil(step.description.length / 35) + step.description.split(/\r\n|\r|\n/).length -1;
-    descriptionLineCount = Math.max(1, lines); // Ensure at least 1 line if description exists
+    descriptionLineCount = Math.max(1, lines);
   }
-  const descriptionHeight = descriptionLineCount * 15; // Assuming ~15px per line height
+  const descriptionHeight = descriptionLineCount * 15;
 
   let subStepsHeight = 0;
   if (step.subSteps && step.subSteps.length > 0) {
-    subStepsHeight = (step.subSteps.length * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2); // Extra half for spacing
+    subStepsHeight = (step.subSteps.length * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
   }
 
   const contentHeight = Math.max(descriptionHeight, subStepsHeight);
   height += contentHeight;
-  height += FINAL_BUFFER_CARD_HEIGHT; // Small final buffer
+  height += FINAL_BUFFER_CARD_HEIGHT;
   return Math.max(NODE_BASE_MIN_HEIGHT, height);
 };
 
@@ -111,7 +107,7 @@ interface RoadmapStepCardProps {
   isSelected?: boolean;
   isSubmitting: boolean;
   onEditStep: (step: RoadmapStep) => void;
-  onSubStepSelect?: (subStep: RoadmapSubStep) => void; // Make onSubStepSelect optional
+  onSubStepSelect?: (parentStep: RoadmapStep, subStep: RoadmapSubStep) => void;
   isActuallyDraggingThisNode?: boolean;
 }
 
@@ -148,8 +144,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         className={cn(
           "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center",
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          // Rings are now only on the inner dot, so remove ring classes from button
-          isSubStepDot ? "active:scale-125" : "shadow-sm active:scale-110" // No shadow for sub-step button
+          isSubStepDot ? "active:scale-125" : "shadow-sm active:scale-110"
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -191,7 +186,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
               <li key={subStep.id} className="text-xs text-muted-foreground/90 flex items-center relative py-0.5 group/substep">
                  <button
                     type="button"
-                    onClick={(e) => { e.stopPropagation(); if (onSubStepSelect) onSubStepSelect(subStep); }}
+                    onClick={(e) => { e.stopPropagation(); if (onSubStepSelect) onSubStepSelect(step, subStep); }}
                     className="truncate flex-grow text-left hover:text-primary hover:underline focus:outline-none focus:text-primary focus:underline"
                     title={`View/Edit sub-step: ${subStep.title}`}
                   >
@@ -205,11 +200,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
           <p className="italic text-muted-foreground/70 text-center py-2 text-[11px]">No details or sub-steps yet.</p>
         )}
       </div>
-      {/* Main Node Dots - N, S, E, W */}
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
       <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
       <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
-      {/* West Dots - Conditional for main node or sub-steps */}
       {!step.subSteps || step.subSteps.length === 0 ? (
           <ConnectionDot anchor="W" parentStepId={step.id} isSubmitting={isSubmitting} style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
       ) : (
@@ -253,16 +246,15 @@ export default function PlanDetailPage() {
   const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{ sourceStepId: string; sourceAnchor: 'N' | 'S' | 'E' | 'W'; creatingFromSubStepContext?: { sourceCardId: string; subStepId: string; subStepTitle: string } } | null>(null);
 
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
-  const [editingSubStep, setEditingSubStep] = useState<RoadmapSubStep | null>(null); // New state for sub-step
-  const [currentSubStepTitleEdit, setCurrentSubStepTitleEdit] = useState<string>(""); // Temp title for sub-step edit
+  const [editingSubStep, setEditingSubStep] = useState<RoadmapSubStep | null>(null);
+  const [currentSubStepTitleEdit, setCurrentSubStepTitleEdit] = useState<string>("");
 
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
   const [isEditingNodeTitle, setIsEditingNodeTitle] = useState(false);
   const [isEditingNodeDescription, setIsEditingNodeDescription] = useState(false);
-  // editingSubStepId is removed, direct sub-step object is used
 
   const [stepToDelete, setStepToDelete] = useState<{id: string, title: string} | null>(null);
-  const [subStepToDelete, setSubStepToDelete] = useState<{ parentStepId: string; subStep: RoadmapSubStep } | null>(null); // For sub-step deletion
+  const [subStepToDelete, setSubStepToDelete] = useState<{ parentStepId: string; subStep: RoadmapSubStep } | null>(null);
 
   const [lineContextMenu, setLineContextMenu] = useState<LineContextMenuState | null>(null);
   const [isLineEditLabelAlertOpen, setIsLineEditLabelAlertOpen] = useState(false);
@@ -276,7 +268,7 @@ export default function PlanDetailPage() {
   const isDraggingRef = useRef<boolean>(false);
   const [activeConnectionLinePreview, setActiveConnectionLinePreview] = useState<{startX: number, startY: number, currentX: number, currentY: number, isFromSubStep: boolean} | null>(null);
 
-  const [isVersionHistorySheetOpen, setIsVersionHistorySheetOpen] = useState(false); // For version history
+  const [isVersionHistorySheetOpen, setIsVersionHistorySheetOpen] = useState(false);
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
@@ -286,19 +278,15 @@ export default function PlanDetailPage() {
     enabled: !!planId && isValidPlanId && !authLoading,
   });
 
-  const { data: planVersions = [], isLoading: isLoadingVersions } = useQuery<ClientPlanVersion[]>({
+  const { data: planVersions = [], isLoading: isLoadingVersions, error: versionsError } = useQuery<ClientPlanVersion[]>({
     queryKey: ['planVersions', planId],
     queryFn: () => (planId && isValidPlanId ? getPlanVersions(planId) : Promise.resolve([])),
-    enabled: isVersionHistorySheetOpen && !!planId && isValidPlanId, // Only fetch when sheet is open
+    enabled: isVersionHistorySheetOpen && !!planId && isValidPlanId,
   });
 
-
   const saveRoadmapMutation = useMutation({
-    // IMPORTANT: Security rules must be updated by the user in Firebase console
-    // to allow any authenticated user to update plans if that's the desired behavior.
-    // The 'ownerId' param here is now effectively 'currentUserId' for versioning.
     mutationFn: (payload: { planId: string; currentUserId: string; roadmap: RoadmapStep[] }) => updatePlanRoadmap(payload.planId, payload.currentUserId, payload.roadmap),
-    onSuccess: () => { toast({ title: "Plan State Saved", description: "The current plan state has been saved." }); if (planId) queryClient.invalidateQueries({ queryKey: ['plan', planId] }); },
+    onSuccess: () => { toast({ title: "Plan State Saved", description: "The current plan state has been saved." }); if (planId) queryClient.invalidateQueries({ queryKey: ['plan', planId] }); queryClient.invalidateQueries({queryKey: ['planVersions', planId]}); },
     onError: (error: Error) => { toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan." }); }
   });
 
@@ -321,10 +309,7 @@ export default function PlanDetailPage() {
     }
   }, [editableRoadmap]);
 
-  // Removed isOwner check for save/edit as per new requirement
-  // const isOwner = useMemo(() => !!user && !!planData && user.uid === planData.ownerId, [user, planData]);
-  const canEditPlan = !!user; // Any authenticated user can edit (pending security rules)
-
+  const canEditPlan = !!user;
 
   const getPointerCoords = useCallback((event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent): { clientX: number; clientY: number } => {
     if ('touches' in event && event.touches.length > 0) return { clientX: event.touches[0].clientX, clientY: event.touches[0].clientY };
@@ -357,27 +342,24 @@ export default function PlanDetailPage() {
   const getSubStepDotAnchorPoint = useCallback((parentStep: RoadmapStep, subStepId: string): { x: number, y: number } => {
     const subStepIndex = parentStep.subSteps?.findIndex(ss => ss.id === subStepId) ?? -1;
     if (subStepIndex === -1) {
-      // Fallback if sub-step not found, though this shouldn't happen if data is consistent
       return { x: parentStep.x, y: parentStep.y + NODE_HEADER_HEIGHT + (NODE_CONTENT_PADDING_Y / 2) };
     }
-    // Calculate the Y center of the sub-step's text line within the content area
     const yCenterOfSubStepTextLine = NODE_HEADER_HEIGHT + (NODE_CONTENT_PADDING_Y / 2) + (subStepIndex * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
     return { x: parentStep.x, y: parentStep.y + yCenterOfSubStepTextLine };
   }, []);
 
   const handleEditStep = useCallback((stepToEdit: RoadmapStep) => {
     setEditingStep(stepToEdit);
-    setEditingSubStep(null); // Ensure we're editing main step
+    setEditingSubStep(null);
     setIsStepDetailSheetOpen(true);
     setIsEditingNodeTitle(false);
     setIsEditingNodeDescription(false);
-    // editingSubStepId state removed
   }, []);
 
   const handleEditSubStep = useCallback((subStepToEdit: RoadmapSubStep, parentStep: RoadmapStep) => {
-    setEditingStep(parentStep); // Set parent as the main editing context
+    setEditingStep(parentStep);
     setEditingSubStep(subStepToEdit);
-    setCurrentSubStepTitleEdit(subStepToEdit.title); // Initialize temp title for editing
+    setCurrentSubStepTitleEdit(subStepToEdit.title);
     setIsStepDetailSheetOpen(true);
   }, []);
 
@@ -444,12 +426,13 @@ export default function PlanDetailPage() {
     const updatedParentStep = {
       ...editingStep,
       subSteps: (editingStep.subSteps || []).map(ss =>
-        ss.id === editingSubStep.id ? { ...ss, title: currentSubStepTitleEdit.trim() || "Untitled Sub-step" } : ss
+        ss.id === editingSubStep.id ? { ...editingSubStep, title: currentSubStepTitleEdit.trim() || "Untitled Sub-step" } : ss
       ),
     };
     setEditableRoadmap(prev => prev.map(s => s.id === editingStep.id ? updatedParentStep : s));
+    setEditingStep(updatedParentStep); // Update editingStep with the modified sub-steps
     toast({ title: "Sub-step Updated", description: `Sub-step saved. Remember to save the plan.` });
-    setEditingSubStep(null); // Go back to parent view
+    setEditingSubStep(null);
     setCurrentSubStepTitleEdit("");
   }, [editingStep, editingSubStep, currentSubStepTitleEdit, canEditPlan, toast]);
 
@@ -465,15 +448,17 @@ export default function PlanDetailPage() {
     setEditableRoadmap(prev =>
       prev.map(s => {
         if (s.id === parentStepId) {
-          return { ...s, subSteps: (s.subSteps || []).filter(ss => ss.id !== subStep.id) };
+          const updatedParent = { ...s, subSteps: (s.subSteps || []).filter(ss => ss.id !== subStep.id) };
+          if (editingStep?.id === parentStepId) setEditingStep(updatedParent); // Update editingStep if it's the parent
+          return updatedParent;
         }
         return s;
       })
     );
     toast({ title: "Sub-step Deleted", description: `Sub-step "${subStep.title}" removed. Remember to save the plan.` });
     setSubStepToDelete(null);
-    setEditingSubStep(null); // Go back to parent view
-  }, [subStepToDelete, canEditPlan, toast]);
+    setEditingSubStep(null);
+  }, [subStepToDelete, canEditPlan, toast, editingStep]);
 
 
   const saveRoadmapChanges = useCallback(async () => {
@@ -673,8 +658,7 @@ export default function PlanDetailPage() {
     if (!isStepDetailSheetOpen) {
       setIsEditingNodeTitle(false);
       setIsEditingNodeDescription(false);
-      // editingSubStepId state removed
-      setEditingSubStep(null); // Also clear editingSubStep
+      setEditingSubStep(null);
       setCurrentSubStepTitleEdit("");
     }
   }, [isStepDetailSheetOpen]);
@@ -780,7 +764,6 @@ export default function PlanDetailPage() {
             <Link href="/discover" className="p-1 rounded hover:bg-muted" aria-label="Back to Discover Page"><ChevronLeft className="h-6 w-6 text-primary" /></Link>
             <div className="h-5 w-px bg-border"></div>
             <h1 className="text-sm font-semibold text-foreground truncate" title={planData.name}>{planData.name}</h1>
-            {/* Removed isOwner check for general UI elements */}
             {user?.uid === planData.ownerId && <Badge variant="outline" className="text-xs ml-2 hidden sm:inline-flex">Owner</Badge>}
         </div>
         <div className="ml-auto flex items-center gap-2">
@@ -795,13 +778,13 @@ export default function PlanDetailPage() {
         <main ref={canvasRef} className="flex-1 grid-background relative overflow-auto p-4 md:p-6" style={{ minHeight: canvasMinHeight }} onClick={() => { if (lineContextMenu?.isOpen) setLineContextMenu(null); }}>
           <svg ref={svgRef} className="absolute inset-0 w-full h-full pointer-events-none z-0">
             <defs>
-              <marker id="arrowhead" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill="hsl(var(--foreground))"/></marker>
+              <marker id="arrowhead" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill={CONNECTION_LINE_COLOR}/></marker>
             </defs>
             {drawConnectionLines()}
             {activeConnectionLinePreview && (<line x1={activeConnectionLinePreview.startX} y1={activeConnectionLinePreview.startY} x2={activeConnectionLinePreview.currentX} y2={activeConnectionLinePreview.currentY} stroke={CONNECTION_LINE_HOVER_COLOR} strokeWidth={activeConnectionLinePreview.isFromSubStep ? CONNECTION_LINE_THICKNESS + 1 : CONNECTION_LINE_THICKNESS_MAIN + 1} strokeDasharray="4 4" markerEnd="url(#arrowhead)" />)}
           </svg>
           {editableRoadmap.length === 0 && !isLoadingPlan && (<div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none"><Map className="h-16 w-16 mb-4" /><p className="text-lg font-medium">Collaboration Plan Area</p><p className="text-sm mt-1">{canEditPlan ? "Click '+ Node' to add your first step to the roadmap." : "This plan currently has no steps defined."}</p></div>)}
-          {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id && !editingSubStep} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} onSubStepSelect={(subStep) => handleEditSubStep(subStep, step)} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}/>))}
+          {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id && !editingSubStep} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} onSubStepSelect={handleEditSubStep} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}/>))}
           <Popover open={lineContextMenu?.isOpen || false} onOpenChange={(open) => { if (!open) setLineContextMenu(null); }}><PopoverTrigger asChild><div className="fixed" style={{ left: `${lineContextMenu?.x || 0}px`, top: `${lineContextMenu?.y || 0}px`, width: 0, height: 0 }} /></PopoverTrigger>
             <PopoverContent className="w-auto p-1" side="right" align="start" sideOffset={5}>
               {lineContextMenu && canEditPlan && (
@@ -822,9 +805,9 @@ export default function PlanDetailPage() {
         </main>
       </div>
       <AddRoadmapStepDialog isOpen={isAddStepDialogOpen} onOpenChange={setIsAddStepDialogOpen} onSubmit={handleAddRoadmapStepSubmit} isSubmitting={saveRoadmapMutation.isPending} parentStepTitle={pendingNodeFromDotInfo?.sourceStepId ? editableRoadmap.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title : null} dialogTitle={pendingNodeFromDotInfo?.creatingFromSubStepContext?.subStepTitle ? `New Step from "${pendingNodeFromDotInfo.creatingFromSubStepContext.subStepTitle}" (Anchor: ${pendingNodeFromDotInfo.sourceAnchor})` : undefined} />
-      <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) { setEditingStep(null); setEditingSubStep(null); } setIsStepDetailSheetOpen(open); }}>
+      <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) { setEditingStep(null); setEditingSubStep(null); } setIsStepDetailSheetOpen(open); setIsEditingNodeTitle(false); setIsEditingNodeDescription(false); setCurrentSubStepTitleEdit("");}}>
         <SheetContent className="sm:max-w-md flex flex-col">
-          {editingSubStep && editingStep ? ( // Sub-step Editing View
+          {editingSubStep && editingStep ? (
             <>
               <SheetHeader><SheetTitle>Sub-step: {editingSubStep.title}</SheetTitle><SheetDescription>Parent: {editingStep.title}</SheetDescription></SheetHeader>
               <ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
@@ -838,7 +821,7 @@ export default function PlanDetailPage() {
                 </div>
               </SheetFooter>
             </>
-          ) : editingStep ? ( // Main Step Editing View
+          ) : editingStep ? (
             <>
               <SheetHeader><SheetTitle>Step: {editingStep.title}</SheetTitle><SheetDescription>Modify details and sub-steps.</SheetDescription></SheetHeader>
               <ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
@@ -875,7 +858,6 @@ export default function PlanDetailPage() {
       <AlertDialog open={!!subStepToDelete} onOpenChange={(open) => !open && setSubStepToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Sub-step: "{subStepToDelete?.subStep.title}"?</AlertDialogTitle><AlertDialogDescription>This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setSubStepToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteSubStep} className="bg-destructive hover:bg-destructive/90" disabled={!canEditPlan}>Delete Sub-step</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       <AlertDialog open={isLineEditLabelAlertOpen} onOpenChange={setIsLineEditLabelAlertOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Edit Line Label</AlertDialogTitle><AlertDialogDescription>Enter a label for this connection (or leave empty to remove an existing label).</AlertDialogDescription></AlertDialogHeader><div className="py-2"><Label htmlFor="line-label-input" className="sr-only">Line Label</Label><Input id="line-label-input" ref={lineLabelInputRef} value={currentLineEditLabel} onChange={(e) => setCurrentLineEditLabel(e.target.value)} placeholder="E.g., Depends on, Blocks, etc." autoFocus /></div><AlertDialogFooter><AlertDialogCancel onClick={() => { setIsLineEditLabelAlertOpen(false); setCurrentLineEditLabel(""); setLineContextMenu(null); }}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleConfirmSetLineLabel} disabled={!canEditPlan}>Set Label</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
       
-      {/* Version History Sheet */}
       <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen}>
         <SheetContent className="sm:max-w-lg w-[90vw]" side="left">
           <SheetHeader className="border-b pb-4">
@@ -885,16 +867,16 @@ export default function PlanDetailPage() {
           <ScrollArea className="h-[calc(100%-80px)]">
             <div className="p-4 space-y-3">
               {isLoadingVersions && <div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/></div>}
-              {!isLoadingVersions && planVersions.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No version history found for this plan yet.</p>}
-              {planVersions.map(version => (
+              {!isLoadingVersions && versionsError && <p className="text-sm text-destructive text-center py-4">Error loading versions: {versionsError.message}</p>}
+              {!isLoadingVersions && !versionsError && planVersions.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No version history found for this plan yet.</p>}
+              {!isLoadingVersions && !versionsError && planVersions.map(version => (
                 <div key={version.id} className="p-3 border rounded-md bg-muted/30">
                   <p className="text-sm font-medium">
-                    Version {version.versionNumber || "(legacy)"} saved by: <span className="text-primary">{version.editorDisplayName || version.editorUid}</span>
+                    Version {version.versionNumber || "(Legacy)"} saved by: <span className="text-primary">{version.editorDisplayName || version.editorUid}</span>
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}
                   </p>
-                  {/* Placeholder for future: Button to view or revert */}
                 </div>
               ))}
             </div>
@@ -907,3 +889,6 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
+
+    
