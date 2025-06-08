@@ -17,7 +17,7 @@ import {
   Map,
   Plus,
   XCircle,
-  Edit2, // Keep Edit2 for general edit icons
+  Edit2,
   Trash2,
   Type as TypeIcon,
   MessageSquare as LineLabelIcon,
@@ -136,11 +136,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         aria-label={titleText}
         title={titleText}
         className={cn(
-          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center border-2 border-transparent", // Base border-transparent
+          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center border-2 border-transparent",
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          isSubStepDot
-            ? "hover:ring-2 hover:ring-green-300 active:scale-125" // Sub-step button hover/active
-            : "hover:ring-2 hover:ring-primary/50 active:scale-110" // Main dot button hover/active (no longer conditional opacity)
+          isSubStepDot ? "active:scale-125" : "active:scale-110",
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -150,8 +148,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         <div className={cn(
             "rounded-full transition-all duration-150 ease-in-out",
             isSubStepDot
-              ? `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300` // Inner sub-step dot with ring on hover
-              : `bg-primary h-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] w-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60` // Inner main dot with ring on hover
+              ? `bg-muted-foreground h-2 w-2 group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300`
+              : `bg-primary h-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] w-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60`
         )}/>
       </button>
     );
@@ -164,6 +162,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         "absolute select-none shadow-lg border rounded-lg flex flex-col",
         "bg-card text-card-foreground",
         isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10",
+        isSubStepDot ? "" : "shadow-sm", // Removed shadow-sm for sub-step dots' button
         isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px`, width: `${NODE_BASE_WIDTH}px`, height: `${dynamicHeight}px`, touchAction: 'none', overflow: 'visible' }}
@@ -171,10 +170,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       onTouchStart={(e) => onNodeInteractionStart(step.id, e)}
       data-node-id={step.id}
     >
-      <div className="p-2 border-b border-border flex items-center justify-between cursor-move bg-muted/30 rounded-t-lg h-[40px]" onClick={() => onEditStep(step)}>
+      <div className="p-2 border-b border-border flex items-center justify-between cursor-move bg-muted/30 rounded-t-lg h-[40px]">
         <h3 className="text-sm font-semibold truncate" title={step.title}>{step.title}</h3>
       </div>
-      <div className="p-2 text-xs text-muted-foreground flex-grow min-h-0" onClick={() => onEditStep(step)}>
+      <div className="p-2 text-xs text-muted-foreground flex-grow min-h-0">
         {step.description && (<p className="whitespace-pre-wrap line-clamp-3 mb-1.5">{step.description}</p>)}
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
@@ -321,7 +320,6 @@ export default function PlanDetailPage() {
 
   const handleEditStep = useCallback((stepToEdit: RoadmapStep) => {
     setEditingStep(stepToEdit); setIsStepDetailSheetOpen(true);
-    // Reset individual edit states when opening the sheet for a new step
     setIsEditingNodeTitle(false);
     setIsEditingNodeDescription(false);
     setEditingSubStepId(null);
@@ -374,7 +372,7 @@ export default function PlanDetailPage() {
     if (!stepToDelete) return;
     setEditableRoadmap(prev => prev.filter(s => s.id !== stepToDelete.id).map(s => ({ ...s, incomingConnections: (s.incomingConnections || []).filter(conn => conn.sourceNodeId !== stepToDelete.id) })));
     toast({ title: "Step Deleted", description: `"${stepToDelete.title}" removed. Remember to save the plan to persist changes.`}); setStepToDelete(null);
-    if (editingStep?.id === stepToDelete?.id) { // Ensure correct comparison for ID from stepToDelete
+    if (editingStep?.id === stepToDelete?.id) {
         setIsStepDetailSheetOpen(false);
         setEditingStep(null);
     }
@@ -382,7 +380,6 @@ export default function PlanDetailPage() {
   const handleStepDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
     setEditableRoadmap(prev => prev.map(s => s.id === updatedStep.id ? updatedStep : s));
     toast({ title: "Step Updated", description: `"${updatedStep.title}" details changed. Remember to save the plan.`});
-    // Reset individual edit states after saving changes in sheet
     setIsEditingNodeTitle(false);
     setIsEditingNodeDescription(false);
     setEditingSubStepId(null);
@@ -473,21 +470,23 @@ export default function PlanDetailPage() {
     }
   }, [isPointerDown, getPointerCoords, setEditableRoadmap, setActiveConnectionLinePreview]);
 
-  const handleGlobalUp = useCallback((event: MouseEvent | TouchEvent) => {
+  const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent) => {
     const clickInfo = clickStartInfoRef.current;
     const finalCoords = getPointerCoords(event);
 
-    if (nodeDragInfoRef.current) {
-      if (!isDraggingRef.current && clickInfo) {
+    if (nodeDragInfoRef.current) { // This means a node itself was the initial interaction target
+      if (!isDraggingRef.current && clickInfo) { // Check if it was NOT a drag, and clickInfo exists
         const timeElapsed = Date.now() - clickInfo.timestamp;
         const deltaX = finalCoords.clientX - clickInfo.clientX;
         const deltaY = finalCoords.clientY - clickInfo.clientY;
         if ((deltaX * deltaX + deltaY * deltaY) < CLICK_MOVE_THRESHOLD_PX_SQ && timeElapsed < CLICK_TIME_THRESHOLD_MS) {
           const clickedStep = editableRoadmap.find(s => s.id === nodeDragInfoRef.current!.nodeId);
-          if (clickedStep) handleEditStep(clickedStep);
+          if (clickedStep) {
+             handleEditStep(clickedStep);
+          }
         }
       }
-    } else if (connectionDragInfoRef.current) {
+    } else if (connectionDragInfoRef.current) { // This means a connection dot was the initial interaction target
       const { sourceStepId, sourceAnchor, sourceSubStepContext } = connectionDragInfoRef.current;
       if (isDraggingRef.current && canvasRef.current) {
         const canvasRect = canvasRef.current.getBoundingClientRect();
@@ -497,18 +496,26 @@ export default function PlanDetailPage() {
         for (const targetStep of editableRoadmap) {
           if (targetStep.id === sourceStepId) continue;
           const targetAnchors: ('N'|'S'|'E'|'W')[] = ['N', 'S', 'E', 'W'];
-          for (const targetAnchor of targetAnchors) {
-            const targetDotPos = getAnchorPoint(targetStep, targetAnchor);
+          for (const targetAnchorOnTargetNode of targetAnchors) {
+            const targetDotPos = getAnchorPoint(targetStep, targetAnchorOnTargetNode);
             const dist = Math.sqrt(Math.pow(releaseX - targetDotPos.x, 2) + Math.pow(releaseY - targetDotPos.y, 2));
             if (dist <= SNAP_THRESHOLD) {
               const alreadyConnected = (targetStep.incomingConnections || []).some(conn => {
-                if (conn.sourceNodeId !== sourceStepId || conn.targetAnchor !== targetAnchor) return false;
-                const existingConnSubStepContext = conn.originatingSubStepContext;
-                if (sourceSubStepContext && existingConnSubStepContext) {
-                  return existingConnSubStepContext.sourceCardId === sourceStepId && 
-                         existingConnSubStepContext.subStepId === sourceSubStepContext.subStepId;
+                const existingConnIsFromSubStep = !!conn.originatingSubStepContext;
+                const newDragIsFromSubStep = !!sourceSubStepContext;
+
+                if (conn.sourceNodeId !== sourceStepId || conn.targetAnchor !== targetAnchorOnTargetNode) return false;
+
+                if (newDragIsFromSubStep && existingConnIsFromSubStep) {
+                  // Both from sub-steps: check if same source node and same sub-step id
+                  return conn.originatingSubStepContext!.sourceCardId === sourceStepId &&
+                         conn.originatingSubStepContext!.subStepId === sourceSubStepContext!.subStepId;
+                } else if (!newDragIsFromSubStep && !existingConnIsFromSubStep) {
+                  // Both from main node: this specific connection is a duplicate
+                  return true;
                 }
-                return !sourceSubStepContext && !existingConnSubStepContext;
+                // One is from sub-step, other is from main node (or vice-versa) - not a duplicate
+                return false;
               });
 
               if (alreadyConnected) {
@@ -520,7 +527,7 @@ export default function PlanDetailPage() {
                 id: `conn-${uuidv4()}`,
                 lineType: 'straight',
                 sourceNodeId: sourceStepId,
-                targetAnchor: targetAnchor,
+                targetAnchor: targetAnchorOnTargetNode,
                 originatingSubStepContext: sourceSubStepContext ? { sourceCardId: sourceStepId, subStepId: sourceSubStepContext.subStepId } : null,
               };
               setEditableRoadmap(prev => {
@@ -538,19 +545,21 @@ export default function PlanDetailPage() {
           }
           if (snapped) break;
         }
-      } else if (clickInfo) { 
+      } else if (clickInfo) { // This was a click on a dot, not a drag
         const parentNode = editableRoadmap.find(s => s.id === sourceStepId);
         if (parentNode) {
             setPendingNodeFromDotInfo({ sourceStepId: parentNode.id, sourceAnchor: sourceAnchor!, creatingFromSubStepContext: sourceSubStepContext || undefined });
             setIsAddStepDialogOpen(true);
         }
       }
+      // Explicitly clear connection drag info here
+      connectionDragInfoRef.current = null;
+      setActiveConnectionLinePreview(null);
     }
+    // General cleanup for all interaction types
     nodeDragInfoRef.current = null;
-    connectionDragInfoRef.current = null;
     clickStartInfoRef.current = null;
     isDraggingRef.current = false;
-    setActiveConnectionLinePreview(null);
     setIsPointerDown(false);
   }, [
     isPointerDown, getPointerCoords, editableRoadmap, handleEditStep, getAnchorPoint,
@@ -558,26 +567,24 @@ export default function PlanDetailPage() {
     setActiveConnectionLinePreview, setIsPointerDown
   ]);
 
-
   useEffect(() => {
     if (isPointerDown) {
       window.addEventListener('mousemove', handleGlobalMove);
       window.addEventListener('touchmove', handleGlobalMove, { passive: false });
-      window.addEventListener('mouseup', handleGlobalUp);
-      window.addEventListener('touchend', handleGlobalUp);
-      window.addEventListener('touchcancel', handleGlobalUp);
+      window.addEventListener('mouseup', handleGlobalPointerUp);
+      window.addEventListener('touchend', handleGlobalPointerUp);
+      window.addEventListener('touchcancel', handleGlobalPointerUp);
     }
     return () => {
       window.removeEventListener('mousemove', handleGlobalMove);
       window.removeEventListener('touchmove', handleGlobalMove);
-      window.removeEventListener('mouseup', handleGlobalUp);
-      window.removeEventListener('touchend', handleGlobalUp);
-      window.removeEventListener('touchcancel', handleGlobalUp);
+      window.removeEventListener('mouseup', handleGlobalPointerUp);
+      window.removeEventListener('touchend', handleGlobalPointerUp);
+      window.removeEventListener('touchcancel', handleGlobalPointerUp);
     };
-  }, [isPointerDown, handleGlobalMove, handleGlobalUp]);
+  }, [isPointerDown, handleGlobalMove, handleGlobalPointerUp]);
 
   useEffect(() => {
-    // Reset individual edit states when the sheet is closed
     if (!isStepDetailSheetOpen) {
       setIsEditingNodeTitle(false);
       setIsEditingNodeDescription(false);
@@ -598,7 +605,7 @@ export default function PlanDetailPage() {
         if (!sourceNode) return null;
         
         let rawStartPoint: { x: number, y: number }, sourceVisualAnchor: 'N' | 'S' | 'E' | 'W', sourceVisualRadius: number;
-        let currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
+        let currentLineThicknessToUse: number;
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
@@ -741,7 +748,7 @@ export default function PlanDetailPage() {
         </main>
       </div>
       <AddRoadmapStepDialog isOpen={isAddStepDialogOpen} onOpenChange={setIsAddStepDialogOpen} onSubmit={handleAddRoadmapStepSubmit} isSubmitting={saveRoadmapMutation.isPending} parentStepTitle={pendingNodeFromDotInfo?.sourceStepId ? editableRoadmap.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title : null} dialogTitle={pendingNodeFromDotInfo?.creatingFromSubStepContext?.subStepTitle ? `New Step from "${pendingNodeFromDotInfo.creatingFromSubStepContext.subStepTitle}" (Anchor: ${pendingNodeFromDotInfo.sourceAnchor})` : undefined} />
-      <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) { setEditingStep(null); setIsEditingNodeTitle(false); setIsEditingNodeDescription(false); setEditingSubStepId(null); } setIsStepDetailSheetOpen(open); }}>
+      <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) { setEditingStep(null); } setIsStepDetailSheetOpen(open); }}>
         <SheetContent className="sm:max-w-md flex flex-col">
           <SheetHeader><SheetTitle>Edit Step: {editingStep?.title}</SheetTitle><SheetDescription>Modify the details and sub-steps of this roadmap item.</SheetDescription></SheetHeader>
           {editingStep && (<ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
