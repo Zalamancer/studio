@@ -17,7 +17,7 @@ import {
   Map,
   Plus,
   XCircle,
-  Edit2,
+  Edit2, // Keep Edit2 for general edit icons
   Trash2,
   Type as TypeIcon,
   MessageSquare as LineLabelIcon,
@@ -34,6 +34,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 import { getPlanById, updatePlanRoadmap } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, RoadmapSubStep, UpdatePlanRoadmapData, IncomingConnection } from '@/types/plan';
@@ -54,7 +55,7 @@ const NODE_BASE_MIN_HEIGHT = 100;
 const NODE_HEADER_HEIGHT = 40;
 const SUBSTEP_ITEM_HEIGHT = 24;
 const NODE_CONTENT_PADDING_Y = 16;
-const FINAL_BUFFER_CARD_HEIGHT = 8; // Reduced padding
+const FINAL_BUFFER_CARD_HEIGHT = 8; 
 
 const DOT_SIZE = 12;
 const SUB_STEP_DOT_VISUAL_DIAMETER = 8;
@@ -67,7 +68,7 @@ const SNAP_THRESHOLD = 25;
 const CONNECTION_LINE_COLOR = "hsl(var(--border))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
 const CONNECTION_LINE_THICKNESS = 2;
-const CONNECTION_LINE_THICKNESS_MAIN = 3; // Thicker main lines
+const CONNECTION_LINE_THICKNESS_MAIN = 3;
 
 const ARROWHEAD_LENGTH = 10;
 const ARROWHEAD_WIDTH_FACTOR = 0.7;
@@ -91,7 +92,7 @@ const calculateNodeHeight = (step: RoadmapStep): number => {
   }
   const contentHeight = Math.max(descriptionHeight, subStepsHeight);
   height += contentHeight;
-  height += FINAL_BUFFER_CARD_HEIGHT; // Use reduced buffer
+  height += FINAL_BUFFER_CARD_HEIGHT;
   return Math.max(NODE_BASE_MIN_HEIGHT, height);
 };
 
@@ -102,8 +103,6 @@ interface RoadmapStepCardProps {
   isSelected?: boolean;
   isSubmitting: boolean;
   onEditStep: (step: RoadmapStep) => void;
-  // onDeleteStep removed from here, will be handled by sheet
-  onAddSubStep: (parentStepId: string, parentStepTitle: string) => void;
   isActuallyDraggingThisNode?: boolean;
 }
 
@@ -114,7 +113,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
   isSelected,
   isSubmitting,
   onEditStep,
-  onAddSubStep,
   isActuallyDraggingThisNode,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -126,10 +124,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     isSubmitting: boolean;
     style?: React.CSSProperties;
     subStepContext?: { sourceCardId: string; subStepId: string; subStepTitle: string };
-    isParentCardSelected?: boolean; // For main node dots
   }
 
-  const ConnectionDot: React.FC<ConnectionDotProps> = ({ anchor, parentStepId: localParentStepId, isSubmitting: propIsSubmitting, style, subStepContext, isParentCardSelected }) => {
+  const ConnectionDot: React.FC<ConnectionDotProps> = ({ anchor, parentStepId: localParentStepId, isSubmitting: propIsSubmitting, style, subStepContext }) => {
     const dotClickableSize = DOT_SIZE;
     const isSubStepDot = !!subStepContext;
     const titleText = `Create new step from: ${isSubStepDot ? `Sub-step "${subStepContext.subStepTitle}"` : `"${step.title}"`} (Anchor: ${anchor})`;
@@ -139,14 +136,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         aria-label={titleText}
         title={titleText}
         className={cn(
-          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center border-2",
+          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center border-2 border-transparent", // Base border-transparent
           propIsSubmitting && "cursor-not-allowed opacity-50",
           isSubStepDot
-            ? "border-transparent active:scale-125 hover:ring-2 hover:ring-green-300" // Sub-step button hover/active
-            : cn(
-                "border-transparent hover:ring-2 hover:ring-primary/50 active:scale-110", // Main dot button hover/active
-                (!isParentCardSelected) && 'opacity-0 pointer-events-none' // Hide main dots if card not selected
-              )
+            ? "hover:ring-2 hover:ring-green-300 active:scale-125" // Sub-step button hover/active
+            : "hover:ring-2 hover:ring-primary/50 active:scale-110" // Main dot button hover/active (no longer conditional opacity)
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -156,13 +150,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         <div className={cn(
             "rounded-full transition-all duration-150 ease-in-out",
             isSubStepDot
-              ? "bg-muted-foreground h-2 w-2 group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300" // Inner sub-step dot
-              : `bg-primary h-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] w-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60` // Inner main dot
+              ? `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300` // Inner sub-step dot with ring on hover
+              : `bg-primary h-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] w-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60` // Inner main dot with ring on hover
         )}/>
       </button>
     );
   };
-
 
   return (
     <div
@@ -178,11 +171,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       onTouchStart={(e) => onNodeInteractionStart(step.id, e)}
       data-node-id={step.id}
     >
-      <div className="p-2 border-b border-border flex items-center justify-between cursor-move bg-muted/30 rounded-t-lg h-[40px]">
+      <div className="p-2 border-b border-border flex items-center justify-between cursor-move bg-muted/30 rounded-t-lg h-[40px]" onClick={() => onEditStep(step)}>
         <h3 className="text-sm font-semibold truncate" title={step.title}>{step.title}</h3>
-        {/* MoreVertical DropdownMenu removed */}
       </div>
-      <div className="p-2 text-xs text-muted-foreground flex-grow min-h-0">
+      <div className="p-2 text-xs text-muted-foreground flex-grow min-h-0" onClick={() => onEditStep(step)}>
         {step.description && (<p className="whitespace-pre-wrap line-clamp-3 mb-1.5">{step.description}</p>)}
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
@@ -191,11 +183,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         )}
         {(!step.description || step.description.trim().length === 0) && (!step.subSteps || step.subSteps.length === 0) && (<p className="italic text-muted-foreground/70 text-center py-2 text-[11px]">No details or sub-steps yet.</p>)}
       </div>
-      <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} isParentCardSelected={isSelected} />
-      <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} isParentCardSelected={isSelected} />
-      <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} isParentCardSelected={isSelected} />
+      <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
+      <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
+      <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
       {!step.subSteps || step.subSteps.length === 0 ? (
-          <ConnectionDot anchor="W" parentStepId={step.id} isSubmitting={isSubmitting} style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} isParentCardSelected={isSelected} />
+          <ConnectionDot anchor="W" parentStepId={step.id} isSubmitting={isSubmitting} style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
       ) : (
           step.subSteps.map((subStep, index) => (
               <ConnectionDot
@@ -208,7 +200,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                     top: `${NODE_HEADER_HEIGHT + (NODE_CONTENT_PADDING_Y / 2) + (index * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2) - (DOT_SIZE/2)}px`
                 }}
                 subStepContext={{ sourceCardId: step.id, subStepId: subStep.id, subStepTitle: subStep.title }}
-                // isParentCardSelected is not needed for sub-step dots as they are always visible
               />
           ))
       )}
@@ -236,8 +227,13 @@ export default function PlanDetailPage() {
   const [editableRoadmap, setEditableRoadmap] = useState<RoadmapStep[]>([]);
   const [isAddStepDialogOpen, setIsAddStepDialogOpen] = useState(false);
   const [pendingNodeFromDotInfo, setPendingNodeFromDotInfo] = useState<{ sourceStepId: string; sourceAnchor: 'N' | 'S' | 'E' | 'W'; creatingFromSubStepContext?: { sourceCardId: string; subStepId: string; subStepTitle: string } } | null>(null);
+  
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
+  const [isEditingNodeTitle, setIsEditingNodeTitle] = useState(false);
+  const [isEditingNodeDescription, setIsEditingNodeDescription] = useState(false);
+  const [editingSubStepId, setEditingSubStepId] = useState<string | null>(null);
+
   const [stepToDelete, setStepToDelete] = useState<{id: string, title: string} | null>(null);
   const [lineContextMenu, setLineContextMenu] = useState<LineContextMenuState | null>(null);
   const [isLineEditLabelAlertOpen, setIsLineEditLabelAlertOpen] = useState(false);
@@ -325,6 +321,10 @@ export default function PlanDetailPage() {
 
   const handleEditStep = useCallback((stepToEdit: RoadmapStep) => {
     setEditingStep(stepToEdit); setIsStepDetailSheetOpen(true);
+    // Reset individual edit states when opening the sheet for a new step
+    setIsEditingNodeTitle(false);
+    setIsEditingNodeDescription(false);
+    setEditingSubStepId(null);
   }, []);
 
   const handleAddRoadmapStepSubmit = useCallback((data: AddRoadmapStepFormData) => {
@@ -374,7 +374,7 @@ export default function PlanDetailPage() {
     if (!stepToDelete) return;
     setEditableRoadmap(prev => prev.filter(s => s.id !== stepToDelete.id).map(s => ({ ...s, incomingConnections: (s.incomingConnections || []).filter(conn => conn.sourceNodeId !== stepToDelete.id) })));
     toast({ title: "Step Deleted", description: `"${stepToDelete.title}" removed. Remember to save the plan to persist changes.`}); setStepToDelete(null);
-    if (editingStep?.id === stepToDelete?.id) {
+    if (editingStep?.id === stepToDelete?.id) { // Ensure correct comparison for ID from stepToDelete
         setIsStepDetailSheetOpen(false);
         setEditingStep(null);
     }
@@ -382,10 +382,11 @@ export default function PlanDetailPage() {
   const handleStepDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
     setEditableRoadmap(prev => prev.map(s => s.id === updatedStep.id ? updatedStep : s));
     toast({ title: "Step Updated", description: `"${updatedStep.title}" details changed. Remember to save the plan.`});
+    // Reset individual edit states after saving changes in sheet
+    setIsEditingNodeTitle(false);
+    setIsEditingNodeDescription(false);
+    setEditingSubStepId(null);
   }, [toast]);
-  const handleAddSubStepToParent = useCallback((parentStepId: string, parentStepTitle: string) => {
-    setEditingStep(editableRoadmap.find(s => s.id === parentStepId) || null); setIsStepDetailSheetOpen(true);
-  }, [editableRoadmap]);
   const saveRoadmapChanges = useCallback(async () => {
     if (!planData || !user || !planId || !isOwner) { toast({ variant: "destructive", title: "Error", description: "Cannot save: Plan data, user auth, or ownership missing." }); return; }
     saveRoadmapMutation.mutate({ planId, ownerId: user.uid, roadmap: editableRoadmap });
@@ -544,13 +545,12 @@ export default function PlanDetailPage() {
             setIsAddStepDialogOpen(true);
         }
       }
-      connectionDragInfoRef.current = null;
-      setActiveConnectionLinePreview(null);
     }
-
     nodeDragInfoRef.current = null;
+    connectionDragInfoRef.current = null;
     clickStartInfoRef.current = null;
     isDraggingRef.current = false;
+    setActiveConnectionLinePreview(null);
     setIsPointerDown(false);
   }, [
     isPointerDown, getPointerCoords, editableRoadmap, handleEditStep, getAnchorPoint,
@@ -576,6 +576,15 @@ export default function PlanDetailPage() {
     };
   }, [isPointerDown, handleGlobalMove, handleGlobalUp]);
 
+  useEffect(() => {
+    // Reset individual edit states when the sheet is closed
+    if (!isStepDetailSheetOpen) {
+      setIsEditingNodeTitle(false);
+      setIsEditingNodeDescription(false);
+      setEditingSubStepId(null);
+    }
+  }, [isStepDetailSheetOpen]);
+
   const getAnchorAxisVector = (anchor: 'N' | 'S' | 'E' | 'W'): { x: number, y: number } => {
     switch (anchor) { case 'N': return { x: 0, y: -1 }; case 'S': return { x: 0, y: 1 }; case 'E': return { x: 1, y: 0 }; case 'W': return { x: -1, y: 0 }; default: return { x: 0, y: 0 }; }
   };
@@ -589,13 +598,13 @@ export default function PlanDetailPage() {
         if (!sourceNode) return null;
         
         let rawStartPoint: { x: number, y: number }, sourceVisualAnchor: 'N' | 'S' | 'E' | 'W', sourceVisualRadius: number;
-        let currentLineThickness = CONNECTION_LINE_THICKNESS;
+        let currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
           sourceVisualAnchor = 'W'; 
           sourceVisualRadius = SUB_STEP_DOT_VISUAL_RADIUS;
-          currentLineThickness = CONNECTION_LINE_THICKNESS; // Thinner for sub-step lines
+          currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
         } else {
           const tempRawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
           let bestAnchor: 'N' | 'S' | 'E' | 'W' = 'S';
@@ -609,7 +618,7 @@ export default function PlanDetailPage() {
           sourceVisualAnchor = bestAnchor;
           rawStartPoint = getAnchorPoint(sourceNode, sourceVisualAnchor);
           sourceVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS;
-          currentLineThickness = CONNECTION_LINE_THICKNESS_MAIN; // Thicker for main lines
+          currentLineThicknessToUse = CONNECTION_LINE_THICKNESS_MAIN;
         }
         
         const rawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
@@ -619,8 +628,8 @@ export default function PlanDetailPage() {
         const sourceAxisVec = getAnchorAxisVector(sourceVisualAnchor);
         const targetAxisVec = getAnchorAxisVector(targetVisualAnchor);
         
-        const lineStartOffset = sourceVisualRadius + (currentLineThickness / 2);
-        const lineEndOffset = targetVisualRadius + (currentLineThickness / 2) + ARROWHEAD_LENGTH;
+        const lineStartOffset = sourceVisualRadius + (currentLineThicknessToUse / 2);
+        const lineEndOffset = targetVisualRadius + (currentLineThicknessToUse / 2) + ARROWHEAD_LENGTH;
 
         const lineStartPoint = { x: rawStartPoint.x + sourceAxisVec.x * lineStartOffset, y: rawStartPoint.y + sourceAxisVec.y * lineStartOffset };
         const lineEndPointForArrow = { x: rawEndPoint.x - targetAxisVec.x * lineEndOffset, y: rawEndPoint.y - targetAxisVec.y * lineEndOffset };
@@ -657,8 +666,8 @@ export default function PlanDetailPage() {
         const labelMidX = (rawStartPoint.x + rawEndPoint.x) / 2; const labelMidY = (rawStartPoint.y + rawEndPoint.y) / 2;
         return (
           <g key={incomingConn.id}>
-            <path d={pathData} stroke="transparent" strokeWidth={currentLineThickness + 12} fill="none" className="cursor-pointer" onClick={(e) => handleLineClick(e, targetStep.id, incomingConn.id!)} style={{pointerEvents: "stroke"}} />
-            <path d={pathData} stroke={CONNECTION_LINE_COLOR} strokeWidth={currentLineThickness} fill="none" markerEnd="url(#arrowhead)" style={{pointerEvents: "none"}} />
+            <path d={pathData} stroke="transparent" strokeWidth={currentLineThicknessToUse + 12} fill="none" className="cursor-pointer" onClick={(e) => handleLineClick(e, targetStep.id, incomingConn.id!)} style={{pointerEvents: "stroke"}} />
+            <path d={pathData} stroke={CONNECTION_LINE_COLOR} strokeWidth={currentLineThicknessToUse} fill="none" markerEnd="url(#arrowhead)" style={{pointerEvents: "none"}} />
             {incomingConn.label && (<text x={labelMidX} y={labelMidY} fill="hsl(var(--foreground))" fontSize="10" textAnchor="middle" dominantBaseline="central" className="pointer-events-none select-none">{incomingConn.label}</text>)}
           </g>
         );
@@ -703,7 +712,7 @@ export default function PlanDetailPage() {
               >
                 <polygon 
                   points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} 
-                  fill="hsl(var(--foreground))" // Changed to use foreground color
+                  fill="hsl(var(--foreground))"
                 />
               </marker>
             </defs>
@@ -711,7 +720,7 @@ export default function PlanDetailPage() {
             {activeConnectionLinePreview && (<line x1={activeConnectionLinePreview.startX} y1={activeConnectionLinePreview.startY} x2={activeConnectionLinePreview.currentX} y2={activeConnectionLinePreview.currentY} stroke={CONNECTION_LINE_HOVER_COLOR} strokeWidth={activeConnectionLinePreview.isFromSubStep ? CONNECTION_LINE_THICKNESS + 1 : CONNECTION_LINE_THICKNESS_MAIN + 1} strokeDasharray="4 4" markerEnd="url(#arrowhead)" />)}
           </svg>
           {editableRoadmap.length === 0 && !isLoadingPlan && (<div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none"><Map className="h-16 w-16 mb-4" /><p className="text-lg font-medium">Collaboration Plan Area</p><p className="text-sm mt-1">{isOwner ? "Click '+ Node' to add your first step to the roadmap." : "This plan currently has no steps defined."}</p></div>)}
-          {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} onAddSubStep={handleAddSubStepToParent} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}/>))}
+          {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}/>))}
           <Popover open={lineContextMenu?.isOpen || false} onOpenChange={(open) => { if (!open) setLineContextMenu(null); }}><PopoverTrigger asChild><div className="fixed" style={{ left: `${lineContextMenu?.x || 0}px`, top: `${lineContextMenu?.y || 0}px`, width: 0, height: 0 }} /></PopoverTrigger>
             <PopoverContent className="w-auto p-1" side="right" align="start" sideOffset={5}>
               {lineContextMenu && isOwner && (
@@ -732,16 +741,45 @@ export default function PlanDetailPage() {
         </main>
       </div>
       <AddRoadmapStepDialog isOpen={isAddStepDialogOpen} onOpenChange={setIsAddStepDialogOpen} onSubmit={handleAddRoadmapStepSubmit} isSubmitting={saveRoadmapMutation.isPending} parentStepTitle={pendingNodeFromDotInfo?.sourceStepId ? editableRoadmap.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title : null} dialogTitle={pendingNodeFromDotInfo?.creatingFromSubStepContext?.subStepTitle ? `New Step from "${pendingNodeFromDotInfo.creatingFromSubStepContext.subStepTitle}" (Anchor: ${pendingNodeFromDotInfo.sourceAnchor})` : undefined} />
-      <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) setEditingStep(null); setIsStepDetailSheetOpen(open); }}><SheetContent className="sm:max-w-md">
+      <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) { setEditingStep(null); setIsEditingNodeTitle(false); setIsEditingNodeDescription(false); setEditingSubStepId(null); } setIsStepDetailSheetOpen(open); }}>
+        <SheetContent className="sm:max-w-md flex flex-col">
           <SheetHeader><SheetTitle>Edit Step: {editingStep?.title}</SheetTitle><SheetDescription>Modify the details and sub-steps of this roadmap item.</SheetDescription></SheetHeader>
-          {editingStep && (<div className="py-4 space-y-4"><div><Label htmlFor="sheet-step-title">Title</Label><Input id="sheet-step-title" value={editingStep.title} onChange={(e) => setEditingStep(prev => prev ? { ...prev, title: e.target.value } : null)} disabled={saveRoadmapMutation.isPending} /></div><div><Label htmlFor="sheet-step-description">Description</Label><Textarea id="sheet-step-description" value={editingStep.description || ""} onChange={(e) => setEditingStep(prev => prev ? { ...prev, description: e.target.value } : null)} rows={4} disabled={saveRoadmapMutation.isPending} /></div>
-              <div className="space-y-2"><Label>Sub-steps</Label>
-                {editingStep.subSteps && editingStep.subSteps.length > 0 && (<ul className="space-y-1">
-                    {editingStep.subSteps.map((sub, index) => (<li key={sub.id} className="flex items-center gap-2 text-xs"><Input value={sub.title} onChange={(e) => { const newSubSteps = [...(editingStep.subSteps || [])]; newSubSteps[index] = { ...newSubSteps[index], title: e.target.value }; setEditingStep(prev => prev ? { ...prev, subSteps: newSubSteps } : null);}} className="flex-grow h-7 text-xs" disabled={saveRoadmapMutation.isPending} /><Button type="button" variant="ghost" size="icon" className="h-6 w-6 p-1 text-destructive hover:text-destructive" onClick={() => { const newSubSteps = (editingStep.subSteps || []).filter((_, i) => i !== index); setEditingStep(prev => prev ? { ...prev, subSteps: newSubSteps } : null); }} disabled={saveRoadmapMutation.isPending}><Trash2 className="h-3.5 w-3.5" /></Button></li>))}
-                  </ul>)}
-                <Button type="button" variant="outline" size="xs" onClick={() => { if (!editingStep) return; const newSubStep: RoadmapSubStep = { id: `sub-${Date.now()}-${uuidv4().substring(0,6)}`, parentId: editingStep.id, title: "New Sub-step" }; setEditingStep(prev => prev ? { ...prev, subSteps: [...(prev.subSteps || []), newSubStep] } : null);}} disabled={saveRoadmapMutation.isPending}><Plus className="mr-1 h-3.5 w-3.5" /> Add Sub-step</Button>
-              </div></div>)}
-          <SheetFooter className="mt-auto border-t pt-4 space-y-2 sm:space-y-0 sm:flex sm:justify-between">
+          {editingStep && (<ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="sheet-step-title">Title</Label>
+                <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditingNodeTitle(prev => !prev)} title={isEditingNodeTitle ? "Finish Editing Title" : "Edit Title"}>
+                  <Edit2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <Input id="sheet-step-title" value={editingStep.title} onChange={(e) => setEditingStep(prev => prev ? { ...prev, title: e.target.value } : null)} disabled={!isEditingNodeTitle || saveRoadmapMutation.isPending} />
+            </div>
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <Label htmlFor="sheet-step-description">Description</Label>
+                 <Button variant="ghost" size="icon" className="h-6 w-6" onClick={() => setIsEditingNodeDescription(prev => !prev)} title={isEditingNodeDescription ? "Finish Editing Description" : "Edit Description"}>
+                  <Edit2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
+              <Textarea id="sheet-step-description" value={editingStep.description || ""} onChange={(e) => setEditingStep(prev => prev ? { ...prev, description: e.target.value } : null)} rows={4} disabled={!isEditingNodeDescription || saveRoadmapMutation.isPending} />
+            </div>
+            <div className="space-y-2"><Label>Sub-steps</Label>
+              {editingStep.subSteps && editingStep.subSteps.length > 0 && (<ul className="space-y-1">
+                  {editingStep.subSteps.map((sub, index) => (
+                    <li key={sub.id} className="flex items-center gap-2 text-xs">
+                      <Input value={sub.title} onChange={(e) => { const newSubSteps = [...(editingStep.subSteps || [])]; newSubSteps[index] = { ...newSubSteps[index], title: e.target.value }; setEditingStep(prev => prev ? { ...prev, subSteps: newSubSteps } : null);}} className="flex-grow h-7 text-xs" disabled={editingSubStepId !== sub.id || saveRoadmapMutation.isPending} />
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6 p-1 text-muted-foreground hover:text-foreground" onClick={() => setEditingSubStepId(prev => prev === sub.id ? null : sub.id)} disabled={saveRoadmapMutation.isPending} title={editingSubStepId === sub.id ? "Finish Editing Sub-step" : "Edit Sub-step"}>
+                        <Edit2 className="h-3.5 w-3.5" />
+                      </Button>
+                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6 p-1 text-destructive hover:text-destructive" onClick={() => { const newSubSteps = (editingStep.subSteps || []).filter((_, i) => i !== index); setEditingStep(prev => prev ? { ...prev, subSteps: newSubSteps } : null); }} disabled={saveRoadmapMutation.isPending} title="Delete Sub-step">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </li>))}
+                </ul>)}
+              <Button type="button" variant="outline" size="xs" onClick={() => { if (!editingStep) return; const newSubStep: RoadmapSubStep = { id: `sub-${Date.now()}-${uuidv4().substring(0,6)}`, parentId: editingStep.id, title: "New Sub-step" }; setEditingStep(prev => prev ? { ...prev, subSteps: [...(prev.subSteps || []), newSubStep] } : null);}} disabled={saveRoadmapMutation.isPending}><Plus className="mr-1 h-3.5 w-3.5" /> Add Sub-step</Button>
+            </div>
+          </div></ScrollArea>)}
+          <SheetFooter className="p-4 mt-auto border-t pt-4 space-y-2 sm:space-y-0 sm:flex sm:justify-between">
             <div>
               {isOwner && editingStep && (
                 <Button 
@@ -760,11 +798,12 @@ export default function PlanDetailPage() {
               )}
             </div>
             <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-              <SheetClose asChild><Button type="button" variant="outline" disabled={saveRoadmapMutation.isPending}>Cancel</Button></SheetClose>
+              <SheetClose asChild><Button type="button" variant="outline" disabled={saveRoadmapMutation.isPending} onClick={() => { setIsEditingNodeTitle(false); setIsEditingNodeDescription(false); setEditingSubStepId(null); }}>Cancel</Button></SheetClose>
               <Button type="button" onClick={() => { if (editingStep) { handleStepDetailUpdate(editingStep); setIsStepDetailSheetOpen(false); setEditingStep(null); }}} disabled={saveRoadmapMutation.isPending || !editingStep}>{saveRoadmapMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes</Button>
             </div>
           </SheetFooter>
-        </SheetContent></Sheet>
+        </SheetContent>
+      </Sheet>
       <AlertDialog open={!!stepToDelete} onOpenChange={(open) => !open && setStepToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Step: "{stepToDelete?.title}"?</AlertDialogTitle><AlertDialogDescription>This will remove the step and any connections to or from it. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setStepToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteStep} className="bg-destructive hover:bg-destructive/90">Delete Step</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
        <AlertDialog open={isLineEditLabelAlertOpen} onOpenChange={setIsLineEditLabelAlertOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Edit Line Label</AlertDialogTitle><AlertDialogDescription>Enter a label for this connection (or leave empty to remove an existing label).</AlertDialogDescription></AlertDialogHeader><div className="py-2"><Label htmlFor="line-label-input" className="sr-only">Line Label</Label><Input id="line-label-input" ref={lineLabelInputRef} value={currentLineEditLabel} onChange={(e) => setCurrentLineEditLabel(e.target.value)} placeholder="E.g., Depends on, Blocks, etc." autoFocus /></div><AlertDialogFooter><AlertDialogCancel onClick={() => { setIsLineEditLabelAlertOpen(false); setCurrentLineEditLabel(""); setLineContextMenu(null); }}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleConfirmSetLineLabel}>Set Label</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </div>
