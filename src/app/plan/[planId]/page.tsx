@@ -61,14 +61,15 @@ const NODE_CONTENT_PADDING_Y = 16;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
 
 const DOT_SIZE = 12;
-const SUB_STEP_DOT_VISUAL_DIAMETER = 8; // Visual size of the inner dot for sub-steps
-// const MAIN_STEP_DOT_VISUAL_DIAMETER = 6; // No longer used for base size
-// const ACTIVE_MAIN_STEP_DOT_VISUAL_DIAMETER = 8; // No longer used if relying on scale
+const SUB_STEP_DOT_VISUAL_DIAMETER = 8; 
 
 const DOT_OFFSET = -DOT_SIZE / 2;
 const SNAP_THRESHOLD = 25;
-const CONNECTION_LINE_COLOR = "hsl(var(--foreground))";
-const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
+
+// Line colors defined by user
+const MAIN_CONNECTION_LINE_COLOR = "#FDC921";
+const SUBSTEP_CONNECTION_LINE_COLOR = "#FDD85D";
+
 const CONNECTION_LINE_THICKNESS = 2;
 const CONNECTION_LINE_THICKNESS_MAIN = 3;
 
@@ -145,7 +146,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         className={cn(
           "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center",
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          isSubStepDot ? "active:scale-125" : "shadow-sm active:scale-110"
+          isSubStepDot ? "active:scale-125" : "active:scale-110" // Removed shadow-sm as main card has shadow
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -156,8 +157,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
             "rounded-full transition-all duration-150 ease-in-out",
             isSubStepDot
               ? `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300`
-              // Updated classes for main node dots
-              : `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-primary group-hover:scale-150 group-hover:ring-2 group-hover:ring-primary/60`
+              : `bg-muted-foreground h-2 w-2 group-hover:bg-primary group-hover:scale-150 group-hover:ring-2 group-hover:ring-primary/60` // Main node dot styling
         )}/>
       </button>
     );
@@ -167,24 +167,35 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     <div
       ref={cardRef}
       className={cn(
-        "absolute select-none shadow-lg border rounded-lg flex flex-col bg-secondary", // Added bg-secondary
+        "absolute select-none shadow-lg border rounded-lg flex flex-col",
         isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
         isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
       )}
-      style={{ left: `${step.x}px`, top: `${step.y}px`, width: `${NODE_BASE_WIDTH}px`, height: `${dynamicHeight}px`, touchAction: 'none', overflow: 'visible' }} // Removed backgroundColor
+      style={{ 
+        left: `${step.x}px`, 
+        top: `${step.y}px`, 
+        width: `${NODE_BASE_WIDTH}px`, 
+        height: `${dynamicHeight}px`, 
+        touchAction: 'none', 
+        overflow: 'visible',
+        backgroundColor: '#99D6EA' // Node content container background
+      }}
       onMouseDown={(e) => onNodeInteractionStart(step.id, e)}
       onTouchStart={(e) => onNodeInteractionStart(step.id, e)}
       data-node-id={step.id}
     >
-      <div className="p-2 border-b border-border flex items-center justify-between cursor-move bg-muted/30 rounded-t-lg h-[40px]">
-        <h3 className="text-sm font-semibold truncate" title={step.title}>{step.title}</h3>
+      <div 
+        className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]"
+        style={{ backgroundColor: '#6798C0' }} // Node title container background
+      >
+        <h3 className="text-sm font-semibold truncate text-white" title={step.title}>{step.title}</h3>
       </div>
-      <div className="p-2 text-xs text-muted-foreground flex-grow min-h-0">
-        {step.description && (<p className="whitespace-pre-wrap line-clamp-3 mb-1.5">{step.description}</p>)}
+      <div className="p-2 text-xs flex-grow min-h-0"> {/* Removed text-muted-foreground, sub-steps will have own color */}
+        {step.description && (<p className="whitespace-pre-wrap line-clamp-3 mb-1.5 text-black">{step.description}</p>)}
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
             {step.subSteps.map((subStep) => (
-              <li key={subStep.id} className="text-xs flex items-center relative py-0.5 group/substep text-black"> {/* Changed text color */}
+              <li key={subStep.id} className="text-xs flex items-center relative py-0.5 group/substep text-black"> {/* Sub-step text color #000000 */}
                  <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); if (onSubStepSelect) onSubStepSelect(step, subStep); }}
@@ -198,7 +209,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
           </ul>
         )}
         {(!step.description || step.description.trim().length === 0) && (!step.subSteps || step.subSteps.length === 0) && (
-          <p className="italic text-muted-foreground/70 text-center py-2 text-[11px]">No details or sub-steps yet.</p>
+          <p className="italic text-gray-600 text-center py-2 text-[11px]">No details or sub-steps yet.</p>
         )}
       </div>
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
@@ -694,13 +705,15 @@ export default function PlanDetailPage() {
         const sourceNode = editableRoadmap.find(s => s.id === incomingConn.sourceNodeId);
         if (!sourceNode) return null;
 
-        let rawStartPoint: { x: number, y: number }, sourceVisualAnchor: 'N' | 'S' | 'E' | 'W', sourceVisualRadius: number, currentLineThicknessToUse: number;
+        let rawStartPoint: { x: number, y: number }, sourceVisualAnchor: 'N' | 'S' | 'E' | 'W', sourceVisualRadius: number, currentLineThicknessToUse: number, currentLineColor: string, currentMarkerId: string;
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
           sourceVisualAnchor = 'W';
           sourceVisualRadius = SUB_STEP_DOT_VISUAL_DIAMETER / 2;
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
+          currentLineColor = SUBSTEP_CONNECTION_LINE_COLOR;
+          currentMarkerId = 'url(#arrowhead-substep)';
         } else {
           const tempRawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
           let bestAnchor: 'N' | 'S' | 'E' | 'W' = 'S';
@@ -713,13 +726,15 @@ export default function PlanDetailPage() {
           });
           sourceVisualAnchor = bestAnchor;
           rawStartPoint = getAnchorPoint(sourceNode, sourceVisualAnchor);
-          sourceVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 4) * 1.5 / 2; // Effective radius after scale
+          sourceVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 2); // Using SUB_STEP_DOT_VISUAL_DIAMETER for consistency in visual size
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS_MAIN;
+          currentLineColor = MAIN_CONNECTION_LINE_COLOR;
+          currentMarkerId = 'url(#arrowhead-main)';
         }
 
         const rawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
         const targetVisualAnchor = incomingConn.targetAnchor;
-        const targetVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 4) * 1.5 / 2; // Effective radius after scale
+        const targetVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 2);
 
         const sourceAxisVec = getAnchorAxisVector(sourceVisualAnchor);
         const targetAxisVec = getAnchorAxisVector(targetVisualAnchor);
@@ -763,7 +778,7 @@ export default function PlanDetailPage() {
         return (
           <g key={incomingConn.id}>
             <path d={pathData} stroke="transparent" strokeWidth={currentLineThicknessToUse + 12} fill="none" className="cursor-pointer" onClick={(e) => handleLineClick(e, targetStep.id, incomingConn.id!)} style={{pointerEvents: "stroke"}} />
-            <path d={pathData} stroke={CONNECTION_LINE_COLOR} strokeWidth={currentLineThicknessToUse} fill="none" markerEnd="url(#arrowhead)" style={{pointerEvents: "none"}} />
+            <path d={pathData} stroke={currentLineColor} strokeWidth={currentLineThicknessToUse} fill="none" markerEnd={currentMarkerId} style={{pointerEvents: "none"}} />
             {incomingConn.label && (<text x={labelMidX} y={labelMidY} fill="hsl(var(--foreground))" fontSize="10" textAnchor="middle" dominantBaseline="central" className="pointer-events-none select-none">{incomingConn.label}</text>)}
           </g>
         );
@@ -813,10 +828,11 @@ export default function PlanDetailPage() {
         <main ref={canvasRef} className="flex-1 grid-background relative overflow-auto p-4 md:p-6" style={{ minHeight: canvasMinHeight }} onClick={() => { if (lineContextMenu?.isOpen) setLineContextMenu(null); }}>
           <svg ref={svgRef} className="absolute inset-0 w-full h-full pointer-events-none z-0">
             <defs>
-              <marker id="arrowhead" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill={CONNECTION_LINE_COLOR}/></marker>
+                <marker id="arrowhead-main" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill={MAIN_CONNECTION_LINE_COLOR}/></marker>
+                <marker id="arrowhead-substep" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill={SUBSTEP_CONNECTION_LINE_COLOR}/></marker>
             </defs>
             {drawConnectionLines()}
-            {activeConnectionLinePreview && (<line x1={activeConnectionLinePreview.startX} y1={activeConnectionLinePreview.startY} x2={activeConnectionLinePreview.currentX} y2={activeConnectionLinePreview.currentY} stroke={CONNECTION_LINE_HOVER_COLOR} strokeWidth={activeConnectionLinePreview.isFromSubStep ? CONNECTION_LINE_THICKNESS + 1 : CONNECTION_LINE_THICKNESS_MAIN + 1} strokeDasharray="4 4" markerEnd="url(#arrowhead)" />)}
+            {activeConnectionLinePreview && (<line x1={activeConnectionLinePreview.startX} y1={activeConnectionLinePreview.startY} x2={activeConnectionLinePreview.currentX} y2={activeConnectionLinePreview.currentY} stroke={activeConnectionLinePreview.isFromSubStep ? SUBSTEP_CONNECTION_LINE_COLOR : MAIN_CONNECTION_LINE_COLOR} strokeWidth={activeConnectionLinePreview.isFromSubStep ? CONNECTION_LINE_THICKNESS + 1 : CONNECTION_LINE_THICKNESS_MAIN + 1} strokeDasharray="4 4" markerEnd={activeConnectionLinePreview.isFromSubStep ? 'url(#arrowhead-substep)' : 'url(#arrowhead-main)'} />)}
           </svg>
           {editableRoadmap.length === 0 && !isLoadingPlan && (<div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none"><Map className="h-16 w-16 mb-4" /><p className="text-lg font-medium">Collaboration Plan Area</p><p className="text-sm mt-1">{canEditPlan ? "Click '+ Node' to add your first step to the roadmap." : "This plan currently has no steps defined."}</p></div>)}
           {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id && !editingSubStep} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} onSubStepSelect={handleEditSubStep} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}/>))}
