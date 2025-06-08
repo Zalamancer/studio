@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -60,10 +61,9 @@ const NODE_CONTENT_PADDING_Y = 16;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
 
 const DOT_SIZE = 12;
-const SUB_STEP_DOT_VISUAL_DIAMETER = 8;
-const MAIN_STEP_DOT_VISUAL_DIAMETER = 6;
-const SUB_STEP_DOT_VISUAL_RADIUS = SUB_STEP_DOT_VISUAL_DIAMETER / 2;
-const MAIN_STEP_DOT_VISUAL_RADIUS = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
+const SUB_STEP_DOT_VISUAL_DIAMETER = 8; // Visual size of the inner dot for sub-steps
+const MAIN_STEP_DOT_VISUAL_DIAMETER = 6; // Visual size of the inner dot for main steps (when not active)
+const ACTIVE_MAIN_STEP_DOT_VISUAL_DIAMETER = 8; // Visual size for active/hovered main step dots
 
 const DOT_OFFSET = -DOT_SIZE / 2;
 const SNAP_THRESHOLD = 25;
@@ -156,7 +156,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
             "rounded-full transition-all duration-150 ease-in-out",
             isSubStepDot
               ? `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300`
-              : `bg-primary h-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] w-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60`
+              : `bg-muted-foreground h-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] w-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:bg-primary group-hover:h-[${ACTIVE_MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:w-[${ACTIVE_MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60`
         )}/>
       </button>
     );
@@ -167,11 +167,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       ref={cardRef}
       className={cn(
         "absolute select-none shadow-lg border rounded-lg flex flex-col",
-        "bg-card text-card-foreground",
         isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
         isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
       )}
-      style={{ left: `${step.x}px`, top: `${step.y}px`, width: `${NODE_BASE_WIDTH}px`, height: `${dynamicHeight}px`, touchAction: 'none', overflow: 'visible' }}
+      style={{ left: `${step.x}px`, top: `${step.y}px`, width: `${NODE_BASE_WIDTH}px`, height: `${dynamicHeight}px`, touchAction: 'none', overflow: 'visible', backgroundColor: '#E9FFFF' }}
       onMouseDown={(e) => onNodeInteractionStart(step.id, e)}
       onTouchStart={(e) => onNodeInteractionStart(step.id, e)}
       data-node-id={step.id}
@@ -184,7 +183,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
             {step.subSteps.map((subStep) => (
-              <li key={subStep.id} className="text-xs text-muted-foreground/90 flex items-center relative py-0.5 group/substep">
+              <li key={subStep.id} className="text-xs flex items-center relative py-0.5 group/substep text-black">
                  <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); if (onSubStepSelect) onSubStepSelect(step, subStep); }}
@@ -699,7 +698,7 @@ export default function PlanDetailPage() {
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
           sourceVisualAnchor = 'W';
-          sourceVisualRadius = SUB_STEP_DOT_VISUAL_RADIUS;
+          sourceVisualRadius = SUB_STEP_DOT_VISUAL_DIAMETER / 2;
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
         } else {
           const tempRawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
@@ -713,13 +712,13 @@ export default function PlanDetailPage() {
           });
           sourceVisualAnchor = bestAnchor;
           rawStartPoint = getAnchorPoint(sourceNode, sourceVisualAnchor);
-          sourceVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS;
+          sourceVisualRadius = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS_MAIN;
         }
 
         const rawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
         const targetVisualAnchor = incomingConn.targetAnchor;
-        const targetVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS;
+        const targetVisualRadius = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
 
         const sourceAxisVec = getAnchorAxisVector(sourceVisualAnchor);
         const targetAxisVec = getAnchorAxisVector(targetVisualAnchor);
