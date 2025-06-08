@@ -55,13 +55,14 @@ const NODE_BASE_MIN_HEIGHT = 100;
 const NODE_HEADER_HEIGHT = 40;
 const SUBSTEP_ITEM_HEIGHT = 24;
 const NODE_CONTENT_PADDING_Y = 16;
-const FINAL_BUFFER_CARD_HEIGHT = 8; 
+const FINAL_BUFFER_CARD_HEIGHT = 8;
 
 const DOT_SIZE = 12;
 const SUB_STEP_DOT_VISUAL_DIAMETER = 8;
 const MAIN_STEP_DOT_VISUAL_DIAMETER = 6;
 const SUB_STEP_DOT_VISUAL_RADIUS = SUB_STEP_DOT_VISUAL_DIAMETER / 2;
 const MAIN_STEP_DOT_VISUAL_RADIUS = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
+
 
 const DOT_OFFSET = -DOT_SIZE / 2;
 const SNAP_THRESHOLD = 25;
@@ -136,9 +137,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         aria-label={titleText}
         title={titleText}
         className={cn(
-          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center border-2 border-transparent",
+          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center",
           propIsSubmitting && "cursor-not-allowed opacity-50",
-          isSubStepDot ? "active:scale-125" : "active:scale-110",
+          isSubStepDot ? "hover:ring-2 hover:ring-green-300 active:scale-125" : "hover:ring-2 hover:ring-primary/50 active:scale-110", // Removed shadow-sm from sub-step button
+          isSubStepDot ? "" : "shadow-sm" // Main dots get shadow by default
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -161,8 +163,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       className={cn(
         "absolute select-none shadow-lg border rounded-lg flex flex-col",
         "bg-card text-card-foreground",
-        isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10",
-        isSubStepDot ? "" : "shadow-sm", // Removed shadow-sm for sub-step dots' button
+        isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm", // Card always gets its shadow
         isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
       )}
       style={{ left: `${step.x}px`, top: `${step.y}px`, width: `${NODE_BASE_WIDTH}px`, height: `${dynamicHeight}px`, touchAction: 'none', overflow: 'visible' }}
@@ -182,9 +183,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         )}
         {(!step.description || step.description.trim().length === 0) && (!step.subSteps || step.subSteps.length === 0) && (<p className="italic text-muted-foreground/70 text-center py-2 text-[11px]">No details or sub-steps yet.</p>)}
       </div>
+      {/* Main Node Dots - N, S, E */}
       <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
       <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
       <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
+
+      {/* West Dots - Conditional for main node or sub-steps */}
       {!step.subSteps || step.subSteps.length === 0 ? (
           <ConnectionDot anchor="W" parentStepId={step.id} isSubmitting={isSubmitting} style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
       ) : (
@@ -507,14 +511,11 @@ export default function PlanDetailPage() {
                 if (conn.sourceNodeId !== sourceStepId || conn.targetAnchor !== targetAnchorOnTargetNode) return false;
 
                 if (newDragIsFromSubStep && existingConnIsFromSubStep) {
-                  // Both from sub-steps: check if same source node and same sub-step id
                   return conn.originatingSubStepContext!.sourceCardId === sourceStepId &&
                          conn.originatingSubStepContext!.subStepId === sourceSubStepContext!.subStepId;
                 } else if (!newDragIsFromSubStep && !existingConnIsFromSubStep) {
-                  // Both from main node: this specific connection is a duplicate
                   return true;
                 }
-                // One is from sub-step, other is from main node (or vice-versa) - not a duplicate
                 return false;
               });
 
@@ -552,14 +553,13 @@ export default function PlanDetailPage() {
             setIsAddStepDialogOpen(true);
         }
       }
-      // Explicitly clear connection drag info here
-      connectionDragInfoRef.current = null;
-      setActiveConnectionLinePreview(null);
     }
     // General cleanup for all interaction types
     nodeDragInfoRef.current = null;
+    connectionDragInfoRef.current = null;
     clickStartInfoRef.current = null;
     isDraggingRef.current = false;
+    setActiveConnectionLinePreview(null);
     setIsPointerDown(false);
   }, [
     isPointerDown, getPointerCoords, editableRoadmap, handleEditStep, getAnchorPoint,
@@ -604,8 +604,7 @@ export default function PlanDetailPage() {
         const sourceNode = editableRoadmap.find(s => s.id === incomingConn.sourceNodeId);
         if (!sourceNode) return null;
         
-        let rawStartPoint: { x: number, y: number }, sourceVisualAnchor: 'N' | 'S' | 'E' | 'W', sourceVisualRadius: number;
-        let currentLineThicknessToUse: number;
+        let rawStartPoint: { x: number, y: number }, sourceVisualAnchor: 'N' | 'S' | 'E' | 'W', sourceVisualRadius: number, currentLineThicknessToUse: number;
 
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
@@ -775,7 +774,7 @@ export default function PlanDetailPage() {
                   {editingStep.subSteps.map((sub, index) => (
                     <li key={sub.id} className="flex items-center gap-2 text-xs">
                       <Input value={sub.title} onChange={(e) => { const newSubSteps = [...(editingStep.subSteps || [])]; newSubSteps[index] = { ...newSubSteps[index], title: e.target.value }; setEditingStep(prev => prev ? { ...prev, subSteps: newSubSteps } : null);}} className="flex-grow h-7 text-xs" disabled={editingSubStepId !== sub.id || saveRoadmapMutation.isPending} />
-                      <Button type="button" variant="ghost" size="icon" className="h-6 w-6 p-1 text-muted-foreground hover:text-foreground" onClick={() => setEditingSubStepId(prev => prev === sub.id ? null : sub.id)} disabled={saveRoadmapMutation.isPending} title={editingSubStepId === sub.id ? "Finish Editing Sub-step" : "Edit Sub-step"}>
+                       <Button type="button" variant="ghost" size="icon" className="h-6 w-6 p-1 text-muted-foreground hover:text-foreground" onClick={() => setEditingSubStepId(prev => prev === sub.id ? null : sub.id)} disabled={saveRoadmapMutation.isPending} title={editingSubStepId === sub.id ? "Finish Editing Sub-step" : "Edit Sub-step"}>
                         <Edit2 className="h-3.5 w-3.5" />
                       </Button>
                       <Button type="button" variant="ghost" size="icon" className="h-6 w-6 p-1 text-destructive hover:text-destructive" onClick={() => { const newSubSteps = (editingStep.subSteps || []).filter((_, i) => i !== index); setEditingStep(prev => prev ? { ...prev, subSteps: newSubSteps } : null); }} disabled={saveRoadmapMutation.isPending} title="Delete Sub-step">
@@ -816,4 +815,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
