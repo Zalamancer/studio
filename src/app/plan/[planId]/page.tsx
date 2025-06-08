@@ -62,11 +62,15 @@ const NODE_BASE_MIN_HEIGHT = 100;
 const NODE_HEADER_HEIGHT = 40;
 const SUBSTEP_ITEM_HEIGHT = 24;
 const NODE_CONTENT_PADDING_Y = 16;
-const FINAL_BUFFER_CARD_HEIGHT = 20;
+const FINAL_BUFFER_CARD_HEIGHT = 8; // Reduced from 20
 
-const DOT_SIZE = 12;
-const DOT_RADIUS = DOT_SIZE / 2;
-const DOT_OFFSET = -DOT_RADIUS;
+const DOT_SIZE = 12; // Clickable area diameter
+const SUB_STEP_DOT_VISUAL_DIAMETER = 8;
+const MAIN_STEP_DOT_VISUAL_DIAMETER = 6;
+const SUB_STEP_DOT_VISUAL_RADIUS = SUB_STEP_DOT_VISUAL_DIAMETER / 2;
+const MAIN_STEP_DOT_VISUAL_RADIUS = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
+
+const DOT_OFFSET = -DOT_SIZE / 2; // Offset for positioning clickable area
 const SNAP_THRESHOLD = 25;
 const CONNECTION_LINE_COLOR = "hsl(var(--border))";
 const CONNECTION_LINE_HOVER_COLOR = "hsl(var(--primary))";
@@ -75,7 +79,6 @@ const CONNECTION_LINE_THICKNESS = 2;
 const ARROWHEAD_LENGTH = 10;
 const ARROWHEAD_WIDTH_FACTOR = 0.7;
 const NECK_LENGTH = ARROWHEAD_LENGTH * 2;
-const START_OFFSET_FROM_DOT = DOT_RADIUS + (CONNECTION_LINE_THICKNESS / 2);
 const MIN_MAIN_PATH_LENGTH = 10;
 
 const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
@@ -132,7 +135,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     style?: React.CSSProperties;
     subStepContext?: { sourceCardId: string; subStepId: string; subStepTitle: string };
   }> = ({ anchor, parentStepId: localParentStepId, isSubmitting: propIsSubmitting, style, subStepContext }) => {
-    const dotClickableSize = DOT_SIZE * 2;
+    const dotClickableSize = DOT_SIZE; // Using DOT_SIZE for clickable area
     const isSubStepDot = !!subStepContext;
     const titleText = `Create new step from: ${isSubStepDot ? `Sub-step "${subStepContext.subStepTitle}"` : `"${step.title}"`} (Anchor: ${anchor})`;
 
@@ -141,11 +144,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         aria-label={titleText}
         title={titleText}
         className={cn(
-          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out shadow-sm flex items-center justify-center border-2",
+          "group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center border-2",
           propIsSubmitting && "cursor-not-allowed opacity-50",
           isSubStepDot
-            ? "border-transparent active:scale-125" // Removed hover:ring-2 hover:ring-green-300 from button
-            : "border-transparent active:scale-110" // Removed hover:ring-2 hover:ring-primary/50 from button
+            ? "border-transparent active:scale-125"
+            : "border-transparent hover:ring-2 hover:ring-primary/50 active:scale-110 shadow-sm"
         )}
         style={{ width: dotClickableSize, height: dotClickableSize, ...style }}
         onMouseDown={(e) => { if (propIsSubmitting) return; e.stopPropagation(); onDotInteractionStart(localParentStepId, anchor, e, subStepContext); }}
@@ -155,8 +158,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         <div className={cn(
             "rounded-full transition-all duration-150 ease-in-out",
             isSubStepDot
-              ? "bg-muted-foreground h-2 w-2 group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300" // Ring here
-              : "bg-primary h-[6px] w-[6px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60" // Ring here
+              ? "bg-muted-foreground h-2 w-2 group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300"
+              : `bg-primary h-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] w-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60`
         )}/>
       </button>
     );
@@ -199,11 +202,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         )}
         {(!step.description || step.description.trim().length === 0) && (!step.subSteps || step.subSteps.length === 0) && (<p className="italic text-muted-foreground/70 text-center py-2 text-[11px]">No details or sub-steps yet.</p>)}
       </div>
-      <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET - (DOT_SIZE/2), left: `calc(50% - ${DOT_SIZE/2}px)` }} />
-      <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET - (DOT_SIZE/2), left: `calc(50% - ${DOT_SIZE/2}px)` }} />
-      <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET - (DOT_SIZE/2), top: `calc(50% - ${DOT_SIZE/2}px)` }} />
+      <ConnectionDot anchor="N" parentStepId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
+      <ConnectionDot anchor="S" parentStepId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
+      <ConnectionDot anchor="E" parentStepId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
       {!step.subSteps || step.subSteps.length === 0 ? (
-          <ConnectionDot anchor="W" parentStepId={step.id} isSubmitting={isSubmitting} style={{ left: DOT_OFFSET - (DOT_SIZE/2), top: `calc(50% - ${DOT_SIZE/2}px)` }} />
+          <ConnectionDot anchor="W" parentStepId={step.id} isSubmitting={isSubmitting} style={{ left: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
       ) : (
           step.subSteps.map((subStep, index) => (
               <ConnectionDot
@@ -212,7 +215,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                 parentStepId={step.id}
                 isSubmitting={isSubmitting}
                 style={{
-                    left: DOT_OFFSET - (DOT_SIZE/2),
+                    left: DOT_OFFSET,
                     top: `${NODE_HEADER_HEIGHT + (NODE_CONTENT_PADDING_Y / 2) + (index * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2) - (DOT_SIZE/2)}px`
                 }}
                 subStepContext={{ sourceCardId: step.id, subStepId: subStep.id, subStepTitle: subStep.title }}
@@ -227,7 +230,6 @@ RoadmapStepCard.displayName = "RoadmapStepCard";
 interface NodeDragInfo { type: 'node'; nodeId: string; offsetX: number; offsetY: number; }
 interface ConnectionDragInfo { type: 'connectionDot'; sourceStepId: string; sourceAnchor: 'N' | 'S' | 'E' | 'W'; startX: number; startY: number; sourceSubStepContext?: { sourceCardId: string; subStepId: string; subStepTitle: string } | null; }
 interface PointerStartInfo { clientX: number; clientY: number; timestamp: number; targetElement: EventTarget | null; }
-interface ConnectionToDeleteInfo { parentNodeId: string; connectionToActuallyDelete: IncomingConnection; }
 interface LineContextMenuState { isOpen: boolean; x: number; y: number; targetNodeId: string; connectionId: string; }
 
 export default function PlanDetailPage() {
@@ -247,7 +249,6 @@ export default function PlanDetailPage() {
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
   const [stepToDelete, setStepToDelete] = useState<{id: string, title: string} | null>(null);
-  const [connectionToDeleteInfo, setConnectionToDeleteInfo] = useState<ConnectionToDeleteInfo | null>(null);
   const [lineContextMenu, setLineContextMenu] = useState<LineContextMenuState | null>(null);
   const [isLineEditLabelAlertOpen, setIsLineEditLabelAlertOpen] = useState(false);
   const [currentLineEditLabel, setCurrentLineEditLabel] = useState("");
@@ -326,7 +327,7 @@ export default function PlanDetailPage() {
   const getSubStepDotAnchorPoint = useCallback((parentStep: RoadmapStep, subStepId: string): { x: number, y: number } => {
     const subStepIndex = parentStep.subSteps?.findIndex(ss => ss.id === subStepId) ?? -1;
     if (subStepIndex === -1) {
-      return { x: parentStep.x, y: parentStep.y + NODE_HEADER_HEIGHT + (NODE_CONTENT_PADDING_Y / 2) };
+      return { x: parentStep.x, y: parentStep.y + NODE_HEADER_HEIGHT + (NODE_CONTENT_PADDING_Y / 2) }; // Default to top of content area
     }
     const yCenterOfSubStepTextLine = NODE_HEADER_HEIGHT + (NODE_CONTENT_PADDING_Y / 2) + (subStepIndex * SUBSTEP_ITEM_HEIGHT) + (SUBSTEP_ITEM_HEIGHT / 2);
     return { x: parentStep.x, y: parentStep.y + yCenterOfSubStepTextLine };
@@ -418,11 +419,6 @@ export default function PlanDetailPage() {
     }
     setIsLineEditLabelAlertOpen(false); setLineContextMenu(null); setCurrentLineEditLabel("");
   }, [lineContextMenu, currentLineEditLabel, toast]);
-  const confirmDeleteConnection = useCallback(() => {
-    if (!connectionToDeleteInfo) return;
-    setEditableRoadmap(prev => prev.map(step => step.id === connectionToDeleteInfo.parentNodeId ? { ...step, incomingConnections: (step.incomingConnections || []).filter(conn => conn.id !== connectionToDeleteInfo.connectionToActuallyDelete.id) } : step ));
-    toast({ title: "Connection Removed", description: "Line deleted. Remember to save the plan to persist changes."}); setConnectionToDeleteInfo(null);
-  }, [connectionToDeleteInfo, toast]);
 
   const handleNodeInteractionStart = useCallback((nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
     if (('button' in event && (event as React.MouseEvent).button !== 0) || !isOwner || !canvasRef.current) return;
@@ -510,19 +506,17 @@ export default function PlanDetailPage() {
             const targetDotPos = getAnchorPoint(targetStep, targetAnchor);
             const dist = Math.sqrt(Math.pow(releaseX - targetDotPos.x, 2) + Math.pow(releaseY - targetDotPos.y, 2));
             if (dist <= SNAP_THRESHOLD) {
-              console.log(`SNAP! Target: ${targetStep.title} (${targetStep.id}) at anchor ${targetAnchor}`);
               const alreadyConnected = (targetStep.incomingConnections || []).some(conn => {
                 if (conn.sourceNodeId !== sourceStepId || conn.targetAnchor !== targetAnchor) return false;
                 const existingConnSubStepContext = conn.originatingSubStepContext;
                 if (sourceSubStepContext && existingConnSubStepContext) {
-                  return existingConnSubStepContext.sourceCardId === sourceSubStepContext.sourceCardId && // Corrected sourceCardId usage
+                  return existingConnSubStepContext.sourceCardId === sourceSubStepContext.sourceCardId && 
                          existingConnSubStepContext.subStepId === sourceSubStepContext.subStepId;
                 }
                 return !sourceSubStepContext && !existingConnSubStepContext;
               });
 
               if (alreadyConnected) {
-                console.log(`Connection from ${sourceStepId} (subStep: ${sourceSubStepContext?.subStepId || 'main'}) to ${targetStep.id} at anchor ${targetAnchor} already exists. Skipping.`);
                 toast({ variant: "default", title: "Already Connected", description: `Node "${targetStep.title}" is already connected from this specific source point.` });
                 snapped = true; break;
               }
@@ -530,20 +524,18 @@ export default function PlanDetailPage() {
               const newConnection: IncomingConnection = {
                 id: `conn-${uuidv4()}`,
                 lineType: 'straight',
-                sourceNodeId: sourceStepId!,
+                sourceNodeId: sourceStepId,
                 targetAnchor: targetAnchor,
                 originatingSubStepContext: sourceSubStepContext ? { sourceCardId: sourceSubStepContext.sourceCardId, subStepId: sourceSubStepContext.subStepId } : null,
               };
-              console.log("Forming new connection object:", newConnection);
               setEditableRoadmap(prev => {
-                const newRoadmap = prev.map(s => {
+                return prev.map(s => {
                   if (s.id === targetStep.id) {
                     const updatedStep = { ...s, incomingConnections: [...(s.incomingConnections || []), newConnection] };
                     return updatedStep;
                   }
                   return s;
                 });
-                return newRoadmap;
               });
               toast({ title: "Nodes Connected", description: "Connection created. Remember to save the plan."});
               snapped = true; break;
@@ -551,22 +543,12 @@ export default function PlanDetailPage() {
           }
           if (snapped) break;
         }
-      } else if (clickInfo) {
+      } else if (clickInfo) { // This is a click on a dot, not a drag
         const parentNode = editableRoadmap.find(s => s.id === sourceStepId);
         if (parentNode) {
-          const existingConnectionToDot = (parentNode.incomingConnections || []).find(conn =>
-            conn.targetAnchor === sourceAnchor &&
-            ((!sourceSubStepContext && !conn.originatingSubStepContext) ||
-             (sourceSubStepContext && conn.originatingSubStepContext &&
-              conn.originatingSubStepContext.subStepId === sourceSubStepContext.subStepId &&
-              conn.originatingSubStepContext.sourceCardId === sourceSubStepContext.sourceCardId))
-          );
-          if (existingConnectionToDot) {
-            setConnectionToDeleteInfo({ parentNodeId: parentNode.id, connectionToActuallyDelete: existingConnectionToDot });
-          } else {
+            // Removed logic for deleting incoming connection on dot click
             setPendingNodeFromDotInfo({ sourceStepId: parentNode.id, sourceAnchor: sourceAnchor!, creatingFromSubStepContext: sourceSubStepContext || undefined });
             setIsAddStepDialogOpen(true);
-          }
         }
       }
       connectionDragInfoRef.current = null;
@@ -580,7 +562,7 @@ export default function PlanDetailPage() {
   }, [
     isPointerDown, getPointerCoords, editableRoadmap, handleEditStep, getAnchorPoint,
     setEditableRoadmap, toast, setIsAddStepDialogOpen, setPendingNodeFromDotInfo,
-    setConnectionToDeleteInfo, setActiveConnectionLinePreview, setIsPointerDown // Ensure all dependencies are listed
+    setActiveConnectionLinePreview, setIsPointerDown
   ]);
 
 
@@ -612,10 +594,12 @@ export default function PlanDetailPage() {
         if (!incomingConn.id || !incomingConn.sourceNodeId) return null;
         const sourceNode = editableRoadmap.find(s => s.id === incomingConn.sourceNodeId);
         if (!sourceNode) return null;
-        let rawStartPoint: { x: number, y: number }, sourceVisualAnchor: 'N' | 'S' | 'E' | 'W';
+        
+        let rawStartPoint: { x: number, y: number }, sourceVisualAnchor: 'N' | 'S' | 'E' | 'W', sourceVisualRadius: number;
         if (incomingConn.originatingSubStepContext && incomingConn.originatingSubStepContext.sourceCardId === sourceNode.id) {
           rawStartPoint = getSubStepDotAnchorPoint(sourceNode, incomingConn.originatingSubStepContext.subStepId);
-          sourceVisualAnchor = 'W';
+          sourceVisualAnchor = 'W'; // Sub-step dots are on the West side
+          sourceVisualRadius = SUB_STEP_DOT_VISUAL_RADIUS;
         } else {
           const tempRawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
           let bestAnchor: 'N' | 'S' | 'E' | 'W' = 'S';
@@ -628,15 +612,24 @@ export default function PlanDetailPage() {
           });
           sourceVisualAnchor = bestAnchor;
           rawStartPoint = getAnchorPoint(sourceNode, sourceVisualAnchor);
+          sourceVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS;
         }
+        
         const rawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
         const targetVisualAnchor = incomingConn.targetAnchor;
+        const targetVisualRadius = MAIN_STEP_DOT_VISUAL_RADIUS; // Connections always target main anchors
+
         const sourceAxisVec = getAnchorAxisVector(sourceVisualAnchor);
         const targetAxisVec = getAnchorAxisVector(targetVisualAnchor);
-        const lineStartPoint = { x: rawStartPoint.x + sourceAxisVec.x * START_OFFSET_FROM_DOT, y: rawStartPoint.y + sourceAxisVec.y * START_OFFSET_FROM_DOT };
-        const lineEndPointForArrow = { x: rawEndPoint.x - targetAxisVec.x * ARROWHEAD_LENGTH, y: rawEndPoint.y - targetAxisVec.y * ARROWHEAD_LENGTH };
+        
+        const lineStartOffset = sourceVisualRadius + (CONNECTION_LINE_THICKNESS / 2);
+        const lineEndOffset = targetVisualRadius + (CONNECTION_LINE_THICKNESS / 2) + ARROWHEAD_LENGTH;
+
+        const lineStartPoint = { x: rawStartPoint.x + sourceAxisVec.x * lineStartOffset, y: rawStartPoint.y + sourceAxisVec.y * lineStartOffset };
+        const lineEndPointForArrow = { x: rawEndPoint.x - targetAxisVec.x * lineEndOffset, y: rawEndPoint.y - targetAxisVec.y * lineEndOffset };
+
         const overallDistance = Math.sqrt(Math.pow(rawEndPoint.x - rawStartPoint.x, 2) + Math.pow(rawEndPoint.y - rawStartPoint.y, 2));
-        const isTooShortForNecks = overallDistance < START_OFFSET_FROM_DOT + (NECK_LENGTH * 2) + MIN_MAIN_PATH_LENGTH + ARROWHEAD_LENGTH;
+        const isTooShortForNecks = overallDistance < lineStartOffset + (NECK_LENGTH * 2) + MIN_MAIN_PATH_LENGTH + lineEndOffset;
         let pathData = "";
         const lineType = incomingConn.lineType || 'straight';
         if (isTooShortForNecks || lineType === 'straight') {
@@ -706,7 +699,7 @@ export default function PlanDetailPage() {
                 viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`}
                 markerWidth={ARROWHEAD_LENGTH} 
                 markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}
-                refX={ARROWHEAD_LENGTH} 
+                refX={ARROWHEAD_LENGTH / 2} // Center refX for better fitting
                 refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} 
                 orient="auto-start-reverse" 
                 markerUnits="userSpaceOnUse"
@@ -721,7 +714,7 @@ export default function PlanDetailPage() {
             {activeConnectionLinePreview && (<line x1={activeConnectionLinePreview.startX} y1={activeConnectionLinePreview.startY} x2={activeConnectionLinePreview.currentX} y2={activeConnectionLinePreview.currentY} stroke={CONNECTION_LINE_HOVER_COLOR} strokeWidth={CONNECTION_LINE_THICKNESS + 1} strokeDasharray="4 4" markerEnd="url(#arrowhead)" />)}
           </svg>
           {editableRoadmap.length === 0 && !isLoadingPlan && (<div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none"><Map className="h-16 w-16 mb-4" /><p className="text-lg font-medium">Collaboration Plan Area</p><p className="text-sm mt-1">{isOwner ? "Click '+ Node' to add your first step to the roadmap." : "This plan currently has no steps defined."}</p></div>)}
-          {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id || pendingNodeFromDotInfo?.sourceStepId === step.id || connectionToDeleteInfo?.parentNodeId === step.id || (nodeDragInfoRef.current && nodeDragInfoRef.current.nodeId === step.id) || (connectionDragInfoRef.current && connectionDragInfoRef.current.sourceStepId === step.id)} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} onDeleteStep={handleDeleteStep} onAddSubStep={handleAddSubStepToParent} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}/>))}
+          {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id || pendingNodeFromDotInfo?.sourceStepId === step.id || (nodeDragInfoRef.current && nodeDragInfoRef.current.nodeId === step.id) || (connectionDragInfoRef.current && connectionDragInfoRef.current.sourceStepId === step.id)} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} onDeleteStep={handleDeleteStep} onAddSubStep={handleAddSubStepToParent} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}/>))}
           <Popover open={lineContextMenu?.isOpen || false} onOpenChange={(open) => { if (!open) setLineContextMenu(null); }}><PopoverTrigger asChild><div className="fixed" style={{ left: `${lineContextMenu?.x || 0}px`, top: `${lineContextMenu?.y || 0}px`, width: 0, height: 0 }} /></PopoverTrigger>
             <PopoverContent className="w-auto p-1" side="right" align="start" sideOffset={5}>
               {lineContextMenu && isOwner && (
@@ -754,7 +747,6 @@ export default function PlanDetailPage() {
           <SheetFooter><SheetClose asChild><Button type="button" variant="outline" disabled={saveRoadmapMutation.isPending}>Cancel</Button></SheetClose><Button type="button" onClick={() => { if (editingStep) { handleStepDetailUpdate(editingStep); setIsStepDetailSheetOpen(false); setEditingStep(null); }}} disabled={saveRoadmapMutation.isPending || !editingStep}>{saveRoadmapMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Changes</Button></SheetFooter>
         </SheetContent></Sheet>
       <AlertDialog open={!!stepToDelete} onOpenChange={(open) => !open && setStepToDelete(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Step: "{stepToDelete?.title}"?</AlertDialogTitle><AlertDialogDescription>This will remove the step and any connections to or from it. This action cannot be undone.</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setStepToDelete(null)}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteStep} className="bg-destructive hover:bg-destructive/90">Delete Step</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
-      <AlertDialog open={!!connectionToDeleteInfo} onOpenChange={(open) => !open && setConnectionToDeleteInfo(null)}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Delete Connection?</AlertDialogTitle><AlertDialogDescription>Are you sure you want to remove the connection to this step{connectionToDeleteInfo?.connectionToActuallyDelete?.sourceNodeId && ` from "${editableRoadmap.find(s => s.id === connectionToDeleteInfo.connectionToActuallyDelete.sourceNodeId)?.title || 'another step'}"`}?</AlertDialogDescription></AlertDialogHeader><AlertDialogFooter><AlertDialogCancel onClick={() => setConnectionToDeleteInfo(null)} disabled={saveRoadmapMutation.isPending}>Cancel</AlertDialogCancel><AlertDialogAction onClick={confirmDeleteConnection} className="bg-destructive hover:bg-destructive/90" disabled={saveRoadmapMutation.isPending}>{saveRoadmapMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}Delete Connection</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
        <AlertDialog open={isLineEditLabelAlertOpen} onOpenChange={setIsLineEditLabelAlertOpen}><AlertDialogContent><AlertDialogHeader><AlertDialogTitle>Edit Line Label</AlertDialogTitle><AlertDialogDescription>Enter a label for this connection (or leave empty to remove an existing label).</AlertDialogDescription></AlertDialogHeader><div className="py-2"><Label htmlFor="line-label-input" className="sr-only">Line Label</Label><Input id="line-label-input" ref={lineLabelInputRef} value={currentLineEditLabel} onChange={(e) => setCurrentLineEditLabel(e.target.value)} placeholder="E.g., Depends on, Blocks, etc." autoFocus /></div><AlertDialogFooter><AlertDialogCancel onClick={() => { setIsLineEditLabelAlertOpen(false); setCurrentLineEditLabel(""); setLineContextMenu(null); }}>Cancel</AlertDialogCancel><AlertDialogAction onClick={handleConfirmSetLineLabel}>Set Label</AlertDialogAction></AlertDialogFooter></AlertDialogContent></AlertDialog>
     </div>
   );
