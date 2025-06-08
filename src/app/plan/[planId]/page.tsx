@@ -62,8 +62,8 @@ const FINAL_BUFFER_CARD_HEIGHT = 8;
 
 const DOT_SIZE = 12;
 const SUB_STEP_DOT_VISUAL_DIAMETER = 8; // Visual size of the inner dot for sub-steps
-const MAIN_STEP_DOT_VISUAL_DIAMETER = 6; // Visual size of the inner dot for main steps (when not active)
-const ACTIVE_MAIN_STEP_DOT_VISUAL_DIAMETER = 8; // Visual size for active/hovered main step dots
+// const MAIN_STEP_DOT_VISUAL_DIAMETER = 6; // No longer used for base size
+// const ACTIVE_MAIN_STEP_DOT_VISUAL_DIAMETER = 8; // No longer used if relying on scale
 
 const DOT_OFFSET = -DOT_SIZE / 2;
 const SNAP_THRESHOLD = 25;
@@ -156,7 +156,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
             "rounded-full transition-all duration-150 ease-in-out",
             isSubStepDot
               ? `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300`
-              : `bg-muted-foreground h-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] w-[${MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:bg-primary group-hover:h-[${ACTIVE_MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:w-[${ACTIVE_MAIN_STEP_DOT_VISUAL_DIAMETER}px] group-hover:scale-125 group-hover:ring-2 group-hover:ring-primary/60`
+              // Updated classes for main node dots
+              : `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-primary group-hover:scale-150 group-hover:ring-2 group-hover:ring-primary/60`
         )}/>
       </button>
     );
@@ -166,11 +167,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     <div
       ref={cardRef}
       className={cn(
-        "absolute select-none shadow-lg border rounded-lg flex flex-col",
+        "absolute select-none shadow-lg border rounded-lg flex flex-col bg-secondary", // Added bg-secondary
         isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
         isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
       )}
-      style={{ left: `${step.x}px`, top: `${step.y}px`, width: `${NODE_BASE_WIDTH}px`, height: `${dynamicHeight}px`, touchAction: 'none', overflow: 'visible', backgroundColor: '#E9FFFF' }}
+      style={{ left: `${step.x}px`, top: `${step.y}px`, width: `${NODE_BASE_WIDTH}px`, height: `${dynamicHeight}px`, touchAction: 'none', overflow: 'visible' }} // Removed backgroundColor
       onMouseDown={(e) => onNodeInteractionStart(step.id, e)}
       onTouchStart={(e) => onNodeInteractionStart(step.id, e)}
       data-node-id={step.id}
@@ -183,7 +184,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
             {step.subSteps.map((subStep) => (
-              <li key={subStep.id} className="text-xs flex items-center relative py-0.5 group/substep text-black">
+              <li key={subStep.id} className="text-xs flex items-center relative py-0.5 group/substep text-black"> {/* Changed text color */}
                  <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); if (onSubStepSelect) onSubStepSelect(step, subStep); }}
@@ -712,13 +713,13 @@ export default function PlanDetailPage() {
           });
           sourceVisualAnchor = bestAnchor;
           rawStartPoint = getAnchorPoint(sourceNode, sourceVisualAnchor);
-          sourceVisualRadius = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
+          sourceVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 4) * 1.5 / 2; // Effective radius after scale
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS_MAIN;
         }
 
         const rawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
         const targetVisualAnchor = incomingConn.targetAnchor;
-        const targetVisualRadius = MAIN_STEP_DOT_VISUAL_DIAMETER / 2;
+        const targetVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 4) * 1.5 / 2; // Effective radius after scale
 
         const sourceAxisVec = getAnchorAxisVector(sourceVisualAnchor);
         const targetAxisVec = getAnchorAxisVector(targetVisualAnchor);
