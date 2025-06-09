@@ -23,7 +23,7 @@ import {
   MessageSquare as LineLabelIcon,
   MinusCircle,
   History,
-  RefreshCcw, 
+  RefreshCcw,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -61,10 +61,15 @@ const NODE_CONTENT_PADDING_Y = 16;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
 
 const DOT_SIZE = 12;
-const SUB_STEP_DOT_VISUAL_DIAMETER = 8; 
+const SUB_STEP_DOT_VISUAL_DIAMETER = 8;
 
 const DOT_OFFSET = -DOT_SIZE / 2;
 const SNAP_THRESHOLD = 25;
+
+// Colors for connections and nodes
+const MAIN_NODE_TITLE_BG = '#6798C0';
+const MAIN_NODE_CONTENT_BG = '#E9FFFF'; // Changed from #99D6EA
+const SUB_STEP_TEXT_COLOR = 'text-black';
 
 const MAIN_CONNECTION_LINE_COLOR = "#FDC921";
 const SUBSTEP_CONNECTION_LINE_COLOR = "#FDD85D";
@@ -138,6 +143,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     const isSubStepDot = !!subStepContext;
     const titleText = `Create new step from: ${isSubStepDot ? `Sub-step "${subStepContext.subStepTitle}"` : `"${step.title}"`} (Anchor: ${anchor})`;
 
+    const baseDotClasses = "rounded-full transition-all duration-150 ease-in-out";
+    const mainNodeDotInactiveClasses = "h-2 w-2 bg-muted-foreground";
+    const mainNodeDotActiveClasses = "group-hover:bg-primary group-hover:scale-150 group-hover:ring-2 group-hover:ring-primary/60";
+    const subStepDotClasses = `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-primary group-hover:scale-150 group-hover:ring-2 group-hover:ring-primary/60`;
+
     return (
       <button
         aria-label={titleText}
@@ -153,10 +163,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         disabled={propIsSubmitting}
       >
         <div className={cn(
-            "rounded-full transition-all duration-150 ease-in-out",
-             isSubStepDot
-              ? `bg-muted-foreground h-${SUB_STEP_DOT_VISUAL_DIAMETER/4} w-${SUB_STEP_DOT_VISUAL_DIAMETER/4} group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300`
-              : `h-2 w-2 bg-muted-foreground group-hover:bg-primary group-hover:scale-150 group-hover:ring-2 group-hover:ring-primary/60`
+            baseDotClasses,
+            isSubStepDot ? subStepDotClasses : `${mainNodeDotInactiveClasses} ${mainNodeDotActiveClasses}`
         )}/>
       </button>
     );
@@ -170,34 +178,35 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
         isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
       )}
-      style={{ 
-        left: `${step.x}px`, 
-        top: `${step.y}px`, 
-        width: `${NODE_BASE_WIDTH}px`, 
-        height: `${dynamicHeight}px`, 
-        touchAction: 'none', 
+      style={{
+        left: `${step.x}px`,
+        top: `${step.y}px`,
+        width: `${NODE_BASE_WIDTH}px`,
+        height: `${dynamicHeight}px`,
+        touchAction: 'none',
         overflow: 'visible',
+        backgroundColor: MAIN_NODE_CONTENT_BG, // Apply node content background here
       }}
       onMouseDown={(e) => onNodeInteractionStart(step.id, e)}
       onTouchStart={(e) => onNodeInteractionStart(step.id, e)}
       data-node-id={step.id}
     >
-      <div 
+      <div
         className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]"
-        style={{ backgroundColor: '#6798C0' }} 
+        style={{ backgroundColor: MAIN_NODE_TITLE_BG }}
       >
         <h3 className="text-sm font-semibold truncate text-white" title={step.title}>{step.title}</h3>
       </div>
-      <div className="p-2 text-xs flex-grow min-h-0" style={{ backgroundColor: '#99D6EA' }}>
+      <div className="p-2 text-xs flex-grow min-h-0" style={{ backgroundColor: MAIN_NODE_CONTENT_BG }}>
         {step.description && (<p className="whitespace-pre-wrap line-clamp-3 mb-1.5 text-black">{step.description}</p>)}
         {step.subSteps && step.subSteps.length > 0 && (
           <ul className="space-y-1 list-none p-0 m-0">
             {step.subSteps.map((subStep) => (
-              <li key={subStep.id} className="text-xs py-0.5 group/substep">
+              <li key={subStep.id} className={cn("text-xs py-0.5 group/substep", SUB_STEP_TEXT_COLOR)}>
                  <button
                     type="button"
                     onClick={(e) => { e.stopPropagation(); if (onSubStepSelect) onSubStepSelect(step, subStep); }}
-                    className="p-0 bg-transparent border-none truncate text-left hover:text-primary hover:underline focus:outline-none focus:text-primary focus:underline text-black"
+                    className="p-0 bg-transparent border-none truncate text-left hover:text-primary hover:underline focus:outline-none focus:text-primary focus:underline"
                     title={`View/Edit sub-step: ${subStep.title}`}
                   >
                     {subStep.title}
@@ -244,8 +253,8 @@ interface ItemToDelete {
   type: 'step' | 'subStep';
   id: string;
   title: string;
-  parentStepId?: string; 
-  parentSubStepId?: string; 
+  parentStepId?: string;
+  parentSubStepId?: string | null; // ID of the direct parent sub-step if nested, or null/mainStepId if direct child of main node
 }
 
 
@@ -266,7 +275,7 @@ export default function PlanDetailPage() {
 
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
   const [editingSubStep, setEditingSubStep] = useState<RoadmapSubStep | null>(null);
-  
+
   const [currentSubStepTitleEdit, setCurrentSubStepTitleEdit] = useState<string>("");
   const [currentSubStepDescriptionEdit, setCurrentSubStepDescriptionEdit] = useState<string>("");
 
@@ -400,18 +409,22 @@ export default function PlanDetailPage() {
     setIsEditingNodeDescription(false);
   }, []);
 
-  const handleEditDirectSubStep = useCallback((subStepToEdit: RoadmapSubStep, parentMainStep: RoadmapStep) => {
-    setEditingStep(parentMainStep);
-    setEditingSubStep(subStepToEdit);
+  // Called when clicking "Edit" on a direct sub-step from the main node's card
+  const handleEditDirectSubStep = useCallback((parentMainStep: RoadmapStep, subStepToEdit: RoadmapSubStep) => {
+    setEditingStep(parentMainStep); // The main node this sub-step belongs to
+    setEditingSubStep(subStepToEdit); // The sub-step itself
     setCurrentSubStepTitleEdit(subStepToEdit.title);
     setCurrentSubStepDescriptionEdit(subStepToEdit.description || "");
     setIsStepDetailSheetOpen(true);
   }, []);
 
+  // Called when clicking "Edit" on a *nested* sub-step from within the sheet
   const handleEditNestedSubStep = useCallback((nestedSubStepToEdit: RoadmapSubStep) => {
+    // editingStep remains the main canvas node. editingSubStep becomes this nested one.
     setEditingSubStep(nestedSubStepToEdit);
     setCurrentSubStepTitleEdit(nestedSubStepToEdit.title);
     setCurrentSubStepDescriptionEdit(nestedSubStepToEdit.description || "");
+    // No need to change isStepDetailSheetOpen, it's already open.
   }, []);
 
 
@@ -457,31 +470,37 @@ export default function PlanDetailPage() {
     toast({ title: "Node Added", description: `"${data.title}" added. Remember to save the plan to persist changes.` });
   }, [canEditPlan, editableRoadmap, pendingNodeFromDotInfo, toast]);
 
+
+  // Recursive helper to update sub-step properties
   const updateSubStepPropertiesRecursive = (
     subSteps: RoadmapSubStep[] | undefined,
-    targetId: string,
+    targetSubStepId: string,
     newTitle: string,
     newDescription: string | null
-  ): { updatedSubSteps: RoadmapSubStep[] | undefined, changed: boolean } => {
-    if (!subSteps) return { updatedSubSteps: undefined, changed: false };
-    let changed = false;
-    const updated = subSteps.map(ss => {
-      if (ss.id === targetId) {
-        changed = true;
+  ): { updatedList: RoadmapSubStep[] | undefined; changed: boolean } => {
+    if (!subSteps) return { updatedList: undefined, changed: false };
+    let wasChanged = false;
+    const updatedSubSteps = subSteps.map(ss => {
+      if (ss.id === targetSubStepId) {
+        wasChanged = true;
         return { ...ss, title: newTitle, description: newDescription };
       }
       if (ss.subSteps && ss.subSteps.length > 0) {
-        const nestedResult = updateSubStepPropertiesRecursive(ss.subSteps, targetId, newTitle, newDescription);
-        if (nestedResult.changed) changed = true;
-        return { ...ss, subSteps: nestedResult.updatedSubSteps };
+        const nestedResult = updateSubStepPropertiesRecursive(ss.subSteps, targetSubStepId, newTitle, newDescription);
+        if (nestedResult.changed) {
+            wasChanged = true;
+            return { ...ss, subSteps: nestedResult.updatedList };
+        }
       }
       return ss;
     });
-    return { updatedSubSteps: updated, changed };
+    return { updatedList: updatedSubSteps, changed: wasChanged };
   };
+
 
   const handleSaveSubStepDetails = useCallback(() => {
     if (!editingStep || !editingSubStep || !canEditPlan) return;
+
     const { id: subStepIdToUpdate } = editingSubStep;
     const newTitle = currentSubStepTitleEdit.trim() || "Untitled Sub-step";
     const newDescription = currentSubStepDescriptionEdit.trim() || null;
@@ -489,46 +508,66 @@ export default function PlanDetailPage() {
     let mainStepUpdated = false;
     setEditableRoadmap(prevRoadmap =>
       prevRoadmap.map(mainStep => {
-        if (mainStep.id === editingStep.id && mainStep.subSteps) {
-          const result = updateSubStepPropertiesRecursive(mainStep.subSteps, subStepIdToUpdate, newTitle, newDescription);
-          if (result.changed) {
+        if (mainStep.id === editingStep.id) {
+          // Check if the editingSubStep is a direct child of mainStep
+          const directChildIndex = mainStep.subSteps?.findIndex(ss => ss.id === subStepIdToUpdate);
+          if (directChildIndex !== undefined && directChildIndex > -1 && mainStep.subSteps) {
             mainStepUpdated = true;
-            return { ...mainStep, subSteps: result.updatedSubSteps };
+            const updatedDirectSubSteps = [...mainStep.subSteps];
+            updatedDirectSubSteps[directChildIndex] = {
+              ...updatedDirectSubSteps[directChildIndex],
+              title: newTitle,
+              description: newDescription,
+            };
+            return { ...mainStep, subSteps: updatedDirectSubSteps };
+          } else if (mainStep.subSteps) {
+            // If not a direct child, recurse through subSteps
+            const result = updateSubStepPropertiesRecursive(mainStep.subSteps, subStepIdToUpdate, newTitle, newDescription);
+            if (result.changed) {
+              mainStepUpdated = true;
+              return { ...mainStep, subSteps: result.updatedList };
+            }
           }
         }
         return mainStep;
       })
     );
-    
+
     if (mainStepUpdated) {
+      // Update the editingSubStep state itself to reflect changes in the UI immediately
       setEditingSubStep(prev => prev ? { ...prev, title: newTitle, description: newDescription } : null);
-      toast({ title: "Sub-step Saved", description: `Changes to "${newTitle}" saved. Remember to save the plan.` });
+      toast({ title: "Sub-step Saved", description: `Changes to "${newTitle}" saved locally. Remember to save the entire plan.` });
     } else {
       toast({ variant: "default", title: "No Changes", description: "No changes detected to save for this sub-step." });
     }
-  }, [editingStep, editingSubStep, currentSubStepTitleEdit, currentSubStepDescriptionEdit, canEditPlan, toast]);
+  }, [editingStep, editingSubStep, currentSubStepTitleEdit, currentSubStepDescriptionEdit, canEditPlan, toast, setEditableRoadmap]);
 
+
+  // Recursive helper to add a sub-step to a target parent sub-step
   const addSubStepToParentRecursive = (
     subSteps: RoadmapSubStep[] | undefined,
     targetParentId: string,
-    newSubStep: RoadmapSubStep
-  ): { updatedSubSteps: RoadmapSubStep[] | undefined, added: boolean } => {
-    if (!subSteps) return { updatedSubSteps: undefined, added: false };
-    let added = false;
-    const updated = subSteps.map(ss => {
+    newSubStepToAdd: RoadmapSubStep
+  ): { updatedList: RoadmapSubStep[] | undefined; added: boolean } => {
+    if (!subSteps) return { updatedList: undefined, added: false };
+    let wasAdded = false;
+    const updatedSubSteps = subSteps.map(ss => {
       if (ss.id === targetParentId) {
-        added = true;
-        return { ...ss, subSteps: [...(ss.subSteps || []), newSubStep] };
+        wasAdded = true;
+        return { ...ss, subSteps: [...(ss.subSteps || []), newSubStepToAdd] };
       }
       if (ss.subSteps && ss.subSteps.length > 0) {
-        const nestedResult = addSubStepToParentRecursive(ss.subSteps, targetParentId, newSubStep);
-        if (nestedResult.added) added = true;
-        return { ...ss, subSteps: nestedResult.updatedSubSteps };
+        const nestedResult = addSubStepToParentRecursive(ss.subSteps, targetParentId, newSubStepToAdd);
+        if (nestedResult.added) {
+            wasAdded = true;
+            return { ...ss, subSteps: nestedResult.updatedList };
+        }
       }
       return ss;
     });
-    return { updatedSubSteps: updated, added };
+    return { updatedList: updatedSubSteps, added: wasAdded };
   };
+
 
   const handleAddSubStepToEditingSubStep = useCallback(() => {
     if (!editingStep || !editingSubStep || !canEditPlan) return;
@@ -541,68 +580,53 @@ export default function PlanDetailPage() {
       subSteps: [],
     };
 
-    // Check if this is the first child being added to editingSubStep (for promotion)
-    const isFirstChildForPromotion = (!editingSubStep.subSteps || editingSubStep.subSteps.length === 0);
+    const isFirstChildForPromotion = (!editingSubStep.subSteps || editingSubStep.subSteps.length === 0) &&
+                                     editingStep.subSteps?.some(s => s.id === editingSubStep.id); // Check if it's a direct child of main step
 
     if (isFirstChildForPromotion) {
         // Promotion Logic
         setEditableRoadmap(prevRoadmap => {
-            const mainParentNode = prevRoadmap.find(rs => rs.id === editingStep.id); // This is the original main parent
+            const mainParentNode = prevRoadmap.find(rs => rs.id === editingStep.id);
             if (!mainParentNode) return prevRoadmap;
 
-            const promotedNodeId = editingSubStep.id; // Use the sub-step's ID as the new main node ID
+            const promotedNodeId = editingSubStep.id;
             const promotedNode: RoadmapStep = {
                 id: promotedNodeId,
                 title: editingSubStep.title,
                 description: editingSubStep.description,
-                x: mainParentNode.x + NODE_BASE_WIDTH + 80, // Position to the right
+                x: mainParentNode.x + NODE_BASE_WIDTH + 80,
                 y: mainParentNode.y,
-                subSteps: [newNestedSubStep], // Add the new child
+                subSteps: [newNestedSubStep],
                 incomingConnections: [{
                     id: `conn-${uuidv4()}`,
                     sourceNodeId: mainParentNode.id,
-                    targetAnchor: 'W', // Connect to West anchor of new node
+                    targetAnchor: 'W',
                     lineType: 'straight',
-                    originatingSubStepContext: null, // Main connection for now
+                    originatingSubStepContext: null, // This connection is from the main node itself
                 }],
             };
-
-            // Remove the promoted sub-step from its original parent's subSteps array
             const updatedMainParentNodeSubSteps = (mainParentNode.subSteps || []).filter(ss => ss.id !== editingSubStep.id);
-            
-            // Clean up connections on original parent that might have originated from the promoted sub-step's dot
-            const updatedMainParentNodeConnections = (mainParentNode.incomingConnections || []).map(conn => {
-                if (conn.originatingSubStepContext?.subStepId === editingSubStep.id) {
-                    // This connection was from the promoted sub-step's dot.
-                    // It's complex to re-route; for now, let's leave it as is, or decide to remove.
-                    // For simplicity here, we might just leave it if the dot UI is robust.
-                    // Or, one could decide to remove such specific connections.
-                }
-                return conn;
-            });
-
             return [
                 ...prevRoadmap.filter(rs => rs.id !== mainParentNode.id && rs.id !== promotedNodeId),
-                { ...mainParentNode, subSteps: updatedMainParentNodeSubSteps, incomingConnections: updatedMainParentNodeConnections },
+                { ...mainParentNode, subSteps: updatedMainParentNodeSubSteps },
                 promotedNode,
             ];
         });
-
         toast({ title: "Sub-step Promoted to Node", description: `"${editingSubStep.title}" is now a main step. Remember to save.` });
-        setIsStepDetailSheetOpen(false); // Close sheet as context has changed significantly
+        setIsStepDetailSheetOpen(false);
         setEditingStep(null);
         setEditingSubStep(null);
-
     } else {
-        // Existing logic: Add as a nested sub-step to the current editingSubStep
+        // Add as a nested sub-step to the current editingSubStep
         let mainStepUpdated = false;
         setEditableRoadmap(prevRoadmap =>
           prevRoadmap.map(mainStep => {
-            if (mainStep.id === editingStep.id && mainStep.subSteps) {
+            if (mainStep.id === editingStep.id) { // Find the main parent step
+              // Now, recurse through its subSteps to find editingSubStep and add to it
               const result = addSubStepToParentRecursive(mainStep.subSteps, editingSubStep.id, newNestedSubStep);
               if (result.added) {
                 mainStepUpdated = true;
-                return { ...mainStep, subSteps: result.updatedSubSteps };
+                return { ...mainStep, subSteps: result.updatedList };
               }
             }
             return mainStep;
@@ -610,6 +634,7 @@ export default function PlanDetailPage() {
         );
 
         if (mainStepUpdated) {
+          // Update the editingSubStep state to reflect the new child for immediate UI update
           setEditingSubStep(prev => prev ? { ...prev, subSteps: [...(prev.subSteps || []), newNestedSubStep] } : null);
           toast({ title: "Nested Sub-step Added", description: "Remember to edit its details and save the plan." });
         }
@@ -623,132 +648,132 @@ export default function PlanDetailPage() {
             type: 'subStep',
             id: editingSubStep.id,
             title: editingSubStep.title,
-            parentStepId: editingStep.id, // The main canvas step
-            parentSubStepId: editingSubStep.parentId, // The direct parent sub-step ID, if nested
+            parentStepId: editingStep.id,
+            parentSubStepId: editingSubStep.parentId || editingStep.id, // parentId of sub-step, or main step id if direct child
         });
     }
   }, [editingSubStep, editingStep]);
 
-  const handleDeleteNestedSubStepFromList = useCallback((nestedSubStep: RoadmapSubStep) => {
-    if (!editingSubStep || !editingStep) return;
+  const handleDeleteNestedSubStepFromList = useCallback((nestedSubStepToDelete: RoadmapSubStep) => {
+    if (!editingSubStep || !editingStep) return; // editingSubStep is the parent of nestedSubStepToDelete
     setItemToDelete({
       type: 'subStep',
-      id: nestedSubStep.id,
-      title: nestedSubStep.title,
-      parentStepId: editingStep.id, 
-      parentSubStepId: editingSubStep.id 
+      id: nestedSubStepToDelete.id,
+      title: nestedSubStepToDelete.title,
+      parentStepId: editingStep.id, // The main canvas node
+      parentSubStepId: editingSubStep.id // The ID of the sub-step whose list we are looking at
     });
   }, [editingStep, editingSubStep]);
 
+  // Recursive helper to remove a sub-step
+  const removeSubStepRecursive = (
+    subSteps: RoadmapSubStep[] | undefined,
+    targetId: string
+  ): { updatedList: RoadmapSubStep[] | undefined; foundAndRemoved: boolean } => {
+    if (!subSteps) return { updatedList: undefined, foundAndRemoved: false };
+    let wasRemoved = false;
+    const filteredList = subSteps.filter(ss => {
+      if (ss.id === targetId) {
+        wasRemoved = true;
+        return false; // Exclude this sub-step
+      }
+      if (ss.subSteps && ss.subSteps.length > 0) {
+        const nestedResult = removeSubStepRecursive(ss.subSteps, targetId);
+        if (nestedResult.foundAndRemoved) {
+          wasRemoved = true;
+          ss.subSteps = nestedResult.updatedList; // Update child's subSteps
+        }
+      }
+      return true;
+    });
+    return { updatedList: wasRemoved ? filteredList : subSteps, foundAndRemoved: wasRemoved };
+  };
 
   const confirmDeleteItem = useCallback(() => {
     if (!itemToDelete || !canEditPlan) return;
     const { type, id: idToDelete, title, parentStepId, parentSubStepId } = itemToDelete;
 
-    const removeRecursive = (
-      subSteps: RoadmapSubStep[] | undefined,
-      targetId: string
-    ): { updatedList: RoadmapSubStep[] | undefined; foundAndRemoved: boolean } => {
-      if (!subSteps) return { updatedList: undefined, foundAndRemoved: false };
-      let removed = false;
-      const filtered = subSteps.filter(ss => {
-        if (ss.id === targetId) {
-          removed = true;
-          return false;
-        }
-        if (ss.subSteps && ss.subSteps.length > 0) {
-          const nestedResult = removeRecursive(ss.subSteps, targetId);
-          ss.subSteps = nestedResult.updatedList;
-          if (nestedResult.foundAndRemoved) removed = true;
-        }
-        return true;
-      });
-      return { updatedList: filtered, foundAndRemoved: removed };
-    };
-    
-    if (type === 'step') { // Deleting a main canvas step
+    if (type === 'step') {
         setEditableRoadmap(prev => {
             const newRoadmap = prev.filter(s => s.id !== idToDelete);
-            // Also remove any connections pointing to this deleted step
             return newRoadmap.map(s => ({
                 ...s,
                 incomingConnections: (s.incomingConnections || []).filter(conn => conn.sourceNodeId !== idToDelete),
             }));
         });
+        toast({ title: "Step Deleted", description: `"${title}" removed. Remember to save the plan.`});
+        if (editingStep?.id === idToDelete) {
+          setIsStepDetailSheetOpen(false); setEditingStep(null); setEditingSubStep(null);
+        }
     } else { // Deleting a sub-step
         setEditableRoadmap(prevRoadmap =>
           prevRoadmap.map(mainStep => {
-            // If the sub-step's direct parent is a main canvas step
-            if (mainStep.id === parentStepId && mainStep.subSteps && (!parentSubStepId || parentSubStepId === mainStep.id)) {
-              const result = removeRecursive(mainStep.subSteps, idToDelete);
-              if (result.foundAndRemoved) {
-                return { ...mainStep, subSteps: result.updatedList };
+            if (mainStep.id === parentStepId) { // Found the main canvas node
+              // If parentSubStepId is null or matches mainStep.id, it's a direct child
+              if (!parentSubStepId || parentSubStepId === mainStep.id) {
+                const result = removeSubStepRecursive(mainStep.subSteps, idToDelete);
+                if (result.foundAndRemoved) return { ...mainStep, subSteps: result.updatedList };
+              } else {
+                // It's a nested sub-step, recurse to find its parent sub-step
+                const updateNested = (subStepsList: RoadmapSubStep[]): RoadmapSubStep[] => {
+                   return subStepsList.map(ss => {
+                       if (ss.id === parentSubStepId) { // Found the direct parent sub-step
+                           const result = removeSubStepRecursive(ss.subSteps, idToDelete);
+                           return result.foundAndRemoved ? { ...ss, subSteps: result.updatedList } : ss;
+                       }
+                       if (ss.subSteps && ss.subSteps.length > 0) {
+                          return {...ss, subSteps: updateNested(ss.subSteps)};
+                       }
+                       return ss;
+                   });
+                };
+                const updatedMainStepSubSteps = mainStep.subSteps ? updateNested(mainStep.subSteps) : undefined;
+                return {...mainStep, subSteps: updatedMainStepSubSteps};
               }
-            }
-            // If the sub-step is nested within another sub-step which is part of this mainStep
-            else if (mainStep.id === parentStepId && mainStep.subSteps && parentSubStepId) {
-                 const updateNested = (subSteps: RoadmapSubStep[]): RoadmapSubStep[] => {
-                    return subSteps.map(ss => {
-                        if (ss.id === parentSubStepId) { // Found the direct parent sub-step
-                            const result = removeRecursive(ss.subSteps, idToDelete);
-                            return result.foundAndRemoved ? { ...ss, subSteps: result.updatedList } : ss;
-                        }
-                        if (ss.subSteps && ss.subSteps.length > 0) {
-                           return {...ss, subSteps: updateNested(ss.subSteps)};
-                        }
-                        return ss;
-                    });
-                 };
-                 const updatedMainStepSubSteps = updateNested(mainStep.subSteps);
-                 return {...mainStep, subSteps: updatedMainStepSubSteps};
             }
             return mainStep;
           })
         );
-    }
+        toast({ title: "Sub-step Deleted", description: `"${title}" removed. Remember to save the plan.`});
 
-    toast({ title: `${type === 'step' ? 'Step' : 'Sub-step'} Deleted`, description: `"${title}" removed. Remember to save the plan.`});
-    
-    if (editingStep?.id === idToDelete && type === 'step') {
-      setIsStepDetailSheetOpen(false); setEditingStep(null); setEditingSubStep(null);
-    } else if (editingSubStep?.id === idToDelete && type === 'subStep') {
-      const parentIsMainStep = parentSubStepId === editingStep?.id || !parentSubStepId;
-      if (parentIsMainStep) {
-        setEditingSubStep(null);
-      } else if (editingStep && parentSubStepId) {
-        // Try to find and set the parent sub-step as active for editing
-        const findParentRecursive = (subSteps: RoadmapSubStep[] | undefined, targetId: string): RoadmapSubStep | null => {
-          if (!subSteps) return null;
-          for (const ss of subSteps) {
-            if (ss.id === targetId) return ss;
-            if (ss.subSteps) {
-              const found = findParentRecursive(ss.subSteps, targetId);
-              if (found) return found;
+        // Update UI state after deletion
+        if (editingSubStep?.id === idToDelete) { // If the currently edited sub-step was deleted
+          // Try to set editingSubStep to its parent if possible, otherwise clear it
+          if (parentSubStepId && parentSubStepId !== editingStep?.id) {
+            const findParentSubStepRecursive = (subSteps: RoadmapSubStep[] | undefined, targetId: string): RoadmapSubStep | null => {
+              if (!subSteps) return null;
+              for (const ss of subSteps) {
+                if (ss.id === targetId) return ss;
+                if (ss.subSteps) {
+                  const found = findParentSubStepRecursive(ss.subSteps, targetId);
+                  if (found) return found;
+                }
+              }
+              return null;
+            };
+            const parent = findParentSubStepRecursive(editingStep?.subSteps, parentSubStepId);
+            if (parent) {
+              setEditingSubStep(parent);
+              setCurrentSubStepTitleEdit(parent.title);
+              setCurrentSubStepDescriptionEdit(parent.description || "");
+            } else {
+              setEditingSubStep(null); // Parent not found, clear editing
             }
+          } else {
+            setEditingSubStep(null); // Was a direct child of main step, or parent couldn't be determined
           }
-          return null;
-        };
-        const parent = findParentRecursive(editingStep.subSteps, parentSubStepId);
-        if (parent) {
-          setEditingSubStep(parent);
-          setCurrentSubStepTitleEdit(parent.title);
-          setCurrentSubStepDescriptionEdit(parent.description || "");
-        } else {
-          setEditingSubStep(null);
+        } else if (editingSubStep && editingSubStep.subSteps?.some(ss => ss.id === idToDelete)) {
+          // If a child of the *currently viewed* sub-step was deleted, refresh its list in the UI state
+          setEditingSubStep(prev => {
+            if (!prev || !prev.subSteps) return prev;
+            const result = removeSubStepRecursive(prev.subSteps, idToDelete);
+            return result.foundAndRemoved ? { ...prev, subSteps: result.updatedList } : prev;
+          });
         }
-      } else {
-        setEditingSubStep(null);
-      }
-    } else if (type === 'subStep' && editingSubStep && parentSubStepId === editingSubStep.id) {
-      // If a child of the currently viewed sub-step was deleted, refresh its list
-      setEditingSubStep(prev => {
-        if (!prev || !prev.subSteps) return prev;
-        const result = removeRecursive(prev.subSteps, idToDelete);
-        return result.foundAndRemoved ? { ...prev, subSteps: result.updatedList } : prev;
-      });
     }
     setItemToDelete(null);
   }, [itemToDelete, canEditPlan, toast, editingStep, editingSubStep]);
+
 
   const handleStepDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
     if (!canEditPlan) return;
@@ -760,7 +785,7 @@ export default function PlanDetailPage() {
   const handleDeleteStepRequest = useCallback((stepId: string, stepTitle: string) => {
     setItemToDelete({ type: 'step', id: stepId, title: stepTitle, parentStepId: stepId });
   }, []);
-  
+
   const saveRoadmapChanges = useCallback(async () => {
     if (!planData || !user || !planId || !canEditPlan) { toast({ variant: "destructive", title: "Error", description: "Cannot save: Plan data, user auth, or permissions missing." }); return; }
     saveRoadmapMutation.mutate({ planId, currentUserId: user.uid, roadmap: editableRoadmap });
@@ -994,7 +1019,7 @@ export default function PlanDetailPage() {
           sourceVisualAnchor = 'W';
           sourceVisualRadius = SUB_STEP_DOT_VISUAL_DIAMETER / 2;
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS;
-          currentLineColor = SUBSTEP_CONNECTION_LINE_COLOR; 
+          currentLineColor = SUBSTEP_CONNECTION_LINE_COLOR;
           currentMarkerId = 'url(#arrowhead-substep)';
         } else {
           const tempRawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
@@ -1008,15 +1033,15 @@ export default function PlanDetailPage() {
           });
           sourceVisualAnchor = bestAnchor;
           rawStartPoint = getAnchorPoint(sourceNode, sourceVisualAnchor);
-          sourceVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 2);
+          sourceVisualRadius = (DOT_SIZE / 2); // Main node dots are larger
           currentLineThicknessToUse = CONNECTION_LINE_THICKNESS_MAIN;
-          currentLineColor = MAIN_CONNECTION_LINE_COLOR; 
+          currentLineColor = MAIN_CONNECTION_LINE_COLOR;
           currentMarkerId = 'url(#arrowhead-main)';
         }
 
         const rawEndPoint = getAnchorPoint(targetStep, incomingConn.targetAnchor);
         const targetVisualAnchor = incomingConn.targetAnchor;
-        const targetVisualRadius = (SUB_STEP_DOT_VISUAL_DIAMETER / 2);
+        const targetVisualRadius = (DOT_SIZE / 2); // Target dots are main node dots
 
         const sourceAxisVec = getAnchorAxisVector(sourceVisualAnchor);
         const targetAxisVec = getAnchorAxisVector(targetVisualAnchor);
@@ -1140,11 +1165,11 @@ export default function PlanDetailPage() {
       <AddRoadmapStepDialog isOpen={isAddStepDialogOpen} onOpenChange={setIsAddStepDialogOpen} onSubmit={handleAddRoadmapStepSubmit} isSubmitting={saveRoadmapMutation.isPending} parentStepTitle={pendingNodeFromDotInfo?.sourceStepId ? editableRoadmap.find(s => s.id === pendingNodeFromDotInfo.sourceStepId)?.title : null} dialogTitle={pendingNodeFromDotInfo?.creatingFromSubStepContext?.subStepTitle ? `New Step from "${pendingNodeFromDotInfo.creatingFromSubStepContext.subStepTitle}" (Anchor: ${pendingNodeFromDotInfo.sourceAnchor})` : undefined} />
       <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) { setEditingStep(null); setEditingSubStep(null); } setIsStepDetailSheetOpen(open); setIsEditingNodeTitle(false); setIsEditingNodeDescription(false); setCurrentSubStepTitleEdit(""); setCurrentSubStepDescriptionEdit("");}}>
         <SheetContent className="sm:max-w-md flex flex-col">
-          {editingSubStep && editingStep ? ( 
+          {editingSubStep && editingStep ? (
             <>
               <SheetHeader className="border-b pb-3">
-                <SheetTitle>Sub-step: {editingSubStep.title}</SheetTitle>
-                <SheetDescription>Parent Step: {editingStep.title}</SheetDescription>
+                <SheetTitle>Sub-step: {currentSubStepTitleEdit || editingSubStep.title}</SheetTitle>
+                <SheetDescription>Parent: {editingStep.title} / {editingSubStep.parentId === editingStep.id ? 'Direct Child' : `Nested under "...${(editableRoadmap.flatMap(rs => rs.subSteps || []).find(ss => ss.id === editingSubStep.parentId)?.title || 'Unknown').substring(0,20)}"`}</SheetDescription>
               </SheetHeader>
               <ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
                 <div>
@@ -1188,7 +1213,7 @@ export default function PlanDetailPage() {
                 </div>
               </SheetFooter>
             </>
-          ) : editingStep ? ( 
+          ) : editingStep ? (
             <>
               <SheetHeader className="border-b pb-3"><SheetTitle>Step: {editingStep.title}</SheetTitle><SheetDescription>Modify details and sub-steps.</SheetDescription></SheetHeader>
               <ScrollArea className="flex-grow min-h-0"><div className="p-4 space-y-4">
@@ -1213,7 +1238,7 @@ export default function PlanDetailPage() {
                             <span className="truncate" title={sub.title}>{sub.title}</span>
                             {canEditPlan && (
                               <div className="flex items-center gap-1 flex-shrink-0">
-                                <Button variant="ghost" size="icon" className="h-6 w-6 p-1" onClick={() => handleEditDirectSubStep(sub, editingStep!)} title={`Edit sub-step: ${sub.title}`} disabled={saveRoadmapMutation.isPending}><Edit2 className="h-3.5 w-3.5" /></Button>
+                                <Button variant="ghost" size="icon" className="h-6 w-6 p-1" onClick={() => handleEditDirectSubStep(editingStep, sub)} title={`Edit sub-step: ${sub.title}`} disabled={saveRoadmapMutation.isPending}><Edit2 className="h-3.5 w-3.5" /></Button>
                                 <Button variant="ghost" size="icon" className="h-6 w-6 p-1 text-destructive hover:text-destructive" onClick={() => setItemToDelete({type: 'subStep', id: sub.id, title: sub.title, parentStepId: editingStep!.id, parentSubStepId: editingStep!.id })} title={`Delete sub-step: ${sub.title}`} disabled={saveRoadmapMutation.isPending}><Trash2 className="h-3.5 w-3.5" /></Button>
                               </div>
                             )}
@@ -1244,7 +1269,7 @@ export default function PlanDetailPage() {
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setItemToDelete(null)}>Cancel</AlertDialogCancel>
-                <AlertDialogAction onClick={confirmDeleteItem} className="bg-destructive hover:bg-destructive/90" disabled={!canEditPlan}>Delete {itemToDelete?.type === 'step' ? 'Step' : 'Sub-step'}</AlertDialogAction>
+                <AlertDialogAction onClick={confirmDeleteItem} className="bg-destructive hover:bg-destructive/90" disabled={!canEditPlan || saveRoadmapMutation.isPending}>Delete {itemToDelete?.type === 'step' ? 'Step' : 'Sub-step'}</AlertDialogAction>
             </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
@@ -1258,7 +1283,7 @@ export default function PlanDetailPage() {
               Review past versions of this plan. You can restore to a previous version.
             </SheetDescription>
           </SheetHeader>
-          <ScrollArea className="h-[calc(100%-100px)]"> 
+          <ScrollArea className="h-[calc(100%-100px)]">
             <div className="p-4 space-y-3">
               {isLoadingVersions && (
                 <div className="flex justify-center items-center py-6">
@@ -1337,4 +1362,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
