@@ -8,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge'; // Added Badge import
+import { Badge } from '@/components/ui/badge';
 import {
   Loader2,
   Share2,
@@ -23,8 +23,8 @@ import {
   History,
   Eye,
   Unlink,
-  PlusCircle, // Added PlusCircle
-  GitBranchPlus, // Kept for "Add Child Node to Canvas" button in panel
+  PlusCircle,
+  GitTree, // Using GitTree as a placeholder for child indicator
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -57,22 +57,18 @@ const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
 const NODE_BASE_MIN_HEIGHT = 80;
 const NODE_HEADER_HEIGHT = 40;
-const CHILD_NODE_ITEM_HEIGHT = 24; // Height for each child title in the card's list
+const CHILD_NODE_ITEM_HEIGHT = 24;
 const NODE_CONTENT_PADDING_Y = 16;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
-
 const DOT_SIZE = 12;
 const DOT_OFFSET = -DOT_SIZE / 2;
-
 const CONNECTION_LINE_THICKNESS_HIERARCHY = 2;
 const ARROWHEAD_LENGTH = 10;
 const ARROWHEAD_WIDTH_FACTOR = 0.7;
-
 const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
 const CLICK_TIME_THRESHOLD_MS = 300;
 const DEFAULT_SPACING_X = 80;
 const DEFAULT_SPACING_Y = 60;
-
 
 const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
   let height = NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y;
@@ -86,7 +82,7 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
   let childNodesListHeight = 0;
   const childCanvasNodes = allSteps.filter(s => s.parentId === step.id);
   if (childCanvasNodes.length > 0) {
-    childNodesListHeight = (childCanvasNodes.length * CHILD_NODE_ITEM_HEIGHT) + (CHILD_NODE_ITEM_HEIGHT / 2); // Add some padding for the list
+    childNodesListHeight = (childCanvasNodes.length * CHILD_NODE_ITEM_HEIGHT) + (CHILD_NODE_ITEM_HEIGHT / 2);
   }
 
   const contentHeight = Math.max(descriptionHeight, childNodesListHeight);
@@ -105,7 +101,7 @@ interface RoadmapStepCardProps {
   onEditStep: (step: RoadmapStep) => void;
   onSelectChildNodeOnCanvas: (childNodeId: string) => void;
   isActuallyDraggingThisNode?: boolean;
-  onAddNestedChild: (parentId: string) => void; // New prop for adding child to a listed child
+  onAddNestedChild: (parentId: string) => void;
 }
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
@@ -204,15 +200,17 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                 const hasGrandChildren = allSteps.some(s => s.parentId === childNode.id);
                 return (
                   <li key={childNode.id} className="text-xs py-0 flex items-center justify-between group/childitem text-foreground hover:text-primary" title={`View child node: ${childNode.title}`}>
-                    <div className="flex items-center flex-grow min-w-0" onClick={(e) => { e.stopPropagation(); onSelectChildNodeOnCanvas(childNode.id); }}>
-                      <div
+                    <div className="flex items-center flex-grow min-w-0">
+                       <div
                         className={cn(
-                          "h-2 w-2 rounded-full mr-1.5 flex-shrink-0 border border-green-600",
-                          hasGrandChildren ? "bg-green-500" : "bg-transparent"
+                          "h-2 w-2 rounded-full mr-1.5 flex-shrink-0",
+                          hasGrandChildren ? "bg-green-500" : "border border-green-600"
                         )}
-                        title={hasGrandChildren ? "This child has its own children" : "This child has no children"}
+                        title={hasGrandChildren ? "This child has further children" : "This child has no children"}
                       />
-                      <span className="truncate">{childNode.title}</span>
+                      <span className="truncate cursor-pointer" onClick={(e) => { e.stopPropagation(); onSelectChildNodeOnCanvas(childNode.id); }}>
+                        {childNode.title}
+                      </span>
                     </div>
                     <button
                       type="button"
@@ -260,7 +258,6 @@ export default function PlanDetailPage() {
   const [isAddNodeDialogOpen, setIsAddNodeDialogOpen] = useState(false);
   const [targetParentIdForDialog, setTargetParentIdForDialog] = useState<string | null>(null);
 
-
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
   const [isEditingNodeTitle, setIsEditingNodeTitle] = useState(false);
@@ -283,7 +280,6 @@ export default function PlanDetailPage() {
   interface NodeDragInfo { type: 'node'; nodeId: string; offsetX: number; offsetY: number; }
   interface ConnectionDragInfo { type: 'connectionDot'; sourceNodeId: string; sourceAnchor: 'N' | 'S' | 'E'; startX: number; startY: number; }
   interface PointerStartInfo { clientX: number; clientY: number; timestamp: number; targetElement: EventTarget | null; }
-
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
@@ -368,39 +364,36 @@ export default function PlanDetailPage() {
     if (!canEditPlan) return;
     let newStepX = 100, newStepY = 100;
 
-    if (targetParentIdForDialog) {
-        const parentNode = editableRoadmap.find(s => s.id === targetParentIdForDialog);
-        if (parentNode) {
-            // Position new child node to the LEFT of its parent
-            newStepX = parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X;
-            newStepY = parentNode.y;
-        } else { // Fallback if parent not found (should not happen if targetParentIdForDialog is valid)
-             if (canvasRef.current) {
-                newStepX = canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2;
-                newStepY = canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2;
-             }
-        }
-    } else if (canvasRef.current) { // Creating a root node
-      newStepX = canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2;
-      newStepY = canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2;
-    }
-
-    newStepX = Math.max(MIN_CANVAS_PADDING, newStepX);
-    newStepY = Math.max(MIN_CANVAS_PADDING, newStepY);
-
     const newNode: RoadmapStep = {
       id: `step-${Date.now()}-${uuidv4().substring(0, 8)}`,
       title: data.title,
       description: null,
-      x: newStepX, y: newStepY,
-      parentId: targetParentIdForDialog,
+      x: newStepX,
+      y: newStepY,
+      parentId: targetParentIdForDialog, // Set parentId from dialog context
     };
+
+    if (targetParentIdForDialog) { // Creating a child node
+        const parentNode = editableRoadmap.find(s => s.id === targetParentIdForDialog);
+        if (parentNode) {
+            newNode.x = Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X); // Position to the left
+            newNode.y = Math.max(MIN_CANVAS_PADDING, parentNode.y); // Align Y with parent
+        } else { // Fallback if parent not found (should not happen)
+             if (canvasRef.current) {
+                newNode.x = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2);
+                newNode.y = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
+             }
+        }
+    } else if (canvasRef.current) { // Creating a root node
+      newNode.x = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2);
+      newNode.y = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
+    }
+
     setEditableRoadmap(prev => [...prev, newNode]);
     setIsAddNodeDialogOpen(false);
     setTargetParentIdForDialog(null); // Reset after use
     toast({ title: "Node Added", description: `"${data.title}" added ${targetParentIdForDialog ? 'as child node' : 'as root node'}. Remember to save the plan.` });
   }, [canEditPlan, editableRoadmap, targetParentIdForDialog, toast]);
-
 
   const handleInitiateAddChildToNode = useCallback((parentId: string | null) => {
     if (!canEditPlan) return;
@@ -412,8 +405,10 @@ export default function PlanDetailPage() {
     if (!nodeToDelete || !canEditPlan) return;
     const idToDelete = nodeToDelete.id;
     setEditableRoadmap(prev => {
-        const childrenOfDeleted = prev.filter(s => s.parentId === idToDelete);
-        const updatedChildren = childrenOfDeleted.map(child => ({ ...child, parentId: null, x: child.x + 10, y: child.y + 10 }));
+        // Children of the deleted node become root nodes
+        const updatedChildren = prev
+            .filter(s => s.parentId === idToDelete)
+            .map(child => ({ ...child, parentId: null, x: child.x + 10, y: child.y + 10 })); // Slight offset
         const remainingNodes = prev.filter(s => s.id !== idToDelete && s.parentId !== idToDelete);
         return [...remainingNodes, ...updatedChildren];
     });
@@ -536,35 +531,39 @@ export default function PlanDetailPage() {
         const canvasRect = canvasRef.current.getBoundingClientRect();
         const releaseX = finalCoords.clientX - canvasRect.left + canvasRef.current.scrollLeft;
         const releaseY = finalCoords.clientY - canvasRect.top + canvasRef.current.scrollTop;
-        let targetFound = false;
+        let targetNodeFound: RoadmapStep | null = null;
 
-        for (const targetNode of editableRoadmap) {
-            if (targetNode.id === sourceNodeId) continue;
-            const targetNodeHeight = calculateNodeHeight(targetNode, editableRoadmap);
-            const targetRect = { left: targetNode.x, top: targetNode.y, right: targetNode.x + NODE_BASE_WIDTH, bottom: targetNode.y + targetNodeHeight };
+        for (const targetStep of editableRoadmap) {
+            if (targetStep.id === sourceNodeId) continue;
+            const targetNodeHeight = calculateNodeHeight(targetStep, editableRoadmap);
+            const targetRect = { left: targetStep.x, top: targetStep.y, right: targetStep.x + NODE_BASE_WIDTH, bottom: targetStep.y + targetNodeHeight };
             if (releaseX >= targetRect.left && releaseX <= targetRect.right && releaseY >= targetRect.top && releaseY <= targetRect.bottom) {
-                let childToSetParentId: string;
-                let newParentIdForChild: string;
+                targetNodeFound = targetStep;
+                break;
+            }
+        }
 
-                if (sourceAnchor === 'S') {
-                    childToSetParentId = sourceNodeId; newParentIdForChild = targetNode.id;
-                } else if (sourceAnchor === 'N') {
-                    childToSetParentId = targetNode.id; newParentIdForChild = sourceNodeId;
-                } else { // Side drag (E)
-                    childToSetParentId = sourceNodeId; newParentIdForChild = targetNode.id;
-                }
+        if (targetNodeFound) { // Connecting to an existing node
+            let childToSetParentId: string = "";
+            let newParentIdForChild: string = "";
 
+            if (sourceAnchor === 'S') { // Dragging from bottom of source
+                childToSetParentId = sourceNodeId; newParentIdForChild = targetNodeFound.id;
+            } else if (sourceAnchor === 'N') { // Dragging from top of source
+                childToSetParentId = targetNodeFound.id; newParentIdForChild = sourceNodeId;
+            } else { // Dragging from side (E) of source, make source child of target
+                childToSetParentId = sourceNodeId; newParentIdForChild = targetNodeFound.id;
+            }
+
+            if (childToSetParentId && newParentIdForChild && childToSetParentId !== newParentIdForChild) {
                 if (!isCyclical(childToSetParentId, newParentIdForChild, editableRoadmap)) {
                     setEditableRoadmap(prev => prev.map(s => s.id === childToSetParentId ? { ...s, parentId: newParentIdForChild } : s));
                     toast({ title: "Nodes Connected", description: `Hierarchy updated. Remember to save.` });
                 } else {
                     toast({ variant: "destructive", title: "Invalid Connection", description: "This connection would create a loop." });
                 }
-                targetFound = true;
-                break;
             }
-        }
-        if (!targetFound) {
+        } else { // Dropped on empty canvas, create new child node
             setTargetParentIdForDialog(sourceNodeId);
             setIsAddNodeDialogOpen(true);
         }
@@ -602,10 +601,13 @@ export default function PlanDetailPage() {
     return editableRoadmap.filter(childStep => childStep.parentId).map(childStep => {
       const parentStep = editableRoadmap.find(s => s.id === childStep.parentId);
       if (!parentStep) return null;
+      
       const parentNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
-      // Connect bottom-center of parent to top-center of child
+      // Start from parent's South dot (bottom-center edge)
       const parentAnchorPoint = { x: parentStep.x + NODE_BASE_WIDTH / 2, y: parentStep.y + parentNodeHeight };
+      // End at child's North dot (top-center edge)
       const childAnchorPoint = { x: childStep.x + NODE_BASE_WIDTH / 2, y: childStep.y };
+
       const pathData = `M ${parentAnchorPoint.x} ${parentAnchorPoint.y} L ${childAnchorPoint.x} ${childAnchorPoint.y}`;
       return (
         <g key={`conn-${parentStep.id}-to-${childStep.id}`}>
@@ -705,7 +707,7 @@ export default function PlanDetailPage() {
                     </div>
 
                     <div className="space-y-2 mt-3">
-                        <Label className="flex items-center"><GitBranchPlus className="mr-1.5 h-4 w-4 text-primary/80"/>Child Nodes (On Canvas)</Label>
+                        <Label className="flex items-center"><GitTree className="mr-1.5 h-4 w-4 text-primary/80"/>Child Nodes (On Canvas)</Label>
                         {directChildrenOfEditingStep.length > 0 ? (
                             <ul className="space-y-1.5 border p-2 rounded-md max-h-40 overflow-y-auto">
                                 {directChildrenOfEditingStep.map(childNode => (
