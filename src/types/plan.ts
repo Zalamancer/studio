@@ -1,21 +1,28 @@
+
 // src/types/plan.ts
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
-// RoadmapSubStep and ExplicitConnection are removed.
-// IncomingConnection is removed as hierarchy is now solely defined by parentId.
+// Represents an item listed within a RoadmapStep's childrenData.
+// It only becomes a full RoadmapStep on the canvas if it itself has children.
+export interface ChildDataItem {
+  id: string; // Unique ID for this child item
+  title: string;
+  description?: string | null;
+  parentCanvasNodeId: string; // ID of the RoadmapStep (canvas node) this item belongs to
+  canvasNodeIdForThisItem?: string | null; // ID of the RoadmapStep on canvas IF this item is spawned
+  // childOrder?: number; // Optional: for ordering within the parent's list
+}
 
+// Represents a node visible and interactive on the main canvas.
 export interface RoadmapStep {
   id: string;
   title: string;
   x: number;
   y: number;
   description?: string | null;
-  parentId: string | null; // ID of the parent RoadmapStep, null if root
-  // subSteps?: RoadmapSubStep[]; // REMOVED - Child nodes are now full RoadmapSteps linked by parentId
-  // explicitConnections?: ExplicitConnection[]; // REMOVED
-  // incomingConnections?: IncomingConnection[]; // REMOVED
+  childrenData: ChildDataItem[]; // List of child items displayed within this node's card
+  // parentId is removed; visual hierarchy from ChildDataItem's dot to spawned canvas node.
 }
-
 
 export interface Plan {
   id: string;
@@ -28,7 +35,7 @@ export interface Plan {
   naicsCode: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  roadmap: RoadmapStep[]; // The collection of all nodes in the plan, hierarchy defined by parentId
+  roadmap: RoadmapStep[]; // Flat list of ALL nodes currently on the canvas.
   version?: number;
 }
 
@@ -36,13 +43,15 @@ export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt'
   createdAt?: FieldValue;
   updatedAt?: FieldValue;
   description?: string | null;
-  roadmap?: RoadmapStep[];
+  roadmap?: RoadmapStep[]; // Initial canvas nodes (likely empty or just a root)
 }
 
-export interface UpdatePlanRoadmapData {
-  roadmap: RoadmapStep[];
+// For updating the overall plan structure, not just a single node's details
+export interface UpdatePlanData {
+  roadmap: RoadmapStep[]; // The entire set of canvas nodes
   updatedAt: FieldValue;
-  version?: FieldValue;
+  version?: FieldValue; // To increment version
+  // Other top-level plan fields if they become editable (name, description, sector etc.)
   name?: string;
   description?: string | null;
   sector?: string;
@@ -56,20 +65,18 @@ export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
   updatedAt: number;
 }
 
+// For version history, storing a snapshot of the canvas nodes
 export interface PlanVersionData {
   planId: string;
-  roadmap: RoadmapStep[]; // Stores the flat list of nodes
+  roadmap: RoadmapStep[]; // Snapshot of all canvas nodes and their childrenData lists
   editorUid: string;
   timestamp: FieldValue;
   versionNumber?: number;
 }
 
-export interface ClientPlanVersion {
+export interface ClientPlanVersion extends Omit<PlanVersionData, 'timestamp' | 'editorUid'> {
   id: string;
-  planId: string;
-  roadmap: RoadmapStep[];
-  editorUid: string;
-  editorDisplayName?: string;
   timestamp: number;
-  versionNumber?: number;
+  editorUid: string; // Keep editorUid
+  editorDisplayName?: string; // For display
 }
