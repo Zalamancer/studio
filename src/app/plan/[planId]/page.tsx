@@ -1,3 +1,4 @@
+
 // src/app/plan/[planId]/page.tsx
 "use client";
 
@@ -7,7 +8,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Badge } from '@/components/ui/badge';
+import { Badge } from '@/components/ui/badge'; // Added Badge import
 import {
   Loader2,
   Share2,
@@ -22,7 +23,8 @@ import {
   History,
   Eye,
   Unlink,
-  GitBranchPlus,
+  PlusCircle, // Added PlusCircle
+  GitBranchPlus, // Kept for "Add Child Node to Canvas" button in panel
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -53,9 +55,9 @@ import { getInitials } from '@/lib/pseudonymUtils';
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
-const NODE_BASE_MIN_HEIGHT = 80; // Reduced min height as sub-steps are gone
+const NODE_BASE_MIN_HEIGHT = 80;
 const NODE_HEADER_HEIGHT = 40;
-const CHILD_NODE_ITEM_HEIGHT = 24; // For listing child titles in the card
+const CHILD_NODE_ITEM_HEIGHT = 24; // Height for each child title in the card's list
 const NODE_CONTENT_PADDING_Y = 16;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
 
@@ -68,6 +70,9 @@ const ARROWHEAD_WIDTH_FACTOR = 0.7;
 
 const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
 const CLICK_TIME_THRESHOLD_MS = 300;
+const DEFAULT_SPACING_X = 80;
+const DEFAULT_SPACING_Y = 60;
+
 
 const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
   let height = NODE_HEADER_HEIGHT + NODE_CONTENT_PADDING_Y;
@@ -81,7 +86,7 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
   let childNodesListHeight = 0;
   const childCanvasNodes = allSteps.filter(s => s.parentId === step.id);
   if (childCanvasNodes.length > 0) {
-    childNodesListHeight = (childCanvasNodes.length * CHILD_NODE_ITEM_HEIGHT) + (CHILD_NODE_ITEM_HEIGHT / 2);
+    childNodesListHeight = (childCanvasNodes.length * CHILD_NODE_ITEM_HEIGHT) + (CHILD_NODE_ITEM_HEIGHT / 2); // Add some padding for the list
   }
 
   const contentHeight = Math.max(descriptionHeight, childNodesListHeight);
@@ -100,6 +105,7 @@ interface RoadmapStepCardProps {
   onEditStep: (step: RoadmapStep) => void;
   onSelectChildNodeOnCanvas: (childNodeId: string) => void;
   isActuallyDraggingThisNode?: boolean;
+  onAddNestedChild: (parentId: string) => void; // New prop for adding child to a listed child
 }
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
@@ -112,13 +118,14 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
   onEditStep,
   onSelectChildNodeOnCanvas,
   isActuallyDraggingThisNode,
+  onAddNestedChild,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const dynamicHeight = calculateNodeHeight(step, allSteps);
   const childCanvasNodes = useMemo(() => allSteps.filter(s => s.parentId === step.id), [allSteps, step.id]);
 
   interface ConnectionDotProps {
-    anchor: 'N' | 'S' | 'E'; // West dot removed
+    anchor: 'N' | 'S' | 'E';
     nodeId: string;
     isSubmitting: boolean;
     style?: React.CSSProperties;
@@ -167,7 +174,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       onMouseDown={(e) => onNodeInteractionStart(step.id, e)}
       onTouchStart={(e) => onNodeInteractionStart(step.id, e)}
       onClick={(e) => {
-        // Prevent click from propagating if it's part of a drag
         if (isActuallyDraggingThisNode) {
             e.stopPropagation();
             return;
@@ -181,12 +187,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <div
         className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]"
         style={{ backgroundColor: 'hsl(var(--primary))' }}
-        onDoubleClick={() => onEditStep(step)} // Allow editing on double click of header too
+        onDoubleClick={() => onEditStep(step)}
       >
         <h3 className="text-sm font-semibold truncate text-primary-foreground" title={step.title}>{step.title}</h3>
       </div>
       <div className="p-2 text-xs flex-grow min-h-0 space-y-1" style={{ backgroundColor: 'hsl(var(--card))' }}
-           onDoubleClick={() => onEditStep(step)} // Also on content double click
+           onDoubleClick={() => onEditStep(step)}
       >
         {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
 
@@ -194,12 +200,33 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
           <>
             <p className="text-[11px] font-medium text-muted-foreground mt-1 mb-0.5">Child Nodes:</p>
             <ul className="space-y-0.5 list-none p-0 m-0 max-h-16 overflow-y-auto custom-scrollbar-xs">
-              {childCanvasNodes.map((childNode) => (
-                <li key={childNode.id} className="text-xs py-0 flex items-center text-foreground hover:text-primary cursor-pointer" onClick={(e) => { e.stopPropagation(); onSelectChildNodeOnCanvas(childNode.id); }} title={`Go to child node: ${childNode.title}`}>
-                   <GitBranchPlus className="h-2.5 w-2.5 mr-1.5 text-primary/70 flex-shrink-0"/>
-                   <span className="truncate">{childNode.title}</span>
-                </li>
-              ))}
+              {childCanvasNodes.map((childNode) => {
+                const hasGrandChildren = allSteps.some(s => s.parentId === childNode.id);
+                return (
+                  <li key={childNode.id} className="text-xs py-0 flex items-center justify-between group/childitem text-foreground hover:text-primary" title={`View child node: ${childNode.title}`}>
+                    <div className="flex items-center flex-grow min-w-0" onClick={(e) => { e.stopPropagation(); onSelectChildNodeOnCanvas(childNode.id); }}>
+                      <div
+                        className={cn(
+                          "h-2 w-2 rounded-full mr-1.5 flex-shrink-0 border border-green-600",
+                          hasGrandChildren ? "bg-green-500" : "bg-transparent"
+                        )}
+                        title={hasGrandChildren ? "This child has its own children" : "This child has no children"}
+                      />
+                      <span className="truncate">{childNode.title}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onAddNestedChild(childNode.id); }}
+                      className="p-0.5 opacity-0 group-hover/childitem:opacity-100 focus-visible:opacity-100 rounded hover:bg-muted"
+                      title={`Add child to "${childNode.title}"`}
+                      disabled={isSubmitting}
+                    >
+                      <PlusCircle className="h-3.5 w-3.5 text-green-600 hover:text-green-700" />
+                      <span className="sr-only">Add child to {childNode.title}</span>
+                    </button>
+                  </li>
+                );
+              })}
             </ul>
           </>
         )}
@@ -211,15 +238,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <ConnectionDot anchor="N" nodeId={step.id} isSubmitting={isSubmitting} style={{ top: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
       <ConnectionDot anchor="S" nodeId={step.id} isSubmitting={isSubmitting} style={{ bottom: DOT_OFFSET, left: `calc(50% - ${DOT_SIZE/2}px)` }} />
       <ConnectionDot anchor="E" nodeId={step.id} isSubmitting={isSubmitting} style={{ right: DOT_OFFSET, top: `calc(50% - ${DOT_SIZE/2}px)` }} />
-      {/* West dot removed */}
     </div>
   );
 });
 RoadmapStepCard.displayName = "RoadmapStepCard";
 
-interface NodeDragInfo { type: 'node'; nodeId: string; offsetX: number; offsetY: number; }
-interface ConnectionDragInfo { type: 'connectionDot'; sourceNodeId: string; sourceAnchor: 'N' | 'S' | 'E'; startX: number; startY: number; }
-interface PointerStartInfo { clientX: number; clientY: number; timestamp: number; targetElement: EventTarget | null; }
 interface LineContextMenuState { isOpen: boolean; x: number; y: number; childNodeId: string; }
 
 export default function PlanDetailPage() {
@@ -235,16 +258,15 @@ export default function PlanDetailPage() {
   const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const [editableRoadmap, setEditableRoadmap] = useState<RoadmapStep[]>([]);
   const [isAddNodeDialogOpen, setIsAddNodeDialogOpen] = useState(false);
-  const [pendingNodeFromDotDragInfo, setPendingNodeFromDotDragInfo] = useState<{ sourceNodeId: string; sourceAnchor: 'N' | 'S' | 'E' } | null>(null);
+  const [targetParentIdForDialog, setTargetParentIdForDialog] = useState<string | null>(null);
+
 
   const [editingStep, setEditingStep] = useState<RoadmapStep | null>(null);
-  // editingSubStep, currentSubStepTitleEdit, currentSubStepDescriptionEdit removed
-
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
   const [isEditingNodeTitle, setIsEditingNodeTitle] = useState(false);
   const [isEditingNodeDescription, setIsEditingNodeDescription] = useState(false);
 
-  const [nodeToDelete, setNodeToDelete] = useState<RoadmapStep | null>(null); // Simplified from ItemToDelete
+  const [nodeToDelete, setNodeToDelete] = useState<RoadmapStep | null>(null);
   const [lineContextMenu, setLineContextMenu] = useState<LineContextMenuState | null>(null);
 
   const [isPointerDown, setIsPointerDown] = useState(false);
@@ -257,6 +279,11 @@ export default function PlanDetailPage() {
   const [isVersionHistorySheetOpen, setIsVersionHistorySheetOpen] = useState(false);
   const [versionToRestore, setVersionToRestore] = useState<ClientPlanVersion | null>(null);
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
+
+  interface NodeDragInfo { type: 'node'; nodeId: string; offsetX: number; offsetY: number; }
+  interface ConnectionDragInfo { type: 'connectionDot'; sourceNodeId: string; sourceAnchor: 'N' | 'S' | 'E'; startX: number; startY: number; }
+  interface PointerStartInfo { clientX: number; clientY: number; timestamp: number; targetElement: EventTarget | null; }
+
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
@@ -312,7 +339,7 @@ export default function PlanDetailPage() {
     }
   }, [editableRoadmap]);
 
-  const canEditPlan = !!user;
+  const canEditPlan = !!user && (planData?.ownerId === user.uid);
 
   const getPointerCoords = useCallback((event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent): { clientX: number; clientY: number } => {
     if ('touches' in event && event.touches.length > 0) return { clientX: event.touches[0].clientX, clientY: event.touches[0].clientY };
@@ -337,73 +364,66 @@ export default function PlanDetailPage() {
     setIsEditingNodeDescription(false);
   }, []);
 
-  const handleAddNodeSubmit = useCallback((data: AddRoadmapStepFormData, parentNodeIdForNewChild?: string | null) => {
+  const handleAddNode = useCallback((data: AddRoadmapStepFormData) => {
     if (!canEditPlan) return;
     let newStepX = 100, newStepY = 100;
-    let effectiveParentId = parentNodeIdForNewChild || null; // Use provided parentId or null for root
 
-    if (effectiveParentId && pendingNodeFromDotDragInfo) { // Positioning new child from dot drag
-        const sourceNode = editableRoadmap.find(s => s.id === pendingNodeFromDotDragInfo.sourceNodeId);
-        if (sourceNode) {
-            const sourceNodeHeight = calculateNodeHeight(sourceNode, editableRoadmap);
-            const sourceNodeWidth = NODE_BASE_WIDTH;
-            const spacing = 80;
-            const newNodeApproxHeight = NODE_BASE_MIN_HEIGHT; // Use min height for initial placement
-
-            switch(pendingNodeFromDotDragInfo.sourceAnchor) {
-              case 'N': newStepX = sourceNode.x + (sourceNodeWidth / 2) - (NODE_BASE_WIDTH / 2); newStepY = sourceNode.y - newNodeApproxHeight - spacing; break;
-              case 'S': newStepX = sourceNode.x + (sourceNodeWidth / 2) - (NODE_BASE_WIDTH / 2); newStepY = sourceNode.y + sourceNodeHeight + spacing; break;
-              case 'E': newStepX = sourceNode.x + sourceNodeWidth + spacing; newStepY = sourceNode.y + (sourceNodeHeight / 2) - (newNodeApproxHeight / 2); break;
-              // West dot removed
-            }
-        }
-    } else if (effectiveParentId) { // Positioning new child added from panel
-        const parentNode = editableRoadmap.find(s => s.id === effectiveParentId);
+    if (targetParentIdForDialog) {
+        const parentNode = editableRoadmap.find(s => s.id === targetParentIdForDialog);
         if (parentNode) {
-            newStepX = parentNode.x + NODE_BASE_WIDTH + 60;
+            // Position new child node to the LEFT of its parent
+            newStepX = parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X;
             newStepY = parentNode.y;
+        } else { // Fallback if parent not found (should not happen if targetParentIdForDialog is valid)
+             if (canvasRef.current) {
+                newStepX = canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2;
+                newStepY = canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2;
+             }
         }
-    } else if (canvasRef.current) { // Positioning new root node
+    } else if (canvasRef.current) { // Creating a root node
       newStepX = canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2;
       newStepY = canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2;
     }
 
-    newStepX = Math.max(MIN_CANVAS_PADDING, newStepX); newStepY = Math.max(MIN_CANVAS_PADDING, newStepY);
+    newStepX = Math.max(MIN_CANVAS_PADDING, newStepX);
+    newStepY = Math.max(MIN_CANVAS_PADDING, newStepY);
+
     const newNode: RoadmapStep = {
       id: `step-${Date.now()}-${uuidv4().substring(0, 8)}`,
       title: data.title,
       description: null,
       x: newStepX, y: newStepY,
-      parentId: effectiveParentId,
+      parentId: targetParentIdForDialog,
     };
     setEditableRoadmap(prev => [...prev, newNode]);
     setIsAddNodeDialogOpen(false);
-    setPendingNodeFromDotDragInfo(null);
-    toast({ title: "Node Added", description: `"${data.title}" added ${effectiveParentId ? 'as child node' : 'as root node'}. Remember to save the plan.` });
-  }, [canEditPlan, editableRoadmap, pendingNodeFromDotDragInfo, toast]);
+    setTargetParentIdForDialog(null); // Reset after use
+    toast({ title: "Node Added", description: `"${data.title}" added ${targetParentIdForDialog ? 'as child node' : 'as root node'}. Remember to save the plan.` });
+  }, [canEditPlan, editableRoadmap, targetParentIdForDialog, toast]);
+
+
+  const handleInitiateAddChildToNode = useCallback((parentId: string | null) => {
+    if (!canEditPlan) return;
+    setTargetParentIdForDialog(parentId);
+    setIsAddNodeDialogOpen(true);
+  }, [canEditPlan]);
 
   const confirmDeleteNode = useCallback(() => {
     if (!nodeToDelete || !canEditPlan) return;
     const idToDelete = nodeToDelete.id;
-
     setEditableRoadmap(prev => {
-        // Make children of the deleted node root nodes
-        const updatedChildren = prev
-            .filter(s => s.parentId === idToDelete)
-            .map(child => ({ ...child, parentId: null, x: child.x + 10, y: child.y + 10 })); // Slightly offset orphaned children
-
-        // Filter out the deleted node and merge updated children
-        return prev.filter(s => s.id !== idToDelete)
-                   .map(s => updatedChildren.find(uc => uc.id === s.id) || s);
+        const childrenOfDeleted = prev.filter(s => s.parentId === idToDelete);
+        const updatedChildren = childrenOfDeleted.map(child => ({ ...child, parentId: null, x: child.x + 10, y: child.y + 10 }));
+        const remainingNodes = prev.filter(s => s.id !== idToDelete && s.parentId !== idToDelete);
+        return [...remainingNodes, ...updatedChildren];
     });
-
     if (editingStep?.id === idToDelete) {
         setIsStepDetailSheetOpen(false);
         setEditingStep(null);
     }
     toast({ title: `Node "${nodeToDelete.title}" Deleted`, description: `Its children (if any) are now root nodes. Remember to save the plan.` });
     setNodeToDelete(null);
-  }, [nodeToDelete, canEditPlan, toast, editingStep, setEditableRoadmap, setIsStepDetailSheetOpen, setEditingStep]);
+  }, [nodeToDelete, canEditPlan, toast, editingStep]);
 
   const handleStepDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
     if (!canEditPlan) return;
@@ -445,7 +465,7 @@ export default function PlanDetailPage() {
     clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetElement: event.currentTarget };
     isDraggingRef.current = false;
     setIsPointerDown(true);
-  }, [canEditPlan, getPointerCoords, lineContextMenu, setIsPointerDown]);
+  }, [canEditPlan, getPointerCoords, lineContextMenu]);
 
   const handleDotInteractionStart = useCallback((nodeId: string, clickedAnchor: 'N' | 'S' | 'E', event: React.MouseEvent<HTMLElement> | React.TouchEvent<HTMLElement>) => {
     if (('button' in event && (event as React.MouseEvent).button !== 0) || !canEditPlan || !canvasRef.current) return;
@@ -458,7 +478,19 @@ export default function PlanDetailPage() {
     clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetElement: event.currentTarget };
     isDraggingRef.current = false;
     setIsPointerDown(true);
-  }, [canEditPlan, getElementCenter, getPointerCoords, lineContextMenu, setIsPointerDown]);
+  }, [canEditPlan, getElementCenter, getPointerCoords, lineContextMenu]);
+
+  const isCyclical = (potentialChildId: string, potentialParentId: string, currentRoadmap: RoadmapStep[]): boolean => {
+    let current = potentialParentId;
+    const visited = new Set<string>();
+    while(current && !visited.has(current)) {
+        visited.add(current);
+        if (current === potentialChildId) return true;
+        const node = currentRoadmap.find(n => n.id === current);
+        current = node?.parentId || "";
+    }
+    return false;
+  };
 
   const handleGlobalMove = useCallback((event: MouseEvent | TouchEvent) => {
     if (!isPointerDown || !canvasRef.current || (!nodeDragInfoRef.current && !connectionDragInfoRef.current)) return;
@@ -485,19 +517,7 @@ export default function PlanDetailPage() {
         setActiveConnectionLinePreview({ startX, startY, currentX, currentY });
       }
     }
-  }, [isPointerDown, getPointerCoords, setEditableRoadmap, setActiveConnectionLinePreview]);
-
-  const isCyclical = (potentialChildId: string, potentialParentId: string, currentRoadmap: RoadmapStep[]): boolean => {
-    let current = potentialParentId;
-    const visited = new Set<string>();
-    while(current && !visited.has(current)) {
-        visited.add(current);
-        if (current === potentialChildId) return true;
-        const node = currentRoadmap.find(n => n.id === current);
-        current = node?.parentId || "";
-    }
-    return false;
-  };
+  }, [isPointerDown, getPointerCoords]);
 
   const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent) => {
     const clickInfo = clickStartInfoRef.current;
@@ -526,11 +546,11 @@ export default function PlanDetailPage() {
                 let childToSetParentId: string;
                 let newParentIdForChild: string;
 
-                if (sourceAnchor === 'S') { // Dragging from bottom of sourceNodeId (source becomes child)
+                if (sourceAnchor === 'S') {
                     childToSetParentId = sourceNodeId; newParentIdForChild = targetNode.id;
-                } else if (sourceAnchor === 'N') { // Dragging from top of sourceNodeId (target becomes child)
+                } else if (sourceAnchor === 'N') {
                     childToSetParentId = targetNode.id; newParentIdForChild = sourceNodeId;
-                } else { // Side drag (E) - sourceNodeId becomes child of targetNode.id
+                } else { // Side drag (E)
                     childToSetParentId = sourceNodeId; newParentIdForChild = targetNode.id;
                 }
 
@@ -544,14 +564,14 @@ export default function PlanDetailPage() {
                 break;
             }
         }
-        if (!targetFound) { // Dropped on empty canvas - create new child node
-            setPendingNodeFromDotDragInfo({ sourceNodeId, sourceAnchor });
+        if (!targetFound) {
+            setTargetParentIdForDialog(sourceNodeId);
             setIsAddNodeDialogOpen(true);
         }
     }
     nodeDragInfoRef.current = null; connectionDragInfoRef.current = null; clickStartInfoRef.current = null;
     isDraggingRef.current = false; setActiveConnectionLinePreview(null); setIsPointerDown(false);
-  }, [getPointerCoords, editableRoadmap, handleEditStep, toast, isCyclical, setEditableRoadmap, setPendingNodeFromDotDragInfo, setIsAddNodeDialogOpen]);
+  }, [getPointerCoords, editableRoadmap, handleEditStep, toast, isCyclical]);
 
   useEffect(() => {
     if (isPointerDown) {
@@ -582,7 +602,9 @@ export default function PlanDetailPage() {
     return editableRoadmap.filter(childStep => childStep.parentId).map(childStep => {
       const parentStep = editableRoadmap.find(s => s.id === childStep.parentId);
       if (!parentStep) return null;
-      const parentAnchorPoint = { x: parentStep.x + NODE_BASE_WIDTH / 2, y: parentStep.y + calculateNodeHeight(parentStep, editableRoadmap) };
+      const parentNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
+      // Connect bottom-center of parent to top-center of child
+      const parentAnchorPoint = { x: parentStep.x + NODE_BASE_WIDTH / 2, y: parentStep.y + parentNodeHeight };
       const childAnchorPoint = { x: childStep.x + NODE_BASE_WIDTH / 2, y: childStep.y };
       const pathData = `M ${parentAnchorPoint.x} ${parentAnchorPoint.y} L ${childAnchorPoint.x} ${childAnchorPoint.y}`;
       return (
@@ -629,7 +651,7 @@ export default function PlanDetailPage() {
             {user?.uid === planData.ownerId && <Badge variant="outline" className="text-xs ml-2 hidden sm:inline-flex">Owner</Badge>}
         </div>
         <div className="ml-auto flex items-center gap-2">
-            {canEditPlan && (<Button variant="outline" size="sm" className="h-8" onClick={() => handleAddNodeSubmit({title: "New Root Node"}, null)} disabled={saveRoadmapMutation.isPending}><Plus className="h-4 w-4 mr-1.5 sm:mr-2" /><span className="hidden sm:inline">Add Root Node</span><span className="sm:hidden">+Node</span></Button>)}
+            {canEditPlan && (<Button variant="outline" size="sm" className="h-8" onClick={() => handleInitiateAddChildToNode(null)} disabled={saveRoadmapMutation.isPending}><Plus className="h-4 w-4 mr-1.5 sm:mr-2" /><span className="hidden sm:inline">Add Root Node</span><span className="sm:hidden">+Node</span></Button>)}
             {canEditPlan && (<Button variant="default" size="sm" className="h-8" onClick={saveRoadmapChanges} disabled={saveRoadmapMutation.isPending}>{saveRoadmapMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}<span className="hidden sm:inline">Save Plan</span><span className="sm:hidden">Save</span></Button>)}
             <Button variant="outline" size="sm" className="h-8" onClick={() => setIsVersionHistorySheetOpen(true)}><History className="h-4 w-4 mr-1.5 sm:mr-2" /><span className="hidden sm:inline">History</span><span className="sm:hidden">Hist.</span></Button>
             <Button variant="outline" size="sm" className="h-8" onClick={sharePlan}><Share2 className="h-4 w-4 mr-1.5 sm:mr-2" /><span className="hidden sm:inline">Share</span><span className="sm:hidden">Share</span></Button>
@@ -644,7 +666,7 @@ export default function PlanDetailPage() {
             {activeConnectionLinePreview && (<line x1={activeConnectionLinePreview.startX} y1={activeConnectionLinePreview.startY} x2={activeConnectionLinePreview.currentX} y2={activeConnectionLinePreview.currentY} stroke={'hsl(var(--primary))'} strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY + 1} strokeDasharray="4 4" markerEnd={'url(#arrowhead-main)'} />)}
           </svg>
           {editableRoadmap.length === 0 && !isLoadingPlan && (<div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none"><Map className="h-16 w-16 mb-4" /><p className="text-lg font-medium">Collaboration Plan Area</p><p className="text-sm mt-1">{canEditPlan ? "Click '+ Root Node' to add your first step." : "This plan currently has no steps defined."}</p></div>)}
-          {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} allSteps={editableRoadmap} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} onSelectChildNodeOnCanvas={handleSelectChildNodeOnCanvas} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}/>))}
+          {editableRoadmap.map(step => (<RoadmapStepCard key={step.id} step={step} allSteps={editableRoadmap} onNodeInteractionStart={handleNodeInteractionStart} onDotInteractionStart={handleDotInteractionStart} isSelected={editingStep?.id === step.id} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditStep} onSelectChildNodeOnCanvas={handleSelectChildNodeOnCanvas} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id} onAddNestedChild={handleInitiateAddChildToNode} />))}
           <Popover open={lineContextMenu?.isOpen || false} onOpenChange={(open) => { if (!open) setLineContextMenu(null); }}><PopoverTrigger asChild><div className="fixed" style={{ left: `${lineContextMenu?.x || 0}px`, top: `${lineContextMenu?.y || 0}px`, width: 0, height: 0 }} /></PopoverTrigger>
             <PopoverContent className="w-auto p-1" side="right" align="start" sideOffset={5}>
               {lineContextMenu && canEditPlan && (
@@ -659,10 +681,9 @@ export default function PlanDetailPage() {
       <AddRoadmapStepDialog
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
-        onSubmit={(data) => handleAddNodeSubmit(data, pendingNodeFromDotDragInfo?.sourceNodeId)}
+        onSubmit={handleAddNode}
         isSubmitting={saveRoadmapMutation.isPending}
-        parentStepTitle={pendingNodeFromDotDragInfo?.sourceNodeId ? editableRoadmap.find(s => s.id === pendingNodeFromDotDragInfo.sourceNodeId)?.title : null}
-        dialogTitle={pendingNodeFromDotDragInfo?.sourceNodeId ? `New Child for "${editableRoadmap.find(s => s.id === pendingNodeFromDotDragInfo.sourceNodeId)?.title}"` : "Add New Root Node"}
+        dialogTitle={targetParentIdForDialog ? `Add Child to "${editableRoadmap.find(s=>s.id === targetParentIdForDialog)?.title || 'Node'}"` : "Add New Root Node"}
       />
 
       <Sheet open={isStepDetailSheetOpen} onOpenChange={(open) => { if (!open) { setEditingStep(null); } setIsStepDetailSheetOpen(open); setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);}}>
@@ -684,7 +705,7 @@ export default function PlanDetailPage() {
                     </div>
 
                     <div className="space-y-2 mt-3">
-                        <Label className="flex items-center"><GitBranchPlus className="mr-1.5 h-4 w-4 text-primary/80"/>Child Nodes</Label>
+                        <Label className="flex items-center"><GitBranchPlus className="mr-1.5 h-4 w-4 text-primary/80"/>Child Nodes (On Canvas)</Label>
                         {directChildrenOfEditingStep.length > 0 ? (
                             <ul className="space-y-1.5 border p-2 rounded-md max-h-40 overflow-y-auto">
                                 {directChildrenOfEditingStep.map(childNode => (
@@ -697,18 +718,17 @@ export default function PlanDetailPage() {
                                     </li>
                                 ))}
                             </ul>
-                        ) : (<p className="text-xs text-muted-foreground italic">No child nodes yet.</p>)}
+                        ) : (<p className="text-xs text-muted-foreground italic">No child nodes on canvas yet.</p>)}
                         {canEditPlan && (
-                            <Button type="button" variant="outline" size="sm" className="mt-2 w-full" onClick={() => handleAddNodeSubmit({title: "New Child for " + editingStep.title}, editingStep.id)} disabled={saveRoadmapMutation.isPending}>
-                                <Plus className="mr-2 h-4 w-4" /> Add Child Node to Canvas
+                            <Button type="button" variant="outline" size="sm" className="mt-2 w-full" onClick={() => handleInitiateAddChildToNode(editingStep.id)} disabled={saveRoadmapMutation.isPending}>
+                                <PlusCircle className="mr-2 h-4 w-4" /> Add New Child Node to Canvas
                             </Button>
                         )}
                     </div>
-                    {/* Removed old "Tasks (for this node)" section */}
               </div></ScrollArea>
               <SheetFooter className="p-4 mt-auto border-t pt-4 space-y-2 sm:space-y-0 sm:flex sm:justify-between">
                 <div>
-                  {canEditPlan && editingStep && (<Button type="button" variant="destructive" onClick={() => setNodeToDelete(editingStep)} disabled={saveRoadmapMutation.isPending} className="w-full sm:w-auto"><Trash2 className="mr-2 h-4 w-4" /> Delete Node</Button>)}
+                  {canEditPlan && editingStep && (<Button type="button" variant="destructive" onClick={() => setNodeToDelete(editingStep)} disabled={saveRoadmapMutation.isPending} className="w-full sm:w-auto"><Trash2 className="mr-2 h-4 w-4" /> Delete This Node</Button>)}
                 </div>
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
                   <SheetClose asChild><Button type="button" variant="outline" onClick={() => setEditingStep(null)} disabled={saveRoadmapMutation.isPending}>Close Panel</Button></SheetClose>
@@ -726,7 +746,7 @@ export default function PlanDetailPage() {
         <AlertDialogContent>
             <AlertDialogHeader>
                 <AlertDialogTitle>Delete Node: "{nodeToDelete?.title}"?</AlertDialogTitle>
-                <AlertDialogDescription>This will remove the node. Its child nodes (if any) will become root nodes. This action cannot be undone.</AlertDialogDescription>
+                <AlertDialogDescription>This will remove the node from the canvas. Its child nodes (if any) will become root nodes. This action cannot be undone from here, but you can restore a previous plan version.</AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
                 <AlertDialogCancel onClick={() => setNodeToDelete(null)}>Cancel</AlertDialogCancel>
@@ -772,3 +792,5 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
+    
