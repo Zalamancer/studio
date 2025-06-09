@@ -1,26 +1,8 @@
-
 // src/types/plan.ts
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
-// Represents task-like items within a main RoadmapStep
-export interface RoadmapSubStep {
-  id: string;
-  parentId: string; // ID of the main step or parent sub-step it belongs to
-  title: string;
-  description?: string | null;
-  subSteps?: RoadmapSubStep[];
-}
-
-// Connections are now primarily defined by parentId relationships.
-// This type might be used for temporary drag previews or specific labeled connections if needed later,
-// but is not the primary structural link for hierarchy.
-export interface ExplicitConnection {
-  id: string;
-  sourceNodeId: string;
-  targetNodeId: string;
-  label?: string | null;
-  // type?: 'dependency' | 'related'; // Example types
-}
+// RoadmapSubStep and ExplicitConnection are removed.
+// IncomingConnection is removed as hierarchy is now solely defined by parentId.
 
 export interface RoadmapStep {
   id: string;
@@ -29,16 +11,16 @@ export interface RoadmapStep {
   y: number;
   description?: string | null;
   parentId: string | null; // ID of the parent RoadmapStep, null if root
-  subSteps?: RoadmapSubStep[]; // For task-like items within this node, not child nodes on canvas
-  // explicitConnections?: ExplicitConnection[]; // Optional: for manually drawn non-hierarchical connections
-  // Other properties like color, status, assignedTo could be added here
+  // subSteps?: RoadmapSubStep[]; // REMOVED - Child nodes are now full RoadmapSteps linked by parentId
+  // explicitConnections?: ExplicitConnection[]; // REMOVED
+  // incomingConnections?: IncomingConnection[]; // REMOVED
 }
 
 
 export interface Plan {
   id: string;
   name: string;
-  description?: string | null; // Added top-level plan description
+  description?: string | null;
   ownerId: string;
   sector: string;
   subSector?: string | null;
@@ -46,7 +28,7 @@ export interface Plan {
   naicsCode: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  roadmap: RoadmapStep[]; // The collection of all nodes in the plan
+  roadmap: RoadmapStep[]; // The collection of all nodes in the plan, hierarchy defined by parentId
   version?: number;
 }
 
@@ -54,15 +36,15 @@ export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt'
   createdAt?: FieldValue;
   updatedAt?: FieldValue;
   description?: string | null;
-  roadmap?: RoadmapStep[]; // Initial roadmap (usually empty or with a root node)
+  roadmap?: RoadmapStep[];
 }
 
 export interface UpdatePlanRoadmapData {
   roadmap: RoadmapStep[];
   updatedAt: FieldValue;
   version?: FieldValue;
-  name?: string; // Allow updating plan name
-  description?: string | null; // Allow updating plan description
+  name?: string;
+  description?: string | null;
   sector?: string;
   subSector?: string | null;
   industry?: string | null;
@@ -76,7 +58,7 @@ export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
 
 export interface PlanVersionData {
   planId: string;
-  roadmap: RoadmapStep[];
+  roadmap: RoadmapStep[]; // Stores the flat list of nodes
   editorUid: string;
   timestamp: FieldValue;
   versionNumber?: number;
