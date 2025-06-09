@@ -2,90 +2,92 @@
 // src/types/plan.ts
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
+// Represents task-like items within a main RoadmapStep
 export interface RoadmapSubStep {
   id: string;
   parentId: string; // ID of the main step or parent sub-step it belongs to
   title: string;
-  description?: string | null; // Added description for sub-steps
-  subSteps?: RoadmapSubStep[]; // Added to allow recursive sub-steps
-  // Potentially add: status, assignee, dates, etc.
+  description?: string | null;
+  subSteps?: RoadmapSubStep[];
 }
 
-export interface IncomingConnection {
-  id: string; // Unique ID for this specific connection instance
-  sourceNodeId: string; // ID of the node this connection comes FROM
-  targetAnchor: 'N' | 'S' | 'E' | 'W'; // Anchor point on THIS (target) node where the line connects
-  originatingSubStepContext?: { // If the connection started from a sub-step on the sourceNode
-    sourceCardId: string; // This should be the same as sourceNodeId in this context
-    subStepId: string;
-  } | null;
-  lineType?: 'straight' | 'curved' | 'acute'; // Default to 'straight' if undefined
-  label?: string | null; // Optional text label for the connection line, use null for DB
+// Connections are now primarily defined by parentId relationships.
+// This type might be used for temporary drag previews or specific labeled connections if needed later,
+// but is not the primary structural link for hierarchy.
+export interface ExplicitConnection {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  label?: string | null;
+  // type?: 'dependency' | 'related'; // Example types
 }
 
 export interface RoadmapStep {
   id: string;
   title: string;
-  subSteps?: RoadmapSubStep[]; // Optional array of sub-steps
-  x: number; // X coordinate for positioning on canvas
-  y: number; // Y coordinate for positioning on canvas
+  x: number;
+  y: number;
   description?: string | null;
-  incomingConnections?: IncomingConnection[]; // Array for multiple incoming connections
+  parentId: string | null; // ID of the parent RoadmapStep, null if root
+  subSteps?: RoadmapSubStep[]; // For task-like items within this node, not child nodes on canvas
+  // explicitConnections?: ExplicitConnection[]; // Optional: for manually drawn non-hierarchical connections
+  // Other properties like color, status, assignedTo could be added here
 }
 
 
 export interface Plan {
   id: string;
   name: string;
+  description?: string | null; // Added top-level plan description
   ownerId: string;
-  sector: string; // Name of the sector
-  subSector?: string | null; // Name of the sub-sector
-  industry?: string | null; // Name of the industry
-  naicsCode: string | null; // Most specific NAICS code selected
+  sector: string;
+  subSector?: string | null;
+  industry?: string | null;
+  naicsCode: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  roadmap?: RoadmapStep[];
-  version?: number; // Optional: for simple numeric versioning
-}
-
-export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'roadmap' | 'version'> {
-  createdAt?: FieldValue;
-  updatedAt?: FieldValue;
-  roadmap?: RoadmapStep[];
-}
-
-// For updating existing plans, specifically the roadmap
-export interface UpdatePlanRoadmapData {
-  roadmap: RoadmapStep[];
-  updatedAt: FieldValue;
-  version?: FieldValue; // For incrementing version
-}
-
-
-// Client-side representation with serializable timestamps
-export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
-  createdAt: number; // Milliseconds since epoch
-  updatedAt: number; // Milliseconds since epoch
-  roadmap?: RoadmapStep[];
+  roadmap: RoadmapStep[]; // The collection of all nodes in the plan
   version?: number;
 }
 
-// For storing versions of a plan's roadmap
-export interface PlanVersionData { // Data to store for a new version, ID is auto-generated
+export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'roadmap' | 'description'> {
+  createdAt?: FieldValue;
+  updatedAt?: FieldValue;
+  description?: string | null;
+  roadmap?: RoadmapStep[]; // Initial roadmap (usually empty or with a root node)
+}
+
+export interface UpdatePlanRoadmapData {
+  roadmap: RoadmapStep[];
+  updatedAt: FieldValue;
+  version?: FieldValue;
+  name?: string; // Allow updating plan name
+  description?: string | null; // Allow updating plan description
+  sector?: string;
+  subSector?: string | null;
+  industry?: string | null;
+  naicsCode?: string | null;
+}
+
+export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
+  createdAt: number;
+  updatedAt: number;
+}
+
+export interface PlanVersionData {
   planId: string;
   roadmap: RoadmapStep[];
   editorUid: string;
   timestamp: FieldValue;
-  versionNumber?: number; // Optional: if you also update a version number on the main plan
-}
-
-export interface ClientPlanVersion {
-  id: string; // Firestore document ID of the version
-  planId: string;
-  roadmap: RoadmapStep[];
-  editorUid: string;
-  editorDisplayName?: string; // To be fetched separately
-  timestamp: number; // Milliseconds since epoch
   versionNumber?: number;
 }
 
+export interface ClientPlanVersion {
+  id: string;
+  planId: string;
+  roadmap: RoadmapStep[];
+  editorUid: string;
+  editorDisplayName?: string;
+  timestamp: number;
+  versionNumber?: number;
+}
