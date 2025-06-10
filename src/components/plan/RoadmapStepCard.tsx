@@ -123,8 +123,23 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                 const childHasOwnCanvasNode = !!(childItem.canvasNodeIdForThisItem && allSteps.some(s => s.id === childItem.canvasNodeIdForThisItem));
                 
                 return (
-                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pr-4"> {/* Added pr-4 for green dot space */}
-                    <div className="flex items-center flex-grow min-w-0">
+                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4"> {/* Changed pr-4 to pl-4 */}
+                    {/* Green dot moved to the left */}
+                    <div
+                      data-child-item-dot-id={childItem.id}
+                      title={`Add sub-item to "${childItem.title}" (will make "${childItem.title}" a canvas node if it isn't already, and allow adding children to it)`}
+                      onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
+                      className={cn(
+                        "absolute left-0 top-1/2 transform -translate-y-1/2 h-2.5 w-2.5 rounded-full border border-green-700 transition-all duration-150 ease-in-out cursor-pointer", // Changed right-0 to left-0
+                        "hover:bg-green-400 hover:scale-125 hover:ring-1 hover:ring-green-300",
+                        childHasOwnCanvasNode 
+                          ? "bg-green-500" 
+                          : "bg-muted-foreground/50 group-hover/childitemli:bg-green-500" 
+                      )}
+                      onMouseDown={(e) => e.stopPropagation()} 
+                      onTouchStart={(e) => e.stopPropagation()} 
+                    />
+                    <div className="flex items-center flex-grow min-w-0 ml-1"> {/* Added ml-1 for slight spacing from dot */}
                       <span
                         className="truncate cursor-pointer hover:underline"
                         onClick={(e) => { 
@@ -132,9 +147,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                             if (childItem.canvasNodeIdForThisItem) {
                                 const childCanvasNode = allSteps.find(s => s.id === childItem.canvasNodeIdForThisItem);
                                 if (childCanvasNode) onEditStep(childCanvasNode); 
-                                else onEditStep(step); // Fallback if child node not found (should not happen)
+                                else onEditStep(step); 
                             } else {
-                                onEditStep(step); // If not a canvas node, editing it means editing the parent list
+                                onEditStep(step); 
                             }
                         }}
                         title={childItem.title}
@@ -142,21 +157,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                         {childItem.title}
                       </span>
                     </div>
-                    {/* Moved green dot to the right */}
-                    <div
-                      data-child-item-dot-id={childItem.id}
-                      title={`Add sub-item to "${childItem.title}" (will make "${childItem.title}" a canvas node if it isn't already, and allow adding children to it)`}
-                      onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
-                      className={cn(
-                        "absolute right-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border border-green-700 transition-all duration-150 ease-in-out cursor-pointer",
-                        "hover:bg-green-400 hover:scale-125 hover:ring-1 hover:ring-green-300",
-                        childHasOwnCanvasNode 
-                          ? "bg-green-500" // Green if it's already a canvas node
-                          : "bg-muted-foreground/50 group-hover/childitemli:bg-green-500" // Dim if not, brightens on hover
-                      )}
-                      onMouseDown={(e) => e.stopPropagation()} // Prevent parent drag
-                      onTouchStart={(e) => e.stopPropagation()} // Prevent parent drag
-                    />
                   </li>
                 );
               })}
