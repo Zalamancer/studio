@@ -58,6 +58,9 @@ const NODE_BASE_MIN_HEIGHT = 80;
 const NODE_HEADER_HEIGHT = 40; 
 const CHILD_ITEM_HEIGHT = 28; 
 const FINAL_BUFFER_CARD_HEIGHT = 8; 
+const CHILD_ITEM_DOT_OFFSET_X = 10; 
+const CHILD_ITEM_LIST_PADDING_TOP = 8;
+
 
 const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
 const ARROWHEAD_LENGTH = 8;
@@ -182,7 +185,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     <div
       ref={cardRef}
       className={cn(
-        "absolute select-none shadow-lg border rounded-lg flex flex-col group/cardnode", // Added group/cardnode
+        "group/cardnode absolute select-none shadow-lg border rounded-lg flex flex-col",
         isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
         isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
       )}
@@ -207,68 +210,74 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     >
       <div className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]" style={{ backgroundColor: 'hsl(var(--primary))' }} onDoubleClick={() => onEditStep(step)}>
         <h3 className="text-sm font-semibold truncate text-primary-foreground" title={step.title}>{step.title}</h3>
+        
+        {/* Parent Node Connector Dots */}
         <div
-          className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 cursor-pointer"
-          data-dot-type="N" title="North Connector"
+          className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 group-hover/cardnode:z-10 cursor-pointer"
+          data-dot-type="N" title="North Connector (Drag to connect or create new)"
           onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
           onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
         />
         <div
-          className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 cursor-pointer"
-          data-dot-type="E" title="East Connector"
+          className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 group-hover/cardnode:z-10 cursor-pointer"
+          data-dot-type="E" title="East Connector (Drag to connect or create new)"
           onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
           onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
         />
         <div
-          className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 cursor-pointer"
-          data-dot-type="S" title="South Connector"
+          className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 group-hover/cardnode:z-10 cursor-pointer"
+          data-dot-type="S" title="South Connector (Drag to connect or create new)"
           onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
           onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
         />
       </div>
-      <ScrollArea className="flex-grow min-h-0">
-        <div className="p-2 text-xs flex-grow min-h-0 space-y-1" style={{ backgroundColor: 'hsl(var(--card))' }} onClick={(e) => { if (isActuallyDraggingThisNode || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) e.stopPropagation(); else onEditStep(step); }}>
-            {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
-            {Array.isArray(step.childrenData) && step.childrenData.length > 0 && (
-              <>
-                <p className="text-[11px] font-medium text-muted-foreground mt-1 mb-0.5">Child Nodes:</p>
-                <ul className="space-y-0.5 list-none p-0 m-0">
-                  {step.childrenData.map((childItem, index) => {
-                    const childCanvasNode = allSteps.find(s => s.id === childItem.canvasNodeIdForThisItem);
-                    const childIsSpawnedAndHasChildren = childCanvasNode ? (Array.isArray(childCanvasNode.childrenData) && childCanvasNode.childrenData.length > 0) : false;
-                    return (
-                      <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4"> {/* Added group/childitemli and pl-4 */}
-                        <div
-                          data-child-item-dot-id={childItem.id} 
-                          className={cn(
-                            "absolute left-0 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full transition-all duration-150 ease-in-out",
-                            childIsSpawnedAndHasChildren ? "bg-green-500" 
-                            : "bg-muted-foreground group-hover/childitemli:bg-green-500 group-hover/childitemli:scale-150 group-hover/childitemli:ring-2 group-hover/childitemli:ring-green-300 cursor-pointer"
-                          )}
-                          title={childIsSpawnedAndHasChildren ? "This child has its own sub-steps" : `Add sub-step to "${childItem.title}"`}
-                          onClick={(e) => { e.stopPropagation(); if (!childIsSpawnedAndHasChildren) onAddGrandchildToChildDataItem(childItem.id, step.id); }}
-                        />
-                        <div className="flex items-center flex-grow min-w-0">
-                          <span
-                            className="truncate cursor-pointer hover:underline"
-                            onClick={(e) => { e.stopPropagation(); if (childCanvasNode) onEditStep(childCanvasNode); else onEditStep(step); }}
-                            title={childItem.title}
-                          >
-                            {childItem.title}
-                          </span>
-                        </div>
-                        {/* Removed PlusCircle button */}
-                      </li>
-                    );
-                  })}
-                </ul>
-              </>
-            )}
-            {(!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0) && (
-              <p className="italic text-muted-foreground text-center py-2 text-[11px]">No details or child items listed.</p>
-            )}
-        </div>
-      </ScrollArea>
+      {/* Removed ScrollArea, content will determine height based on calculateNodeHeight */}
+      <div className="flex-grow min-h-0 p-2 text-xs space-y-1" style={{ backgroundColor: 'hsl(var(--card))' }} onClick={(e) => { if (isActuallyDraggingThisNode || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) e.stopPropagation(); else onEditStep(step); }}>
+          {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
+          {Array.isArray(step.childrenData) && step.childrenData.length > 0 && (
+            <>
+              <p className="text-[11px] font-medium text-muted-foreground mt-1 mb-0.5">Child Items:</p>
+              <ul className="space-y-0.5 list-none p-0 m-0">
+                {step.childrenData.map((childItem, index) => {
+                  const childCanvasNode = allSteps.find(s => s.id === childItem.canvasNodeIdForThisItem);
+                  const childNodeIsSpawnedAndPopulated = childCanvasNode && Array.isArray(childCanvasNode.childrenData) && childCanvasNode.childrenData.length > 0;
+                  return (
+                    <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4">
+                      {/* Child Item Dot - now always interactive for adding more children */}
+                      <div
+                        data-child-item-dot-id={childItem.id}
+                        className={cn(
+                          "absolute left-0 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full transition-all duration-150 ease-in-out cursor-pointer",
+                          childNodeIsSpawnedAndPopulated
+                            ? "bg-green-500" // Solid green if it's spawned AND has its own children listed
+                            : "bg-muted-foreground group-hover/childitemli:bg-green-500 group-hover/childitemli:scale-150 group-hover/childitemli:ring-2 group-hover/childitemli:ring-green-300" // Interactive otherwise
+                        )}
+                        title={childNodeIsSpawnedAndPopulated ? `Add more sub-steps to "${childItem.title}"` : `Add sub-step to "${childItem.title}"`}
+                        onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
+                        onMouseDown={(e) => e.stopPropagation()} // Prevent card drag when clicking dot
+                        onTouchStart={(e) => e.stopPropagation()} // Prevent card drag on touch
+                      />
+                      <div className="flex items-center flex-grow min-w-0">
+                        <span
+                          className="truncate cursor-pointer hover:underline"
+                          onClick={(e) => { e.stopPropagation(); if (childCanvasNode) onEditStep(childCanvasNode); else onEditStep(step); }}
+                          title={childItem.title}
+                        >
+                          {childItem.title}
+                        </span>
+                      </div>
+                      {/* Edit text button for child item (can remain if desired) */}
+                       {/* <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 opacity-0 group-hover/childitemli:opacity-100 focus-visible:opacity-100" onClick={(e) => {e.stopPropagation(); onEditStep(step); /* TODO: Focus on this specific child for editing */}} title={`Edit text for ${childItem.title}`}><Edit2 className="h-3 w-3"/></Button> */}
+                    </li>
+                  );
+                })}
+              </ul>
+            </>
+          )}
+          {(!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0) && (
+            <p className="italic text-muted-foreground text-center py-2 text-[11px]">No details or child items listed.</p>
+          )}
+      </div>
     </div>
   );
 });
@@ -466,16 +475,16 @@ export default function PlanDetailPage() {
   }, [canEditPlan, toast, editableRoadmap, targetParentIdForDialog]);
 
   const handleSpawnChildDataItemAsCanvasNode = useCallback((childItemId: string, parentCanvasNodeIdOfChildItem: string): string => {
+    let spawnedNodeIdToReturn: string = '';
     const parentNodeForToast = editableRoadmap.find(s => s.id === parentCanvasNodeIdOfChildItem);
     const childItemForToast = parentNodeForToast?.childrenData?.find(ci => ci.id === childItemId);
     const childItemTitleForToast = childItemForToast?.title || 'Item';
-    let spawnedNodeIdToReturn: string = '';
 
     setEditableRoadmap(prev => {
       const parentNode = prev.find(s => s.id === parentCanvasNodeIdOfChildItem);
       if (!parentNode) {
         console.error(`[Spawn] Parent node ${parentCanvasNodeIdOfChildItem} not found.`);
-        spawnedNodeIdToReturn = '';
+        spawnedNodeIdToReturn = ''; 
         return prev;
       }
       const childItem = (parentNode.childrenData || []).find(ci => ci.id === childItemId);
@@ -717,7 +726,7 @@ export default function PlanDetailPage() {
         const dropTargetNode = targetNodeId ? editableRoadmap.find(s => s.id === targetNodeId) : undefined;
 
         if (dropTargetNode) {
-            toast({ title: "Connect to Existing (Not Implemented for this dot type)", description: `Dropped from ${sourceNode.title} (${sourceDotType}) onto ${dropTargetNode.title}. Hierarchical connections made via in-card green dot.` });
+            toast({ title: "Connect to Existing (Not Implemented for parent dots)", description: `Dropped from ${sourceNode.title} (${sourceDotType}) onto ${dropTargetNode.title}. Hierarchical connections made via in-card green dot.` });
         } else {
             setTargetParentIdForDialog(sourceNodeId); 
             setIsAddNodeDialogOpen(true);
@@ -771,12 +780,13 @@ export default function PlanDetailPage() {
         console.warn("[drawConnectionLines] Encountered an undefined parentStep in editableRoadmap.");
         return;
       }
-      if (!Array.isArray(parentStep.childrenData)) {
+      if (!parentStep.childrenData || !Array.isArray(parentStep.childrenData)) {
         console.error(`[drawConnectionLines] FATAL: parentStep (ID: ${parentStep.id}, Title: "${parentStep.title}") has MISSING or INVALID childrenData. This should not happen. childrenData:`, parentStep.childrenData);
         return;
       }
 
-      parentStep.childrenData.forEach(childItem => {
+
+      parentStep.childrenData.forEach((childItem, childIndex) => {
         if (childItem.canvasNodeIdForThisItem) {
           const childCanvasNode = editableRoadmap.find(n => n.id === childItem.canvasNodeIdForThisItem);
           if (!childCanvasNode) return;
