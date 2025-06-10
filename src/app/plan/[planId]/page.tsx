@@ -22,7 +22,7 @@ import {
   Trash2,
   History,
   Eye,
-  ListTree, 
+  ListTree, // Corrected from GitTree
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -55,11 +55,11 @@ import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
 const NODE_BASE_MIN_HEIGHT = 80;
-const NODE_HEADER_HEIGHT = 40; 
-const CHILD_ITEM_HEIGHT = 28; 
-const FINAL_BUFFER_CARD_HEIGHT = 8; 
-const CHILD_ITEM_DOT_OFFSET_X = 10; 
-const CHILD_ITEM_LIST_PADDING_TOP = 8;
+const NODE_HEADER_HEIGHT = 40;
+const CHILD_ITEM_HEIGHT = 28;
+const FINAL_BUFFER_CARD_HEIGHT = 8;
+const CHILD_ITEM_DOT_OFFSET_X = 10; // Now used for line origin calculation
+const CHILD_ITEM_LIST_PADDING_TOP = 8; // Now used for line origin calculation
 
 
 const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
@@ -71,7 +71,7 @@ const DEFAULT_SPACING_X = 80;
 const DEFAULT_SPACING_Y = 40;
 
 const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
-  let height = NODE_HEADER_HEIGHT; 
+  let height = NODE_HEADER_HEIGHT;
   let contentAreaHeight = 0;
 
   let descriptionLineCount = 0;
@@ -79,22 +79,22 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
     const lines = Math.ceil(step.description.length / 35) + (step.description.split(/\r\n|\r|\n/).length - 1);
     descriptionLineCount = Math.max(1, lines);
   }
-  const descriptionHeight = descriptionLineCount * 15 + (descriptionLineCount > 0 ? 8 : 0); 
+  const descriptionHeight = descriptionLineCount * 15 + (descriptionLineCount > 0 ? 8 : 0);
 
   let childrenDataListHeight = 0;
   if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
-    childrenDataListHeight += 18; 
-    childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT; 
-    childrenDataListHeight += 8; 
+    childrenDataListHeight += CHILD_ITEM_LIST_PADDING_TOP;
+    childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
+    childrenDataListHeight += 8; // Bottom padding for the list
   }
   
   contentAreaHeight = Math.max(descriptionHeight, childrenDataListHeight);
-  if (contentAreaHeight === 0) { 
+  if (contentAreaHeight === 0 && (!step.description || step.description.trim().length === 0) && (!step.childrenData || step.childrenData.length === 0)) { 
       contentAreaHeight = 20;
   }
 
   height += contentAreaHeight;
-  height += FINAL_BUFFER_CARD_HEIGHT; 
+  height += FINAL_BUFFER_CARD_HEIGHT;
   return Math.max(NODE_BASE_MIN_HEIGHT, height);
 };
 
@@ -162,7 +162,6 @@ interface RoadmapStepCardProps {
   allSteps: RoadmapStep[];
   onNodeInteractionStart: (nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, isDotDrag?: boolean, dotType?: 'N' | 'E' | 'S') => void;
   isSelected?: boolean;
-  isSubmitting: boolean;
   onEditStep: (step: RoadmapStep) => void;
   onAddGrandchildToChildDataItem: (parentChildItemId: string, parentCanvasNodeIdOfChildItem: string) => void;
   isActuallyDraggingThisNode?: boolean;
@@ -173,7 +172,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
   allSteps,
   onNodeInteractionStart,
   isSelected,
-  isSubmitting,
   onEditStep,
   onAddGrandchildToChildDataItem,
   isActuallyDraggingThisNode,
@@ -181,8 +179,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
   const cardRef = useRef<HTMLDivElement>(null);
   const dynamicHeight = calculateNodeHeight(step, allSteps);
 
-  return (
-    <div
+  // Ensure JavaScript before return is minimal and correct
+  // const someVariable = someFunction(); // Example of valid JS
+  // if (condition) { /* block */ } // Example of valid JS
+
+  return ( // This is line 184 in the context of the component
+    <div // This is where the error "Unexpected token 'div'. Expected jsx identifier" was reported (line 185)
       ref={cardRef}
       className={cn(
         "group/cardnode absolute select-none shadow-lg border rounded-lg flex flex-col",
@@ -211,7 +213,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <div className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]" style={{ backgroundColor: 'hsl(var(--primary))' }} onDoubleClick={() => onEditStep(step)}>
         <h3 className="text-sm font-semibold truncate text-primary-foreground" title={step.title}>{step.title}</h3>
         
-        {/* Parent Node Connector Dots */}
         <div
           className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 group-hover/cardnode:z-10 cursor-pointer"
           data-dot-type="N" title="North Connector (Drag to connect or create new)"
@@ -231,48 +232,43 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
           onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
         />
       </div>
-      {/* Removed ScrollArea, content will determine height based on calculateNodeHeight */}
       <div className="flex-grow min-h-0 p-2 text-xs space-y-1" style={{ backgroundColor: 'hsl(var(--card))' }} onClick={(e) => { if (isActuallyDraggingThisNode || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) e.stopPropagation(); else onEditStep(step); }}>
           {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
+          
           {Array.isArray(step.childrenData) && step.childrenData.length > 0 && (
-            <>
-              <p className="text-[11px] font-medium text-muted-foreground mt-1 mb-0.5">Child Items:</p>
-              <ul className="space-y-0.5 list-none p-0 m-0">
-                {step.childrenData.map((childItem, index) => {
-                  const childCanvasNode = allSteps.find(s => s.id === childItem.canvasNodeIdForThisItem);
-                  const childNodeIsSpawnedAndPopulated = childCanvasNode && Array.isArray(childCanvasNode.childrenData) && childCanvasNode.childrenData.length > 0;
-                  return (
-                    <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4">
-                      {/* Child Item Dot - now always interactive for adding more children */}
-                      <div
-                        data-child-item-dot-id={childItem.id}
-                        className={cn(
-                          "absolute left-0 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full transition-all duration-150 ease-in-out cursor-pointer",
-                          childNodeIsSpawnedAndPopulated
-                            ? "bg-green-500" // Solid green if it's spawned AND has its own children listed
-                            : "bg-muted-foreground group-hover/childitemli:bg-green-500 group-hover/childitemli:scale-150 group-hover/childitemli:ring-2 group-hover/childitemli:ring-green-300" // Interactive otherwise
-                        )}
-                        title={childNodeIsSpawnedAndPopulated ? `Add more sub-steps to "${childItem.title}"` : `Add sub-step to "${childItem.title}"`}
-                        onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
-                        onMouseDown={(e) => e.stopPropagation()} // Prevent card drag when clicking dot
-                        onTouchStart={(e) => e.stopPropagation()} // Prevent card drag on touch
-                      />
-                      <div className="flex items-center flex-grow min-w-0">
-                        <span
-                          className="truncate cursor-pointer hover:underline"
-                          onClick={(e) => { e.stopPropagation(); if (childCanvasNode) onEditStep(childCanvasNode); else onEditStep(step); }}
-                          title={childItem.title}
-                        >
-                          {childItem.title}
-                        </span>
-                      </div>
-                      {/* Edit text button for child item (can remain if desired) */}
-                       {/* <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 opacity-0 group-hover/childitemli:opacity-100 focus-visible:opacity-100" onClick={(e) => {e.stopPropagation(); onEditStep(step); /* TODO: Focus on this specific child for editing */}} title={`Edit text for ${childItem.title}`}><Edit2 className="h-3 w-3"/></Button> */}
-                    </li>
-                  );
-                })}
-              </ul>
-            </>
+            <ul className="space-y-0.5 list-none p-0 m-0" style={{paddingTop: `${CHILD_ITEM_LIST_PADDING_TOP}px`}}>
+              {step.childrenData.map((childItem, index) => {
+                const childCanvasNode = childItem.canvasNodeIdForThisItem ? allSteps.find(s => s.id === childItem.canvasNodeIdForThisItem) : null;
+                const childIsSpawnedAndHasChildren = !!(childCanvasNode && Array.isArray(childCanvasNode.childrenData) && childCanvasNode.childrenData.length > 0);
+                
+                return (
+                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4">
+                    <div
+                      data-child-item-dot-id={childItem.id}
+                      title={childIsSpawnedAndHasChildren ? `Add more sub-steps to "${childItem.title}"` : `Add sub-step to "${childItem.title}"`}
+                      onClick={() => onAddGrandchildToChildDataItem(childItem.id, step.id)}
+                      className={cn(
+                        "absolute left-0 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full transition-all duration-150 ease-in-out",
+                        childIsSpawnedAndHasChildren
+                          ? "bg-green-500 cursor-pointer" // Always clickable, but style indicates state
+                          : "bg-muted-foreground group-hover/childitemli:bg-green-500 group-hover/childitemli:scale-150 group-hover/childitemli:ring-2 group-hover/childitemli:ring-green-300 cursor-pointer"
+                      )}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onTouchStart={(e) => e.stopPropagation()}
+                    />
+                    <div className="flex items-center flex-grow min-w-0">
+                      <span
+                        className="truncate cursor-pointer hover:underline"
+                        onClick={(e) => { e.stopPropagation(); if (childCanvasNode) onEditStep(childCanvasNode); else onEditStep(step); }}
+                        title={childItem.title}
+                      >
+                        {childItem.title}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
           )}
           {(!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0) && (
             <p className="italic text-muted-foreground text-center py-2 text-[11px]">No details or child items listed.</p>
@@ -317,8 +313,8 @@ export default function PlanDetailPage() {
 
   const [isEditChildItemDialogOpen, setIsEditChildItemDialogOpen] = useState(false);
   const [childItemManagementContext, setChildItemManagementContext] = useState<{
-    parentCanvasNodeId: string; 
-    childDataItemIdToEdit?: string; 
+    parentCanvasNodeId: string;
+    childDataItemIdToEdit?: string;
   } | null>(null);
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
@@ -366,20 +362,20 @@ export default function PlanDetailPage() {
         const sanitizedChildren = (Array.isArray(s.childrenData) ? s.childrenData : [])
           .filter((ci): ci is ChildDataItem => ci != null && typeof ci.id === 'string')
           .map(ci => ({
-            id: ci.id, 
+            id: ci.id,
             title: ci.title || "Untitled Child",
             description: ci.description || null,
-            parentCanvasNodeId: ci.parentCanvasNodeId || s.id, 
+            parentCanvasNodeId: ci.parentCanvasNodeId || s.id,
             canvasNodeIdForThisItem: ci.canvasNodeIdForThisItem || null,
           }));
 
         return {
-          id: s.id, 
+          id: s.id,
           title: s.title || "Untitled Step",
           x: typeof s.x === 'number' ? s.x : 0,
           y: typeof s.y === 'number' ? s.y : 0,
           description: s.description || null,
-          childrenData: sanitizedChildren, 
+          childrenData: sanitizedChildren,
         };
       });
       setEditableRoadmap(sanitizedRoadmap as RoadmapStep[]);
@@ -453,14 +449,14 @@ export default function PlanDetailPage() {
         }
         setEditableRoadmap(prev => {
             const updatedParent = prev.find(s => s.id === targetParentIdForDialog);
-            if (!updatedParent) return [...prev, newNode]; 
+            if (!updatedParent) return [...prev, newNode];
             
             const newChildDataItem: ChildDataItem = {
-                id: `childitem-${newId}`, 
+                id: `childitem-${newId}`,
                 title: newNode.title,
                 description: newNode.description,
-                parentCanvasNodeId: targetParentIdForDialog, 
-                canvasNodeIdForThisItem: newNode.id,      
+                parentCanvasNodeId: targetParentIdForDialog,
+                canvasNodeIdForThisItem: newNode.id,
             };
             const updatedParentWithNewChildItem = { ...updatedParent, childrenData: [...(updatedParent.childrenData || []), newChildDataItem] };
             return [...prev.filter(s => s.id !== targetParentIdForDialog), updatedParentWithNewChildItem, newNode];
@@ -475,16 +471,16 @@ export default function PlanDetailPage() {
   }, [canEditPlan, toast, editableRoadmap, targetParentIdForDialog]);
 
   const handleSpawnChildDataItemAsCanvasNode = useCallback((childItemId: string, parentCanvasNodeIdOfChildItem: string): string => {
-    let spawnedNodeIdToReturn: string = '';
     const parentNodeForToast = editableRoadmap.find(s => s.id === parentCanvasNodeIdOfChildItem);
     const childItemForToast = parentNodeForToast?.childrenData?.find(ci => ci.id === childItemId);
     const childItemTitleForToast = childItemForToast?.title || 'Item';
+    let spawnedNodeIdToReturn: string = '';
 
     setEditableRoadmap(prev => {
       const parentNode = prev.find(s => s.id === parentCanvasNodeIdOfChildItem);
       if (!parentNode) {
         console.error(`[Spawn] Parent node ${parentCanvasNodeIdOfChildItem} not found.`);
-        spawnedNodeIdToReturn = ''; 
+        spawnedNodeIdToReturn = '';
         return prev;
       }
       const childItem = (parentNode.childrenData || []).find(ci => ci.id === childItemId);
@@ -509,7 +505,7 @@ export default function PlanDetailPage() {
           description: childItem.description,
           x: Math.max(MIN_CANVAS_PADDING, parentNode.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X),
           y: Math.max(MIN_CANVAS_PADDING, parentNode.y + ((parentNode.childrenData || []).findIndex(ci => ci.id === childItemId) * (CHILD_ITEM_HEIGHT * 1.5))),
-          childrenData: [], 
+          childrenData: [],
       };
       
       const updatedParentNode = {
@@ -559,8 +555,8 @@ export default function PlanDetailPage() {
             id: newChildDataItemId,
             title: data.title,
             description: data.description || null,
-            parentCanvasNodeId: parentCanvasNodeId, 
-            canvasNodeIdForThisItem: null, 
+            parentCanvasNodeId: parentCanvasNodeId,
+            canvasNodeIdForThisItem: null,
           };
           updatedChildrenData = [...currentChildrenData, newChildItem];
         }
@@ -612,7 +608,7 @@ export default function PlanDetailPage() {
             ...rn,
             childrenData: (rn.childrenData || []).map(ci =>
                 ci.canvasNodeIdForThisItem === idToDelete
-                    ? { ...ci, canvasNodeIdForThisItem: null } 
+                    ? { ...ci, canvasNodeIdForThisItem: null }
                     : ci
             ),
         }));
@@ -701,7 +697,7 @@ export default function PlanDetailPage() {
           targetNodeIdUnderCursor = (targetNodeElement as HTMLElement).dataset.nodeId;
       }
       activeConnectionLinePreviewRef.current = { path: `M ${startX} ${startY} L ${currentX} ${currentY}`, targetNodeId: targetNodeIdUnderCursor };
-      if (svgRef.current) svgRef.current.style.display = 'block'; 
+      if (svgRef.current) svgRef.current.style.display = 'block';
     } else if (isDraggingRef.current && nodeDragInfoRef.current) {
       if (event.cancelable) event.preventDefault();
       const canvasRect = canvasRef.current.getBoundingClientRect();
@@ -728,7 +724,7 @@ export default function PlanDetailPage() {
         if (dropTargetNode) {
             toast({ title: "Connect to Existing (Not Implemented for parent dots)", description: `Dropped from ${sourceNode.title} (${sourceDotType}) onto ${dropTargetNode.title}. Hierarchical connections made via in-card green dot.` });
         } else {
-            setTargetParentIdForDialog(sourceNodeId); 
+            setTargetParentIdForDialog(sourceNodeId);
             setIsAddNodeDialogOpen(true);
         }
     } else if (nodeDragInfoRef.current && !isDraggingRef.current && clickStartInfoRef.current) {
@@ -747,7 +743,7 @@ export default function PlanDetailPage() {
     clickStartInfoRef.current = null;
     isDraggingRef.current = false;
     setIsPointerDown(false);
-    if (svgRef.current) svgRef.current.style.display = 'block'; 
+    if (svgRef.current) svgRef.current.style.display = 'block';
   }, [isPointerDown, getPointerCoords, editableRoadmap, handleEditCanvasNode, toast]);
 
 
@@ -780,11 +776,10 @@ export default function PlanDetailPage() {
         console.warn("[drawConnectionLines] Encountered an undefined parentStep in editableRoadmap.");
         return;
       }
-      if (!parentStep.childrenData || !Array.isArray(parentStep.childrenData)) {
+      if (!Array.isArray(parentStep.childrenData)) {
         console.error(`[drawConnectionLines] FATAL: parentStep (ID: ${parentStep.id}, Title: "${parentStep.title}") has MISSING or INVALID childrenData. This should not happen. childrenData:`, parentStep.childrenData);
         return;
       }
-
 
       parentStep.childrenData.forEach((childItem, childIndex) => {
         if (childItem.canvasNodeIdForThisItem) {
@@ -861,7 +856,7 @@ export default function PlanDetailPage() {
             </div>
           )}
           {editableRoadmap.map(step => (
-            <RoadmapStepCard key={step.id} step={step} allSteps={editableRoadmap} onNodeInteractionStart={handleNodeInteractionStart} isSelected={editingStep?.id === step.id} isSubmitting={saveRoadmapMutation.isPending} onEditStep={handleEditCanvasNode} onAddGrandchildToChildDataItem={handleAddGrandchildToChildDataItem} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id} />
+            <RoadmapStepCard key={step.id} step={step} allSteps={editableRoadmap} onNodeInteractionStart={handleNodeInteractionStart} isSelected={editingStep?.id === step.id} onEditStep={handleEditCanvasNode} onAddGrandchildToChildDataItem={handleAddGrandchildToChildDataItem} isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id} />
           ))}
         </main>
       </div>
