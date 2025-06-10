@@ -36,7 +36,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 import { getPlanById, updatePlanRoadmap as savePlanData, getPlanVersions, restorePlanToVersion } from '@/services/planService';
-import type { ClientPlan, RoadmapStep, ChildDataItem, UpdatePlanData, ClientPlanVersion } from '@/types/plan';
+import type { ClientPlan, RoadmapStep, ChildDataItem, UpdatePlanData, ClientPlanVersion, PeerConnection } from '@/types/plan'; // Added PeerConnection
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { cn, IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
@@ -60,6 +60,7 @@ const CHILD_ITEM_HEIGHT = 28;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
 
 const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
+const CONNECTION_LINE_THICKNESS_PEER = 1.5; // Can be different
 const ARROWHEAD_LENGTH = 8;
 const ARROWHEAD_WIDTH_FACTOR = 0.7;
 const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
@@ -80,9 +81,9 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
 
   let childrenDataListHeight = 0;
   if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
-    childrenDataListHeight += 8; // Top padding for the list
+    childrenDataListHeight += 8;
     childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
-    childrenDataListHeight += 8; // Bottom padding for the list
+    childrenDataListHeight += 8;
   }
   
   contentAreaHeight = Math.max(descriptionHeight, childrenDataListHeight);
@@ -207,19 +208,19 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         <h3 className="text-sm font-semibold truncate text-primary-foreground" title={step.title}>{step.title}</h3>
         
         <div
-          className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 group-hover/cardnode:z-10 cursor-pointer"
+          className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
           data-dot-type="N" title="North Connector (Drag to connect or create new)"
           onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
           onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
         />
         <div
-          className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 group-hover/cardnode:z-10 cursor-pointer"
+          className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
           data-dot-type="E" title="East Connector (Drag to connect or create new)"
           onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
           onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
         />
         <div
-          className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-2 w-2 rounded-full bg-muted-foreground transition-all duration-150 ease-in-out group-hover/cardnode:bg-primary group-hover/cardnode:scale-150 group-hover/cardnode:ring-2 group-hover/cardnode:ring-primary/60 group-hover/cardnode:z-10 cursor-pointer"
+          className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
           data-dot-type="S" title="South Connector (Drag to connect or create new)"
           onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
           onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
@@ -238,13 +239,14 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                   <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4">
                     <div
                       data-child-item-dot-id={childItem.id}
-                      title={childHasSubStepsOnCanvas ? `Add more sub-steps to "${childItem.title}"` : `Add sub-step to "${childItem.title}"`}
-                      onClick={() => onAddGrandchildToChildDataItem(childItem.id, step.id)}
+                      title={childHasSubStepsOnCanvas ? `Manage sub-steps for "${childItem.title}"` : `Add sub-steps to "${childItem.title}"`}
+                      onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
                       className={cn(
-                        "absolute left-0 top-1/2 -translate-y-1/2 h-2 w-2 rounded-full transition-all duration-150 ease-in-out cursor-pointer",
+                        "absolute left-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border border-green-700 transition-all duration-150 ease-in-out cursor-pointer",
+                        "hover:bg-green-400 hover:scale-125 hover:ring-1 hover:ring-green-300",
                         childHasSubStepsOnCanvas
-                          ? "bg-green-500 group-hover/childitemli:bg-green-600 group-hover/childitemli:scale-125 group-hover/childitemli:ring-1 group-hover/childitemli:ring-green-400"
-                          : "bg-muted-foreground group-hover/childitemli:bg-green-500 group-hover/childitemli:scale-150 group-hover/childitemli:ring-2 group-hover/childitemli:ring-green-300"
+                          ? "bg-green-500"
+                          : "bg-muted-foreground/50 group-hover/childitemli:bg-green-500"
                       )}
                       onMouseDown={(e) => e.stopPropagation()}
                       onTouchStart={(e) => e.stopPropagation()}
@@ -297,20 +299,19 @@ export default function PlanDetailPage() {
   const isDraggingRef = useRef<boolean>(false);
   const activeConnectionLinePreviewRef = useRef<{ path: string; targetNodeId?: string; sourceDotType?: 'N' | 'E' | 'S' } | null>(null);
 
-
   const [isVersionHistorySheetOpen, setIsVersionHistorySheetOpen] = useState(false);
   const [versionToRestore, setVersionToRestore] = useState<ClientPlanVersion | null>(null);
   const [isRestoreConfirmOpen, setIsRestoreConfirmOpen] = useState(false);
 
   const [isAddNodeDialogOpen, setIsAddNodeDialogOpen] = useState(false);
-  const [targetParentIdForDialog, setTargetParentIdForDialog] = useState<string | null>(null);
+  const [targetParentIdForDialog, setTargetParentIdForDialog] = useState<string | null>(null); // Used for initiating node add. If set, indicates a "source" node for a peer link.
   const [initiatingDotTypeForDialog, setInitiatingDotTypeForDialog] = useState<'N' | 'E' | 'S' | null>(null);
 
 
   const [isEditChildItemDialogOpen, setIsEditChildItemDialogOpen] = useState(false);
   const [childItemManagementContext, setChildItemManagementContext] = useState<{
-    parentCanvasNodeId: string;
-    childDataItemIdToEdit?: string;
+    parentCanvasNodeId: string; // ID of the CANVAS NODE this child item will belong to
+    childDataItemIdToEdit?: string; // ID of the child item itself, if editing
   } | null>(null);
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
@@ -370,6 +371,7 @@ export default function PlanDetailPage() {
           y: typeof s.y === 'number' ? s.y : 0,
           description: s.description || null,
           childrenData: sanitizedChildren,
+          peerConnections: Array.isArray(s.peerConnections) ? s.peerConnections : [], // Ensure peerConnections exists
         };
       });
       setEditableRoadmap(sanitizedRoadmap as RoadmapStep[]);
@@ -380,19 +382,21 @@ export default function PlanDetailPage() {
 
   useEffect(() => {
     if (editingStep?.id && editableRoadmap) {
-      const updatedVersionOfEditingStep = editableRoadmap.find(s => s.id === editingStep.id);
-      if (updatedVersionOfEditingStep) {
-        if (JSON.stringify(updatedVersionOfEditingStep.childrenData) !== JSON.stringify(editingStep.childrenData) ||
-            updatedVersionOfEditingStep.title !== editingStep.title ||
-            updatedVersionOfEditingStep.description !== editingStep.description) {
-          setEditingStep(updatedVersionOfEditingStep);
+        const updatedVersionOfEditingStep = editableRoadmap.find(s => s.id === editingStep.id);
+        if (updatedVersionOfEditingStep) {
+            // Compare childrenData or other critical fields before updating
+            if (JSON.stringify(updatedVersionOfEditingStep.childrenData) !== JSON.stringify(editingStep.childrenData) ||
+                updatedVersionOfEditingStep.title !== editingStep.title ||
+                updatedVersionOfEditingStep.description !== editingStep.description) {
+                setEditingStep(updatedVersionOfEditingStep);
+            }
+        } else {
+            // Editing step was deleted from roadmap, close panel
+            setIsStepDetailSheetOpen(false);
+            setEditingStep(null);
         }
-      } else {
-        setIsStepDetailSheetOpen(false);
-        setEditingStep(null);
-      }
     }
-  }, [editableRoadmap, editingStep?.id]);
+  }, [editableRoadmap, editingStep?.id]); // Re-run when editableRoadmap or the ID of editingStep changes
 
 
   useEffect(() => {
@@ -430,9 +434,9 @@ export default function PlanDetailPage() {
     setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);
   }, [canEditPlan, toast]);
 
-  const handleInitiateAddNode = useCallback((parentId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
+  const handleInitiateAddNode = useCallback((sourceNodeId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
     if (!canEditPlan) return;
-    setTargetParentIdForDialog(parentId);
+    setTargetParentIdForDialog(sourceNodeId); // If null, it's a root node. If set, it's the source of a peer link drag.
     setInitiatingDotTypeForDialog(initiatingDot || null);
     setIsAddNodeDialogOpen(true);
   }, [canEditPlan]);
@@ -442,126 +446,104 @@ export default function PlanDetailPage() {
     const newId = `step-${Date.now()}-${uuidv4().substring(0, 8)}`;
     let newStepX, newStepY;
 
-    if (targetParentIdForDialog) {
-      const parentNode = editableRoadmap.find(s => s.id === targetParentIdForDialog);
-      if (parentNode) {
-        const parentHeight = calculateNodeHeight(parentNode, editableRoadmap);
-        // Default to West if no specific dot initiated, or for 'E' dot
-        if (initiatingDotTypeForDialog === 'N') {
-          newStepX = Math.max(MIN_CANVAS_PADDING, parentNode.x);
-          newStepY = Math.max(MIN_CANVAS_PADDING, parentNode.y - NODE_BASE_MIN_HEIGHT - DEFAULT_SPACING_Y);
-        } else if (initiatingDotTypeForDialog === 'S') {
-          newStepX = Math.max(MIN_CANVAS_PADDING, parentNode.x);
-          newStepY = Math.max(MIN_CANVAS_PADDING, parentNode.y + parentHeight + DEFAULT_SPACING_Y);
-        } else { // Default to West (for 'E' dot or if no dot specified for a child context)
-          newStepX = Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X);
-          newStepY = Math.max(MIN_CANVAS_PADDING, parentNode.y);
+    const sourceNodeForPeerLink = targetParentIdForDialog ? editableRoadmap.find(s => s.id === targetParentIdForDialog) : null;
+
+    if (sourceNodeForPeerLink && initiatingDotTypeForDialog) {
+        const sourceHeight = calculateNodeHeight(sourceNodeForPeerLink, editableRoadmap);
+        switch (initiatingDotTypeForDialog) {
+            case 'N': newStepX = sourceNodeForPeerLink.x; newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y - NODE_BASE_MIN_HEIGHT - DEFAULT_SPACING_Y); break;
+            case 'E': newStepX = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X); newStepY = sourceNodeForPeerLink.y; break;
+            case 'S': newStepX = sourceNodeForPeerLink.x; newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y + sourceHeight + DEFAULT_SPACING_Y); break;
+            default: // Should not happen if initiatingDotTypeForDialog is set
+                newStepX = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2);
+                newStepY = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
+                break;
         }
-      } else { // Fallback if parent not found (should not happen)
+    } else { // Root node or non-dot initiated
         newStepX = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2);
         newStepY = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
-      }
-    } else { // Root node
-      newStepX = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2);
-      newStepY = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
     }
     
     const newNode: RoadmapStep = {
-      id: newId, title: data.title, x: newStepX, y: newStepY, description: null, childrenData: [],
+      id: newId, title: data.title, x: newStepX, y: newStepY, description: null, childrenData: [], peerConnections: [],
     };
 
     setEditableRoadmap(prev => {
-      let newMap = [...prev];
-      if (targetParentIdForDialog) {
-        const parentNodeIndex = newMap.findIndex(s => s.id === targetParentIdForDialog);
-        if (parentNodeIndex > -1) {
-          const parentNode = { ...newMap[parentNodeIndex] };
-          const newChildDataItem: ChildDataItem = {
-            id: `childitem-${newId}`, title: newNode.title, description: newNode.description,
-            parentCanvasNodeId: targetParentIdForDialog, canvasNodeIdForThisItem: newNode.id,
-          };
-          parentNode.childrenData = [...(parentNode.childrenData || []), newChildDataItem];
-          newMap[parentNodeIndex] = parentNode;
-          toast({ title: `Linked Step "${newNode.title}" Added to "${parentNode.title}"` });
+        let newMap = [...prev, newNode];
+        if (sourceNodeForPeerLink && initiatingDotTypeForDialog) {
+            // This new node was created by dragging from a blue dot of sourceNodeForPeerLink
+            const sourceNodeIndex = newMap.findIndex(s => s.id === sourceNodeForPeerLink.id);
+            if (sourceNodeIndex > -1) {
+                const updatedSourceNode = { ...newMap[sourceNodeIndex] };
+                let targetDotOnNewNode: PeerConnection['targetDot'] = 'W'; // Default target
+                if (initiatingDotTypeForDialog === 'N') targetDotOnNewNode = 'S';
+                else if (initiatingDotTypeForDialog === 'S') targetDotOnNewNode = 'N';
+                // E already defaults to W, S to N, N to S.
+
+                const newPeerConnection: PeerConnection = {
+                    targetNodeId: newNode.id,
+                    sourceDot: initiatingDotTypeForDialog,
+                    targetDot: targetDotOnNewNode,
+                };
+                updatedSourceNode.peerConnections = [...(updatedSourceNode.peerConnections || []), newPeerConnection];
+                newMap[sourceNodeIndex] = updatedSourceNode;
+                toast({ title: `Node "${newNode.title}" created and linked from "${updatedSourceNode.title}".` });
+            }
+        } else {
+            toast({ title: `Node "${newNode.title}" Added` });
         }
-      } else {
-        toast({ title: `Root Step "${newNode.title}" Added` });
-      }
-      return [...newMap, newNode];
+        return newMap;
     });
     setTargetParentIdForDialog(null);
     setInitiatingDotTypeForDialog(null);
   }, [canEditPlan, toast, editableRoadmap, targetParentIdForDialog, initiatingDotTypeForDialog]);
 
   const handleSpawnChildDataItemAsCanvasNode = useCallback((childItemId: string, parentCanvasNodeIdOfChildItem: string): string => {
-    const parentNodeForToast = editableRoadmap.find(s => s.id === parentCanvasNodeIdOfChildItem);
-    const childItemForToast = parentNodeForToast?.childrenData?.find(ci => ci.id === childItemId);
-    const childItemTitleForToast = childItemForToast?.title || 'Item';
     let spawnedNodeIdToReturn: string = '';
-
     setEditableRoadmap(prev => {
       const parentNode = prev.find(s => s.id === parentCanvasNodeIdOfChildItem);
-      if (!parentNode) {
-        console.error(`[Spawn] Parent node ${parentCanvasNodeIdOfChildItem} not found.`);
-        spawnedNodeIdToReturn = '';
-        return prev;
-      }
+      if (!parentNode) { spawnedNodeIdToReturn = ''; return prev; }
       const childItem = (parentNode.childrenData || []).find(ci => ci.id === childItemId);
-      if (!childItem) {
-        console.error(`[Spawn] Child item ${childItemId} not found in parent ${parentCanvasNodeIdOfChildItem}.`);
-        spawnedNodeIdToReturn = '';
-        return prev;
-      }
+      if (!childItem) { spawnedNodeIdToReturn = ''; return prev; }
 
       if (childItem.canvasNodeIdForThisItem && prev.some(n => n.id === childItem.canvasNodeIdForThisItem)) {
-        console.log(`[Spawn] Child item ${childItemId} already spawned as canvas node ${childItem.canvasNodeIdForThisItem}.`);
-        spawnedNodeIdToReturn = childItem.canvasNodeIdForThisItem;
-        return prev;
+        spawnedNodeIdToReturn = childItem.canvasNodeIdForThisItem; return prev;
       }
 
       const newSpawnedNodeId = `canvasnode-${childItem.id}-${uuidv4().substring(0,4)}`;
       spawnedNodeIdToReturn = newSpawnedNodeId;
+      const childItemIndex = (parentNode.childrenData || []).findIndex(ci => ci.id === childItemId);
 
       const newSpawnedNode: RoadmapStep = {
-          id: newSpawnedNodeId,
-          title: childItem.title,
-          description: childItem.description,
-          x: Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X), // Position West
-          y: Math.max(MIN_CANVAS_PADDING, parentNode.y + ((parentNode.childrenData || []).findIndex(ci => ci.id === childItemId) * (CHILD_ITEM_HEIGHT * 1.2))), // Stagger vertically
-          childrenData: [],
+          id: newSpawnedNodeId, title: childItem.title, description: childItem.description,
+          x: Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X),
+          y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 1.2))),
+          childrenData: [], peerConnections: [],
       };
-      
-      const updatedParentNode = {
-          ...parentNode,
-          childrenData: (parentNode.childrenData || []).map(ci =>
-            ci.id === childItemId ? { ...ci, canvasNodeIdForThisItem: newSpawnedNodeId } : ci
-          )
-      };
-      console.log(`[Spawn] Spawning child item ${childItemId} as new canvas node ${newSpawnedNodeId}. Parent ${parentCanvasNodeIdOfChildItem} updated.`);
+      const updatedParentNode = { ...parentNode, childrenData: (parentNode.childrenData || []).map(ci => ci.id === childItemId ? { ...ci, canvasNodeIdForThisItem: newSpawnedNodeId } : ci )};
       return [...prev.filter(s => s.id !== parentCanvasNodeIdOfChildItem), updatedParentNode, newSpawnedNode];
     });
-    toast({ title: `Node for "${childItemTitleForToast}" is now on canvas.` });
+    toast({ title: `Node for "${editableRoadmap.find(s=>s.id===parentCanvasNodeIdOfChildItem)?.childrenData.find(ci=>ci.id===childItemId)?.title || 'Item'}" is now on canvas.` });
     return spawnedNodeIdToReturn;
   }, [toast, editableRoadmap]);
 
-  const handleAddGrandchildToChildDataItem = useCallback((targetChildItemId: string, parentCanvasNodeIdOfChildItem: string) => {
+  const handleAddGrandchildToChildDataItem = useCallback((targetChildItemId: string, parentCanvasNodeIdOfClickedChildItem: string) => {
     if (!canEditPlan) return;
-    let spawnedChildCanvasNodeId = editableRoadmap.find(s => s.id === parentCanvasNodeIdOfChildItem)?.childrenData?.find(ci => ci.id === targetChildItemId)?.canvasNodeIdForThisItem || null;
+    let childsOwnCanvasNodeId = editableRoadmap.find(s => s.id === parentCanvasNodeIdOfClickedChildItem)?.childrenData?.find(ci => ci.id === targetChildItemId)?.canvasNodeIdForThisItem || null;
 
-    if (!spawnedChildCanvasNodeId || !editableRoadmap.some(n => n.id === spawnedChildCanvasNodeId)) {
-      spawnedChildCanvasNodeId = handleSpawnChildDataItemAsCanvasNode(targetChildItemId, parentCanvasNodeIdOfChildItem);
+    if (!childsOwnCanvasNodeId || !editableRoadmap.some(n => n.id === childsOwnCanvasNodeId)) {
+      childsOwnCanvasNodeId = handleSpawnChildDataItemAsCanvasNode(targetChildItemId, parentCanvasNodeIdOfClickedChildItem);
     }
-    if (!spawnedChildCanvasNodeId) {
-        toast({variant: "destructive", title: "Error", description: "Could not prepare parent node for new child."});
-        return;
-    }
-    setChildItemManagementContext({ parentCanvasNodeId: spawnedChildCanvasNodeId });
+    if (!childsOwnCanvasNodeId) { toast({variant: "destructive", title: "Error", description: "Could not prepare parent node for new sub-item."}); return; }
+    
+    setChildItemManagementContext({ parentCanvasNodeId: childsOwnCanvasNodeId }); // The child item's canvas node is the parent for the new grandchild item
     setIsEditChildItemDialogOpen(true);
   }, [canEditPlan, editableRoadmap, handleSpawnChildDataItemAsCanvasNode, toast]);
 
   const handleChildItemDialogSubmit = useCallback((data: { title: string; description?: string }) => {
     if (!childItemManagementContext) return;
     const { parentCanvasNodeId, childDataItemIdToEdit } = childItemManagementContext;
+    let newlyCreatedChildItemId: string | null = null;
 
     setEditableRoadmap(prev => prev.map(canvasNode => {
       if (canvasNode.id === parentCanvasNodeId) {
@@ -573,12 +555,10 @@ export default function PlanDetailPage() {
           );
         } else {
           const newChildDataItemId = `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`;
+          newlyCreatedChildItemId = newChildDataItemId; // Capture ID for spawning
           const newChildItem: ChildDataItem = {
-            id: newChildDataItemId,
-            title: data.title,
-            description: data.description || null,
-            parentCanvasNodeId: parentCanvasNodeId,
-            canvasNodeIdForThisItem: null,
+            id: newChildDataItemId, title: data.title, description: data.description || null,
+            parentCanvasNodeId: parentCanvasNodeId, canvasNodeIdForThisItem: null,
           };
           updatedChildrenData = [...currentChildrenData, newChildItem];
         }
@@ -586,10 +566,16 @@ export default function PlanDetailPage() {
       }
       return canvasNode;
     }));
+    
+    // If a new child item was created (not edited), immediately spawn its canvas node
+    if (newlyCreatedChildItemId) {
+        handleSpawnChildDataItemAsCanvasNode(newlyCreatedChildItemId, parentCanvasNodeId);
+    }
+
     setIsEditChildItemDialogOpen(false);
     setChildItemManagementContext(null);
-    toast({ title: childDataItemIdToEdit ? "Item Updated" : "Item Added to Node's List", description: "Remember to save the plan." });
-  }, [childItemManagementContext, toast]);
+    toast({ title: childDataItemIdToEdit ? "Item Updated" : "Item Added & Node Spawned", description: "Remember to save the plan." });
+  }, [childItemManagementContext, toast, handleSpawnChildDataItemAsCanvasNode]);
 
   const handleEditChildItemText = useCallback((childItem: ChildDataItem, parentCanvasNodeIdOfChildItem: string) => {
     if(!canEditPlan) return;
@@ -630,9 +616,10 @@ export default function PlanDetailPage() {
             ...rn,
             childrenData: (rn.childrenData || []).map(ci =>
                 ci.canvasNodeIdForThisItem === idToDelete
-                    ? { ...ci, canvasNodeIdForThisItem: null }
+                    ? { ...ci, canvasNodeIdForThisItem: null } // Unlink, don't delete the child item itself
                     : ci
             ),
+            peerConnections: (rn.peerConnections || []).filter(pc => pc.targetNodeId !== idToDelete) // Remove peer connections pointing to deleted node
         }));
         return remainingNodes;
     });
@@ -733,57 +720,73 @@ export default function PlanDetailPage() {
   }, [isPointerDown, getPointerCoords, editableRoadmap]);
 
   const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent) => {
-    if (!isPointerDown) return;
+    if (!isPointerDown || !nodeDragInfoRef.current) { // Check nodeDragInfoRef.current
+        setIsPointerDown(false); // Ensure pointer state is reset
+        return;
+    }
 
-    if (nodeDragInfoRef.current?.isDotDrag && activeConnectionLinePreviewRef.current?.path) {
-        const { nodeId: sourceNodeId, dotType: sourceDotType } = nodeDragInfoRef.current;
+    const { nodeId: sourceNodeId, dotType: sourceDotType, isDotDrag } = nodeDragInfoRef.current;
+
+    if (isDotDrag && sourceDotType && activeConnectionLinePreviewRef.current?.path) {
         const sourceNode = editableRoadmap.find(s => s.id === sourceNodeId);
-        if (!sourceNode) return;
+        if (!sourceNode) {
+            activeConnectionLinePreviewRef.current = null;
+            nodeDragInfoRef.current = null;
+            setIsPointerDown(false);
+            if (svgRef.current) svgRef.current.style.display = 'block'; // Keep SVG visible for other lines
+            return;
+        }
 
         const targetNodeIdUnderCursor = activeConnectionLinePreviewRef.current.targetNodeId;
         const dropTargetNode = targetNodeIdUnderCursor ? editableRoadmap.find(s => s.id === targetNodeIdUnderCursor) : undefined;
 
-        if (dropTargetNode) {
-            // Check if dropTarget is the same as sourceNode
+        if (dropTargetNode) { // Dropped on an existing node (blue dot to blue dot)
             if (dropTargetNode.id === sourceNode.id) {
                 toast({ variant: "destructive", title: "Invalid Connection", description: "Cannot connect a node to itself." });
             } else {
-                // Connect parent N/E/S dot to the West dot of the dropTargetNode
                 setEditableRoadmap(prev => {
-                    let newMap = [...prev];
-                    const parentIndex = newMap.findIndex(s => s.id === sourceNode.id);
-                    const childIndex = newMap.findIndex(s => s.id === dropTargetNode.id);
-                    if (parentIndex > -1 && childIndex > -1) {
-                        const parent = { ...newMap[parentIndex] };
-                        const child = { ...newMap[childIndex] };
-                        // Create a child item in the parent representing this connection
-                        const newChildDataItem: ChildDataItem = {
-                            id: `linkitem-${child.id}`, title: child.title, description: null,
-                            parentCanvasNodeId: parent.id, canvasNodeIdForThisItem: child.id,
+                    const map = [...prev];
+                    const sourceNodeIndex = map.findIndex(s => s.id === sourceNode.id);
+                    if (sourceNodeIndex === -1) return prev;
+
+                    const updatedSourceNode = { ...map[sourceNodeIndex] };
+                    updatedSourceNode.peerConnections = updatedSourceNode.peerConnections || [];
+
+                    let targetDotOnDropTarget: PeerConnection['targetDot'] = 'W'; // Default
+                    if (sourceDotType === 'N') targetDotOnDropTarget = 'S';
+                    else if (sourceDotType === 'S') targetDotOnDropTarget = 'N';
+                    // E already defaults to W
+
+                    // Prevent duplicate peer connections
+                    const alreadyConnected = updatedSourceNode.peerConnections.some(
+                        pc => pc.targetNodeId === dropTargetNode.id && pc.sourceDot === sourceDotType && pc.targetDot === targetDotOnDropTarget
+                    );
+
+                    if (!alreadyConnected) {
+                        const newPeerConnection: PeerConnection = {
+                            targetNodeId: dropTargetNode.id,
+                            sourceDot: sourceDotType,
+                            targetDot: targetDotOnDropTarget,
                         };
-                        // Avoid duplicate child items linking to the same canvas node
-                        if (!parent.childrenData.some(ci => ci.canvasNodeIdForThisItem === child.id)) {
-                            parent.childrenData = [...(parent.childrenData || []), newChildDataItem];
-                            newMap[parentIndex] = parent;
-                            toast({ title: "Nodes Linked", description: `"${parent.title}" is now linked to "${child.title}".` });
-                        } else {
-                            toast({ title: "Already Linked", description: `"${parent.title}" is already linked to "${child.title}".` });
-                        }
+                        updatedSourceNode.peerConnections.push(newPeerConnection);
+                        map[sourceNodeIndex] = updatedSourceNode;
+                        toast({ title: "Nodes Linked", description: `"${updatedSourceNode.title}" is now linked to "${dropTargetNode.title}".` });
+                    } else {
+                        toast({ title: "Already Linked", description: "These nodes are already connected in this way." });
                     }
-                    return newMap;
+                    return map;
                 });
             }
-        } else {
-            // Dropped on empty space: initiate adding a new node linked to the source dot
+        } else { // Dropped on empty space (blue dot to new node)
             handleInitiateAddNode(sourceNodeId, sourceDotType);
         }
-    } else if (nodeDragInfoRef.current && !isDraggingRef.current && clickStartInfoRef.current) {
+    } else if (!isDraggingRef.current && clickStartInfoRef.current) { // Clicked on a node (not dragging a dot)
       const finalCoords = getPointerCoords(event);
       const timeElapsed = Date.now() - clickStartInfoRef.current.timestamp;
       const deltaX = finalCoords.clientX - clickStartInfoRef.current.clientX;
       const deltaY = finalCoords.clientY - clickStartInfoRef.current.clientY;
       if ((deltaX * deltaX + deltaY * deltaY) < CLICK_MOVE_THRESHOLD_PX_SQ && timeElapsed < CLICK_TIME_THRESHOLD_MS) {
-        const clickedStep = editableRoadmap.find(s => s.id === nodeDragInfoRef.current!.nodeId);
+        const clickedStep = editableRoadmap.find(s => s.id === sourceNodeId);
         if (clickedStep) handleEditCanvasNode(clickedStep);
       }
     }
@@ -822,40 +825,94 @@ export default function PlanDetailPage() {
     const canvasRectBase = canvasRef.current.getBoundingClientRect();
 
     editableRoadmap.forEach(parentStep => {
-      if (!parentStep || !Array.isArray(parentStep.childrenData)) {
-        console.warn(`[drawConnectionLines] parentStep (ID: ${parentStep?.id}) has invalid/undefined childrenData. Skipping. childrenData:`, parentStep?.childrenData);
-        return;
+      // Draw hierarchical child connections (green dot to child's West dot)
+      if (Array.isArray(parentStep.childrenData)) {
+        parentStep.childrenData.forEach((childItem) => {
+          if (childItem.canvasNodeIdForThisItem) {
+            const childCanvasNode = editableRoadmap.find(n => n.id === childItem.canvasNodeIdForThisItem);
+            if (!childCanvasNode) return;
+            const greenDotElement = canvasRef.current?.querySelector(`[data-node-id="${parentStep.id}"] [data-child-item-dot-id="${childItem.id}"]`);
+            if (greenDotElement && canvasRef.current) {
+              const dotRect = greenDotElement.getBoundingClientRect();
+              const startX = dotRect.left - canvasRectBase.left + canvasRef.current.scrollLeft + (dotRect.width / 2);
+              const startY = dotRect.top - canvasRectBase.top + canvasRef.current.scrollTop + (dotRect.height / 2);
+              const endX = childCanvasNode.x; // Connect to West dot of child
+              const endY = childCanvasNode.y + calculateNodeHeight(childCanvasNode, editableRoadmap) / 2; // Midpoint of West edge
+              const pathData = `M ${startX} ${startY} L ${endX} ${endY}`;
+              const pathKey = `conn-dot-${childItem.id}-to-node-${childCanvasNode.id}-${startX}-${startY}-${endX}-${endY}`;
+              lines.push(
+                <path key={pathKey} d={pathData} stroke={'hsl(var(--primary))'} strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" markerEnd={'url(#arrowhead-main)'} style={{ pointerEvents: "none" }} />
+              );
+            }
+          }
+        });
       }
 
-      parentStep.childrenData.forEach((childItem) => {
-        if (childItem.canvasNodeIdForThisItem) {
-          const childCanvasNode = editableRoadmap.find(n => n.id === childItem.canvasNodeIdForThisItem);
-          if (!childCanvasNode) {
-            console.warn(`[drawConnectionLines] Child canvas node ${childItem.canvasNodeIdForThisItem} not found for child item ${childItem.id} in parent ${parentStep.id}`);
-            return;
+      // Draw peer-to-peer connections (blue dots to blue dots)
+      if (parentStep.peerConnections) {
+        parentStep.peerConnections.forEach((peerConn, index) => {
+          const targetStep = editableRoadmap.find(s => s.id === peerConn.targetNodeId);
+          if (!targetStep) return;
+
+          const sourceNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
+          const targetNodeHeight = calculateNodeHeight(targetStep, editableRoadmap);
+
+          let startX_peer: number, startY_peer: number;
+          switch(peerConn.sourceDot) {
+            case 'N': startX_peer = parentStep.x + NODE_BASE_WIDTH / 2; startY_peer = parentStep.y; break;
+            case 'E': startX_peer = parentStep.x + NODE_BASE_WIDTH; startY_peer = parentStep.y + sourceNodeHeight / 2; break;
+            case 'S': startX_peer = parentStep.x + NODE_BASE_WIDTH / 2; startY_peer = parentStep.y + sourceNodeHeight; break;
+            default: console.warn(`Invalid sourceDot: ${peerConn.sourceDot}`); return;
           }
-          const greenDotElement = canvasRef.current?.querySelector(`[data-node-id="${parentStep.id}"] [data-child-item-dot-id="${childItem.id}"]`);
-          if (greenDotElement && canvasRef.current) {
-            const dotRect = greenDotElement.getBoundingClientRect();
-            const startX = dotRect.left - canvasRectBase.left + canvasRef.current.scrollLeft + (dotRect.width / 2);
-            const startY = dotRect.top - canvasRectBase.top + canvasRef.current.scrollTop + (dotRect.height / 2);
-            
-            const endX = childCanvasNode.x + NODE_BASE_WIDTH; // Connect to East dot of child
-            const endY = childCanvasNode.y + calculateNodeHeight(childCanvasNode, editableRoadmap) / 2; // Midpoint of East edge
-            
-            const pathData = `M ${startX} ${startY} L ${endX} ${endY}`;
-            const pathKey = `conn-dot-${childItem.id}-to-node-${childCanvasNode.id}-${startX}-${startY}-${endX}-${endY}`;
-            lines.push(
-              <path key={pathKey} d={pathData} stroke={'hsl(var(--primary))'} strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" markerEnd={'url(#arrowhead-main)'} style={{ pointerEvents: "none" }} />
-            );
-          } else {
-             console.warn(`[drawConnectionLines] Could not find green dot DOM element for childItem.id: ${childItem.id} within parentStep.id: ${parentStep.id}. Line not drawn.`);
+
+          let endX_peer: number, endY_peer: number;
+          switch(peerConn.targetDot) {
+            case 'N': endX_peer = targetStep.x + NODE_BASE_WIDTH / 2; endY_peer = targetStep.y; break;
+            case 'E': endX_peer = targetStep.x + NODE_BASE_WIDTH; endY_peer = targetStep.y + targetNodeHeight / 2; break;
+            case 'S': endX_peer = targetStep.x + NODE_BASE_WIDTH / 2; endY_peer = targetStep.y + targetNodeHeight; break;
+            case 'W': endX_peer = targetStep.x; endY_peer = targetStep.y + targetNodeHeight / 2; break;
+            default: console.warn(`Invalid targetDot: ${peerConn.targetDot}`); return;
           }
-        }
-      });
+          
+          // Control points for a simple curve (Bezier)
+          // For E-W: Curve horizontally
+          // For N-S: Curve vertically
+          let c1x = startX_peer, c1y = startY_peer, c2x = endX_peer, c2y = endY_peer;
+          const curveFactor = 0.4 * Math.sqrt(Math.pow(endX_peer - startX_peer, 2) + Math.pow(endY_peer - startY_peer, 2)); // Adjust for distance
+
+          if (peerConn.sourceDot === 'E' && peerConn.targetDot === 'W') {
+              c1x = startX_peer + curveFactor;
+              c2x = endX_peer - curveFactor;
+          } else if (peerConn.sourceDot === 'W' && peerConn.targetDot === 'E') { // Should not happen with current N,E,S source dots
+              c1x = startX_peer - curveFactor;
+              c2x = endX_peer + curveFactor;
+          } else if (peerConn.sourceDot === 'S' && peerConn.targetDot === 'N') {
+              c1y = startY_peer + curveFactor;
+              c2y = endY_peer - curveFactor;
+          } else if (peerConn.sourceDot === 'N' && peerConn.targetDot === 'S') {
+              c1y = startY_peer - curveFactor;
+              c2y = endY_peer + curveFactor;
+          }
+          // Basic direct line fallback for other combinations or if curve factor is problematic
+          else if (Math.abs(startX_peer - endX_peer) > Math.abs(startY_peer - endY_peer)) { // More horizontal
+            c1x = startX_peer + (endX_peer - startX_peer) * 0.3; c1y = startY_peer;
+            c2x = startX_peer + (endX_peer - startX_peer) * 0.7; c2y = endY_peer;
+          } else { // More vertical
+            c1x = startX_peer; c1y = startY_peer + (endY_peer - startY_peer) * 0.3;
+            c2x = endX_peer; c2y = startY_peer + (endY_peer - startY_peer) * 0.7;
+          }
+
+          const pathData_peer = `M ${startX_peer} ${startY_peer} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX_peer} ${endY_peer}`;
+          const pathKey_peer = `peerconn-${parentStep.id}-${peerConn.sourceDot}-to-${targetStep.id}-${peerConn.targetDot}-${index}`; // Added index for key stability
+          lines.push(
+            <path key={pathKey_peer} d={pathData_peer} stroke={'hsl(var(--accent))'} strokeWidth={CONNECTION_LINE_THICKNESS_PEER} fill="none" markerEnd={'url(#arrowhead-accent)'} style={{ pointerEvents: "none" }} />
+          );
+        });
+      }
     });
     return lines;
   };
+
 
   if (authLoading || (isLoadingPlan && isValidPlanId)) { return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>; }
   if (!planId || !isValidPlanId) { return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Invalid Plan ID</h1><p className="text-muted-foreground">The plan identifier in the URL is not valid.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>); }
@@ -882,9 +939,12 @@ export default function PlanDetailPage() {
       <div className="flex flex-1 overflow-hidden">
         <main ref={canvasRef} className="flex-1 grid-background relative overflow-auto p-4 md:p-6" style={{ minHeight: canvasMinHeight }}>
           <svg ref={svgRef} className="absolute inset-0 w-full h-full pointer-events-none z-0">
-            <defs><marker id="arrowhead-main" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill={'hsl(var(--primary))'}/></marker></defs>
+            <defs>
+                <marker id="arrowhead-main" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill={'hsl(var(--primary))'}/></marker>
+                <marker id="arrowhead-accent" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill={'hsl(var(--accent))'}/></marker>
+            </defs>
             {drawConnectionLines()}
-            {activeConnectionLinePreviewRef.current?.path && <path d={activeConnectionLinePreviewRef.current.path} stroke="hsl(var(--primary))" strokeWidth="2" strokeDasharray="4 4" fill="none" markerEnd={activeConnectionLinePreviewRef.current.targetNodeId ? 'url(#arrowhead-main)' : undefined} />}
+            {activeConnectionLinePreviewRef.current?.path && <path d={activeConnectionLinePreviewRef.current.path} stroke="hsl(var(--accent))" strokeWidth="2" strokeDasharray="4 4" fill="none" markerEnd={activeConnectionLinePreviewRef.current.targetNodeId ? 'url(#arrowhead-accent)' : undefined} />}
           </svg>
           {editableRoadmap.length === 0 && !isLoadingPlan && (
             <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none">
