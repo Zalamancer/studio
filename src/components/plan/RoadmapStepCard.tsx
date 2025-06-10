@@ -1,0 +1,175 @@
+// src/components/plan/RoadmapStepCard.tsx
+"use client";
+
+import React, { useRef } from 'react';
+import type { RoadmapStep } from '@/types/plan';
+import { cn } from '@/lib/utils';
+
+const MIN_CANVAS_PADDING = 20;
+const NODE_BASE_WIDTH = 220;
+const NODE_BASE_MIN_HEIGHT = 80;
+const NODE_HEADER_HEIGHT = 40;
+const CHILD_ITEM_HEIGHT = 28;
+const FINAL_BUFFER_CARD_HEIGHT = 8;
+
+const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
+  let height = NODE_HEADER_HEIGHT;
+  let contentAreaHeight = 0;
+
+  let descriptionLineCount = 0;
+  if (step.description && step.description.trim().length > 0) {
+    const lines = Math.ceil(step.description.length / 35) + (step.description.split(/\r\n|\r|\n/).length - 1);
+    descriptionLineCount = Math.max(1, lines);
+  }
+  const descriptionHeight = descriptionLineCount * 15 + (descriptionLineCount > 0 ? 8 : 0);
+
+  let childrenDataListHeight = 0;
+  if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
+    childrenDataListHeight += 8; // Padding top for list
+    childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
+    childrenDataListHeight += 8; // Padding bottom for list
+  }
+  
+  contentAreaHeight = Math.max(descriptionHeight, childrenDataListHeight);
+  // If there's no description AND no children, ensure there's still some minimal content height
+  if (contentAreaHeight === 0 && (!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0)) { 
+      contentAreaHeight = 20; // Minimal height for "No details..." text or empty space
+  }
+
+  height += contentAreaHeight;
+  height += FINAL_BUFFER_CARD_HEIGHT; // Bottom padding for the card itself
+  return Math.max(NODE_BASE_MIN_HEIGHT, height);
+};
+
+interface RoadmapStepCardProps {
+  step: RoadmapStep;
+  allSteps: RoadmapStep[];
+  onNodeInteractionStart: (nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, isDotDrag?: boolean, dotType?: 'N' | 'E' | 'S') => void;
+  isSelected?: boolean;
+  onEditStep: (step: RoadmapStep) => void;
+  onAddGrandchildToChildDataItem: (parentChildItemId: string, parentCanvasNodeIdOfChildItem: string) => void;
+  isActuallyDraggingThisNode?: boolean;
+}
+
+const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
+  step,
+  allSteps,
+  onNodeInteractionStart,
+  isSelected,
+  onEditStep,
+  onAddGrandchildToChildDataItem,
+  isActuallyDraggingThisNode,
+}) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const dynamicHeight = calculateNodeHeight(step, allSteps);
+
+  return (
+    <div
+      ref={cardRef}
+      className={cn(
+        "group/cardnode absolute select-none shadow-lg border rounded-lg flex flex-col",
+        isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
+        isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
+      )}
+      style={{
+        left: `${step.x}px`,
+        top: `${step.y}px`,
+        width: `${NODE_BASE_WIDTH}px`,
+        height: `${dynamicHeight}px`,
+        touchAction: 'none',
+        backgroundColor: 'hsl(var(--card))',
+      }}
+      onMouseDown={(e) => {
+        // Prevent drag if clicking on a connection dot
+        if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
+        onNodeInteractionStart(step.id, e);
+      }}
+      onTouchStart={(e) => {
+        if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
+        onNodeInteractionStart(step.id, e);
+      }}
+      onClick={(e) => { if (isActuallyDraggingThisNode || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) { e.stopPropagation(); return; } onEditStep(step); }}
+      data-node-id={step.id}
+    >
+      <div className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]" style={{ backgroundColor: 'hsl(var(--primary))' }} onDoubleClick={() => onEditStep(step)}>
+        <h3 className="text-sm font-semibold truncate text-primary-foreground" title={step.title}>{step.title}</h3>
+        
+        {/* N/E/S Connection Dots */}
+        <div
+          className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+          data-dot-type="N" title="North Connector (Drag to connect or create new)"
+          onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
+          onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
+        />
+        <div
+          className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+          data-dot-type="E" title="East Connector (Drag to connect or create new)"
+          onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
+          onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
+        />
+        <div
+          className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+          data-dot-type="S" title="South Connector (Drag to connect or create new)"
+          onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
+          onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
+        />
+      </div>
+      <div className="flex-grow min-h-0 p-2 text-xs space-y-1" style={{ backgroundColor: 'hsl(var(--card))' }} onClick={(e) => { if (isActuallyDraggingThisNode || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) e.stopPropagation(); else onEditStep(step); }}>
+          {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
+          
+          {Array.isArray(step.childrenData) && step.childrenData.length > 0 && (
+            <ul className="space-y-0.5 list-none p-0 m-0" style={{paddingTop: `8px`}}>
+              {step.childrenData.map((childItem, index) => {
+                const childHasOwnCanvasNode = !!(childItem.canvasNodeIdForThisItem && allSteps.some(s => s.id === childItem.canvasNodeIdForThisItem));
+                
+                return (
+                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pr-4"> {/* Added pr-4 for green dot space */}
+                    <div className="flex items-center flex-grow min-w-0">
+                      <span
+                        className="truncate cursor-pointer hover:underline"
+                        onClick={(e) => { 
+                            e.stopPropagation(); 
+                            if (childItem.canvasNodeIdForThisItem) {
+                                const childCanvasNode = allSteps.find(s => s.id === childItem.canvasNodeIdForThisItem);
+                                if (childCanvasNode) onEditStep(childCanvasNode); 
+                                else onEditStep(step); // Fallback if child node not found (should not happen)
+                            } else {
+                                onEditStep(step); // If not a canvas node, editing it means editing the parent list
+                            }
+                        }}
+                        title={childItem.title}
+                      >
+                        {childItem.title}
+                      </span>
+                    </div>
+                    {/* Moved green dot to the right */}
+                    <div
+                      data-child-item-dot-id={childItem.id}
+                      title={`Add sub-item to "${childItem.title}" (will make "${childItem.title}" a canvas node if it isn't already, and allow adding children to it)`}
+                      onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
+                      className={cn(
+                        "absolute right-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border border-green-700 transition-all duration-150 ease-in-out cursor-pointer",
+                        "hover:bg-green-400 hover:scale-125 hover:ring-1 hover:ring-green-300",
+                        childHasOwnCanvasNode 
+                          ? "bg-green-500" // Green if it's already a canvas node
+                          : "bg-muted-foreground/50 group-hover/childitemli:bg-green-500" // Dim if not, brightens on hover
+                      )}
+                      onMouseDown={(e) => e.stopPropagation()} // Prevent parent drag
+                      onTouchStart={(e) => e.stopPropagation()} // Prevent parent drag
+                    />
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {(!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0) && (
+            <p className="italic text-muted-foreground text-center py-2 text-[11px]">No details or child items listed.</p>
+          )}
+      </div>
+    </div>
+  );
+});
+RoadmapStepCard.displayName = "RoadmapStepCard";
+
+export default RoadmapStepCard;
+    
