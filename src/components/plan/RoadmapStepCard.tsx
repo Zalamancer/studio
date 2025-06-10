@@ -1,3 +1,4 @@
+
 // src/components/plan/RoadmapStepCard.tsx
 "use client";
 
@@ -9,7 +10,7 @@ const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
 const NODE_BASE_MIN_HEIGHT = 80;
 const NODE_HEADER_HEIGHT = 40;
-const CHILD_ITEM_HEIGHT = 28;
+const CHILD_ITEM_HEIGHT = 28; // Includes padding/margin for each item
 const FINAL_BUFFER_CARD_HEIGHT = 8;
 
 const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
@@ -31,13 +32,12 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
   }
   
   contentAreaHeight = Math.max(descriptionHeight, childrenDataListHeight);
-  // If there's no description AND no children, ensure there's still some minimal content height
   if (contentAreaHeight === 0 && (!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0)) { 
-      contentAreaHeight = 20; // Minimal height for "No details..." text or empty space
+      contentAreaHeight = 20; 
   }
 
   height += contentAreaHeight;
-  height += FINAL_BUFFER_CARD_HEIGHT; // Bottom padding for the card itself
+  height += FINAL_BUFFER_CARD_HEIGHT; 
   return Math.max(NODE_BASE_MIN_HEIGHT, height);
 };
 
@@ -80,7 +80,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         backgroundColor: 'hsl(var(--card))',
       }}
       onMouseDown={(e) => {
-        // Prevent drag if clicking on a connection dot
         if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
         onNodeInteractionStart(step.id, e);
       }}
@@ -94,7 +93,6 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <div className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]" style={{ backgroundColor: 'hsl(var(--primary))' }} onDoubleClick={() => onEditStep(step)}>
         <h3 className="text-sm font-semibold truncate text-primary-foreground" title={step.title}>{step.title}</h3>
         
-        {/* N/E/S Connection Dots */}
         <div
           className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
           data-dot-type="N" title="North Connector (Drag to connect or create new)"
@@ -123,23 +121,26 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                 const childHasOwnCanvasNode = !!(childItem.canvasNodeIdForThisItem && allSteps.some(s => s.id === childItem.canvasNodeIdForThisItem));
                 
                 return (
-                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4"> {/* Changed pr-4 to pl-4 */}
-                    {/* Green dot moved to the left */}
+                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-3"> {/* Adjusted padding for dot */}
                     <div
                       data-child-item-dot-id={childItem.id}
-                      title={`Add sub-item to "${childItem.title}" (will make "${childItem.title}" a canvas node if it isn't already, and allow adding children to it)`}
+                      aria-label={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
+                      title={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
                       onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
                       className={cn(
-                        "absolute left-0 top-1/2 transform -translate-y-1/2 h-2.5 w-2.5 rounded-full border border-green-700 transition-all duration-150 ease-in-out cursor-pointer", // Changed right-0 to left-0
-                        "hover:bg-green-400 hover:scale-125 hover:ring-1 hover:ring-green-300",
-                        childHasOwnCanvasNode 
-                          ? "bg-green-500" 
-                          : "bg-muted-foreground/50 group-hover/childitemli:bg-green-500" 
+                        "absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center active:scale-125 cursor-pointer",
+                        "w-3 h-3 left-[-6px] top-1/2 -translate-y-1/2" 
                       )}
                       onMouseDown={(e) => e.stopPropagation()} 
                       onTouchStart={(e) => e.stopPropagation()} 
-                    />
-                    <div className="flex items-center flex-grow min-w-0 ml-1"> {/* Added ml-1 for slight spacing from dot */}
+                    >
+                        <div className={cn(
+                            "rounded-full transition-all duration-150 ease-in-out h-2 w-2",
+                            childHasOwnCanvasNode ? "bg-green-500" : "bg-muted-foreground",
+                            "group-hover/childitemli:bg-green-500 group-hover/childitemli:scale-150 group-hover/childitemli:ring-2 group-hover/childitemli:ring-green-300"
+                        )}></div>
+                    </div>
+                    <div className="flex items-center flex-grow min-w-0"> {/* Removed ml-1, text will start near the edge of the dot's clickable area */}
                       <span
                         className="truncate cursor-pointer hover:underline"
                         onClick={(e) => { 
