@@ -101,7 +101,7 @@ interface EditChildItemDialogProps {
   onOpenChange: (open: boolean) => void;
   onSubmit: (data: { title: string; description?: string }) => void;
   isSubmitting: boolean;
-  dialogTitle: string; // Made dynamic
+  dialogTitle: string; 
   defaultTitle?: string;
   defaultDescription?: string;
 }
@@ -120,7 +120,9 @@ const EditChildItemDialog: React.FC<EditChildItemDialogProps> = ({ isOpen, onOpe
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
-      alert("Item title cannot be empty.");
+      // Replaced alert with a more appropriate UI feedback or console warning for now
+      console.warn("Item title cannot be empty.");
+      // If using useToast, you might do: toast({ variant: "destructive", title: "Title Required" });
       return;
     }
     onSubmit({ title: title.trim(), description: description.trim() || undefined });
@@ -245,8 +247,8 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                         "absolute left-0 top-1/2 -translate-y-1/2 h-2.5 w-2.5 rounded-full border border-green-700 transition-all duration-150 ease-in-out cursor-pointer",
                         "hover:bg-green-400 hover:scale-125 hover:ring-1 hover:ring-green-300",
                         childHasOwnCanvasNode 
-                          ? "bg-green-500" // Green if it IS a canvas node (meaning it can have children listed)
-                          : "bg-muted-foreground/50 group-hover/childitemli:bg-green-500" // Dimmed if not yet a canvas node
+                          ? "bg-green-500" 
+                          : "bg-muted-foreground/50 group-hover/childitemli:bg-green-500" 
                       )}
                       onMouseDown={(e) => e.stopPropagation()}
                       onTouchStart={(e) => e.stopPropagation()}
@@ -258,10 +260,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                             e.stopPropagation(); 
                             if (childItem.canvasNodeIdForThisItem) {
                                 const childCanvasNode = allSteps.find(s => s.id === childItem.canvasNodeIdForThisItem);
-                                if (childCanvasNode) onEditStep(childCanvasNode); // Edit the child's canvas node
-                                else onEditStep(step); // Fallback if linked node not found, edit parent
+                                if (childCanvasNode) onEditStep(childCanvasNode); 
+                                else onEditStep(step); 
                             } else {
-                                onEditStep(step); // Edit parent if child item is not on canvas (to edit its text)
+                                onEditStep(step); 
                             }
                         }}
                         title={childItem.title}
@@ -283,6 +285,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
 });
 RoadmapStepCard.displayName = "RoadmapStepCard";
 
+type ChildItemOperationContext = 
+    | { operation: 'createGrandchild'; targetChildToBecomeParentId: string; currentParentOfTargetChildId: string; }
+    | { operation: 'createChild'; targetParentNodeId: string; }
+    | { operation: 'edit'; itemToEditId: string; parentNodeId: string; };
 
 export default function PlanDetailPage() {
   const params = useParams();
@@ -316,10 +322,6 @@ export default function PlanDetailPage() {
   const [targetParentIdForDialog, setTargetParentIdForDialog] = useState<string | null>(null);
   const [initiatingDotTypeForDialog, setInitiatingDotTypeForDialog] = useState<'N' | 'E' | 'S' | null>(null);
 
-  type ChildItemOperationContext = 
-    | { operation: 'createGrandchild'; targetChildToBecomeParentId: string; currentParentOfTargetChildId: string; }
-    | { operation: 'createChild'; targetParentNodeId: string; }
-    | { operation: 'edit'; itemToEditId: string; parentNodeId: string; };
   const childItemManagementContextRef = useRef<ChildItemOperationContext | null>(null);
   
   const [isEditChildItemDialogOpen, setIsEditChildItemDialogOpen] = useState(false);
@@ -501,6 +503,7 @@ export default function PlanDetailPage() {
     });
     setTargetParentIdForDialog(null);
     setInitiatingDotTypeForDialog(null);
+    setIsAddNodeDialogOpen(false); // Close dialog after adding
   }, [canEditPlan, toast, editableRoadmap, targetParentIdForDialog, initiatingDotTypeForDialog]);
 
   const handleSpawnChildDataItemAsCanvasNode = useCallback((childItemId: string, parentCanvasNodeIdOfChildItem: string): string => {
@@ -515,17 +518,21 @@ export default function PlanDetailPage() {
       const childItem = parentNode.childrenData[childItemIndex];
 
       if (childItem.canvasNodeIdForThisItem && prev.some(n => n.id === childItem.canvasNodeIdForThisItem)) {
-        spawnedNodeIdToReturn = childItem.canvasNodeIdForThisItem; return prev; // Already spawned
+        spawnedNodeIdToReturn = childItem.canvasNodeIdForThisItem; 
+        return prev; // Already spawned
       }
 
       const newSpawnedNodeId = `canvasnode-${childItem.id}-${uuidv4().substring(0,4)}`;
       spawnedNodeIdToReturn = newSpawnedNodeId;
       
       const newSpawnedNode: RoadmapStep = {
-          id: newSpawnedNodeId, title: childItem.title, description: childItem.description,
+          id: newSpawnedNodeId, 
+          title: childItem.title, // Populate title from ChildDataItem
+          description: childItem.description, // Populate description from ChildDataItem
           x: Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X),
           y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 1.2))),
-          childrenData: [], peerConnections: [],
+          childrenData: [], 
+          peerConnections: [],
       };
       const updatedChildrenData = parentNode.childrenData.map(ci => ci.id === childItemId ? { ...ci, canvasNodeIdForThisItem: newSpawnedNodeId } : ci );
       const updatedParentNode = { ...parentNode, childrenData: updatedChildrenData };
@@ -541,14 +548,16 @@ export default function PlanDetailPage() {
 
   const onAddGrandchildToChildDataItem = useCallback((clickedChildItemId: string, parentCanvasNodeIdOfClickedItem: string) => {
     if (!canEditPlan) return;
+    const parentNode = editableRoadmap.find(n => n.id === parentCanvasNodeIdOfClickedItem);
+    const childItem = parentNode?.childrenData.find(ci => ci.id === clickedChildItemId);
+    if (!childItem) return;
+
     childItemManagementContextRef.current = {
         operation: 'createGrandchild',
         targetChildToBecomeParentId: clickedChildItemId,
         currentParentOfTargetChildId: parentCanvasNodeIdOfClickedItem
     };
-    const parentNode = editableRoadmap.find(n => n.id === parentCanvasNodeIdOfClickedItem);
-    const childItem = parentNode?.childrenData.find(ci => ci.id === clickedChildItemId);
-    setDynamicChildDialogTitle(`Add Item to "${childItem?.title || 'Item'}"`);
+    setDynamicChildDialogTitle(`Add Item to "${childItem.title}"`);
     setDefaultChildDialogTitle("");
     setDefaultChildDialogDescription("");
     setIsEditChildItemDialogOpen(true);
@@ -562,40 +571,48 @@ export default function PlanDetailPage() {
       let newRoadmap = [...prevRoadmap];
       if (context.operation === 'createGrandchild') {
         const { targetChildToBecomeParentId, currentParentOfTargetChildId } = context;
-        // Step 1: Spawn the targetChild as a canvas node if it isn't already
-        const idOfCanvasNodeForChild = handleSpawnChildDataItemAsCanvasNode(targetChildToBecomeParentId, currentParentOfTargetChildId);
         
-        // Wait for state to update from handleSpawn... or refetch the node
-        // For simplicity here, we'll find it in the potentially updated roadmap
-        // This might need a refactor if handleSpawnChildDataItemAsCanvasNode becomes async and returns a promise
-        newRoadmap = newRoadmap.map(node => { // Re-map to get latest state after spawn
-            if(node.id === currentParentOfTargetChildId){ // Update original parent's childData linkage
-                return {
-                    ...node,
-                    childrenData: node.childrenData.map(child => 
-                        child.id === targetChildToBecomeParentId 
-                            ? {...child, canvasNodeIdForThisItem: idOfCanvasNodeForChild} 
-                            : child
-                    )
-                };
-            }
-            return node;
-        });
-        
-        // Step 2: Add the new grandchild item to this (now) canvas node
-        const parentCanvasNodeIndex = newRoadmap.findIndex(node => node.id === idOfCanvasNodeForChild);
-        if (parentCanvasNodeIndex > -1) {
+        let idOfCanvasNodeForChildA: string = '';
+        const parentNodeOfChildAIndex = newRoadmap.findIndex(s => s.id === currentParentOfTargetChildId);
+        if(parentNodeOfChildAIndex === -1) return newRoadmap;
+        const parentNodeOfChildA = newRoadmap[parentNodeOfChildAIndex];
+        const childAIndex = parentNodeOfChildA.childrenData.findIndex(ci => ci.id === targetChildToBecomeParentId);
+        if(childAIndex === -1) return newRoadmap;
+        const childAData = parentNodeOfChildA.childrenData[childAIndex];
+
+        if (childAData.canvasNodeIdForThisItem && newRoadmap.some(n => n.id === childAData.canvasNodeIdForThisItem)) {
+            idOfCanvasNodeForChildA = childAData.canvasNodeIdForThisItem;
+        } else {
+            const newSpawnedNodeId = `canvasnode-${childAData.id}-${uuidv4().substring(0,4)}`;
+            idOfCanvasNodeForChildA = newSpawnedNodeId;
+            const newCanvasNodeForChildA: RoadmapStep = {
+                id: newSpawnedNodeId, title: childAData.title, description: childAData.description,
+                x: Math.max(MIN_CANVAS_PADDING, parentNodeOfChildA.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X),
+                y: Math.max(MIN_CANVAS_PADDING, parentNodeOfChildA.y + (childAIndex * (CHILD_ITEM_HEIGHT * 1.2))),
+                childrenData: [], peerConnections: [],
+            };
+            newRoadmap = [...newRoadmap, newCanvasNodeForChildA];
+            const updatedChildAData = {...childAData, canvasNodeIdForThisItem: newSpawnedNodeId};
+            const updatedParentNodeOfChildA = {...parentNodeOfChildA, childrenData: parentNodeOfChildA.childrenData.map(ci => ci.id === targetChildToBecomeParentId ? updatedChildAData : ci)};
+            newRoadmap = newRoadmap.map(node => node.id === currentParentOfTargetChildId ? updatedParentNodeOfChildA : node);
+            toast({ title: `Node for "${childAData.title}" created.` });
+        }
+
+        const parentCanvasNodeForGrandchildIndex = newRoadmap.findIndex(node => node.id === idOfCanvasNodeForChildA);
+        if (parentCanvasNodeForGrandchildIndex > -1) {
           const newGrandchildItem: ChildDataItem = {
             id: `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`,
             title: data.title,
             description: data.description || null,
-            parentCanvasNodeId: idOfCanvasNodeForChild,
+            parentCanvasNodeId: idOfCanvasNodeForChildA,
             canvasNodeIdForThisItem: null,
           };
-          const updatedParentNode = { ...newRoadmap[parentCanvasNodeIndex] };
+          const updatedParentNode = { ...newRoadmap[parentCanvasNodeForGrandchildIndex] };
           updatedParentNode.childrenData = [...(updatedParentNode.childrenData || []), newGrandchildItem];
-          newRoadmap[parentCanvasNodeIndex] = updatedParentNode;
-          toast({ title: "Item Added to List", description: `"${data.title}" added. Remember to save.` });
+          newRoadmap[parentCanvasNodeForGrandchildIndex] = updatedParentNode;
+          toast({ title: "Grandchild Item Added", description: `"${data.title}" added to "${updatedParentNode.title}". Remember to save.` });
+        } else {
+            toast({ variant: "destructive", title: "Error", description: `Parent node for grandchild (ID: ${idOfCanvasNodeForChildA}) not found after spawn.` });
         }
       } else if (context.operation === 'createChild') {
         const { targetParentNodeId } = context;
@@ -627,7 +644,6 @@ export default function PlanDetailPage() {
           });
           newRoadmap[parentNodeIndex] = { ...newRoadmap[parentNodeIndex], childrenData: updatedChildren };
 
-          // If the edited item was also a canvas node, update that node's title/description
           if (itemWasCanvasNodeId) {
             const canvasNodeIndex = newRoadmap.findIndex(node => node.id === itemWasCanvasNodeId);
             if (canvasNodeIndex > -1) {
@@ -642,7 +658,7 @@ export default function PlanDetailPage() {
     
     setIsEditChildItemDialogOpen(false);
     childItemManagementContextRef.current = null;
-  }, [toast, handleSpawnChildDataItemAsCanvasNode]);
+  }, [toast]);
 
 
   const handleEditChildItemText = useCallback((childItem: ChildDataItem, parentCanvasNodeIdOfChildItem: string) => {
@@ -661,12 +677,21 @@ export default function PlanDetailPage() {
   const handleUnspawnNodeIfChildless = useCallback((nodeIdToCheck: string) => {
     setEditableRoadmap(prev => {
       const node = prev.find(n => n.id === nodeIdToCheck);
-      if (!node || (node.childrenData && node.childrenData.length > 0)) {
-        return prev; // Not childless or node not found
+      // Check if it's a node that could have been spawned from a child item.
+      // Root nodes or nodes not linked via canvasNodeIdForThisItem should not be unspawned this way.
+      let isSpawnedChildNode = false;
+      for (const rn of prev) {
+          if (rn.childrenData?.some(ci => ci.canvasNodeIdForThisItem === nodeIdToCheck)) {
+              isSpawnedChildNode = true;
+              break;
+          }
+      }
+
+      if (!node || (node.childrenData && node.childrenData.length > 0) || !isSpawnedChildNode) {
+        return prev; 
       }
 
       let newRoadmap = [...prev];
-      // Find and update the parent item that was linking to this node
       let unlinked = false;
       for (let i = 0; i < newRoadmap.length; i++) {
         if (newRoadmap[i].childrenData) {
@@ -687,7 +712,6 @@ export default function PlanDetailPage() {
       }
 
       if (unlinked) {
-        // Remove the node itself and clear its peer connections
         newRoadmap = newRoadmap.filter(n => n.id !== nodeIdToCheck);
         newRoadmap = newRoadmap.map(rn => ({
           ...rn,
@@ -696,15 +720,16 @@ export default function PlanDetailPage() {
         toast({ title: `Node "${node.title}" became childless and was removed from canvas.` });
         return newRoadmap;
       }
-      return prev; // No changes if no parent link was found (shouldn't happen for spawned nodes)
+      return prev; 
     });
   }, [toast]);
 
   const handleDeleteChildItem = useCallback((childItemIdToDelete: string, parentCanvasNodeIdOfItem: string) => {
     if (!canEditPlan) return;
-    let canvasNodeIdThatWasDeleted: string | null = null;
+    
     setEditableRoadmap(prev => {
-        const newRoadmap = prev.map(cn => {
+        let canvasNodeIdThatWasDeleted: string | null = null;
+        let updatedRoadmap = prev.map(cn => {
             if (cn.id === parentCanvasNodeIdOfItem) {
                 const childItemToRemove = (cn.childrenData || []).find(ci => ci.id === childItemIdToDelete);
                 canvasNodeIdThatWasDeleted = childItemToRemove?.canvasNodeIdForThisItem || null;
@@ -713,21 +738,27 @@ export default function PlanDetailPage() {
             }
             return cn;
         });
-        // If the deleted child item *was* a canvas node, remove that canvas node
+        
         if (canvasNodeIdThatWasDeleted) {
+            updatedRoadmap = updatedRoadmap.filter(node => node.id !== canvasNodeIdThatWasDeleted);
+            updatedRoadmap = updatedRoadmap.map(rn => ({
+              ...rn,
+              peerConnections: (rn.peerConnections || []).filter(pc => pc.targetNodeId !== canvasNodeIdThatWasDeleted)
+            }));
             toast({ title: "Item and its Canvas Node Removed", description: "Remember to save."});
-            return newRoadmap.filter(node => node.id !== canvasNodeIdThatWasDeleted);
         } else {
             toast({ title: "Item Removed from List", description: "Remember to save."});
-            return newRoadmap;
         }
+        
+        // Important: Check if the parent node became childless AFTER the current state update
+        const parentNodeAfterDelete = updatedRoadmap.find(n => n.id === parentCanvasNodeIdOfItem);
+        if (parentNodeAfterDelete && (!parentNodeAfterDelete.childrenData || parentNodeAfterDelete.childrenData.length === 0)) {
+            // Defer the unspawning check to allow this current state update to complete
+            setTimeout(() => handleUnspawnNodeIfChildless(parentCanvasNodeIdOfItem), 0);
+        }
+        return updatedRoadmap;
     });
-    // After state update, check if the parent node became childless
-    const parentNodeAfterDelete = editableRoadmap.find(n => n.id === parentCanvasNodeIdOfItem);
-    if (parentNodeAfterDelete && (!parentNodeAfterDelete.childrenData || parentNodeAfterDelete.childrenData.length === 0)) {
-        handleUnspawnNodeIfChildless(parentCanvasNodeIdOfItem);
-    }
-  }, [canEditPlan, toast, editableRoadmap, handleUnspawnNodeIfChildless]);
+  }, [canEditPlan, toast, handleUnspawnNodeIfChildless]);
 
 
   const confirmDeleteNode = useCallback(() => {
@@ -857,7 +888,7 @@ export default function PlanDetailPage() {
             activeConnectionLinePreviewRef.current = null;
             nodeDragInfoRef.current = null;
             setIsPointerDown(false);
-            if (svgRef.current) svgRef.current.style.display = 'block'; // Keep true to draw existing lines
+            if (svgRef.current) svgRef.current.style.display = 'block'; 
             return;
         }
 
@@ -914,7 +945,7 @@ export default function PlanDetailPage() {
     clickStartInfoRef.current = null;
     isDraggingRef.current = false;
     setIsPointerDown(false);
-    if (svgRef.current) svgRef.current.style.display = 'block'; // Keep drawing existing lines
+    if (svgRef.current) svgRef.current.style.display = 'block'; 
   }, [isPointerDown, getPointerCoords, editableRoadmap, handleEditCanvasNode, toast, handleInitiateAddNode]);
 
 
