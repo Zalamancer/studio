@@ -70,7 +70,7 @@ const ARROWHEAD_WIDTH_FACTOR = 0.7;
 const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
 const CLICK_TIME_THRESHOLD_MS = 300;
 
-
+// Function to calculate node height based on its content
 const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
   let height = NODE_HEADER_HEIGHT;
   let contentAreaHeight = 0;
@@ -99,6 +99,7 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
   return Math.max(NODE_BASE_MIN_HEIGHT, height);
 };
 
+// Function to sanitize roadmap steps, ensuring all required fields and defaults
 const sanitizeRoadmapStep = (step: Partial<RoadmapStep>, defaultParentId?: string): RoadmapStep => {
   const sanitizedChildrenData = (Array.isArray(step.childrenData) ? step.childrenData : []).map(ci => ({
     id: typeof ci.id === 'string' && ci.id.trim() !== '' ? ci.id : `childitem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
@@ -798,9 +799,10 @@ export default function PlanDetailPage() {
 
   const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersion: ClientPlanVersion | null) => {
     if (!planData) return;
+    // If clicking the button for the version whose diff is already active, hide it
     if (diffDetailsVersionId === versionToView.id && diffTarget) {
-        handleExitDiffView(); // If clicking the same "Hide Changes" button
-    } else {
+        handleExitDiffView();
+    } else { // Otherwise, show this version's diff
         setDiffTarget({ current: versionToView, previous: previousVersion });
         setDiffDetailsVersionId(versionToView.id);
     }
@@ -809,7 +811,10 @@ export default function PlanDetailPage() {
   const handleExitDiffView = useCallback(() => {
       setDiffTarget(null); 
       setDiffDetailsVersionId(null); 
-  }, []);
+      if (planData) { // Reset to live plan data
+        setEditableRoadmap((planData.roadmap || []).map(s => sanitizeRoadmapStep(s)));
+      }
+  }, [planData]);
 
   const handleRestoreVersion = (version: ClientPlanVersion) => { setVersionToRestore(version); setIsRestoreConfirmOpen(true); };
   const confirmRestore = () => { if (!versionToRestore || !planId || !user) return; restorePlanMutation.mutate({ planId, versionIdToRestore: versionToRestore.id, currentUserId: user.uid }); };
@@ -1120,7 +1125,7 @@ export default function PlanDetailPage() {
                 key={step.id} 
                 step={step} 
                 allSteps={editableRoadmap} 
-                onNodeInteractionStart={handleNodeInteractionStart} 
+                onNodeInteractionStart={handleNodeInteractionStart}
                 isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
                 onEditStep={handleEditCanvasNode} 
                 onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
@@ -1269,40 +1274,51 @@ export default function PlanDetailPage() {
             <SheetDescription>Review past versions of this plan. You can restore to a previous version or view changes.</SheetDescription>
           </SheetHeader>
           <ScrollArea className="h-[calc(100%-60px)]"> {/* Adjusted height for NO footer */}
-            <div className="p-4 space-y-1">
+            <div className="p-4 space-y-2"> {/* Increased space-y from 1 to 2 */}
               {isLoadingVersions && (<div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/><p className="ml-2 text-muted-foreground">Loading versions...</p></div>)}
               {!isLoadingVersions && planVersions.length === 0 && (<p className="text-sm text-muted-foreground text-center py-4">No version history available for this plan.</p>)}
               {!isLoadingVersions && planVersions.map((version, index) => {
                 const isCurrentLiveVersion = version.versionNumber === planData?.version;
                 const isViewingThisVersionDiff = diffDetailsVersionId === version.id && !!diffTarget;
                 const previousVersionForDiff = planVersions[index + 1] || null;
-                const canViewChangesForThis = index < planVersions.length - 1 || (planVersions.length === 1 && version.versionNumber > 1); // Can view changes if not oldest, or if it's the only version but not v1
+                const canViewChangesForThis = index < planVersions.length - 1 || (planVersions.length === 1 && version.versionNumber > 1);
                 
                 return (
-                  <div key={version.id} className={cn("p-3 border rounded-md bg-card hover:bg-muted/30 transition-colors", isCurrentLiveVersion && "border-primary ring-1 ring-primary", isViewingThisVersionDiff && "ring-2 ring-purple-500 border-purple-500")}>
-                    <div className="flex justify-between items-center">
-                        <div className="min-w-0">
+                  <div key={version.id} className={cn("p-3 border rounded-md bg-card hover:bg-muted/30 transition-colors mb-1.5", isCurrentLiveVersion && "border-primary ring-1 ring-primary", isViewingThisVersionDiff && "ring-2 ring-purple-500 border-purple-500")}>
+                    <div className="flex justify-between items-start">
+                        <div className="min-w-0 flex-grow">
                             <div className="flex items-center gap-2">
                                 <p className="text-sm font-medium truncate text-foreground">Version {version.versionNumber || "(Legacy)"}</p>
                                 {isCurrentLiveVersion && <Badge variant="secondary" className="text-xs">Current Live</Badge>}
-                                 <div className="flex items-center gap-1.5">
-                                    <Button variant="outline" size="xs" className="h-7 px-2 text-xs" 
-                                        onClick={() => handleViewChangesClick(version, previousVersionForDiff)} 
-                                        disabled={!canViewChangesForThis || restorePlanMutation.isPending || (!!diffTarget && !isViewingThisVersionDiff)} // Disable if another diff is active
-                                    >
-                                        {isViewingThisVersionDiff ? <><View className="h-3.5 w-3.5 mr-1.5 text-purple-500"/>Hiding...</> : <><Eye className="h-3.5 w-3.5 mr-1.5" />View Changes</>}
-                                    </Button>
-                                    <Button variant="outline" size="xs" className="h-7 px-2 text-xs" onClick={() => handleRestoreVersion(version)} disabled={isCurrentLiveVersion || restorePlanMutation.isPending || !!diffTarget}>
-                                        <History className="h-3.5 w-3.5 mr-1.5" /> Restore
-                                    </Button>
-                                </div>
                             </div>
                             <p className="text-xs text-muted-foreground truncate">Saved by: <span className="font-semibold text-foreground/80">{version.editorDisplayName || getInitials(version.editorUid) || version.editorUid}</span> on {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}</p>
+                        </div>
+                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2 mt-0.5">
+                            {isViewingThisVersionDiff && (
+                                <span className="text-xs text-muted-foreground mr-1">
+                                (+{addedNodeIds.size} added, -{removedNodeTitles.length} removed)
+                                </span>
+                            )}
+                            <Button variant="outline" size="xs" className="h-7 px-2 text-xs" 
+                                onClick={() => {
+                                    if (isViewingThisVersionDiff) {
+                                        handleExitDiffView();
+                                    } else {
+                                        handleViewChangesClick(version, previousVersionForDiff);
+                                    }
+                                }} 
+                                disabled={!canViewChangesForThis || restorePlanMutation.isPending || (!!diffTarget && !isViewingThisVersionDiff)}
+                            >
+                                {isViewingThisVersionDiff ? <><View className="h-3.5 w-3.5 mr-1.5 text-purple-500"/>Hide Changes</> : <><Eye className="h-3.5 w-3.5 mr-1.5" />View Changes</>}
+                            </Button>
+                            <Button variant="outline" size="xs" className="h-7 px-2 text-xs" onClick={() => handleRestoreVersion(version)} disabled={isCurrentLiveVersion || restorePlanMutation.isPending || !!diffTarget}>
+                                <History className="h-3.5 w-3.5 mr-1.5" /> Restore
+                            </Button>
                         </div>
                     </div>
                     {isViewingThisVersionDiff && diffTarget && (
                         <div className="mt-2 pt-2 border-t border-dashed border-purple-500/50 bg-purple-500/5 text-xs space-y-1 p-2 rounded-b-md">
-                            <div className="font-medium text-purple-700 dark:text-purple-300">Displaying changes in Version {diffTarget.current.versionNumber} compared to Version {diffTarget.previous?.versionNumber || 'Initial State'}.</div>
+                            <div className="font-medium text-purple-700 dark:text-purple-300">Comparing with Version {diffTarget.previous?.versionNumber || 'Initial State'}.</div>
                             {addedNodeIds.size > 0 && (
                                 <div><strong>Added Nodes:</strong> {Array.from(addedNodeIds).map(id => diffTarget.current.roadmap.find(n=>n.id===id)?.title || id).join(', ')}</div>
                             )}
@@ -1312,7 +1328,6 @@ export default function PlanDetailPage() {
                             {addedNodeIds.size === 0 && removedNodeTitles.length === 0 && (
                                 <p className="italic">No structural node additions or removals compared to the previous version (content changes may exist).</p>
                             )}
-                             <Button variant="outline" size="xs" className="mt-1.5 h-6 px-1.5 text-xs" onClick={handleExitDiffView}>Exit Diff View</Button>
                         </div>
                     )}
                   </div>
@@ -1320,7 +1335,6 @@ export default function PlanDetailPage() {
               })}
             </div>
           </ScrollArea>
-          {/* Footer removed to give more space to content */}
         </SheetContent>
       </Sheet>
       <AlertDialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
@@ -1329,4 +1343,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
