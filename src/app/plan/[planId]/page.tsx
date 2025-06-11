@@ -57,7 +57,7 @@ import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
 import { fetchUserProfileBasic } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { Card, CardHeader, CardTitle as CardPrimitiveTitle, CardDescription as CardPrimitiveDescription, CardContent } from '@/components/ui/card'; // For Plan Info Card
+import { Card, CardHeader, CardTitle as CardPrimitiveTitle, CardDescription as CardPrimitiveDescription, CardContent } from '@/components/ui/card';
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
@@ -1288,7 +1288,7 @@ export default function PlanDetailPage() {
                         </div>
                     )}
                     <DialogFooter>
-                        <DialogClose asChild><Button type="button" variant="outline">Close</Button></DialogClose>
+                        {/* Removed redundant Close button */}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -1311,7 +1311,7 @@ export default function PlanDetailPage() {
             className="bg-muted grid-background"
           >
             {diffTarget && (
-              <div // This is the overlay for the diff view, covering the grid area
+              <div
                 className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
                 onClick={handleExitDiffView}
                 aria-hidden="true"
@@ -1531,3 +1531,4 @@ export default function PlanDetailPage() {
   );
 }
     
+
