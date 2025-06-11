@@ -21,12 +21,12 @@ import {
   Eye,
   ChevronsUpDown,
   User,
-  Info, // Added Info icon
-  FileText, // For plan info
-  CalendarDays, // For plan info
-  Users2, // For contributors
-  BoxSelect, // For nodes
-  ListTree, // For child items
+  Info,
+  FileText,
+  CalendarDays,
+  Users2,
+  BoxSelect,
+  ListTree,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -50,14 +50,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { format } from 'date-fns';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
 import { fetchUserProfileBasic } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'; // For Plan Info Card
+import { Card, CardHeader, CardTitle as CardPrimitiveTitle, CardDescription as CardPrimitiveDescription, CardContent } from '@/components/ui/card'; // For Plan Info Card
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
@@ -67,6 +67,7 @@ const CHILD_ITEM_HEIGHT = 28;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
 const DEFAULT_SPACING_X = 80;
 const DEFAULT_SPACING_Y = 40;
+const CANVAS_STATIC_WIDTH = '1920px';
 
 const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
 const CONNECTION_LINE_THICKNESS_PEER = 1.5;
@@ -382,6 +383,8 @@ export default function PlanDetailPage() {
   const [persistedNodeIds, setPersistedNodeIds] = useState<Set<string>>(new Set());
   const [removedNodeTitles, setRemovedNodeTitles] = useState<string[]>([]);
   const [diffDetailsVersionId, setDiffDetailsVersionId] = useState<string | null>(null);
+  const [isPlanInfoDialogOpen, setIsPlanInfoDialogOpen] = useState(false);
+
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
@@ -427,7 +430,7 @@ export default function PlanDetailPage() {
   }, [editableRoadmap]);
 
   const uniqueContributorsCount = useMemo(() => {
-    if (!planData) return 1; // Only owner if no plan data
+    if (!planData) return 1; 
     const editorUids = new Set<string>();
     if (planData.ownerId) editorUids.add(planData.ownerId);
     if (augmentedPlanVersions && augmentedPlanVersions.length > 0) {
@@ -1158,9 +1161,9 @@ export default function PlanDetailPage() {
               const endX = childCanvasNode.x + NODE_BASE_WIDTH;
               const endY = childCanvasNode.y + calculateNodeHeight(childCanvasNode, editableRoadmap) / 2;
               const pathData = `M ${startX} ${startY} L ${endX} ${endY}`;
-              const pathKey = `conn-dot-${childItem.id}-to-node-${childCanvasNode.id}-${startX}-${startY}-${endX}-${endY}`;
+              const pathKey_hier = `conn-dot-${childItem.id}-to-node-${childCanvasNode.id}-${startX}-${startY}-${endX}-${endY}`;
               lines.push(
-                <path key={pathKey} d={pathData} stroke={'hsl(var(--primary))'} strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" markerEnd={'url(#arrowhead-main)'} style={{ pointerEvents: "none" }} />
+                <path key={pathKey_hier} d={pathData} stroke={'hsl(var(--primary))'} strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" markerEnd={'url(#arrowhead-main)'} style={{ pointerEvents: "none" }} />
               );
             }
           }
@@ -1211,7 +1214,7 @@ export default function PlanDetailPage() {
   if (!planId || !isValidPlanId) { return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Invalid Plan ID</h1><p className="text-muted-foreground">The plan identifier in the URL is not valid.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>); }
 
   return (
-    <div className="flex flex-col flex-1 h-full"> {/* Ensure full height for flex */}
+    <div className="flex flex-col flex-1 h-full">
       <div className="sticky top-0 z-30 w-full border-b bg-background">
         <div className="container mx-auto flex h-16 max-w-screen-2xl items-center px-4 justify-between">
           <div className="flex items-center gap-2">
@@ -1241,117 +1244,113 @@ export default function PlanDetailPage() {
                 </Button>
               </>
             )}
-             <Button variant="secondary" size="sm" onClick={sharePlan} className="text-xs sm:text-sm h-8 sm:h-9">
-                <Share2 className="mr-1 sm:mr-2 h-3.5 sm:h-4 w-3.5 sm:w-4" />
-                Share
-              </Button>
+            <Button variant="secondary" size="sm" onClick={sharePlan} className="text-xs sm:text-sm h-8 sm:h-9">
+              <Share2 className="mr-1 sm:mr-2 h-3.5 sm:h-4 w-3.5 sm:w-4" />
+              Share
+            </Button>
+            <Dialog open={isPlanInfoDialogOpen} onOpenChange={setIsPlanInfoDialogOpen}>
+                <DialogTrigger asChild>
+                    <Button variant="outline" size="sm" className="text-xs sm:text-sm h-8 sm:h-9">
+                        <Info className="mr-1 sm:mr-2 h-3.5 sm:h-4 w-3.5 sm:w-4" /> Info
+                    </Button>
+                </DialogTrigger>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Details</DialogTitle>
+                        <DialogDescription>Key information about this collaboration plan.</DialogDescription>
+                    </DialogHeader>
+                    {planData && (
+                        <div className="grid gap-3 py-4 text-sm">
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground flex items-center gap-1.5"><User className="h-4 w-4"/>Created by:</span>
+                                <span className="font-medium truncate" title={ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}>{ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground flex items-center gap-1.5"><CalendarDays className="h-4 w-4"/>Created:</span>
+                                <span className="font-medium">{format(new Date(planData.createdAt), 'PP')}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground flex items-center gap-1.5"><History className="h-4 w-4"/>Updated:</span>
+                                <span className="font-medium">{format(new Date(planData.updatedAt), 'PPp')}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground flex items-center gap-1.5"><BoxSelect className="h-4 w-4"/>Nodes:</span>
+                                <span className="font-medium">{editableRoadmap.length}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground flex items-center gap-1.5"><ListTree className="h-4 w-4"/>Child Items:</span>
+                                <span className="font-medium">{totalChildItemCount}</span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                                <span className="text-muted-foreground flex items-center gap-1.5"><Users2 className="h-4 w-4"/>Contributors:</span>
+                                <span className="font-medium">{uniqueContributorsCount}</span>
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <DialogClose asChild><Button type="button" variant="outline">Close</Button></DialogClose>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
           </div>
         </div>
       </div>
 
-      {/* Plan Info Section */}
-      {planData && (
-        <Card className="m-4 mb-0 rounded-lg border shadow-sm bg-card">
-            <CardHeader className="p-3">
-                <CardTitle className="text-base font-semibold flex items-center gap-2">
-                    <Info className="h-4 w-4 text-primary" /> Plan Overview
-                </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0 text-xs grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
-                <div className="flex items-center gap-1.5">
-                    <User className="h-3.5 w-3.5 text-muted-foreground"/>
-                    <strong className="text-foreground/80">Created by:</strong>
-                    <span className="text-muted-foreground truncate" title={ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}>
-                        {ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}
-                    </span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground"/>
-                    <strong className="text-foreground/80">Created:</strong>
-                    <span className="text-muted-foreground">{format(new Date(planData.createdAt), 'PP')}</span>
-                </div>
-                 <div className="flex items-center gap-1.5">
-                    <History className="h-3.5 w-3.5 text-muted-foreground"/>
-                    <strong className="text-foreground/80">Updated:</strong>
-                    <span className="text-muted-foreground">{format(new Date(planData.updatedAt), 'PPp')}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <BoxSelect className="h-3.5 w-3.5 text-muted-foreground"/>
-                    <strong className="text-foreground/80">Nodes:</strong>
-                    <span className="text-muted-foreground">{editableRoadmap.length}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <ListTree className="h-3.5 w-3.5 text-muted-foreground"/>
-                    <strong className="text-foreground/80">Child Items:</strong>
-                    <span className="text-muted-foreground">{totalChildItemCount}</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                    <Users2 className="h-3.5 w-3.5 text-muted-foreground"/>
-                    <strong className="text-foreground/80">Contributors:</strong>
-                    <span className="text-muted-foreground">{uniqueContributorsCount}</span>
-                </div>
-            </CardContent>
-        </Card>
-      )}
-
-
-      {diffTarget && (
-        <div
-          className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
-          onClick={handleExitDiffView}
-          aria-hidden="true"
-        />
-      )}
-
-      <div className="flex flex-1 items-center justify-center overflow-auto mt-4"> {/* Added mt-4 for spacing */}
-        {planError ? (
-          <div className="flex flex-col items-center justify-center p-4 text-center">
-            <AlertTriangle className="h-10 w-10 text-destructive mb-2" />
-            <h1 className="text-xl font-semibold">Error Loading Plan</h1>
-            <p className="text-muted-foreground">{planError.message || "Failed to load plan."}</p>
-          </div>
-        ) : (
-          <ScrollArea className="flex flex-1 w-full h-full"> {/* Ensure ScrollArea takes full width and height of its parent */}
-            <div
-              ref={canvasRef}
-              style={{ minWidth: '100%', minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'visible' }} // Changed overflow to visible
-              className="bg-muted grid-background"
-            >
-              <svg
-                ref={svgRef}
-                style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', display: 'block' }}
-                className="pointer-events-none"
-              >
-                <defs>
-                  <marker id="arrowhead-main" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                    <path d={`M 0 0 L 10 5 L 0 10 z`} fill={'hsl(var(--primary))'} />
-                  </marker>
-                  <marker id="arrowhead-accent" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
-                    <path d={`M 0 0 L 10 5 L 0 10 z`} fill={'hsl(var(--accent))'} />
-                  </marker>
-                </defs>
-                {drawConnectionLines()}
-                {activeConnectionLinePreviewRef.current?.path && (
-                  <path d={activeConnectionLinePreviewRef.current.path} stroke={'hsl(var(--primary))'} strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" style={{ pointerEvents: "none" }} />
-                )}
-              </svg>
-              {editableRoadmap.map((step) => (
-                <RoadmapStepCardComponent
-                  key={step.id}
-                  step={step}
-                  allSteps={editableRoadmap}
-                  onNodeInteractionStart={handleNodeInteractionStart}
-                  isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
-                  onEditStep={handleEditCanvasNode}
-                  onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
-                  onChildItemTitleClick={handleChildItemCanvasNodeFocus}
-                  isActuallyDraggingThisNode={nodeDragInfoRef.current?.nodeId === step.id && isDraggingRef.current}
-                  diffHighlight={diffTarget ? (addedNodeIds.has(step.id) ? 'added' : (persistedNodeIds.has(step.id) ? 'persisted' : undefined)) : undefined}
-                />
-              ))}
-            </div>
-          </ScrollArea>
+      <div className="flex flex-1 items-center justify-center overflow-auto relative">
+        {diffTarget && (
+          <div
+            className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
+            onClick={handleExitDiffView}
+            aria-hidden="true"
+          />
         )}
+        <ScrollArea className="flex flex-1 w-full h-full">
+          <div
+            ref={canvasRef}
+            style={{ width: CANVAS_STATIC_WIDTH, minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'visible' }}
+            className="bg-muted grid-background"
+          >
+            {diffTarget && (
+              <div // This is the overlay for the diff view, covering the grid area
+                className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
+                onClick={handleExitDiffView}
+                aria-hidden="true"
+              />
+            )}
+            <svg
+              ref={svgRef}
+              style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', display: 'block' }}
+              className="pointer-events-none"
+            >
+              <defs>
+                <marker id="arrowhead-main" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                  <path d={`M 0 0 L 10 5 L 0 10 z`} fill={'hsl(var(--primary))'} />
+                </marker>
+                <marker id="arrowhead-accent" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto">
+                  <path d={`M 0 0 L 10 5 L 0 10 z`} fill={'hsl(var(--accent))'} />
+                </marker>
+              </defs>
+              {drawConnectionLines()}
+              {activeConnectionLinePreviewRef.current?.path && (
+                <path d={activeConnectionLinePreviewRef.current.path} stroke={'hsl(var(--primary))'} strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" style={{ pointerEvents: "none" }} />
+              )}
+            </svg>
+            {editableRoadmap.map((step) => (
+              <RoadmapStepCardComponent
+                key={step.id}
+                step={step}
+                allSteps={editableRoadmap}
+                onNodeInteractionStart={handleNodeInteractionStart}
+                isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
+                onEditStep={handleEditCanvasNode}
+                onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
+                onChildItemTitleClick={handleChildItemCanvasNodeFocus}
+                isActuallyDraggingThisNode={nodeDragInfoRef.current?.nodeId === step.id && isDraggingRef.current}
+                diffHighlight={diffTarget ? (addedNodeIds.has(step.id) ? 'added' : (persistedNodeIds.has(step.id) ? 'persisted' : undefined)) : undefined}
+              />
+            ))}
+          </div>
+        </ScrollArea>
       </div>
 
       <Sheet open={isStepDetailSheetOpen} onOpenChange={setIsStepDetailSheetOpen}>
@@ -1462,10 +1461,10 @@ export default function PlanDetailPage() {
           <ScrollArea className="flex-1">
             <div className="divide-y divide-border p-4 space-y-3">
               {augmentedPlanVersions.map((version) => {
-                const isThisVersionDiffActive = diffTarget?.current.id === version.id && diffDetailsVersionId === version.id;
+                const isCurrentlyViewingThisDiff = diffDetailsVersionId === version.id && !!diffTarget;
                 const changeSummary = `(+${version.addedNodesCount} added, -${version.removedNodesCount} removed)`;
                 return (
-                  <div key={version.id} className={cn("pt-3 first:pt-0 mb-2", isThisVersionDiffActive && "bg-muted/50 p-3 rounded-md -mx-3")}>
+                  <div key={version.id} className={cn("pt-3 first:pt-0 mb-2", isCurrentlyViewingThisDiff && "bg-muted/50 p-3 rounded-md -mx-3")}>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex-grow min-w-0">
                         <div className="flex items-baseline gap-x-2 flex-wrap">
@@ -1481,7 +1480,7 @@ export default function PlanDetailPage() {
                       </div>
                       <div className="flex items-center space-x-1 flex-shrink-0">
                         <Button variant="outline" size="xs" onClick={() => handleViewChangesClick(version, augmentedPlanVersions.find(v => v.versionNumber === version.versionNumber -1) || null)} className="h-7 px-2">
-                          {isThisVersionDiffActive ? (<><Eye className="mr-1 h-3.5 w-3.5" /> Viewing...</>) : (<><ChevronsUpDown className="mr-1 h-3.5 w-3.5" /> View Changes</>)}
+                          {isCurrentlyViewingThisDiff ? (<><Eye className="mr-1 h-3.5 w-3.5" /> Hide Changes</>) : (<><ChevronsUpDown className="mr-1 h-3.5 w-3.5" /> View Changes</>)}
                         </Button>
                         {canEditPlan && (
                           <Button variant="ghost" size="xs" onClick={() => handleRestoreVersion(version)} disabled={restorePlanMutation.isPending && versionToRestore?.id === version.id} className="h-7 px-2">
@@ -1491,7 +1490,7 @@ export default function PlanDetailPage() {
                         )}
                       </div>
                     </div>
-                    {isThisVersionDiffActive && (
+                    {isCurrentlyViewingThisDiff && (
                       <div className="mt-2.5 pt-2.5 border-t border-border/50 text-xs space-y-1 pl-1">
                         <div className="font-medium text-foreground">Canvas highlights active. Interactions disabled.</div>
                         {addedNodeIds.size > 0 && (
@@ -1500,7 +1499,6 @@ export default function PlanDetailPage() {
                         {removedNodeTitles.length > 0 && (
                             <div><strong>Removed Nodes:</strong> {removedNodeTitles.join(', ')}</div>
                         )}
-                         {/* No "Hide Changes" button here, it's part of the main View/Hide button now */}
                       </div>
                     )}
                   </div>
