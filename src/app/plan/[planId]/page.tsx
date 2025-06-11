@@ -1,3 +1,4 @@
+
 // src/app/plan/[planId]/page.tsx
 "use client";
 
@@ -24,6 +25,7 @@ import {
   ListTree,
   View,
   ArrowRightLeft,
+  ChevronsUpDown,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -34,6 +36,7 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
+  AlertDialogTrigger, // Ensure AlertDialogTrigger is imported if used for the confirm delete dialog
 } from "@/components/ui/alert-dialog";
 
 import { getPlanById, updatePlanRoadmap as savePlanData, getPlanVersions, restorePlanToVersion } from '@/services/planService';
@@ -46,25 +49,31 @@ import { v4 as uuidv4 } from 'uuid';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog'; // Dialog might still be used for EditChildItemDialog
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { format } from 'date-fns';
 import { getInitials } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
-// RoadmapStepCardComponent is now defined locally
-// import RoadmapStepCardComponent from '@/components/plan/RoadmapStepCard';
 
+// Constants for node rendering and layout
+const MIN_CANVAS_PADDING = 20;
+const NODE_BASE_WIDTH = 220;
+const NODE_BASE_MIN_HEIGHT = 80;
+const NODE_HEADER_HEIGHT = 40;
+const CHILD_ITEM_HEIGHT = 28;
+const FINAL_BUFFER_CARD_HEIGHT = 8;
+const DEFAULT_SPACING_X = 80;
+const DEFAULT_SPACING_Y = 40;
 
-// --- START: Definitions from RoadmapStepCard.tsx ---
-const MIN_CANVAS_PADDING_CARD = 20;
-const NODE_BASE_WIDTH_CARD = 220;
-const NODE_BASE_MIN_HEIGHT_CARD = 80;
-const NODE_HEADER_HEIGHT_CARD = 40;
-const CHILD_ITEM_HEIGHT_CARD = 28;
-const FINAL_BUFFER_CARD_HEIGHT_CARD = 8;
+const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
+const CONNECTION_LINE_THICKNESS_PEER = 1.5;
+const ARROWHEAD_LENGTH = 8;
+const ARROWHEAD_WIDTH_FACTOR = 0.7;
+const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
+const CLICK_TIME_THRESHOLD_MS = 300;
 
-const calculateNodeHeightCard = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
-  let height = NODE_HEADER_HEIGHT_CARD;
+function calculateNodeHeight(step: RoadmapStep, allSteps: RoadmapStep[]): number {
+  let height = NODE_HEADER_HEIGHT;
   let contentAreaHeight = 0;
 
   let descriptionLineCount = 0;
@@ -77,7 +86,7 @@ const calculateNodeHeightCard = (step: RoadmapStep, allSteps: RoadmapStep[]): nu
   let childrenDataListHeight = 0;
   if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
     childrenDataListHeight += 8;
-    childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT_CARD;
+    childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
     childrenDataListHeight += 8;
   }
 
@@ -87,11 +96,11 @@ const calculateNodeHeightCard = (step: RoadmapStep, allSteps: RoadmapStep[]): nu
   }
 
   height += contentAreaHeight;
-  height += FINAL_BUFFER_CARD_HEIGHT_CARD;
-  return Math.max(NODE_BASE_MIN_HEIGHT_CARD, height);
-};
+  height += FINAL_BUFFER_CARD_HEIGHT;
+  return Math.max(NODE_BASE_MIN_HEIGHT, height);
+}
 
-interface RoadmapStepCardProps {
+const RoadmapStepCardComponent: React.FC<{
   step: RoadmapStep;
   allSteps: RoadmapStep[];
   onNodeInteractionStart: (nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, isDotDrag?: boolean, dotType?: 'N' | 'E' | 'S') => void;
@@ -101,9 +110,7 @@ interface RoadmapStepCardProps {
   onChildItemTitleClick: (childItemId: string, parentCanvasNodeId: string) => void;
   isActuallyDraggingThisNode?: boolean;
   diffHighlight?: 'added' | 'persisted';
-}
-
-const RoadmapStepCardComponent: React.FC<RoadmapStepCardProps> = React.memo(({
+}> = React.memo(({
   step,
   allSteps,
   onNodeInteractionStart,
@@ -115,14 +122,14 @@ const RoadmapStepCardComponent: React.FC<RoadmapStepCardProps> = React.memo(({
   diffHighlight,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
-  const dynamicHeight = calculateNodeHeightCard(step, allSteps);
+  const dynamicHeight = calculateNodeHeight(step, allSteps);
 
   const cardClasses = cn(
     "group/cardnode absolute select-none shadow-lg border rounded-lg flex flex-col",
     isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
     isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab',
-    diffHighlight === 'added' && 'border-green-500 ring-2 ring-green-300 shadow-green-500/30',
-    diffHighlight === 'persisted' && 'border-gray-400 opacity-70'
+    diffHighlight === 'added' && 'border-green-500 ring-2 ring-green-300 shadow-green-500/30 z-30',
+    diffHighlight === 'persisted' && 'border-gray-400 opacity-70 z-30'
   );
 
   const headerClasses = cn(
@@ -138,7 +145,7 @@ const RoadmapStepCardComponent: React.FC<RoadmapStepCardProps> = React.memo(({
       style={{
         left: `${step.x}px`,
         top: `${step.y}px`,
-        width: `${NODE_BASE_WIDTH_CARD}px`,
+        width: `${NODE_BASE_WIDTH}px`,
         height: `${dynamicHeight}px`,
         touchAction: diffHighlight ? 'auto' : 'none',
         pointerEvents: diffHighlight ? 'none' : 'auto',
@@ -243,53 +250,7 @@ const RoadmapStepCardComponent: React.FC<RoadmapStepCardProps> = React.memo(({
   );
 });
 RoadmapStepCardComponent.displayName = "RoadmapStepCardComponent";
-// --- END: Definitions from RoadmapStepCard.tsx ---
 
-
-// Constants for node rendering and layout
-const MIN_CANVAS_PADDING = 20;
-const NODE_BASE_WIDTH = 220;
-const NODE_BASE_MIN_HEIGHT = 80;
-const NODE_HEADER_HEIGHT = 40;
-const CHILD_ITEM_HEIGHT = 28;
-const FINAL_BUFFER_CARD_HEIGHT = 8;
-const DEFAULT_SPACING_X = 80;
-const DEFAULT_SPACING_Y = 40;
-
-const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
-const CONNECTION_LINE_THICKNESS_PEER = 1.5;
-const ARROWHEAD_LENGTH = 8;
-const ARROWHEAD_WIDTH_FACTOR = 0.7;
-const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
-const CLICK_TIME_THRESHOLD_MS = 300;
-
-function calculateNodeHeight(step: RoadmapStep, allSteps: RoadmapStep[]): number {
-  let height = NODE_HEADER_HEIGHT;
-  let contentAreaHeight = 0;
-
-  let descriptionLineCount = 0;
-  if (step.description && step.description.trim().length > 0) {
-    const lines = Math.ceil(step.description.length / 35) + (step.description.split(/\r\n|\r|\n/).length - 1);
-    descriptionLineCount = Math.max(1, lines);
-  }
-  const descriptionHeight = descriptionLineCount * 15 + (descriptionLineCount > 0 ? 8 : 0);
-
-  let childrenDataListHeight = 0;
-  if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
-    childrenDataListHeight += 8;
-    childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
-    childrenDataListHeight += 8;
-  }
-
-  contentAreaHeight = Math.max(descriptionHeight, childrenDataListHeight);
-  if (contentAreaHeight === 0 && (!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0)) {
-      contentAreaHeight = 20;
-  }
-
-  height += contentAreaHeight;
-  height += FINAL_BUFFER_CARD_HEIGHT;
-  return Math.max(NODE_BASE_MIN_HEIGHT, height);
-}
 
 function sanitizeRoadmapStep(step: Partial<RoadmapStep>, defaultParentId?: string): RoadmapStep {
   const sanitizedChildrenData = (Array.isArray(step.childrenData) ? step.childrenData : []).map(ci => ({
@@ -446,12 +407,15 @@ export default function PlanDetailPage() {
     enabled: isVersionHistorySheetOpen && !!planId && isValidPlanId,
   });
 
-  const augmentedPlanVersions = useMemo<AugmentedClientPlanVersion[]>(() => {
+ const augmentedPlanVersions = useMemo<AugmentedClientPlanVersion[]>(() => {
     if (!planVersionsData || planVersionsData.length === 0) return [];
     return planVersionsData.map((currentVersion, index) => {
       let addedNodesCount = 0;
       let removedNodesCount = 0;
       const currentRoadmapIds = new Set((currentVersion.roadmap || []).map(n => n.id));
+      
+      // Find the chronologically PREVIOUS version in the full list
+      // The list is sorted desc by timestamp, so previous is index + 1
       const previousVersionInHistory = planVersionsData[index + 1];
 
       if (previousVersionInHistory) {
@@ -459,6 +423,8 @@ export default function PlanDetailPage() {
         currentRoadmapIds.forEach(id => { if (!previousRoadmapIds.has(id)) addedNodesCount++; });
         previousRoadmapIds.forEach(id => { if (!currentRoadmapIds.has(id)) removedNodesCount++; });
       } else {
+        // This is the oldest version in the list (or the only version)
+        // All its nodes are considered "added" relative to a hypothetical empty state
         addedNodesCount = currentRoadmapIds.size;
         removedNodesCount = 0;
       }
@@ -1294,10 +1260,10 @@ export default function PlanDetailPage() {
       <div className="sticky top-0 z-20 w-full border-b bg-background">
         <div className="container flex h-16 items-center space-x-4 sm:justify-between sm:space-x-0">
           <div className="flex items-center space-x-4">
-            <Link href="/" className="md:hidden">
+            <Link href="/discover" className="md:hidden">
               <ChevronLeft className="h-6 w-6" />
             </Link>
-            <h1 className="text-xl font-semibold">{planData?.title || "Loading Plan..."}</h1>
+            <h1 className="text-xl font-semibold">{planData?.name || "Loading Plan..."}</h1>
             {planData?.public && (<Badge variant="secondary">Public</Badge>)}
           </div>
           <div className="flex flex-1 items-center justify-end space-x-4 sm:space-x-2">
@@ -1310,33 +1276,33 @@ export default function PlanDetailPage() {
                 <span>{planData.ownerId}</span>
               </div>
             )}
-            {canEditPlan && !diffTarget && (
+            {canEditPlan && (
               <>
                 <Button variant="outline" size="sm" onClick={() => setIsVersionHistorySheetOpen(true)}>
                   <History className="mr-2 h-4 w-4" />
                   Version History
                 </Button>
-                <Button size="sm" onClick={saveRoadmapChanges} disabled={saveRoadmapMutation.isLoading}>
-                  {saveRoadmapMutation.isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <Button size="sm" onClick={saveRoadmapChanges} disabled={saveRoadmapMutation.isPending || !!diffTarget}>
+                  {saveRoadmapMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                   Save
                 </Button>
               </>
             )}
-            {!diffTarget && (
-              <Button variant="secondary" size="sm" onClick={sharePlan}>
+             <Button variant="secondary" size="sm" onClick={sharePlan}>
                 <Share2 className="mr-2 h-4 w-4" />
                 Share
               </Button>
-            )}
-            {diffTarget && (
-                <Button variant="secondary" size="sm" onClick={handleExitDiffView}>
-                  <XCircle className="mr-2 h-4 w-4" />
-                  Exit Diff View
-                </Button>
-            )}
           </div>
         </div>
       </div>
+
+      {/* Dimming overlay for diff mode */}
+      {diffTarget && (
+        <div
+          className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
+          onClick={handleExitDiffView}
+        />
+      )}
 
       <div className="flex flex-1 items-center justify-center overflow-auto">
         {planError ? (
@@ -1376,7 +1342,7 @@ export default function PlanDetailPage() {
                   step={step}
                   allSteps={editableRoadmap}
                   onNodeInteractionStart={handleNodeInteractionStart}
-                  isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id}
+                  isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
                   onEditStep={handleEditCanvasNode}
                   onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
                   onChildItemTitleClick={handleChildItemCanvasNodeFocus}
@@ -1488,7 +1454,7 @@ export default function PlanDetailPage() {
         </SheetContent>
       </Sheet>
 
-      <Dialog open={nodeToDelete !== null} onOpenChange={(open) => { if (!open) setNodeToDelete(null); }}>
+      <AlertDialog open={nodeToDelete !== null} onOpenChange={(open) => { if (!open) setNodeToDelete(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Delete</AlertDialogTitle>
@@ -1499,7 +1465,7 @@ export default function PlanDetailPage() {
             <AlertDialogAction onClick={confirmDeleteNode}>Delete</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </Dialog>
+      </AlertDialog>
 
       <AddRoadmapStepDialog isOpen={isAddNodeDialogOpen} onOpenChange={setIsAddNodeDialogOpen} onSubmit={handleAddNode} />
 
@@ -1514,59 +1480,63 @@ export default function PlanDetailPage() {
       />
 
       <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen}>
-        <SheetContent className="sm:max-w-[500px]" side="left">
-          <SheetHeader>
+        <SheetContent className="sm:max-w-[600px] w-[90vw] p-0 flex flex-col" side="left">
+          <SheetHeader className="p-4 border-b text-left">
             <SheetTitle>Plan Version History</SheetTitle>
-            <SheetDescription>View and restore previous versions of your plan.</SheetDescription>
+            <SheetDescription>View, compare, and restore previous versions of your plan.</SheetDescription>
           </SheetHeader>
-          <ScrollArea className="h-[calc(100vh-10rem)]">
-            <div className="divide-y">
+          <ScrollArea className="flex-1">
+            <div className="divide-y divide-border p-4 space-y-3">
               {augmentedPlanVersions.map((version, index) => {
                 const previousVersionInHistory = augmentedPlanVersions[index + 1] || null;
-                const isCurrentlyViewingThisDiff = diffDetailsVersionId === version.id && !!diffTarget;
+                const isViewingThisVersionDiff = diffDetailsVersionId === version.id && !!diffTarget;
+                const changeSummary = `(+${version.addedNodesCount} added, -${version.removedNodesCount} removed)`;
 
                 return (
-                  <div key={version.id} className="py-4">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <h3 className="text-sm font-semibold">{version.name || `Version from ${format(version.createdAt, 'MMM d, yyyy h:mm a')}`}</h3>
-                        <p className="text-xs text-muted-foreground">
-                          Created: {format(version.createdAt, 'MMM d, yyyy h:mm a')}.
-                          {version.description && (<><br />Note: {version.description}</>)}
-                        </p>
+                  <div key={version.id} className={cn("pt-3 first:pt-0 mb-1.5", isViewingThisVersionDiff && "bg-muted/50 p-3 rounded-md -mx-3")}>
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex-grow min-w-0">
+                        <h3 className="text-sm font-semibold truncate" title={version.name || `Version ${version.versionNumber}`}>
+                          Version {version.versionNumber}
+                        </h3>
+                        <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2">
+                            <span>by {version.editorDisplayName || 'Unknown Editor'}</span>
+                            <span>{format(version.timestamp, 'MMM d, yyyy h:mm a')}</span>
+                            <span className={cn(version.addedNodesCount > 0 && "text-green-600", version.removedNodesCount > 0 && "text-red-600")}>
+                              {changeSummary}
+                            </span>
+                        </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        <Button variant="secondary" size="sm" onClick={() => handleViewChangesClick(version, previousVersionInHistory)}>
-                          {isCurrentlyViewingThisDiff ? (<XCircle className="mr-2 h-4 w-4" />) : (<Eye className="mr-2 h-4 w-4" />)}
-                          {isCurrentlyViewingThisDiff ? "Hide Changes" : "View Changes"}
+                      <div className="flex items-center space-x-1 flex-shrink-0">
+                        <Button variant="outline" size="xs" onClick={() => handleViewChangesClick(version, previousVersionInHistory)} className="h-7 px-2">
+                          {isViewingThisVersionDiff ? (<><XCircle className="mr-1 h-3.5 w-3.5" /> Hide</>) : (<><ChevronsUpDown className="mr-1 h-3.5 w-3.5" /> View</>)}
+                           Changes
                         </Button>
                         {canEditPlan && (
-                          <Button variant="ghost" size="sm" onClick={() => handleRestoreVersion(version)} disabled={isCurrentlyViewingThisDiff}>
-                            <ArrowRightLeft className="mr-2 h-4 w-4" />
+                          <Button variant="ghost" size="xs" onClick={() => handleRestoreVersion(version)} disabled={isViewingThisVersionDiff || restorePlanMutation.isPending} className="h-7 px-2">
+                            {restorePlanMutation.isPending && versionToRestore?.id === version.id ? <Loader2 className="mr-1 h-3.5 w-3.5 animate-spin"/> : <ArrowRightLeft className="mr-1 h-3.5 w-3.5" />}
                             Restore
                           </Button>
                         )}
                       </div>
                     </div>
-                    <div className="mt-2 flex items-center space-x-2 text-xs text-muted-foreground">
-                      {version.addedNodesCount > 0 && (
-                        <Badge variant="outline">
-                          <Plus className="mr-1 h-3 w-3" />
-                          {version.addedNodesCount} nodes
-                        </Badge>
-                      )}
-                      {version.removedNodesCount > 0 && (
-                        <Badge variant="destructive">
-                          <XCircle className="mr-1 h-3 w-3" />
-                          {version.removedNodesCount} nodes
-                        </Badge>
-                      )}
-                    </div>
+                    {isViewingThisVersionDiff && (
+                      <div className="mt-2.5 pt-2.5 border-t border-border/50 text-xs space-y-1 pl-1">
+                        <div className="font-medium text-foreground">Canvas highlights active. Interactions disabled.</div>
+                        {addedNodeIds.size > 0 && (
+                            <div><strong>Added Nodes:</strong> {Array.from(addedNodeIds).map(id => diffTarget?.current.roadmap.find(n=>n.id===id)?.title || id).join(', ')}</div>
+                        )}
+                        {removedNodeTitles.length > 0 && (
+                            <div><strong>Removed Nodes:</strong> {removedNodeTitles.join(', ')}</div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 );
               })}
             </div>
           </ScrollArea>
+          {/* Removed SheetFooter with Close History button */}
         </SheetContent>
       </Sheet>
 
@@ -1574,39 +1544,20 @@ export default function PlanDetailPage() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Confirm Restore</AlertDialogTitle>
-            <AlertDialogDescription>Are you sure you want to restore this version? This will overwrite your current plan state.</AlertDialogDescription>
+            <AlertDialogDescription>
+              Are you sure you want to restore to "Version {versionToRestore?.versionNumber || ''}" from {versionToRestore ? format(versionToRestore.timestamp, 'MMM d, yyyy') : ''}?
+              This will overwrite your current plan state. A snapshot of the current state will be saved to history before restoring.
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => { setIsRestoreConfirmOpen(false); setVersionToRestore(null); }}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmRestore}>Restore</AlertDialogAction>
+            <AlertDialogCancel onClick={() => { setIsRestoreConfirmOpen(false); setVersionToRestore(null); }} disabled={restorePlanMutation.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmRestore} disabled={restorePlanMutation.isPending}>
+               {restorePlanMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              Restore
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {diffTarget && (
-        <div className="fixed bottom-0 left-0 w-full bg-secondary/80 backdrop-blur-sm text-secondary-foreground p-4 border-t z-50">
-          <div className="container flex items-center justify-between">
-            <div>
-              <h2 className="text-sm font-semibold">
-                Viewing Changes:{" "}
-                <span className="font-normal">
-                  {diffTarget.current.name || `Version from ${format(diffTarget.current.createdAt, "MMM d, yyyy h:mm a")}`}
-                </span>
-              </h2>
-              {removedNodeTitles.length > 0 && (
-                <p className="text-xs">
-                  <XCircle className="inline-block h-3 w-3 mr-1 align-text-bottom" />
-                  Removed: {removedNodeTitles.join(", ")}
-                </p>
-              )}
-            </div>
-            <Button size="sm" variant="secondary" onClick={handleExitDiffView}>
-              <XCircle className="mr-2 h-4 w-4" />
-              Exit Diff View
-            </Button>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
