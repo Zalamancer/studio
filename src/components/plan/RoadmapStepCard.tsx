@@ -1,4 +1,3 @@
-
 // src/components/plan/RoadmapStepCard.tsx
 "use client";
 
@@ -90,9 +89,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         top: `${step.y}px`,
         width: `${NODE_BASE_WIDTH}px`,
         height: `${dynamicHeight}px`,
-        touchAction: diffHighlight ? 'auto' : 'none', // Allow interaction with overlay when in diff mode
-        pointerEvents: diffHighlight ? 'none' : 'auto', // Disable direct interaction with card in diff mode
-        zIndex: diffHighlight ? 30 : (isSelected ? 20 : 10), // Ensure diff items are above overlay
+        touchAction: diffHighlight ? 'auto' : 'none', 
+        pointerEvents: diffHighlight ? 'none' : 'auto', 
+        zIndex: diffHighlight ? 30 : (isSelected ? 20 : 10),
       }}
       onMouseDown={(e) => {
         if (diffHighlight) return;
@@ -195,4 +194,3 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
 RoadmapStepCard.displayName = "RoadmapStepCard";
 
 export default RoadmapStepCard;
-    

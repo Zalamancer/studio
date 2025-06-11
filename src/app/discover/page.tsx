@@ -9,7 +9,7 @@ import { getRecentPlans } from '@/services/planService';
 import type { ClientPlan } from '@/types/plan';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Loader2, AlertTriangle, Brain, MapPin, Layers } from 'lucide-react';
+import { Loader2, AlertTriangle, Brain, MapPin, Layers, Users } from 'lucide-react'; // Added Users icon
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 
@@ -22,8 +22,9 @@ const DiscoverPage = () => {
 
   const calculateNodeCounts = (plan: ClientPlan) => {
     const numNodes = plan.roadmap?.length || 0;
-    const numSubNodes = plan.roadmap?.reduce((acc, step) => acc + (step.subSteps?.length || 0), 0) || 0;
-    return { numNodes, numSubNodes };
+    // Count direct children items across all top-level roadmap steps
+    const numChildren = plan.roadmap?.reduce((acc, step) => acc + (step.childrenData?.length || 0), 0) || 0;
+    return { numNodes, numChildren };
   };
 
   return (
@@ -70,7 +71,11 @@ const DiscoverPage = () => {
       {!isLoading && !error && plans && plans.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {plans.map((plan) => {
-            const { numNodes, numSubNodes } = calculateNodeCounts(plan);
+            const { numNodes, numChildren } = calculateNodeCounts(plan);
+            // Placeholder for collaborator count and avatars - data not available yet
+            // const collaboratorCount = 1; // Example: Plan owner
+            // const recentCollaboratorAvatars = [plan.ownerProfile?.avatarUrl].filter(Boolean) as string[];
+
             return (
               <Card key={plan.id} className="flex flex-col shadow-md hover:shadow-lg transition-shadow duration-200 rounded-lg border-border">
                 <CardHeader className="pb-3">
@@ -96,7 +101,6 @@ const DiscoverPage = () => {
                    {plan.industry && (
                     <div className="flex items-center justify-between text-xs text-muted-foreground">
                         <span className="flex items-center gap-1.5">
-                           {/* Using Layers as a generic industry icon */}
                            <Layers className="h-3.5 w-3.5 text-primary/70" /> 
                             Industry:
                         </span>
@@ -113,10 +117,27 @@ const DiscoverPage = () => {
                   <div className="flex items-center justify-between text-xs text-muted-foreground">
                      <span className="flex items-center gap-1.5">
                         <Layers className="h-3.5 w-3.5 text-primary/70 opacity-70" />
-                        Sub-nodes:
+                        # of Children:
                      </span>
-                    <span className="font-medium text-foreground">{numSubNodes}</span>
+                    <span className="font-medium text-foreground">{numChildren}</span>
                   </div>
+                  {/* Placeholder for Collaborators - requires data in ClientPlan
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span className="flex items-center gap-1.5">
+                      <Users className="h-3.5 w-3.5 text-primary/70" />
+                      Collaborators:
+                    </span>
+                    <div className="flex items-center gap-1">
+                       <span className="font-medium text-foreground">{collaboratorCount}</span>
+                       {recentCollaboratorAvatars.slice(0,3).map((avatar, idx) => (
+                         <Avatar key={idx} className="h-4 w-4 border border-background -ml-1">
+                            <AvatarImage src={avatar} />
+                            <AvatarFallback className="text-[8px]">{idx+1}</AvatarFallback>
+                         </Avatar>
+                       ))}
+                    </div>
+                  </div>
+                  */}
                 </CardContent>
                 <CardFooter className="flex justify-between items-center pt-3 border-t mt-auto">
                   <p className="text-xs text-muted-foreground">
@@ -139,3 +160,4 @@ const DiscoverPage = () => {
 };
 
 export default DiscoverPage;
+

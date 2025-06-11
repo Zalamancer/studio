@@ -24,6 +24,7 @@ import {
   Eye,
   ListTree,
   View,
+  ArrowRightLeft,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -188,6 +189,12 @@ type ChildItemOperationContext =
     | { operation: 'createChild'; targetParentNodeId: string; }
     | { operation: 'edit'; itemToEditId: string; parentNodeId: string; };
 
+interface AugmentedClientPlanVersion extends ClientPlanVersion {
+  addedNodesCount: number;
+  removedNodesCount: number;
+  changedNodeTitles?: { from: string, to: string }[]; // For future use
+}
+
 export default function PlanDetailPage() {
   const params = useParams();
   const router = useRouter();
@@ -243,11 +250,32 @@ export default function PlanDetailPage() {
     enabled: !!planId && isValidPlanId && !authLoading,
   });
 
-  const { data: planVersions = [], isLoading: isLoadingVersions, refetch: refetchPlanVersions } = useQuery<ClientPlanVersion[]>({
+  const { data: planVersionsData = [], isLoading: isLoadingVersions, refetch: refetchPlanVersions } = useQuery<ClientPlanVersion[]>({
     queryKey: ['planVersions', planId],
     queryFn: () => (planId && isValidPlanId ? getPlanVersions(planId) : Promise.resolve([])),
     enabled: isVersionHistorySheetOpen && !!planId && isValidPlanId,
   });
+
+  const augmentedPlanVersions = useMemo<AugmentedClientPlanVersion[]>(() => {
+    if (!planVersionsData || planVersionsData.length === 0) return [];
+    return planVersionsData.map((currentVersion, index) => {
+      let addedNodesCount = 0;
+      let removedNodesCount = 0;
+      const currentRoadmapIds = new Set((currentVersion.roadmap || []).map(n => n.id));
+      const previousVersionInHistory = planVersionsData[index + 1]; // Chronologically previous
+
+      if (previousVersionInHistory) {
+        const previousRoadmapIds = new Set((previousVersionInHistory.roadmap || []).map(n => n.id));
+        currentRoadmapIds.forEach(id => { if (!previousRoadmapIds.has(id)) addedNodesCount++; });
+        previousRoadmapIds.forEach(id => { if (!currentRoadmapIds.has(id)) removedNodesCount++; });
+      } else {
+        addedNodesCount = currentRoadmapIds.size; // All nodes are "added" for the oldest version in the list
+        removedNodesCount = 0;
+      }
+      return { ...currentVersion, addedNodesCount, removedNodesCount };
+    });
+  }, [planVersionsData]);
+
 
   const saveRoadmapMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; roadmapToSave: RoadmapStep[] }) => savePlanData(payload.planId, payload.currentUserId, payload.roadmapToSave),
@@ -270,7 +298,7 @@ export default function PlanDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
       refetchPlanVersions();
       setIsRestoreConfirmOpen(false); setVersionToRestore(null);
-      handleExitDiffView(); // Exit diff mode after restore
+      handleExitDiffView(); 
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Restore Failed", description: error.message || "Could not restore plan." }),
   });
@@ -797,13 +825,14 @@ export default function PlanDetailPage() {
     }
   }, [planData, planId, toast]);
 
-  const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersion: ClientPlanVersion | null) => {
+  const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersionInHistory: ClientPlanVersion | null) => {
     if (!planData) return;
-    // If clicking the button for the version whose diff is already active, hide it
-    if (diffDetailsVersionId === versionToView.id && diffTarget) {
+    const isCurrentlyViewingThisDiff = diffDetailsVersionId === versionToView.id && !!diffTarget;
+
+    if (isCurrentlyViewingThisDiff) {
         handleExitDiffView();
-    } else { // Otherwise, show this version's diff
-        setDiffTarget({ current: versionToView, previous: previousVersion });
+    } else {
+        setDiffTarget({ current: versionToView, previous: previousVersionInHistory });
         setDiffDetailsVersionId(versionToView.id);
     }
   }, [planData, diffDetailsVersionId, diffTarget]);
@@ -811,7 +840,7 @@ export default function PlanDetailPage() {
   const handleExitDiffView = useCallback(() => {
       setDiffTarget(null); 
       setDiffDetailsVersionId(null); 
-      if (planData) { // Reset to live plan data
+      if (planData) { 
         setEditableRoadmap((planData.roadmap || []).map(s => sanitizeRoadmapStep(s)));
       }
   }, [planData]);
@@ -1101,7 +1130,7 @@ export default function PlanDetailPage() {
         <main ref={canvasRef} className="flex-1 grid-background relative overflow-auto p-4 md:p-6" style={{ minHeight: canvasMinHeight }}>
          {diffTarget && (
             <div
-              className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
+              className="absolute inset-0 bg-black/60 z-20 pointer-events-auto" // Overlay for dimming
               onClick={handleExitDiffView}
               title="Click to exit diff view"
             />
@@ -1268,48 +1297,49 @@ export default function PlanDetailPage() {
       )}
 
       <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen}>
-        <SheetContent className="sm:max-w-lg w-[90vw]" side="left">
-          <SheetHeader className="border-b pb-4">
-            <SheetTitle>Plan Version History (Live Version: {planData?.version || 1})</SheetTitle>
+        <SheetContent className="sm:max-w-lg w-[90vw] p-0 flex flex-col" side="left">
+          <SheetHeader className="p-4 border-b">
+            <SheetTitle>Plan Version History</SheetTitle>
             <SheetDescription>Review past versions of this plan. You can restore to a previous version or view changes.</SheetDescription>
           </SheetHeader>
-          <ScrollArea className="h-[calc(100%-60px)]"> {/* Adjusted height for NO footer */}
-            <div className="p-4 space-y-2"> {/* Increased space-y from 1 to 2 */}
+          <ScrollArea className="flex-grow min-h-0">
+            <div className="p-4 space-y-3">
               {isLoadingVersions && (<div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/><p className="ml-2 text-muted-foreground">Loading versions...</p></div>)}
-              {!isLoadingVersions && planVersions.length === 0 && (<p className="text-sm text-muted-foreground text-center py-4">No version history available for this plan.</p>)}
-              {!isLoadingVersions && planVersions.map((version, index) => {
+              {!isLoadingVersions && augmentedPlanVersions.length === 0 && (<p className="text-sm text-muted-foreground text-center py-4">No version history available for this plan.</p>)}
+              {!isLoadingVersions && augmentedPlanVersions.map((version, index) => {
                 const isCurrentLiveVersion = version.versionNumber === planData?.version;
                 const isViewingThisVersionDiff = diffDetailsVersionId === version.id && !!diffTarget;
-                const previousVersionForDiff = planVersions[index + 1] || null;
-                const canViewChangesForThis = index < planVersions.length - 1 || (planVersions.length === 1 && version.versionNumber > 1);
                 
                 return (
-                  <div key={version.id} className={cn("p-3 border rounded-md bg-card hover:bg-muted/30 transition-colors mb-1.5", isCurrentLiveVersion && "border-primary ring-1 ring-primary", isViewingThisVersionDiff && "ring-2 ring-purple-500 border-purple-500")}>
-                    <div className="flex justify-between items-start">
-                        <div className="min-w-0 flex-grow">
-                            <div className="flex items-center gap-2">
-                                <p className="text-sm font-medium truncate text-foreground">Version {version.versionNumber || "(Legacy)"}</p>
-                                {isCurrentLiveVersion && <Badge variant="secondary" className="text-xs">Current Live</Badge>}
+                  <div key={version.id} className={cn("p-3 border rounded-md bg-card hover:bg-muted/50 transition-colors mb-2", isCurrentLiveVersion && "border-primary ring-1 ring-primary", isViewingThisVersionDiff && "ring-2 ring-purple-500 border-purple-500")}>
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-y-1.5">
+                        <div className="flex-grow min-w-0">
+                            <div className="flex items-baseline gap-2">
+                                <p className="text-sm font-semibold text-foreground truncate">Version {version.versionNumber || "(Legacy)"}</p>
+                                <p className="text-xs text-muted-foreground/80">
+                                    ({format(new Date(version.timestamp), "MMM d, h:mma")})
+                                </p>
+                                {isCurrentLiveVersion && <Badge variant="secondary" className="text-xs h-5">Live</Badge>}
                             </div>
-                            <p className="text-xs text-muted-foreground truncate">Saved by: <span className="font-semibold text-foreground/80">{version.editorDisplayName || getInitials(version.editorUid) || version.editorUid}</span> on {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                                By: <span className="font-medium text-foreground/80">{version.editorDisplayName || getInitials(version.editorUid) || version.editorUid}</span>
+                            </p>
                         </div>
-                         <div className="flex items-center gap-1.5 flex-shrink-0 ml-2 mt-0.5">
-                            {isViewingThisVersionDiff && (
-                                <span className="text-xs text-muted-foreground mr-1">
-                                (+{addedNodeIds.size} added, -{removedNodeTitles.length} removed)
-                                </span>
-                            )}
-                            <Button variant="outline" size="xs" className="h-7 px-2 text-xs" 
+                        <div className="flex items-center gap-1.5 flex-shrink-0 self-start sm:self-center">
+                            <span className="text-xs text-muted-foreground">
+                                (<span className={cn(version.addedNodesCount > 0 && "text-green-600")}>+{version.addedNodesCount}</span>, <span className={cn(version.removedNodesCount > 0 && "text-red-600")}>-{version.removedNodesCount}</span>)
+                            </span>
+                            <Button 
+                                variant="outline" 
+                                size="xs" 
+                                className="h-7 px-2 text-xs" 
                                 onClick={() => {
-                                    if (isViewingThisVersionDiff) {
-                                        handleExitDiffView();
-                                    } else {
-                                        handleViewChangesClick(version, previousVersionForDiff);
-                                    }
-                                }} 
-                                disabled={!canViewChangesForThis || restorePlanMutation.isPending || (!!diffTarget && !isViewingThisVersionDiff)}
+                                  const prevVersionForDiffDisplay = augmentedPlanVersions[index + 1] || null;
+                                  handleViewChangesClick(version, prevVersionForDiffDisplay);
+                                }}
+                                disabled={restorePlanMutation.isPending || (!!diffTarget && !isViewingThisVersionDiff) || (version.addedNodesCount === 0 && version.removedNodesCount === 0)}
                             >
-                                {isViewingThisVersionDiff ? <><View className="h-3.5 w-3.5 mr-1.5 text-purple-500"/>Hide Changes</> : <><Eye className="h-3.5 w-3.5 mr-1.5" />View Changes</>}
+                                {isViewingThisVersionDiff ? <><ArrowRightLeft className="h-3.5 w-3.5 mr-1.5 text-purple-500"/>Hide Changes</> : <><Eye className="h-3.5 w-3.5 mr-1.5" />View</>}
                             </Button>
                             <Button variant="outline" size="xs" className="h-7 px-2 text-xs" onClick={() => handleRestoreVersion(version)} disabled={isCurrentLiveVersion || restorePlanMutation.isPending || !!diffTarget}>
                                 <History className="h-3.5 w-3.5 mr-1.5" /> Restore
@@ -1317,7 +1347,7 @@ export default function PlanDetailPage() {
                         </div>
                     </div>
                     {isViewingThisVersionDiff && diffTarget && (
-                        <div className="mt-2 pt-2 border-t border-dashed border-purple-500/50 bg-purple-500/5 text-xs space-y-1 p-2 rounded-b-md">
+                        <div className="mt-2.5 pt-2.5 border-t border-dashed border-purple-500/50 bg-purple-500/5 text-xs space-y-1 p-2.5 rounded-b-md">
                             <div className="font-medium text-purple-700 dark:text-purple-300">Comparing with Version {diffTarget.previous?.versionNumber || 'Initial State'}.</div>
                             {addedNodeIds.size > 0 && (
                                 <div><strong>Added Nodes:</strong> {Array.from(addedNodeIds).map(id => diffTarget.current.roadmap.find(n=>n.id===id)?.title || id).join(', ')}</div>
@@ -1335,6 +1365,7 @@ export default function PlanDetailPage() {
               })}
             </div>
           </ScrollArea>
+          {/* Removed SheetFooter with "Close History" button */}
         </SheetContent>
       </Sheet>
       <AlertDialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
@@ -1343,3 +1374,207 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
+    
+```
+  </change>
+  <change>
+    <file>/src/components/plan/RoadmapStepCard.tsx</file>
+    <content><![CDATA[
+// src/components/plan/RoadmapStepCard.tsx
+"use client";
+
+import React, { useRef } from 'react';
+import type { RoadmapStep } from '@/types/plan';
+import { cn } from '@/lib/utils';
+
+const MIN_CANVAS_PADDING = 20;
+const NODE_BASE_WIDTH = 220;
+const NODE_BASE_MIN_HEIGHT = 80;
+const NODE_HEADER_HEIGHT = 40;
+const CHILD_ITEM_HEIGHT = 28; // Includes padding/margin for each item
+const FINAL_BUFFER_CARD_HEIGHT = 8;
+
+const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
+  let height = NODE_HEADER_HEIGHT;
+  let contentAreaHeight = 0;
+
+  let descriptionLineCount = 0;
+  if (step.description && step.description.trim().length > 0) {
+    const lines = Math.ceil(step.description.length / 35) + (step.description.split(/\r\n|\r|\n/).length - 1);
+    descriptionLineCount = Math.max(1, lines);
+  }
+  const descriptionHeight = descriptionLineCount * 15 + (descriptionLineCount > 0 ? 8 : 0);
+
+  let childrenDataListHeight = 0;
+  if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
+    childrenDataListHeight += 8; // Padding top for list
+    childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
+    childrenDataListHeight += 8; // Padding bottom for list
+  }
+  
+  contentAreaHeight = Math.max(descriptionHeight, childrenDataListHeight);
+  if (contentAreaHeight === 0 && (!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0)) { 
+      contentAreaHeight = 20; 
+  }
+
+  height += contentAreaHeight;
+  height += FINAL_BUFFER_CARD_HEIGHT; 
+  return Math.max(NODE_BASE_MIN_HEIGHT, height);
+};
+
+interface RoadmapStepCardProps {
+  step: RoadmapStep;
+  allSteps: RoadmapStep[];
+  onNodeInteractionStart: (nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, isDotDrag?: boolean, dotType?: 'N' | 'E' | 'S') => void;
+  isSelected?: boolean;
+  onEditStep: (step: RoadmapStep) => void;
+  onAddGrandchildToChildDataItem: (parentChildItemId: string, parentCanvasNodeIdOfChildItem: string) => void;
+  onChildItemTitleClick: (childItemId: string, parentCanvasNodeId: string) => void;
+  isActuallyDraggingThisNode?: boolean;
+  diffHighlight?: 'added' | 'persisted';
+}
+
+const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
+  step,
+  allSteps,
+  onNodeInteractionStart,
+  isSelected,
+  onEditStep,
+  onAddGrandchildToChildDataItem,
+  onChildItemTitleClick,
+  isActuallyDraggingThisNode,
+  diffHighlight,
+}) => {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const dynamicHeight = calculateNodeHeight(step, allSteps);
+
+  const cardClasses = cn(
+    "group/cardnode absolute select-none shadow-lg border rounded-lg flex flex-col",
+    isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
+    isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab',
+    diffHighlight === 'added' && 'border-green-500 ring-2 ring-green-300 shadow-green-500/30 z-30', // Ensure added nodes are on top
+    diffHighlight === 'persisted' && 'border-gray-400 opacity-70 z-30' // Ensure persisted are also on top of dimming overlay
+  );
+  
+  const headerClasses = cn(
+    "p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]",
+    diffHighlight === 'added' ? 'bg-green-600 text-white' : diffHighlight === 'persisted' ? 'bg-gray-500 text-gray-100' : 'bg-primary text-primary-foreground'
+  );
+
+
+  return (
+    <div
+      ref={cardRef}
+      className={cardClasses}
+      style={{
+        left: `${step.x}px`,
+        top: `${step.y}px`,
+        width: `${NODE_BASE_WIDTH}px`,
+        height: `${dynamicHeight}px`,
+        touchAction: diffHighlight ? 'auto' : 'none', 
+        pointerEvents: diffHighlight ? 'none' : 'auto', 
+        zIndex: diffHighlight ? 30 : (isSelected ? 20 : 10),
+      }}
+      onMouseDown={(e) => {
+        if (diffHighlight) return;
+        if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
+        onNodeInteractionStart(step.id, e);
+      }}
+      onTouchStart={(e) => {
+        if (diffHighlight) return;
+        if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
+        onNodeInteractionStart(step.id, e);
+      }}
+      data-node-id={step.id}
+    >
+      <div 
+        className={headerClasses}
+        onDoubleClick={diffHighlight ? undefined : () => onEditStep(step)}
+      >
+        <h3 className="text-sm font-semibold truncate" title={step.title}>{step.title}</h3>
+        
+        {!diffHighlight && ( // Hide dots in diff mode
+          <>
+            <div
+              className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+              data-dot-type="N" title="North Connector (Drag to connect or create new)"
+              onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
+              onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
+            />
+            <div
+              className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+              data-dot-type="E" title="East Connector (Drag to connect or create new)"
+              onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
+              onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
+            />
+            <div
+              className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+              data-dot-type="S" title="South Connector (Drag to connect or create new)"
+              onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
+              onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
+            />
+          </>
+        )}
+      </div>
+      <div 
+        className={cn("flex-grow min-h-0 p-2 text-xs space-y-1", diffHighlight === 'persisted' && 'opacity-80')}
+        style={{ backgroundColor: 'hsl(var(--card))' }}
+      >
+          {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
+          
+          {Array.isArray(step.childrenData) && step.childrenData.length > 0 && (
+            <ul className="space-y-0.5 list-none p-0 m-0" style={{paddingTop: `8px`}}>
+              {step.childrenData.map((childItem, index) => {
+                const childHasOwnCanvasNode = !!(childItem.canvasNodeIdForThisItem && allSteps.some(s => s.id === childItem.canvasNodeIdForThisItem));
+                
+                return (
+                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4">
+                    {!diffHighlight && ( // Hide child dots in diff mode
+                        <button
+                        aria-label={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
+                        title={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
+                        onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
+                        className="group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center active:scale-125 cursor-pointer w-3 h-3 left-[-6px] top-1/2 -translate-y-1/2"
+                        data-child-item-dot-id={childItem.id}
+                        onMouseDown={(e) => e.stopPropagation()} 
+                        onTouchStart={(e) => e.stopPropagation()} 
+                        >
+                            <div className={cn(
+                                "rounded-full transition-all duration-150 ease-in-out h-2 w-2",
+                                childHasOwnCanvasNode ? "bg-green-500" : "bg-muted-foreground",
+                                "group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300"
+                            )}></div>
+                        </button>
+                    )}
+                    <div className="flex items-center flex-grow min-w-0">
+                      <button 
+                        type="button"
+                        className={cn("truncate text-left data-child-item-title-button", !diffHighlight && "hover:underline cursor-pointer")}
+                        onClick={(e) => { 
+                            if (diffHighlight) return;
+                            e.stopPropagation(); 
+                            onChildItemTitleClick(childItem.id, step.id); 
+                        }}
+                        disabled={!!diffHighlight}
+                        title={childItem.title}
+                      >
+                        {childItem.title}
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {(!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0) && (
+            <p className="italic text-muted-foreground text-center py-2 text-[11px]">No details or child items listed.</p>
+          )}
+      </div>
+    </div>
+  );
+});
+RoadmapStepCard.displayName = "RoadmapStepCard";
+
+export default RoadmapStepCard;
+    
