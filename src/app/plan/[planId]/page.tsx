@@ -430,7 +430,7 @@ export default function PlanDetailPage() {
   }, [editableRoadmap]);
 
   const uniqueContributorsCount = useMemo(() => {
-    if (!planData) return 1; 
+    if (!planData) return 1;
     const editorUids = new Set<string>();
     if (planData.ownerId) editorUids.add(planData.ownerId);
     if (augmentedPlanVersions && augmentedPlanVersions.length > 0) {
@@ -1288,7 +1288,7 @@ export default function PlanDetailPage() {
                         </div>
                     )}
                     <DialogFooter>
-                        {/* Removed redundant Close button */}
+                       {/* Close button was here, removed as per user request */}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -1386,10 +1386,7 @@ export default function PlanDetailPage() {
                   disabled={!canEditPlan || diffTarget}
                 />
               </div>
-              <div className="border rounded-md p-2 text-sm text-muted-foreground">
-                <Eye className="inline-block h-3 w-3 mr-1 align-text-bottom" />
-                <span>X: {editingTarget.data.x}, Y: {editingTarget.data.y}</span>
-              </div>
+              {/* Removed coordinate display */}
             </div>
           )}
           {editingTarget?.type === 'childItem' && (
@@ -1531,4 +1528,3 @@ export default function PlanDetailPage() {
   );
 }
     
-
