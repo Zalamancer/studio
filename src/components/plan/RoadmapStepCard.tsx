@@ -45,8 +45,9 @@ interface RoadmapStepCardProps {
   allSteps: RoadmapStep[];
   onNodeInteractionStart: (nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, isDotDrag?: boolean, dotType?: 'N' | 'E' | 'S') => void;
   isSelected?: boolean;
-  onEditStep: (step: RoadmapStep) => void; // Retained for onDoubleClick and potential future direct edit actions from card itself
+  onEditStep: (step: RoadmapStep) => void;
   onAddGrandchildToChildDataItem: (parentChildItemId: string, parentCanvasNodeIdOfChildItem: string) => void;
+  onChildItemTitleClick: (childItemId: string, parentCanvasNodeId: string) => void; // New prop
   isActuallyDraggingThisNode?: boolean;
 }
 
@@ -57,6 +58,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
   isSelected,
   onEditStep,
   onAddGrandchildToChildDataItem,
+  onChildItemTitleClick, // New prop
   isActuallyDraggingThisNode,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -79,22 +81,19 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         backgroundColor: 'hsl(var(--card))',
       }}
       onMouseDown={(e) => {
-        // Prevent panel opening if interaction starts on a dot
         if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
         onNodeInteractionStart(step.id, e);
       }}
       onTouchStart={(e) => {
-        // Prevent panel opening if interaction starts on a dot
         if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
         onNodeInteractionStart(step.id, e);
       }}
-      // onClick removed from here: panel opening is now handled by handleGlobalPointerUp in parent
       data-node-id={step.id}
     >
       <div 
         className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]" 
         style={{ backgroundColor: 'hsl(var(--primary))' }} 
-        onDoubleClick={() => onEditStep(step)} // Double click on header still opens panel
+        onDoubleClick={() => onEditStep(step)}
       >
         <h3 className="text-sm font-semibold truncate text-primary-foreground" title={step.title}>{step.title}</h3>
         
@@ -120,13 +119,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <div 
         className="flex-grow min-h-0 p-2 text-xs space-y-1" 
         style={{ backgroundColor: 'hsl(var(--card))' }}
-        // onClick removed from here: panel opening is now handled by handleGlobalPointerUp in parent
-        // Allow click propagation for children (like child item text) for their specific interactions
         onClick={(e) => { 
             if (isActuallyDraggingThisNode || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) {
-                 e.stopPropagation(); // Prevent click on parent if dragging or clicking green dot
+                 e.stopPropagation(); 
             }
-            // No onEditStep(step) here anymore for the content area itself
         }}
       >
           {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
@@ -137,23 +133,20 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                 const childHasOwnCanvasNode = !!(childItem.canvasNodeIdForThisItem && allSteps.some(s => s.id === childItem.canvasNodeIdForThisItem));
                 
                 return (
-                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-3">
+                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4"> {/* Changed to pl-4 */}
                     <button
-                      aria-label={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
-                      title={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
+                      aria-label={`Create new step from: Sub-step "${childItem.title}"`}
+                      title={`Create new step from: Sub-step "${childItem.title}"`}
                       onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
-                      className={cn(
-                        "absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center active:scale-125 cursor-pointer",
-                        "w-3 h-3 left-[-6px] top-1/2 -translate-y-1/2" // Adjusted from data-child-item-dot-id
-                      )}
-                      data-child-item-dot-id={childItem.id} // Keep data attribute for targeting
+                      className="group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center active:scale-125 cursor-pointer w-3 h-3 left-[-6px] top-1/2 -translate-y-1/2" // Adjusted left to -6px
+                      data-child-item-dot-id={childItem.id}
                       onMouseDown={(e) => e.stopPropagation()} 
                       onTouchStart={(e) => e.stopPropagation()} 
                     >
                         <div className={cn(
                             "rounded-full transition-all duration-150 ease-in-out h-2 w-2",
                             childHasOwnCanvasNode ? "bg-green-500" : "bg-muted-foreground",
-                            "group-hover/childitemli:bg-green-500 group-hover/childitemli:scale-150 group-hover/childitemli:ring-2 group-hover/childitemli:ring-green-300"
+                            "group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300"
                         )}></div>
                     </button>
                     <div className="flex items-center flex-grow min-w-0">
@@ -161,12 +154,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                         className="truncate cursor-pointer hover:underline"
                         onClick={(e) => { 
                             e.stopPropagation(); 
-                            if (childItem.canvasNodeIdForThisItem) {
-                                const childCanvasNode = allSteps.find(s => s.id === childItem.canvasNodeIdForThisItem);
-                                if (childCanvasNode) onEditStep(childCanvasNode); 
-                                // else onEditStep(step); // Removed: clicking text of child shouldn't open parent
-                            }
-                            // else onEditStep(step); // Removed: clicking text of child shouldn't open parent
+                            onChildItemTitleClick(childItem.id, step.id); // Call new prop
                         }}
                         title={childItem.title}
                       >
