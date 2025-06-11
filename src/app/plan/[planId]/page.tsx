@@ -50,14 +50,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose, DialogTrigger } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'; // DialogClose removed
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { format } from 'date-fns';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
 import { fetchUserProfileBasic } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { Card, CardHeader, CardTitle as CardPrimitiveTitle, CardDescription as CardPrimitiveDescription, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardContent } from '@/components/ui/card'; // CardPrimitiveTitle, CardPrimitiveDescription removed as they are not direct exports
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
@@ -76,22 +76,18 @@ const ARROWHEAD_WIDTH_FACTOR = 0.7;
 const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
 const CLICK_TIME_THRESHOLD_MS = 300;
 
-// CalculateNodeHeight no longer considers direct description display on card.
-// It's mainly for childrenData list now or a minimal content area.
 function calculateNodeHeight(step: RoadmapStep, allSteps: RoadmapStep[]): number {
   let height = NODE_HEADER_HEIGHT;
   let contentAreaHeight = 0;
 
   let childrenDataListHeight = 0;
   if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
-    childrenDataListHeight += 8; // Padding top for list
+    childrenDataListHeight += 8; 
     childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
-    childrenDataListHeight += 8; // Padding bottom for list
+    childrenDataListHeight += 8; 
   }
 
   contentAreaHeight = childrenDataListHeight;
-  // Ensure there's some minimum content area even if no children,
-  // for visual balance and if description were to be re-added later to card.
   if (contentAreaHeight === 0) {
       contentAreaHeight = 20;
   }
@@ -197,7 +193,6 @@ const RoadmapStepCardComponent = React.memo<RoadmapStepCardComponentProps>(({
         className={cn("flex-grow min-h-0 p-2 text-xs space-y-1", diffHighlight === 'persisted' && 'opacity-80')}
         style={{ backgroundColor: 'hsl(var(--card))' }}
       >
-        {/* Description removed from here */}
         {Array.isArray(step.childrenData) && step.childrenData.length > 0 && (
           <ul className="space-y-0.5 list-none p-0 m-0" style={{paddingTop: `8px`}}>
             {step.childrenData.map((childItem, index) => {
@@ -249,6 +244,7 @@ const RoadmapStepCardComponent = React.memo<RoadmapStepCardComponentProps>(({
   );
 });
 RoadmapStepCardComponent.displayName = "RoadmapStepCardComponent";
+
 
 function sanitizeRoadmapStep(step: Partial<RoadmapStep>, defaultParentId?: string): RoadmapStep {
   const sanitizedChildrenData = (Array.isArray(step.childrenData) ? step.childrenData : []).map(ci => ({
@@ -315,7 +311,7 @@ const EditChildItemDialog: React.FC<EditChildItemDialogProps> = ({ isOpen, onOpe
             <Textarea id="child-item-description-dialog" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Details about this item..." rows={3} disabled={isSubmitting} />
           </div>
           <DialogFooter>
-            <DialogClose asChild><Button type="button" variant="outline" disabled={isSubmitting}>Cancel</Button></DialogClose>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button> {/* Changed DialogClose to Button */}
             <Button type="submit" disabled={isSubmitting || !title.trim()}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Item
@@ -383,6 +379,7 @@ export default function PlanDetailPage() {
   const [removedNodeTitles, setRemovedNodeTitles] = useState<string[]>([]);
   const [diffDetailsVersionId, setDiffDetailsVersionId] = useState<string | null>(null);
   const [isPlanInfoDialogOpen, setIsPlanInfoDialogOpen] = useState(false);
+  const [originalEditingChildItemData, setOriginalEditingChildItemData] = useState<ChildDataItem | null>(null);
 
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
@@ -562,11 +559,11 @@ export default function PlanDetailPage() {
       toast({ variant: "destructive", title: "Error", description: "Child item not found."});
       return;
     }
-    // Always set editingTarget to childItem to allow editing its details in the panel
     setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
+    // setOriginalEditingChildItemData(childItem); // This will be handled by Sheet's onOpenChange
     setIsStepDetailSheetOpen(true);
     setIsEditingChildItemTitle(false); setIsEditingChildItemDescription(false);
-  }, [editableRoadmap, toast, diffTarget]);
+  }, [editableRoadmap, toast, diffTarget, setEditingTarget, setIsStepDetailSheetOpen]);
 
   const handleNodeDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
     if (!canEditPlan || diffTarget) return;
@@ -575,9 +572,10 @@ export default function PlanDetailPage() {
         ? { ...s, ...updatedStep, childrenData: updatedStep.childrenData || (s.childrenData || []) }
         : s
     ));
-    toast({ title: "Node Updated", description: `"${updatedStep.title}" details changed. Remember to save.`});
+    // Toast is removed here, will be handled on panel close if changes were made
+    // toast({ title: "Node Updated", description: `"${updatedStep.title}" details changed. Remember to save.`});
     setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);
-  }, [canEditPlan, toast, diffTarget]);
+  }, [canEditPlan, diffTarget]);
 
   const handleChildItemDetailUpdateInPanel = useCallback((updatedChildItem: ChildDataItem, parentNodeId: string) => {
     if (!canEditPlan || diffTarget) return;
@@ -590,9 +588,10 @@ export default function PlanDetailPage() {
       }
       return parentNode;
     }));
-    toast({ title: "Item Updated", description: `"${updatedChildItem.title}" details changed. Remember to save.`});
+    // Toast is removed here, will be handled on panel close
+    // toast({ title: "Item Updated", description: `"${updatedChildItem.title}" details changed. Remember to save.`});
     setIsEditingChildItemTitle(false); setIsEditingChildItemDescription(false);
-  }, [canEditPlan, toast, diffTarget]);
+  }, [canEditPlan, diffTarget]);
 
   const handleInitiateAddNode = useCallback((sourceNodeId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
     if (!canEditPlan || diffTarget) return;
@@ -812,16 +811,24 @@ export default function PlanDetailPage() {
 
   const handleEditChildItemText = useCallback((childItem: ChildDataItem, parentNodeIdOfChildItem: string) => {
     if(!canEditPlan || diffTarget) return;
+    const parentNode = editableRoadmap.find(n => n.id === parentNodeIdOfChildItem);
+    if (!parentNode) {
+      toast({variant: "destructive", title: "Error", description: "Parent node not found for this item."});
+      return;
+    }
     childItemManagementContextRef.current = {
       operation: 'edit',
       itemToEditId: childItem.id,
       parentNodeId: parentNodeIdOfChildItem
     };
+    setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
+    // setOriginalEditingChildItemData(childItem); // This will be handled by Sheet's onOpenChange
+    setIsStepDetailSheetOpen(true);
     setDynamicChildDialogTitle(`Edit Item: "${childItem.title}"`);
     setDefaultChildDialogTitle(childItem.title);
     setDefaultChildDialogDescription(childItem.description || "");
-    setIsEditChildItemDialogOpen(true);
-  }, [canEditPlan, diffTarget]);
+    // setIsEditChildItemDialogOpen(true); // No, the panel is now used
+  }, [canEditPlan, diffTarget, editableRoadmap, toast, setEditingTarget, setIsStepDetailSheetOpen]);
 
   const handleUnspawnNodeIfChildless = useCallback((nodeIdToCheck: string) => {
     setEditableRoadmap(prev => {
@@ -1123,85 +1130,6 @@ export default function PlanDetailPage() {
     };
   }, [isPointerDown, handleGlobalMove, handleGlobalPointerUp]);
 
-  useEffect(() => {
-    if (!isStepDetailSheetOpen) {
-      setEditingTarget(null);
-      setIsEditingNodeTitle(false);
-      setIsEditingNodeDescription(false);
-      setIsEditingChildItemTitle(false);
-      setIsEditingChildItemDescription(false);
-    }
-  }, [isStepDetailSheetOpen]);
-
-  const drawConnectionLines = useCallback(() => {
-    if (!canvasRef.current || !editableRoadmap || editableRoadmap.length === 0) return [];
-    const lines: JSX.Element[] = [];
-    const canvasRectBase = canvasRef.current.getBoundingClientRect();
-    editableRoadmap.forEach(parentStep => {
-      if (!parentStep || !parentStep.id) return;
-      if (Array.isArray(parentStep.childrenData)) {
-        parentStep.childrenData.forEach((childItem) => {
-          if (!childItem || !childItem.id) return;
-          if (childItem.canvasNodeIdForThisItem) {
-            const childCanvasNode = editableRoadmap.find(n => n && n.id === childItem.canvasNodeIdForThisItem);
-            if (!childCanvasNode) return;
-            const greenDotElement = canvasRef.current?.querySelector(`[data-node-id="${parentStep.id}"] [data-child-item-dot-id="${childItem.id}"]`);
-            if (greenDotElement && canvasRef.current) {
-              const dotRect = greenDotElement.getBoundingClientRect();
-              const startX = dotRect.left - canvasRectBase.left + canvasRef.current.scrollLeft + (dotRect.width / 2);
-              const startY = dotRect.top - canvasRectBase.top + canvasRef.current.scrollTop + (dotRect.height / 2);
-              const endX = childCanvasNode.x + NODE_BASE_WIDTH;
-              const endY = childCanvasNode.y + calculateNodeHeight(childCanvasNode, editableRoadmap) / 2;
-              const pathData = `M ${startX} ${startY} L ${endX} ${endY}`;
-              const pathKey_hier = `conn-dot-${childItem.id}-to-node-${childCanvasNode.id}-${startX}-${startY}-${endX}-${endY}`;
-              lines.push(
-                <path key={pathKey_hier} d={pathData} stroke={'hsl(var(--primary))'} strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" markerEnd={'url(#arrowhead-main)'} style={{ pointerEvents: "none" }} />
-              );
-            }
-          }
-        });
-      }
-      if (Array.isArray(parentStep.peerConnections)) {
-        parentStep.peerConnections.forEach((peerConn, index) => {
-          if (!peerConn || !peerConn.targetNodeId) return;
-          const targetStep = editableRoadmap.find(s => s && s.id === peerConn.targetNodeId);
-          if (!targetStep) return;
-          const sourceNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
-          const targetNodeHeight = calculateNodeHeight(targetStep, editableRoadmap);
-          let startX_peer: number, startY_peer: number;
-          switch(peerConn.sourceDot) {
-            case 'N': startX_peer = parentStep.x + NODE_BASE_WIDTH / 2; startY_peer = parentStep.y; break;
-            case 'E': startX_peer = parentStep.x + NODE_BASE_WIDTH; startY_peer = parentStep.y + sourceNodeHeight / 2; break;
-            case 'S': startX_peer = parentStep.x + NODE_BASE_WIDTH / 2; startY_peer = parentStep.y + sourceNodeHeight; break;
-            default: console.warn(`Invalid sourceDot: ${peerConn.sourceDot}`); return;
-          }
-          let endX_peer: number, endY_peer: number;
-          switch(peerConn.targetDot) {
-            case 'N': endX_peer = targetStep.x + NODE_BASE_WIDTH / 2; endY_peer = targetStep.y; break;
-            case 'E': endX_peer = targetStep.x + NODE_BASE_WIDTH; endY_peer = targetStep.y + targetNodeHeight / 2; break;
-            case 'S': endX_peer = targetStep.x + NODE_BASE_WIDTH / 2; endY_peer = targetStep.y + targetNodeHeight; break;
-            case 'W': endX_peer = targetStep.x; endY_peer = targetStep.y + targetNodeHeight / 2; break;
-            default: console.warn(`Invalid targetDot: ${peerConn.targetDot}`); return;
-          }
-          let c1x = startX_peer, c1y = startY_peer, c2x = endX_peer, c2y = endY_peer;
-          const curveFactor = 0.4 * Math.sqrt(Math.pow(endX_peer - startX_peer, 2) + Math.pow(endY_peer - startY_peer, 2));
-          if (peerConn.sourceDot === 'E' && peerConn.targetDot === 'W') { c1x = startX_peer + curveFactor; c2x = endX_peer - curveFactor; }
-          else if (peerConn.sourceDot === 'W' && peerConn.targetDot === 'E') { c1x = startX_peer - curveFactor; c2x = endX_peer + curveFactor; }
-          else if (peerConn.sourceDot === 'S' && peerConn.targetDot === 'N') { c1y = startY_peer + curveFactor; c2y = endY_peer - curveFactor; }
-          else if (peerConn.sourceDot === 'N' && peerConn.targetDot === 'S') { c1y = startY_peer - curveFactor; c2y = endY_peer + curveFactor; }
-          else if (Math.abs(startX_peer - endX_peer) > Math.abs(startY_peer - endY_peer)) { c1x = startX_peer + (endX_peer - startX_peer) * 0.3; c1y = startY_peer; c2x = startX_peer + (endX_peer - startX_peer) * 0.7; c2y = endY_peer; }
-          else { c1x = startX_peer; c1y = startY_peer + (endY_peer - startY_peer) * 0.3; c2x = endX_peer; c2y = startY_peer + (endY_peer - startY_peer) * 0.7; }
-          const pathData_peer = `M ${startX_peer} ${startY_peer} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX_peer} ${endY_peer}`;
-          const pathKey_peer = `peerconn-${parentStep.id}-${peerConn.sourceDot}-to-${targetStep.id}-${peerConn.targetDot}-${index}`;
-          lines.push(
-            <path key={pathKey_peer} d={pathData_peer} stroke={'hsl(var(--accent))'} strokeWidth={CONNECTION_LINE_THICKNESS_PEER} fill="none" markerEnd={'url(#arrowhead-accent)'} style={{ pointerEvents: "none" }} />
-          );
-        });
-      }
-    });
-    return lines;
-  }, [editableRoadmap]);
-
   if (authLoading || (isLoadingPlan && isValidPlanId)) { return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>; }
   if (!planId || !isValidPlanId) { return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Invalid Plan ID</h1><p className="text-muted-foreground">The plan identifier in the URL is not valid.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>); }
 
@@ -1216,6 +1144,11 @@ export default function PlanDetailPage() {
             <h1 className="text-lg sm:text-xl font-semibold truncate" title={planData?.name || "Loading Plan..."}>
               {planData?.name || "Loading Plan..."}
             </h1>
+            {ownerProfile && (
+              <span className="text-xs text-muted-foreground hidden sm:inline">
+                by <Link href={`/profile/${ownerProfile.userId}`} className="hover:underline">{ownerProfile.displayName || generateAnonymousName(ownerProfile.userId)}</Link>
+              </span>
+            )}
           </div>
           <div className="flex flex-1 items-center justify-end space-x-1 sm:space-x-2">
             {canEditPlan && (
@@ -1226,7 +1159,7 @@ export default function PlanDetailPage() {
                 </Button>
                 <Button size="sm" onClick={saveRoadmapChanges} disabled={saveRoadmapMutation.isPending || !!diffTarget} className="text-xs sm:text-sm h-8 sm:h-9">
                   {saveRoadmapMutation.isPending && <Loader2 className="mr-1 sm:mr-2 h-3.5 sm:h-4 w-3.5 sm:w-4 animate-spin" />}
-                  Save
+                  Save Plan
                 </Button>
               </>
             )}
@@ -1274,7 +1207,7 @@ export default function PlanDetailPage() {
                         </div>
                     )}
                     <DialogFooter>
-                       {/* Close button removed as per user request */}
+                       {/* Removed Close Button as per previous request */}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -1294,6 +1227,7 @@ export default function PlanDetailPage() {
                 className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
                 onClick={handleExitDiffView}
                 aria-hidden="true"
+                style={{ width: '100%', height: '100%' }}
               />
             )}
             <svg
@@ -1332,7 +1266,38 @@ export default function PlanDetailPage() {
         </ScrollArea>
       </div>
 
-      <Sheet open={isStepDetailSheetOpen} onOpenChange={setIsStepDetailSheetOpen}>
+      <Sheet open={isStepDetailSheetOpen} onOpenChange={(newOpenState) => {
+          if (newOpenState) { // Sheet is opening
+            if (editingTarget?.type === 'childItem') {
+              const parentNode = editableRoadmap.find(n => n.id === editingTarget.parentNode.id);
+              const currentItemData = parentNode?.childrenData.find(ci => ci.id === editingTarget.data.id);
+              setOriginalEditingChildItemData(currentItemData || editingTarget.data);
+            }
+          } else { // Sheet is closing
+            if (editingTarget?.type === 'childItem' && originalEditingChildItemData) {
+              const parentNode = editableRoadmap.find(n => n.id === editingTarget.parentNode.id);
+              const latestItemData = parentNode?.childrenData.find(ci => ci.id === originalEditingChildItemData.id);
+
+              if (latestItemData) {
+                const originalTitle = originalEditingChildItemData.title || "";
+                const latestTitle = latestItemData.title || "";
+                const originalDescription = originalEditingChildItemData.description || "";
+                const latestDescription = latestItemData.description || "";
+
+                if (originalTitle !== latestTitle || originalDescription !== latestDescription) {
+                  toast({ title: "Item Updated", description: "Changes saved in draft. Click 'Save Plan' to persist."});
+                }
+              }
+            }
+            setEditingTarget(null);
+            setOriginalEditingChildItemData(null);
+            setIsEditingNodeTitle(false);
+            setIsEditingNodeDescription(false);
+            setIsEditingChildItemTitle(false);
+            setIsEditingChildItemDescription(false);
+          }
+          setIsStepDetailSheetOpen(newOpenState);
+        }}>
         <SheetContent className="sm:max-w-[486px]" side="right">
           <SheetHeader>
              <SheetTitle>
@@ -1371,6 +1336,7 @@ export default function PlanDetailPage() {
                   onFocus={() => setIsEditingNodeDescription(true)}
                   onBlur={() => setIsEditingNodeDescription(false)}
                   disabled={!canEditPlan || diffTarget}
+                  placeholder="Add a description for this step..."
                 />
               </div>
             </div>
@@ -1544,5 +1510,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
     
