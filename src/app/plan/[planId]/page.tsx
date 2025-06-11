@@ -76,26 +76,23 @@ const ARROWHEAD_WIDTH_FACTOR = 0.7;
 const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
 const CLICK_TIME_THRESHOLD_MS = 300;
 
+// CalculateNodeHeight no longer considers direct description display on card.
+// It's mainly for childrenData list now or a minimal content area.
 function calculateNodeHeight(step: RoadmapStep, allSteps: RoadmapStep[]): number {
   let height = NODE_HEADER_HEIGHT;
   let contentAreaHeight = 0;
 
-  let descriptionLineCount = 0;
-  if (step.description && step.description.trim().length > 0) {
-    const lines = Math.ceil(step.description.length / 35) + (step.description.split(/\r\n|\r|\n/).length - 1);
-    descriptionLineCount = Math.max(1, lines);
-  }
-  const descriptionHeight = descriptionLineCount * 15 + (descriptionLineCount > 0 ? 8 : 0);
-
   let childrenDataListHeight = 0;
   if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
-    childrenDataListHeight += 8;
+    childrenDataListHeight += 8; // Padding top for list
     childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
-    childrenDataListHeight += 8;
+    childrenDataListHeight += 8; // Padding bottom for list
   }
 
-  contentAreaHeight = Math.max(descriptionHeight, childrenDataListHeight);
-  if (contentAreaHeight === 0 && (!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0)) {
+  contentAreaHeight = childrenDataListHeight;
+  // Ensure there's some minimum content area even if no children,
+  // for visual balance and if description were to be re-added later to card.
+  if (contentAreaHeight === 0) {
       contentAreaHeight = 20;
   }
 
@@ -116,7 +113,7 @@ interface RoadmapStepCardComponentProps {
   diffHighlight?: 'added' | 'persisted';
 }
 
-const RoadmapStepCardComponent: React.FC<RoadmapStepCardComponentProps> = React.memo(({
+const RoadmapStepCardComponent = React.memo<RoadmapStepCardComponentProps>(({
   step,
   allSteps,
   onNodeInteractionStart,
@@ -134,8 +131,8 @@ const RoadmapStepCardComponent: React.FC<RoadmapStepCardComponentProps> = React.
     "group/cardnode absolute select-none shadow-lg border rounded-lg flex flex-col",
     isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
     isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab',
-    diffHighlight === 'added' && 'border-green-500 ring-2 ring-green-300 shadow-green-500/30',
-    diffHighlight === 'persisted' && 'border-gray-400 opacity-70'
+    diffHighlight === 'added' && 'border-green-500 ring-2 ring-green-300 shadow-green-500/30 z-30',
+    diffHighlight === 'persisted' && 'border-gray-400 opacity-70 z-30'
   );
 
   const headerClasses = cn(
@@ -200,7 +197,7 @@ const RoadmapStepCardComponent: React.FC<RoadmapStepCardComponentProps> = React.
         className={cn("flex-grow min-h-0 p-2 text-xs space-y-1", diffHighlight === 'persisted' && 'opacity-80')}
         style={{ backgroundColor: 'hsl(var(--card))' }}
       >
-        {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
+        {/* Description removed from here */}
         {Array.isArray(step.childrenData) && step.childrenData.length > 0 && (
           <ul className="space-y-0.5 list-none p-0 m-0" style={{paddingTop: `8px`}}>
             {step.childrenData.map((childItem, index) => {
@@ -244,8 +241,8 @@ const RoadmapStepCardComponent: React.FC<RoadmapStepCardComponentProps> = React.
             })}
           </ul>
         )}
-        {(!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0) && (
-          <p className="italic text-muted-foreground text-center py-2 text-[11px]">No details or child items listed.</p>
+        {(!Array.isArray(step.childrenData) || step.childrenData.length === 0) && (
+          <p className="italic text-muted-foreground text-center py-2 text-[11px]">No child items listed.</p>
         )}
       </div>
     </div>
@@ -361,6 +358,8 @@ export default function PlanDetailPage() {
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
   const [isEditingNodeTitle, setIsEditingNodeTitle] = useState(false);
   const [isEditingNodeDescription, setIsEditingNodeDescription] = useState(false);
+  const [isEditingChildItemTitle, setIsEditingChildItemTitle] = useState(false);
+  const [isEditingChildItemDescription, setIsEditingChildItemDescription] = useState(false);
   const [nodeToDelete, setNodeToDelete] = useState<RoadmapStep | null>(null);
   const [isPointerDown, setIsPointerDown] = useState(false);
   const nodeDragInfoRef = useRef<{ nodeId: string; offsetX: number; offsetY: number; isDotDrag: boolean; dotType?: 'N' | 'E' | 'S' } | null>(null);
@@ -563,20 +562,10 @@ export default function PlanDetailPage() {
       toast({ variant: "destructive", title: "Error", description: "Child item not found."});
       return;
     }
-
-    if (childItem.canvasNodeIdForThisItem) {
-      const existingCanvasNode = editableRoadmap.find(n => n.id === childItem.canvasNodeIdForThisItem);
-      if (existingCanvasNode) {
-        setEditingTarget({ type: 'node', data: existingCanvasNode });
-      } else {
-        console.warn("Child item has canvasNodeIdForThisItem, but node not found in roadmap. Treating as non-spawned.");
-        setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
-      }
-    } else {
-      setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
-    }
+    // Always set editingTarget to childItem to allow editing its details in the panel
+    setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
     setIsStepDetailSheetOpen(true);
-    setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);
+    setIsEditingChildItemTitle(false); setIsEditingChildItemDescription(false);
   }, [editableRoadmap, toast, diffTarget]);
 
   const handleNodeDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
@@ -602,6 +591,7 @@ export default function PlanDetailPage() {
       return parentNode;
     }));
     toast({ title: "Item Updated", description: `"${updatedChildItem.title}" details changed. Remember to save.`});
+    setIsEditingChildItemTitle(false); setIsEditingChildItemDescription(false);
   }, [canEditPlan, toast, diffTarget]);
 
   const handleInitiateAddNode = useCallback((sourceNodeId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
@@ -1138,6 +1128,8 @@ export default function PlanDetailPage() {
       setEditingTarget(null);
       setIsEditingNodeTitle(false);
       setIsEditingNodeDescription(false);
+      setIsEditingChildItemTitle(false);
+      setIsEditingChildItemDescription(false);
     }
   }, [isStepDetailSheetOpen]);
 
@@ -1224,12 +1216,6 @@ export default function PlanDetailPage() {
             <h1 className="text-lg sm:text-xl font-semibold truncate" title={planData?.name || "Loading Plan..."}>
               {planData?.name || "Loading Plan..."}
             </h1>
-            {planData?.ownerId && (
-              <div className="hidden sm:flex items-center space-x-1 text-xs text-muted-foreground ml-2">
-                <User className="h-3.5 w-3.5" />
-                <span>{isLoadingOwnerProfile ? 'Owner...' : ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}</span>
-              </div>
-            )}
           </div>
           <div className="flex flex-1 items-center justify-end space-x-1 sm:space-x-2">
             {canEditPlan && (
@@ -1288,7 +1274,7 @@ export default function PlanDetailPage() {
                         </div>
                     )}
                     <DialogFooter>
-                       {/* Close button was here, removed as per user request */}
+                       {/* Close button removed as per user request */}
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
@@ -1297,13 +1283,6 @@ export default function PlanDetailPage() {
       </div>
 
       <div className="flex flex-1 items-center justify-center overflow-auto relative">
-        {diffTarget && (
-          <div
-            className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
-            onClick={handleExitDiffView}
-            aria-hidden="true"
-          />
-        )}
         <ScrollArea className="flex flex-1 w-full h-full">
           <div
             ref={canvasRef}
@@ -1356,16 +1335,24 @@ export default function PlanDetailPage() {
       <Sheet open={isStepDetailSheetOpen} onOpenChange={setIsStepDetailSheetOpen}>
         <SheetContent className="sm:max-w-[486px]" side="right">
           <SheetHeader>
-            <SheetTitle>{editingTarget?.type === 'node' ? `Step Details: "${editingTarget.data.title}"` : editingTarget?.type === 'childItem' ? `Item Details: "${editingTarget.data.title}"` : "Step Details"}</SheetTitle>
-            <SheetDescription>Make changes to your plan here. Click outside to save.</SheetDescription>
+             <SheetTitle>
+                {editingTarget?.type === 'node' ? `Edit Step: "${editingTarget.data.title}"` : 
+                 editingTarget?.type === 'childItem' ? `Edit Item: "${editingTarget.data.title}"` 
+                 : "Details"}
+             </SheetTitle>
+            <SheetDescription>
+                {editingTarget?.type === 'node' ? "Modify the title and description for this roadmap step." :
+                 editingTarget?.type === 'childItem' ? `Modify the details for this item within "${editingTarget.parentNode.title}".`
+                 : "View and edit details."}
+            </SheetDescription>
           </SheetHeader>
           {editingTarget?.type === 'node' && (
             <div className="grid gap-4 py-4">
               <div>
-                <Label htmlFor="title">Title</Label>
+                <Label htmlFor="node-title">Title</Label>
                 <Input
                   type="text"
-                  id="title"
+                  id="node-title"
                   value={editingTarget.data.title}
                   onChange={(e) => handleNodeDetailUpdate({ ...editingTarget.data, title: e.target.value })}
                   className={cn(isEditingNodeTitle ? "ring-2 ring-primary" : "cursor-pointer hover:ring-1 hover:ring-border")}
@@ -1375,9 +1362,9 @@ export default function PlanDetailPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="description">Description</Label>
+                <Label htmlFor="node-description">Description</Label>
                 <Textarea
-                  id="description"
+                  id="node-description"
                   value={editingTarget.data.description || ""}
                   onChange={(e) => handleNodeDetailUpdate({ ...editingTarget.data, description: e.target.value })}
                   className={cn(isEditingNodeDescription ? "ring-2 ring-primary" : "cursor-pointer hover:ring-1 hover:ring-border")}
@@ -1386,34 +1373,64 @@ export default function PlanDetailPage() {
                   disabled={!canEditPlan || diffTarget}
                 />
               </div>
-              {/* Removed coordinate display */}
             </div>
           )}
           {editingTarget?.type === 'childItem' && (
               <div className="grid gap-4 py-4">
                 <div>
-                  <Label htmlFor="child-item-title-display">Title</Label>
-                  <Input type="text" id="child-item-title-display" value={editingTarget.data.title} readOnly disabled />
+                  <Label htmlFor="child-item-title">Item Title</Label>
+                  <Input
+                    type="text"
+                    id="child-item-title"
+                    value={editingTarget.data.title}
+                    onChange={(e) => handleChildItemDetailUpdateInPanel({ ...editingTarget.data, title: e.target.value }, editingTarget.parentNode.id)}
+                    className={cn(isEditingChildItemTitle ? "ring-2 ring-primary" : "cursor-pointer hover:ring-1 hover:ring-border")}
+                    onFocus={() => setIsEditingChildItemTitle(true)}
+                    onBlur={() => setIsEditingChildItemTitle(false)}
+                    disabled={!canEditPlan || diffTarget}
+                  />
                 </div>
                 <div>
-                  <Label htmlFor="child-item-description-display">Description</Label>
-                  <Textarea id="child-item-description-display" value={editingTarget.data.description || ""} readOnly disabled />
+                  <Label htmlFor="child-item-description">Item Description</Label>
+                  <Textarea
+                    id="child-item-description"
+                    value={editingTarget.data.description || ""}
+                    onChange={(e) => handleChildItemDetailUpdateInPanel({ ...editingTarget.data, description: e.target.value }, editingTarget.parentNode.id)}
+                    className={cn(isEditingChildItemDescription ? "ring-2 ring-primary" : "cursor-pointer hover:ring-1 hover:ring-border")}
+                    onFocus={() => setIsEditingChildItemDescription(true)}
+                    onBlur={() => setIsEditingChildItemDescription(false)}
+                    disabled={!canEditPlan || diffTarget}
+                    placeholder="Details about this item..."
+                  />
                 </div>
-                <div className="flex space-x-2">
-                    <Button variant="secondary" size="sm" onClick={() => handleEditChildItemText(editingTarget.data, editingTarget.parentNode.id)}>
-                        <Edit2 className="h-4 w-4 mr-2" /> Edit
-                    </Button>
-                    <Button variant="destructive" size="sm" onClick={() => handleDeleteChildItem(editingTarget.data.id, editingTarget.parentNode.id)}>
-                        <Trash2 className="h-4 w-4 mr-2" /> Delete Item
-                    </Button>
-                </div>
+                {canEditPlan && !diffTarget && (
+                    <div className="flex space-x-2 pt-2">
+                        <Button variant="destructive" size="sm" onClick={() => handleDeleteChildItem(editingTarget.data.id, editingTarget.parentNode.id)}>
+                            <Trash2 className="h-4 w-4 mr-2" /> Delete Item
+                        </Button>
+                    </div>
+                )}
               </div>
           )}
           {editingTarget?.type === 'node' && canEditPlan && !diffTarget && (
             <SheetFooter>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                    childItemManagementContextRef.current = { operation: 'createChild', targetParentNodeId: editingTarget.data.id };
+                    setDynamicChildDialogTitle(`Add Item to Step: "${editingTarget.data.title}"`);
+                    setDefaultChildDialogTitle("");
+                    setDefaultChildDialogDescription("");
+                    setIsEditChildItemDialogOpen(true);
+                }}
+                disabled={diffTarget}
+                >
+                <Plus className="mr-2 h-4 w-4" /> Add Child Item
+              </Button>
               <AlertDialog>
                 <AlertDialogTrigger asChild>
-                  <Button variant="destructive">
+                  <Button variant="destructive" size="sm">
                     <Trash2 className="mr-2 h-4 w-4" /> Delete Step
                   </Button>
                 </AlertDialogTrigger>
@@ -1527,4 +1544,5 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
     
