@@ -47,7 +47,7 @@ interface RoadmapStepCardProps {
   isSelected?: boolean;
   onEditStep: (step: RoadmapStep) => void;
   onAddGrandchildToChildDataItem: (parentChildItemId: string, parentCanvasNodeIdOfChildItem: string) => void;
-  onChildItemTitleClick: (childItemId: string, parentCanvasNodeId: string) => void; // New prop
+  onChildItemTitleClick: (childItemId: string, parentCanvasNodeId: string) => void;
   isActuallyDraggingThisNode?: boolean;
 }
 
@@ -58,7 +58,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
   isSelected,
   onEditStep,
   onAddGrandchildToChildDataItem,
-  onChildItemTitleClick, // New prop
+  onChildItemTitleClick,
   isActuallyDraggingThisNode,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
@@ -119,11 +119,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <div 
         className="flex-grow min-h-0 p-2 text-xs space-y-1" 
         style={{ backgroundColor: 'hsl(var(--card))' }}
-        onClick={(e) => { 
-            if (isActuallyDraggingThisNode || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) {
-                 e.stopPropagation(); 
-            }
-        }}
+        // Removed onClick from here to centralize panel opening logic
       >
           {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
           
@@ -133,12 +129,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                 const childHasOwnCanvasNode = !!(childItem.canvasNodeIdForThisItem && allSteps.some(s => s.id === childItem.canvasNodeIdForThisItem));
                 
                 return (
-                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4"> {/* Changed to pl-4 */}
+                  <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4">
                     <button
-                      aria-label={`Create new step from: Sub-step "${childItem.title}"`}
-                      title={`Create new step from: Sub-step "${childItem.title}"`}
+                      aria-label={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
+                      title={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
                       onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
-                      className="group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center active:scale-125 cursor-pointer w-3 h-3 left-[-6px] top-1/2 -translate-y-1/2" // Adjusted left to -6px
+                      className="group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center active:scale-125 cursor-pointer w-3 h-3 left-[-6px] top-1/2 -translate-y-1/2"
                       data-child-item-dot-id={childItem.id}
                       onMouseDown={(e) => e.stopPropagation()} 
                       onTouchStart={(e) => e.stopPropagation()} 
@@ -150,8 +146,9 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                         )}></div>
                     </button>
                     <div className="flex items-center flex-grow min-w-0">
-                      <span
-                        className="truncate cursor-pointer hover:underline"
+                      <button // Changed span to button for better accessibility and clearer click target
+                        type="button"
+                        className="truncate text-left hover:underline cursor-pointer data-child-item-title-button" // Added data attribute
                         onClick={(e) => { 
                             e.stopPropagation(); 
                             onChildItemTitleClick(childItem.id, step.id); // Call new prop
@@ -159,7 +156,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                         title={childItem.title}
                       >
                         {childItem.title}
-                      </span>
+                      </button>
                     </div>
                   </li>
                 );
