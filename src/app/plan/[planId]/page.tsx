@@ -1,3 +1,4 @@
+
 // src/app/plan/[planId]/page.tsx
 "use client";
 
@@ -20,11 +21,11 @@ import {
   Edit2,
   Trash2,
   History,
-  Eye,
+  Eye, // Added Eye icon
   ListTree,
 } from 'lucide-react';
 import {
-  AlertDialog,
+  AlertDialog, // Keep AlertDialog for node deletion confirmation
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
@@ -51,13 +52,15 @@ import { getInitials } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
 import RoadmapStepCardComponent from '@/components/plan/RoadmapStepCard';
 
-
+// Constants for node rendering and layout
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
 const NODE_BASE_MIN_HEIGHT = 80;
 const NODE_HEADER_HEIGHT = 40;
 const CHILD_ITEM_HEIGHT = 28;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
+const DEFAULT_SPACING_X = 80;
+const DEFAULT_SPACING_Y = 40;
 
 const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
 const CONNECTION_LINE_THICKNESS_PEER = 1.5;
@@ -65,14 +68,6 @@ const ARROWHEAD_LENGTH = 8;
 const ARROWHEAD_WIDTH_FACTOR = 0.7;
 const CLICK_MOVE_THRESHOLD_PX_SQ = 25;
 const CLICK_TIME_THRESHOLD_MS = 300;
-const DEFAULT_SPACING_X = 80;
-const DEFAULT_SPACING_Y = 40;
-
-// New type for the editing target state
-type EditingTarget = 
-  | { type: 'node', data: RoadmapStep }
-  | { type: 'childItem', data: ChildDataItem, parentNode: RoadmapStep }
-  | null;
 
 
 const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
@@ -101,6 +96,25 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
   height += contentAreaHeight;
   height += FINAL_BUFFER_CARD_HEIGHT;
   return Math.max(NODE_BASE_MIN_HEIGHT, height);
+};
+
+const sanitizeRoadmapStep = (step: Partial<RoadmapStep>, defaultParentId?: string): RoadmapStep => {
+  const sanitizedChildrenData = (Array.isArray(step.childrenData) ? step.childrenData : []).map(ci => ({
+    id: typeof ci.id === 'string' && ci.id.trim() !== '' ? ci.id : `childitem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    title: ci.title || "Untitled Child",
+    description: ci.description || null,
+    parentCanvasNodeId: ci.parentCanvasNodeId || step.id || defaultParentId || "", 
+    canvasNodeIdForThisItem: ci.canvasNodeIdForThisItem || null,
+  }));
+  return {
+    id: typeof step.id === 'string' && step.id.trim() !== '' ? step.id : `step_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+    title: typeof step.title === 'string' ? step.title : "Untitled Step",
+    x: typeof step.x === 'number' ? step.x : 0,
+    y: typeof step.y === 'number' ? step.y : 0,
+    description: (typeof step.description === 'string' && step.description.trim() !== '') ? step.description.trim() : null,
+    childrenData: sanitizedChildrenData,
+    peerConnections: Array.isArray(step.peerConnections) ? step.peerConnections : [],
+  };
 };
 
 interface EditChildItemDialogProps {
@@ -161,6 +175,11 @@ const EditChildItemDialog: React.FC<EditChildItemDialogProps> = ({ isOpen, onOpe
   );
 };
 
+type EditingTarget = 
+  | { type: 'node', data: RoadmapStep }
+  | { type: 'childItem', data: ChildDataItem, parentNode: RoadmapStep }
+  | null;
+
 type ChildItemOperationContext = 
     | { operation: 'createGrandchild'; targetChildToBecomeParentId: string; currentParentOfTargetChildId: string; }
     | { operation: 'createChild'; targetParentNodeId: string; }
@@ -179,11 +198,9 @@ export default function PlanDetailPage() {
   const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const [editableRoadmap, setEditableRoadmap] = useState<RoadmapStep[]>([]);
   
-  // New state for the editing target
   const [editingTarget, setEditingTarget] = useState<EditingTarget>(null);
   
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
-  // States for inline editing within the sheet, specific to when editingTarget.type === 'node'
   const [isEditingNodeTitle, setIsEditingNodeTitle] = useState(false);
   const [isEditingNodeDescription, setIsEditingNodeDescription] = useState(false);
   const [nodeToDelete, setNodeToDelete] = useState<RoadmapStep | null>(null);
@@ -209,6 +226,14 @@ export default function PlanDetailPage() {
   const [defaultChildDialogTitle, setDefaultChildDialogTitle] = useState("");
   const [defaultChildDialogDescription, setDefaultChildDialogDescription] = useState("");
 
+  // State for diff view
+  const [diffTarget, setDiffTarget] = useState<{ current: ClientPlanVersion; previous: ClientPlanVersion | null } | null>(null);
+  const [addedNodeIds, setAddedNodeIds] = useState<Set<string>>(new Set());
+  const [persistedNodeIds, setPersistedNodeIds] = useState<Set<string>>(new Set());
+  const [removedNodeTitles, setRemovedNodeTitles] = useState<string[]>([]);
+  const [diffDetailsVersionId, setDiffDetailsVersionId] = useState<string | null>(null);
+
+
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
   const { data: planData, isLoading: isLoadingPlan, error: planError } = useQuery<ClientPlan | null>({
@@ -217,7 +242,7 @@ export default function PlanDetailPage() {
     enabled: !!planId && isValidPlanId && !authLoading,
   });
 
-  const { data: planVersions = [], isLoading: isLoadingVersions } = useQuery<ClientPlanVersion[]>({
+  const { data: planVersions = [], isLoading: isLoadingVersions, refetch: refetchPlanVersions } = useQuery<ClientPlanVersion[]>({
     queryKey: ['planVersions', planId],
     queryFn: () => (planId && isValidPlanId ? getPlanVersions(planId) : Promise.resolve([])),
     enabled: isVersionHistorySheetOpen && !!planId && isValidPlanId,
@@ -227,8 +252,11 @@ export default function PlanDetailPage() {
     mutationFn: (payload: { planId: string; currentUserId: string; roadmapToSave: RoadmapStep[] }) => savePlanData(payload.planId, payload.currentUserId, payload.roadmapToSave),
     onSuccess: () => {
       toast({ title: "Plan State Saved", description: "The current plan state has been saved." });
-      if (planId) queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-      queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
+      if (planId) {
+        queryClient.invalidateQueries({ queryKey: ['plan', planId] });
+        queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
+        refetchPlanVersions(); // Ensure history sheet updates
+      }
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan." })
   });
@@ -239,51 +267,73 @@ export default function PlanDetailPage() {
       toast({ title: "Plan Restored", description: "The plan has been restored." });
       queryClient.invalidateQueries({ queryKey: ['plan', planId] });
       queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
+      refetchPlanVersions();
       setIsRestoreConfirmOpen(false); setVersionToRestore(null);
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Restore Failed", description: error.message || "Could not restore plan." }),
   });
 
   useEffect(() => {
-    if (planData) {
-      const validRoadmapSteps = (planData.roadmap || []).filter(
-        (s): s is RoadmapStep => s != null && typeof s.id === 'string'
-      );
-      const sanitizedRoadmap = validRoadmapSteps.map(s => {
-        const sanitizedChildren = (Array.isArray(s.childrenData) ? s.childrenData : [])
-          .filter((ci): ci is ChildDataItem => ci != null && typeof ci.id === 'string')
-          .map(ci => ({
-            id: ci.id,
-            title: ci.title || "Untitled Child",
-            description: ci.description || null,
-            parentCanvasNodeId: ci.parentCanvasNodeId || s.id,
-            canvasNodeIdForThisItem: ci.canvasNodeIdForThisItem || null,
-          }));
-        return {
-          id: s.id,
-          title: s.title || "Untitled Step",
-          x: typeof s.x === 'number' ? s.x : 0,
-          y: typeof s.y === 'number' ? s.y : 0,
-          description: s.description || null,
-          childrenData: sanitizedChildren,
-          peerConnections: Array.isArray(s.peerConnections) ? s.peerConnections : [],
-        };
-      });
-      setEditableRoadmap(sanitizedRoadmap as RoadmapStep[]);
+    if (diffTarget) {
+        // In diff mode
+        const currentRoadmap = (diffTarget.current.roadmap || []).map(s => sanitizeRoadmapStep(s));
+        const previousRoadmap = diffTarget.previous ? (diffTarget.previous.roadmap || []).map(s => sanitizeRoadmapStep(s)) : [];
+
+        setEditableRoadmap(currentRoadmap);
+
+        const currentIds = new Set(currentRoadmap.map(n => n.id));
+        const previousIds = new Set(previousRoadmap.map(n => n.id));
+
+        const added = new Set<string>();
+        currentRoadmap.forEach(node => {
+            if (!previousIds.has(node.id)) {
+                added.add(node.id);
+            }
+        });
+        setAddedNodeIds(added);
+
+        const persisted = new Set<string>();
+        currentRoadmap.forEach(node => {
+            if (previousIds.has(node.id)) {
+                persisted.add(node.id);
+            }
+        });
+        setPersistedNodeIds(persisted);
+
+        const removedTitlesList: string[] = [];
+        previousRoadmap.forEach(node => {
+            if (!currentIds.has(node.id)) {
+                removedTitlesList.push(node.title || `Unnamed Node (ID: ${node.id})`);
+            }
+        });
+        setRemovedNodeTitles(removedTitlesList);
+
+    } else if (planData) {
+        // Not in diff mode, use the live plan data
+        setEditableRoadmap((planData.roadmap || []).map(s => sanitizeRoadmapStep(s)));
+        setAddedNodeIds(new Set());
+        setPersistedNodeIds(new Set());
+        setRemovedNodeTitles([]);
+        setDiffDetailsVersionId(null); 
     } else {
-      setEditableRoadmap([]);
+        // No plan data and not in diff mode (e.g., loading or error)
+        setEditableRoadmap([]);
+        setAddedNodeIds(new Set());
+        setPersistedNodeIds(new Set());
+        setRemovedNodeTitles([]);
+        setDiffDetailsVersionId(null);
     }
-  }, [planData]);
+  }, [planData, diffTarget]);
+
 
   useEffect(() => {
     if (editingTarget?.type === 'node' && editingTarget.data.id && editableRoadmap) {
         const updatedVersionOfEditingNode = editableRoadmap.find(s => s.id === editingTarget.data.id);
         if (updatedVersionOfEditingNode) {
-            // Simple check for changes to avoid infinite loops. Could be more granular.
             if (JSON.stringify(updatedVersionOfEditingNode) !== JSON.stringify(editingTarget.data)) {
                 setEditingTarget({ type: 'node', data: updatedVersionOfEditingNode });
             }
-        } else { // Node was deleted
+        } else { 
             setIsStepDetailSheetOpen(false);
             setEditingTarget(null);
         }
@@ -295,11 +345,11 @@ export default function PlanDetailPage() {
                 if (JSON.stringify(updatedChildItem) !== JSON.stringify(editingTarget.data)) {
                     setEditingTarget({ type: 'childItem', data: updatedChildItem, parentNode: parentNode });
                 }
-            } else { // Child item was deleted
+            } else { 
                 setIsStepDetailSheetOpen(false);
                 setEditingTarget(null);
             }
-        } else { // Parent node was deleted
+        } else { 
             setIsStepDetailSheetOpen(false);
             setEditingTarget(null);
         }
@@ -326,12 +376,14 @@ export default function PlanDetailPage() {
   }, []);
 
   const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
+    if (diffTarget) return; // Disable editing in diff mode
     setEditingTarget({ type: 'node', data: nodeToEdit });
     setIsStepDetailSheetOpen(true);
     setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);
-  }, []);
+  }, [diffTarget]);
   
   const handleChildItemCanvasNodeFocus = useCallback((childItemId: string, parentCanvasNodeId: string) => {
+    if (diffTarget) return; // Disable in diff mode
     const parentNode = editableRoadmap.find(n => n.id === parentCanvasNodeId);
     if (!parentNode) {
       toast({ variant: "destructive", title: "Error", description: "Parent node not found."});
@@ -348,21 +400,19 @@ export default function PlanDetailPage() {
       if (existingCanvasNode) {
         setEditingTarget({ type: 'node', data: existingCanvasNode });
       } else {
-        // This case should ideally not happen if data is consistent
         console.warn("Child item has canvasNodeIdForThisItem, but node not found in roadmap. Treating as non-spawned.");
         setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
       }
     } else {
-      // If it's not yet a canvas node, show its details within the context of its parent
       setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
     }
     setIsStepDetailSheetOpen(true);
     setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);
-  }, [editableRoadmap, toast]);
+  }, [editableRoadmap, toast, diffTarget]);
 
 
   const handleNodeDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
-    if (!canEditPlan) return;
+    if (!canEditPlan || diffTarget) return;
     setEditableRoadmap(prev => prev.map(s =>
       s.id === updatedStep.id
         ? { ...s, ...updatedStep, childrenData: updatedStep.childrenData || (s.childrenData || []) }
@@ -370,10 +420,10 @@ export default function PlanDetailPage() {
     ));
     toast({ title: "Node Updated", description: `"${updatedStep.title}" details changed. Remember to save.`});
     setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);
-  }, [canEditPlan, toast]);
+  }, [canEditPlan, toast, diffTarget]);
 
   const handleChildItemDetailUpdateInPanel = useCallback((updatedChildItem: ChildDataItem, parentNodeId: string) => {
-    if (!canEditPlan) return;
+    if (!canEditPlan || diffTarget) return;
     setEditableRoadmap(prev => prev.map(parentNode => {
         if (parentNode.id === parentNodeId) {
             return {
@@ -384,18 +434,18 @@ export default function PlanDetailPage() {
         return parentNode;
     }));
     toast({ title: "Item Updated", description: `"${updatedChildItem.title}" details changed. Remember to save.`});
-  }, [canEditPlan, toast]);
+  }, [canEditPlan, toast, diffTarget]);
 
 
   const handleInitiateAddNode = useCallback((sourceNodeId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
-    if (!canEditPlan) return;
+    if (!canEditPlan || diffTarget) return;
     setTargetParentIdForDialog(sourceNodeId);
     setInitiatingDotTypeForDialog(initiatingDot || null);
     setIsAddNodeDialogOpen(true);
-  }, [canEditPlan]);
+  }, [canEditPlan, diffTarget]);
 
   const handleAddNode = useCallback((data: AddRoadmapStepFormData) => {
-    if (!canEditPlan || !canvasRef.current) return;
+    if (!canEditPlan || !canvasRef.current || diffTarget) return;
     
     const newId = `step-${Date.now()}-${uuidv4().substring(0, 8)}`;
     let newStepX, newStepY;
@@ -407,7 +457,7 @@ export default function PlanDetailPage() {
         switch (initiatingDotTypeForDialog) {
             case 'N': newStepX = sourceNodeForPeerLink.x; newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y - NODE_BASE_MIN_HEIGHT - DEFAULT_SPACING_Y); break;
             case 'E': newStepX = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X); newStepY = sourceNodeForPeerLink.y; break;
-            case 'S': newStepX = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y + sourceHeight + DEFAULT_SPACING_Y); newStepY = sourceNodeForPeerLink.x; break;
+            case 'S': newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y + sourceHeight + DEFAULT_SPACING_Y); newStepX = sourceNodeForPeerLink.x; break; // Corrected X and Y assignment for S
             default: 
                 newStepX = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2);
                 newStepY = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
@@ -445,7 +495,7 @@ export default function PlanDetailPage() {
     setIsAddNodeDialogOpen(false);
     setTargetParentIdForDialog(null);
     setInitiatingDotTypeForDialog(null);
-  }, [canEditPlan, toast, editableRoadmap, targetParentIdForDialog, initiatingDotTypeForDialog]);
+  }, [canEditPlan, toast, editableRoadmap, targetParentIdForDialog, initiatingDotTypeForDialog, diffTarget]);
   
   const handleSpawnChildDataItemAsCanvasNode = useCallback((
     currentRoadmap: RoadmapStep[],
@@ -492,7 +542,7 @@ export default function PlanDetailPage() {
 
 
   const onAddGrandchildToChildDataItem = useCallback((clickedChildItemId: string, parentCanvasNodeIdOfClickedItem: string) => {
-    if (!canEditPlan) return;
+    if (!canEditPlan || diffTarget) return;
     const parentNode = editableRoadmap.find(n => n.id === parentCanvasNodeIdOfClickedItem);
     const childItemWhoseDotWasClicked = parentNode?.childrenData.find(ci => ci.id === clickedChildItemId);
     if (!childItemWhoseDotWasClicked) {
@@ -509,10 +559,10 @@ export default function PlanDetailPage() {
     setDefaultChildDialogTitle("");
     setDefaultChildDialogDescription("");
     setIsEditChildItemDialogOpen(true);
-  }, [canEditPlan, editableRoadmap, toast]);
+  }, [canEditPlan, editableRoadmap, toast, diffTarget]);
 
   const handleChildItemDialogSubmit = useCallback((data: { title: string; description?: string }) => {
-    if (!childItemManagementContextRef.current || !canEditPlan) return;
+    if (!childItemManagementContextRef.current || !canEditPlan || diffTarget) return;
     const context = childItemManagementContextRef.current;
     let operationSucceeded = false;
 
@@ -546,7 +596,6 @@ export default function PlanDetailPage() {
           toast({ title: "Item Added", description: `"${data.title}" added to "${updatedParentNode.title}". Remember to save.` });
           operationSucceeded = true;
 
-          // After successfully adding the grandchild, ensure the panel focuses on the new parent node
           const nodeThatBecameParent = tempRoadmap.find(n => n.id === spawnedNodeIdForContext);
           if (nodeThatBecameParent) {
               setTimeout(() => {
@@ -610,10 +659,10 @@ export default function PlanDetailPage() {
         setIsEditChildItemDialogOpen(false);
     }
     childItemManagementContextRef.current = null;
-  }, [canEditPlan, toast, handleSpawnChildDataItemAsCanvasNode]);
+  }, [canEditPlan, toast, handleSpawnChildDataItemAsCanvasNode, diffTarget]);
 
   const handleEditChildItemText = useCallback((childItem: ChildDataItem, parentNodeIdOfChildItem: string) => {
-    if(!canEditPlan) return;
+    if(!canEditPlan || diffTarget) return;
     childItemManagementContextRef.current = {
         operation: 'edit',
         itemToEditId: childItem.id,
@@ -623,7 +672,7 @@ export default function PlanDetailPage() {
     setDefaultChildDialogTitle(childItem.title);
     setDefaultChildDialogDescription(childItem.description || "");
     setIsEditChildItemDialogOpen(true);
-  }, [canEditPlan]);
+  }, [canEditPlan, diffTarget]);
   
   const handleUnspawnNodeIfChildless = useCallback((nodeIdToCheck: string) => {
     setEditableRoadmap(prev => {
@@ -669,7 +718,7 @@ export default function PlanDetailPage() {
   }, [toast]);
 
   const handleDeleteChildItem = useCallback((childItemIdToDelete: string, parentCanvasNodeIdOfItem: string) => {
-    if (!canEditPlan) return;
+    if (!canEditPlan || diffTarget) return;
     
     setEditableRoadmap(prev => {
         let canvasNodeIdThatWasRepresentedByDeletedItem: string | null = null;
@@ -698,27 +747,26 @@ export default function PlanDetailPage() {
             toast({ title: `"${deletedItemTitle}" Removed`, description: `Removed from list in "${parentNodeTitle}". Remember to save.`});
         }
         
-        // Update editingTarget if the deleted item (or its parent node) was being viewed
         if (editingTarget?.type === 'childItem' && editingTarget.data.id === childItemIdToDelete && editingTarget.parentNode.id === parentCanvasNodeIdOfItem) {
             const parentNodeAfterDelete = updatedRoadmap.find(n => n.id === parentCanvasNodeIdOfItem);
             if (parentNodeAfterDelete) {
-                 setEditingTarget({type: 'node', data: parentNodeAfterDelete}); // Revert to parent node view
+                 setEditingTarget({type: 'node', data: parentNodeAfterDelete}); 
             } else {
-                 setIsStepDetailSheetOpen(false); setEditingTarget(null); // Parent node somehow gone too
+                 setIsStepDetailSheetOpen(false); setEditingTarget(null); 
             }
         } else if (editingTarget?.type === 'node' && editingTarget.data.id === canvasNodeIdThatWasRepresentedByDeletedItem) {
-            setIsStepDetailSheetOpen(false); setEditingTarget(null); // Node being viewed was deleted
+            setIsStepDetailSheetOpen(false); setEditingTarget(null); 
         }
 
         setTimeout(() => handleUnspawnNodeIfChildless(parentCanvasNodeIdOfItem), 0);
         
         return updatedRoadmap;
     });
-  }, [canEditPlan, toast, handleUnspawnNodeIfChildless, editingTarget]);
+  }, [canEditPlan, toast, handleUnspawnNodeIfChildless, editingTarget, diffTarget]);
 
 
   const confirmDeleteNode = useCallback(() => {
-    if (!nodeToDelete || !canEditPlan) return;
+    if (!nodeToDelete || !canEditPlan || diffTarget) return;
     const idToDelete = nodeToDelete.id;
 
     setEditableRoadmap(prev => {
@@ -741,15 +789,15 @@ export default function PlanDetailPage() {
     }
     toast({ title: `Node "${nodeToDelete.title}" Deleted from Canvas`, description: `Remember to save.` });
     setNodeToDelete(null);
-  }, [nodeToDelete, canEditPlan, toast, editingTarget]);
+  }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget]);
 
   const saveRoadmapChanges = useCallback(async () => {
-    if (!planData || !user || !planId || !canEditPlan) {
+    if (!planData || !user || !planId || !canEditPlan || diffTarget) {
       toast({ variant: "destructive", title: "Error", description: "Cannot save." });
       return;
     }
     saveRoadmapMutation.mutate({ planId, currentUserId: user.uid, roadmapToSave: editableRoadmap });
-  }, [planData, user, planId, canEditPlan, editableRoadmap, saveRoadmapMutation, toast]);
+  }, [planData, user, planId, canEditPlan, editableRoadmap, saveRoadmapMutation, toast, diffTarget]);
 
   const sharePlan = useCallback(async () => {
     if (!planData || !planId) return;
@@ -762,11 +810,24 @@ export default function PlanDetailPage() {
     }
   }, [planData, planId, toast]);
 
+  const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersion: ClientPlanVersion | null) => {
+    if (!planData) return; // Should not happen if button is enabled
+
+    setDiffTarget({ current: versionToView, previous: previousVersion });
+    setDiffDetailsVersionId(versionToView.id); // Show details for this version
+    // Diff calculation will happen in the useEffect hook that depends on diffTarget
+  }, [planData, setDiffTarget, setDiffDetailsVersionId]);
+
+  const handleExitDiffView = useCallback(() => {
+      setDiffTarget(null); // This will trigger the useEffect to reset states
+      // setDiffDetailsVersionId(null); // Now handled by the useEffect for diffTarget
+  }, [setDiffTarget]);
+
   const handleRestoreVersion = (version: ClientPlanVersion) => { setVersionToRestore(version); setIsRestoreConfirmOpen(true); };
   const confirmRestore = () => { if (!versionToRestore || !planId || !user) return; restorePlanMutation.mutate({ planId, versionIdToRestore: versionToRestore.id, currentUserId: user.uid }); };
 
   const handleNodeInteractionStart = useCallback((nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, isDotDrag: boolean = false, dotType?: 'N' | 'E' | 'S') => {
-    if (('button' in event && (event as React.MouseEvent).button !== 0) || !canEditPlan || !canvasRef.current) return;
+    if (('button' in event && (event as React.MouseEvent).button !== 0) || !canEditPlan || !canvasRef.current || diffTarget) return;
     const { clientX, clientY } = getPointerCoords(event);
     const nodeElement = (event.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement;
     if (!nodeElement && !isDotDrag) return;
@@ -779,10 +840,10 @@ export default function PlanDetailPage() {
     clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetElement: event.currentTarget };
     isDraggingRef.current = false;
     setIsPointerDown(true);
-  }, [canEditPlan, getPointerCoords]);
+  }, [canEditPlan, getPointerCoords, diffTarget]);
 
   const handleGlobalMove = useCallback((event: MouseEvent | TouchEvent) => {
-    if (!isPointerDown || !canvasRef.current) return;
+    if (!isPointerDown || !canvasRef.current || diffTarget) return;
     const { clientX, clientY } = getPointerCoords(event);
 
     if (clickStartInfoRef.current && !isDraggingRef.current) {
@@ -828,10 +889,10 @@ export default function PlanDetailPage() {
       let newY = Math.max(MIN_CANVAS_PADDING, currentY - offsetY);
       setEditableRoadmap(prev => prev.map(step => step.id === nodeId ? { ...step, x: newX, y: newY } : step ));
     }
-  }, [isPointerDown, getPointerCoords, editableRoadmap]);
+  }, [isPointerDown, getPointerCoords, editableRoadmap, diffTarget]);
 
   const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent) => {
-    if (!isPointerDown || !nodeDragInfoRef.current) {
+    if (!isPointerDown || !nodeDragInfoRef.current || diffTarget) {
         setIsPointerDown(false);
         return;
     }
@@ -891,9 +952,9 @@ export default function PlanDetailPage() {
 
             if ((deltaX * deltaX + deltaY * deltaY) < CLICK_MOVE_THRESHOLD_PX_SQ && timeElapsed < CLICK_TIME_THRESHOLD_MS) {
                  if (clickInfo.targetElement && (clickInfo.targetElement as HTMLElement).closest('[data-node-id]') &&
-                    !(clickInfo.targetElement as HTMLElement).closest('[data-dot-type]') && // Not a blue dot
-                    !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-dot-id]') && // Not a green child dot
-                    !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-title-button]')) { // Not child item title text
+                    !(clickInfo.targetElement as HTMLElement).closest('[data-dot-type]') && 
+                    !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-dot-id]') && 
+                    !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-title-button]')) { 
                     const clickedStep = editableRoadmap.find(s => s.id === sourceNodeId);
                     if (clickedStep) {
                         handleEditCanvasNode(clickedStep); 
@@ -909,7 +970,7 @@ export default function PlanDetailPage() {
     isDraggingRef.current = false;
     setIsPointerDown(false);
     if (svgRef.current) svgRef.current.style.display = 'block'; 
-  }, [isPointerDown, getPointerCoords, editableRoadmap, handleEditCanvasNode, toast, handleInitiateAddNode]);
+  }, [isPointerDown, getPointerCoords, editableRoadmap, handleEditCanvasNode, toast, handleInitiateAddNode, diffTarget]);
 
   useEffect(() => {
     if (isPointerDown) {
@@ -1036,8 +1097,8 @@ export default function PlanDetailPage() {
             {user?.uid === planData.ownerId && <Badge variant="outline" className="text-xs ml-2 hidden sm:inline-flex">Owner</Badge>}
         </div>
         <div className="ml-auto flex items-center gap-2">
-            {canEditPlan && (<Button variant="outline" size="sm" className="h-8" onClick={() => handleInitiateAddNode(null)} disabled={saveRoadmapMutation.isPending}><Plus className="h-4 w-4 mr-1.5 sm:mr-2" /><span className="hidden sm:inline">Add Root Node</span><span className="sm:hidden">+Node</span></Button>)}
-            {canEditPlan && (<Button variant="default" size="sm" className="h-8" onClick={saveRoadmapChanges} disabled={saveRoadmapMutation.isPending}>{saveRoadmapMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}<span className="hidden sm:inline">Save Plan</span><span className="sm:hidden">Save</span></Button>)}
+            {canEditPlan && !diffTarget && (<Button variant="outline" size="sm" className="h-8" onClick={() => handleInitiateAddNode(null)} disabled={saveRoadmapMutation.isPending}><Plus className="h-4 w-4 mr-1.5 sm:mr-2" /><span className="hidden sm:inline">Add Root Node</span><span className="sm:hidden">+Node</span></Button>)}
+            {canEditPlan && !diffTarget && (<Button variant="default" size="sm" className="h-8" onClick={saveRoadmapChanges} disabled={saveRoadmapMutation.isPending}>{saveRoadmapMutation.isPending ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Save className="h-4 w-4 mr-1.5" />}<span className="hidden sm:inline">Save Plan</span><span className="sm:hidden">Save</span></Button>)}
             <Button variant="outline" size="sm" className="h-8" onClick={() => setIsVersionHistorySheetOpen(true)}><History className="h-4 w-4 mr-1.5 sm:mr-2" /><span className="hidden sm:inline">History</span><span className="sm:hidden">Hist.</span></Button>
             <Button variant="outline" size="sm" className="h-8" onClick={sharePlan}><Share2 className="h-4 w-4 mr-1.5 sm:mr-2" /><span className="hidden sm:inline">Share</span><span className="sm:hidden">Share</span></Button>
             {user && (<Avatar className="h-7 w-7"><AvatarImage src={user.photoURL || undefined} alt={getInitials(user.displayName || user.email)} /><AvatarFallback className="text-xs">{getInitials(user.displayName || user.email || "U")}</AvatarFallback></Avatar>)}
@@ -1045,6 +1106,13 @@ export default function PlanDetailPage() {
       </header>
       <div className="flex flex-1 overflow-hidden">
         <main ref={canvasRef} className="flex-1 grid-background relative overflow-auto p-4 md:p-6" style={{ minHeight: canvasMinHeight }}>
+         {diffTarget && (
+            <div
+              className="absolute inset-0 bg-background/70 backdrop-blur-sm z-20 pointer-events-auto"
+              onClick={handleExitDiffView}
+              title="Click to exit diff view"
+            />
+          )}
           <svg ref={svgRef} className="absolute inset-0 w-full h-full pointer-events-none z-0">
             <defs>
                 <marker id="arrowhead-main" viewBox={`0 0 ${ARROWHEAD_LENGTH} ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} markerWidth={ARROWHEAD_LENGTH} markerHeight={ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR} refX={ARROWHEAD_LENGTH / 2} refY={(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2} orient="auto-start-reverse" markerUnits="userSpaceOnUse"><polygon points={`0 0, ${ARROWHEAD_LENGTH} ${(ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR) / 2}, 0 ${ARROWHEAD_LENGTH * ARROWHEAD_WIDTH_FACTOR}`} fill={'hsl(var(--primary))'}/></marker>
@@ -1053,7 +1121,7 @@ export default function PlanDetailPage() {
             {drawConnectionLines()}
             {activeConnectionLinePreviewRef.current?.path && <path d={activeConnectionLinePreviewRef.current.path} stroke="hsl(var(--accent))" strokeWidth="2" strokeDasharray="4 4" fill="none" markerEnd={activeConnectionLinePreviewRef.current.targetNodeId ? 'url(#arrowhead-accent)' : undefined} />}
           </svg>
-          {editableRoadmap.length === 0 && !isLoadingPlan && (
+          {editableRoadmap.length === 0 && !isLoadingPlan && !diffTarget && (
             <div className="flex flex-col items-center justify-center text-muted-foreground h-full opacity-70 pointer-events-none">
               <Map className="h-16 w-16 mb-4" />
               <p className="text-lg font-medium">{canEditPlan ? "Click '+ Root Node' to start." : "Plan is empty."}</p>
@@ -1065,11 +1133,12 @@ export default function PlanDetailPage() {
                 step={step} 
                 allSteps={editableRoadmap} 
                 onNodeInteractionStart={handleNodeInteractionStart} 
-                isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id}
+                isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
                 onEditStep={handleEditCanvasNode} 
                 onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
                 onChildItemTitleClick={handleChildItemCanvasNodeFocus}
-                isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id} 
+                isActuallyDraggingThisNode={isDraggingRef.current && nodeDragInfoRef.current?.nodeId === step.id}
+                diffHighlight={diffTarget ? (addedNodeIds.has(step.id) ? 'added' : persistedNodeIds.has(step.id) ? 'persisted' : undefined) : undefined}
             />
           ))}
         </main>
@@ -1206,13 +1275,65 @@ export default function PlanDetailPage() {
       )}
 
       <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen}>
-        <SheetContent className="sm:max-w-lg w-[90vw]" side="left"><SheetHeader className="border-b pb-4"><SheetTitle>Plan Version History (v{planData?.version || 1})</SheetTitle><SheetDescription>Review past versions of this plan. You can restore to a previous version.</SheetDescription></SheetHeader>
-          <ScrollArea className="h-[calc(100%-100px)]"><div className="p-4 space-y-3">
+        <SheetContent className="sm:max-w-lg w-[90vw]" side="left">
+          <SheetHeader className="border-b pb-4">
+            <SheetTitle>Plan Version History (v{planData?.version || 1})</SheetTitle>
+            <SheetDescription>Review past versions of this plan. You can restore to a previous version or view changes.</SheetDescription>
+          </SheetHeader>
+          <ScrollArea className="h-[calc(100%-120px)]"> {/* Adjusted height for footer */}
+            <div className="p-4 space-y-1">
               {isLoadingVersions && (<div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/><p className="ml-2 text-muted-foreground">Loading versions...</p></div>)}
               {!isLoadingVersions && planVersions.length === 0 && (<p className="text-sm text-muted-foreground text-center py-4">No version history.</p>)}
-              {!isLoadingVersions && planVersions.map(version => (<div key={version.id} className={cn("p-3 border rounded-md bg-muted/30 hover:bg-muted/40 transition-colors flex justify-between items-center", version.versionNumber === planData?.version && "border-primary ring-1 ring-primary")}><div className="min-w-0"><p className="text-sm font-medium truncate">Version {version.versionNumber || "(Legacy)"} {version.versionNumber === planData?.version && <Badge variant="secondary" className="ml-2 text-xs">Current</Badge>}</p><p className="text-xs text-muted-foreground truncate">Saved by: <span className="font-semibold text-foreground">{version.editorDisplayName || getInitials(version.editorUid) || version.editorUid}</span> on {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}</p></div><Button variant="outline" size="xs" className="h-7 px-2 text-xs flex-shrink-0" onClick={() => handleRestoreVersion(version)} disabled={version.versionNumber === planData?.version || restorePlanMutation.isPending}><History className="h-3.5 w-3.5 mr-1.5" /> Restore</Button></div>))}
-          </div></ScrollArea>
-          <SheetFooter className="border-t pt-4 p-4"><SheetClose asChild><Button variant="outline">Close</Button></SheetClose></SheetFooter>
+              {!isLoadingVersions && planVersions.map((version, index) => {
+                const isCurrentLiveVersion = version.versionNumber === planData?.version;
+                const isDiffingThisVersion = diffDetailsVersionId === version.id && !!diffTarget;
+                const previousVersion = planVersions[index + 1] || null;
+                const canViewChanges = index < planVersions.length - 1; // Cannot view changes for the oldest version
+                
+                return (
+                  <div key={version.id} className={cn("p-3 border rounded-md bg-muted/30 hover:bg-muted/40 transition-colors", isCurrentLiveVersion && "border-primary ring-1 ring-primary", isDiffingThisVersion && "ring-2 ring-purple-500 border-purple-500")}>
+                    <div className="flex justify-between items-center">
+                        <div className="min-w-0">
+                            <p className="text-sm font-medium truncate">Version {version.versionNumber || "(Legacy)"} {isCurrentLiveVersion && <Badge variant="secondary" className="ml-2 text-xs">Current Live</Badge>}</p>
+                            <p className="text-xs text-muted-foreground truncate">Saved by: <span className="font-semibold text-foreground">{version.editorDisplayName || getInitials(version.editorUid) || version.editorUid}</span> on {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}</p>
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
+                            {isDiffingThisVersion ? (
+                                <Button variant="outline" size="xs" className="h-7 px-2 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 border-purple-500" onClick={handleExitDiffView} disabled={restorePlanMutation.isPending}>
+                                    Hide Changes
+                                </Button>
+                            ) : (
+                                <Button variant="outline" size="xs" className="h-7 px-2 text-xs" onClick={() => handleViewChangesClick(version, previousVersion)} disabled={!canViewChanges || restorePlanMutation.isPending || !!diffTarget}>
+                                    <Eye className="h-3.5 w-3.5 mr-1.5" /> View Changes
+                                </Button>
+                            )}
+                            <Button variant="outline" size="xs" className="h-7 px-2 text-xs" onClick={() => handleRestoreVersion(version)} disabled={isCurrentLiveVersion || restorePlanMutation.isPending || !!diffTarget}>
+                                <History className="h-3.5 w-3.5 mr-1.5" /> Restore
+                            </Button>
+                        </div>
+                    </div>
+                    {isDiffingThisVersion && diffTarget && (
+                        <div className="mt-2 pt-2 border-t border-dashed border-purple-500/50 bg-purple-500/5 text-xs space-y-1 p-2 rounded-b-md">
+                            <div className="font-medium text-purple-700 dark:text-purple-300">Comparing Version {diffTarget.current.versionNumber} with Version {diffTarget.previous?.versionNumber || 'Initial State'}. Canvas interactions disabled.</div>
+                            {addedNodeIds.size > 0 && (
+                                <div><strong>Added Nodes:</strong> {Array.from(addedNodeIds).map(id => diffTarget.current.roadmap.find(n=>n.id===id)?.title || id).join(', ')}</div>
+                            )}
+                            {removedNodeTitles.length > 0 && (
+                                <div><strong>Removed Nodes:</strong> {removedNodeTitles.join(', ')}</div>
+                            )}
+                            {addedNodeIds.size === 0 && removedNodeTitles.length === 0 && (
+                                <p className="italic">No structural node additions or removals compared to the previous version.</p>
+                            )}
+                        </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </ScrollArea>
+          <SheetFooter className="border-t pt-4 p-4">
+            <SheetClose asChild><Button variant="outline" className="w-full">Close History</Button></SheetClose>
+          </SheetFooter>
         </SheetContent>
       </Sheet>
       <AlertDialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
@@ -1221,4 +1342,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-    
+
