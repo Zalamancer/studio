@@ -1,3 +1,4 @@
+
 // src/components/plan/RoadmapStepCard.tsx
 "use client";
 
@@ -49,6 +50,7 @@ interface RoadmapStepCardProps {
   onAddGrandchildToChildDataItem: (parentChildItemId: string, parentCanvasNodeIdOfChildItem: string) => void;
   onChildItemTitleClick: (childItemId: string, parentCanvasNodeId: string) => void;
   isActuallyDraggingThisNode?: boolean;
+  diffHighlight?: 'added' | 'persisted';
 }
 
 const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
@@ -60,66 +62,82 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
   onAddGrandchildToChildDataItem,
   onChildItemTitleClick,
   isActuallyDraggingThisNode,
+  diffHighlight,
 }) => {
   const cardRef = useRef<HTMLDivElement>(null);
   const dynamicHeight = calculateNodeHeight(step, allSteps);
 
+  const cardClasses = cn(
+    "group/cardnode absolute select-none shadow-lg border rounded-lg flex flex-col",
+    isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
+    isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab',
+    diffHighlight === 'added' && 'border-green-500 ring-2 ring-green-300 shadow-green-500/30 z-30', // Ensure added nodes are on top
+    diffHighlight === 'persisted' && 'border-gray-400 opacity-70 z-30' // Ensure persisted are also on top of dimming overlay
+  );
+  
+  const headerClasses = cn(
+    "p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]",
+    diffHighlight === 'added' ? 'bg-green-600 text-white' : diffHighlight === 'persisted' ? 'bg-gray-500 text-gray-100' : 'bg-primary text-primary-foreground'
+  );
+
+
   return (
     <div
       ref={cardRef}
-      className={cn(
-        "group/cardnode absolute select-none shadow-lg border rounded-lg flex flex-col",
-        isSelected ? "ring-2 ring-primary shadow-2xl z-20" : "border-border hover:shadow-xl z-10 shadow-sm",
-        isActuallyDraggingThisNode ? 'cursor-grabbing shadow-2xl z-30' : 'cursor-grab'
-      )}
+      className={cardClasses}
       style={{
         left: `${step.x}px`,
         top: `${step.y}px`,
         width: `${NODE_BASE_WIDTH}px`,
         height: `${dynamicHeight}px`,
-        touchAction: 'none',
-        backgroundColor: 'hsl(var(--card))',
+        touchAction: diffHighlight ? 'auto' : 'none', // Allow interaction with overlay when in diff mode
+        pointerEvents: diffHighlight ? 'none' : 'auto', // Disable direct interaction with card in diff mode
+        zIndex: diffHighlight ? 30 : (isSelected ? 20 : 10), // Ensure diff items are above overlay
       }}
       onMouseDown={(e) => {
+        if (diffHighlight) return;
         if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
         onNodeInteractionStart(step.id, e);
       }}
       onTouchStart={(e) => {
+        if (diffHighlight) return;
         if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
         onNodeInteractionStart(step.id, e);
       }}
       data-node-id={step.id}
     >
       <div 
-        className="p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]" 
-        style={{ backgroundColor: 'hsl(var(--primary))' }} 
-        onDoubleClick={() => onEditStep(step)}
+        className={headerClasses}
+        onDoubleClick={diffHighlight ? undefined : () => onEditStep(step)}
       >
-        <h3 className="text-sm font-semibold truncate text-primary-foreground" title={step.title}>{step.title}</h3>
+        <h3 className="text-sm font-semibold truncate" title={step.title}>{step.title}</h3>
         
-        <div
-          className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
-          data-dot-type="N" title="North Connector (Drag to connect or create new)"
-          onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
-          onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
-        />
-        <div
-          className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
-          data-dot-type="E" title="East Connector (Drag to connect or create new)"
-          onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
-          onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
-        />
-        <div
-          className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
-          data-dot-type="S" title="South Connector (Drag to connect or create new)"
-          onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
-          onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
-        />
+        {!diffHighlight && ( // Hide dots in diff mode
+          <>
+            <div
+              className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+              data-dot-type="N" title="North Connector (Drag to connect or create new)"
+              onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
+              onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'N'); }}
+            />
+            <div
+              className="absolute right-0 top-1/2 transform translate-x-1/2 -translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+              data-dot-type="E" title="East Connector (Drag to connect or create new)"
+              onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
+              onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'E'); }}
+            />
+            <div
+              className="absolute bottom-0 left-1/2 transform -translate-x-1/2 translate-y-1/2 h-3 w-3 rounded-full bg-sky-400 border-2 border-white transition-all duration-150 ease-in-out group-hover/cardnode:scale-125 group-hover/cardnode:ring-2 group-hover/cardnode:ring-sky-300 group-hover/cardnode:z-10 cursor-pointer"
+              data-dot-type="S" title="South Connector (Drag to connect or create new)"
+              onMouseDown={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
+              onTouchStart={(e) => { e.stopPropagation(); onNodeInteractionStart(step.id, e, true, 'S'); }}
+            />
+          </>
+        )}
       </div>
       <div 
-        className="flex-grow min-h-0 p-2 text-xs space-y-1" 
+        className={cn("flex-grow min-h-0 p-2 text-xs space-y-1", diffHighlight === 'persisted' && 'opacity-80')}
         style={{ backgroundColor: 'hsl(var(--card))' }}
-        // Removed onClick from here to centralize panel opening logic
       >
           {step.description && (<p className="whitespace-pre-wrap line-clamp-2 mb-1 text-foreground">{step.description}</p>)}
           
@@ -130,29 +148,33 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                 
                 return (
                   <li key={childItem.id} data-child-item-index={index} className="text-xs py-0.5 flex items-center justify-between group/childitemli relative pl-4">
-                    <button
-                      aria-label={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
-                      title={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
-                      onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
-                      className="group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center active:scale-125 cursor-pointer w-3 h-3 left-[-6px] top-1/2 -translate-y-1/2"
-                      data-child-item-dot-id={childItem.id}
-                      onMouseDown={(e) => e.stopPropagation()} 
-                      onTouchStart={(e) => e.stopPropagation()} 
-                    >
-                        <div className={cn(
-                            "rounded-full transition-all duration-150 ease-in-out h-2 w-2",
-                            childHasOwnCanvasNode ? "bg-green-500" : "bg-muted-foreground",
-                            "group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300"
-                        )}></div>
-                    </button>
+                    {!diffHighlight && ( // Hide child dots in diff mode
+                        <button
+                        aria-label={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
+                        title={`Create new step from: Sub-step "${childItem.title}" (Anchor: W)`}
+                        onClick={(e) => { e.stopPropagation(); onAddGrandchildToChildDataItem(childItem.id, step.id); }}
+                        className="group absolute rounded-full z-20 transition-all duration-150 ease-in-out flex items-center justify-center active:scale-125 cursor-pointer w-3 h-3 left-[-6px] top-1/2 -translate-y-1/2"
+                        data-child-item-dot-id={childItem.id}
+                        onMouseDown={(e) => e.stopPropagation()} 
+                        onTouchStart={(e) => e.stopPropagation()} 
+                        >
+                            <div className={cn(
+                                "rounded-full transition-all duration-150 ease-in-out h-2 w-2",
+                                childHasOwnCanvasNode ? "bg-green-500" : "bg-muted-foreground",
+                                "group-hover:bg-green-500 group-hover:scale-150 group-hover:ring-2 group-hover:ring-green-300"
+                            )}></div>
+                        </button>
+                    )}
                     <div className="flex items-center flex-grow min-w-0">
-                      <button // Changed span to button for better accessibility and clearer click target
+                      <button 
                         type="button"
-                        className="truncate text-left hover:underline cursor-pointer data-child-item-title-button" // Added data attribute
+                        className={cn("truncate text-left data-child-item-title-button", !diffHighlight && "hover:underline cursor-pointer")}
                         onClick={(e) => { 
+                            if (diffHighlight) return;
                             e.stopPropagation(); 
-                            onChildItemTitleClick(childItem.id, step.id); // Call new prop
+                            onChildItemTitleClick(childItem.id, step.id); 
                         }}
+                        disabled={!!diffHighlight}
                         title={childItem.title}
                       >
                         {childItem.title}

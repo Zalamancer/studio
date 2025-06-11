@@ -21,11 +21,12 @@ import {
   Edit2,
   Trash2,
   History,
-  Eye, // Added Eye icon
+  Eye,
   ListTree,
+  View,
 } from 'lucide-react';
 import {
-  AlertDialog, // Keep AlertDialog for node deletion confirmation
+  AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
@@ -46,7 +47,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose } from '@/components/ui/sheet';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { format } from 'date-fns';
 import { getInitials } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
@@ -116,6 +117,7 @@ const sanitizeRoadmapStep = (step: Partial<RoadmapStep>, defaultParentId?: strin
     peerConnections: Array.isArray(step.peerConnections) ? step.peerConnections : [],
   };
 };
+
 
 interface EditChildItemDialogProps {
   isOpen: boolean;
@@ -226,13 +228,11 @@ export default function PlanDetailPage() {
   const [defaultChildDialogTitle, setDefaultChildDialogTitle] = useState("");
   const [defaultChildDialogDescription, setDefaultChildDialogDescription] = useState("");
 
-  // State for diff view
   const [diffTarget, setDiffTarget] = useState<{ current: ClientPlanVersion; previous: ClientPlanVersion | null } | null>(null);
   const [addedNodeIds, setAddedNodeIds] = useState<Set<string>>(new Set());
   const [persistedNodeIds, setPersistedNodeIds] = useState<Set<string>>(new Set());
   const [removedNodeTitles, setRemovedNodeTitles] = useState<string[]>([]);
   const [diffDetailsVersionId, setDiffDetailsVersionId] = useState<string | null>(null);
-
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
@@ -255,7 +255,7 @@ export default function PlanDetailPage() {
       if (planId) {
         queryClient.invalidateQueries({ queryKey: ['plan', planId] });
         queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
-        refetchPlanVersions(); // Ensure history sheet updates
+        refetchPlanVersions(); 
       }
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan." })
@@ -269,13 +269,13 @@ export default function PlanDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
       refetchPlanVersions();
       setIsRestoreConfirmOpen(false); setVersionToRestore(null);
+      handleExitDiffView(); // Exit diff mode after restore
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Restore Failed", description: error.message || "Could not restore plan." }),
   });
 
   useEffect(() => {
     if (diffTarget) {
-        // In diff mode
         const currentRoadmap = (diffTarget.current.roadmap || []).map(s => sanitizeRoadmapStep(s));
         const previousRoadmap = diffTarget.previous ? (diffTarget.previous.roadmap || []).map(s => sanitizeRoadmapStep(s)) : [];
 
@@ -285,38 +285,24 @@ export default function PlanDetailPage() {
         const previousIds = new Set(previousRoadmap.map(n => n.id));
 
         const added = new Set<string>();
-        currentRoadmap.forEach(node => {
-            if (!previousIds.has(node.id)) {
-                added.add(node.id);
-            }
-        });
+        currentRoadmap.forEach(node => { if (!previousIds.has(node.id)) added.add(node.id); });
         setAddedNodeIds(added);
 
         const persisted = new Set<string>();
-        currentRoadmap.forEach(node => {
-            if (previousIds.has(node.id)) {
-                persisted.add(node.id);
-            }
-        });
+        currentRoadmap.forEach(node => { if (previousIds.has(node.id)) persisted.add(node.id); });
         setPersistedNodeIds(persisted);
 
         const removedTitlesList: string[] = [];
-        previousRoadmap.forEach(node => {
-            if (!currentIds.has(node.id)) {
-                removedTitlesList.push(node.title || `Unnamed Node (ID: ${node.id})`);
-            }
-        });
+        previousRoadmap.forEach(node => { if (!currentIds.has(node.id)) removedTitlesList.push(node.title || `Unnamed Node (ID: ${node.id})`); });
         setRemovedNodeTitles(removedTitlesList);
 
     } else if (planData) {
-        // Not in diff mode, use the live plan data
         setEditableRoadmap((planData.roadmap || []).map(s => sanitizeRoadmapStep(s)));
         setAddedNodeIds(new Set());
         setPersistedNodeIds(new Set());
         setRemovedNodeTitles([]);
         setDiffDetailsVersionId(null); 
     } else {
-        // No plan data and not in diff mode (e.g., loading or error)
         setEditableRoadmap([]);
         setAddedNodeIds(new Set());
         setPersistedNodeIds(new Set());
@@ -376,14 +362,14 @@ export default function PlanDetailPage() {
   }, []);
 
   const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
-    if (diffTarget) return; // Disable editing in diff mode
+    if (diffTarget) return; 
     setEditingTarget({ type: 'node', data: nodeToEdit });
     setIsStepDetailSheetOpen(true);
     setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);
   }, [diffTarget]);
   
   const handleChildItemCanvasNodeFocus = useCallback((childItemId: string, parentCanvasNodeId: string) => {
-    if (diffTarget) return; // Disable in diff mode
+    if (diffTarget) return; 
     const parentNode = editableRoadmap.find(n => n.id === parentCanvasNodeId);
     if (!parentNode) {
       toast({ variant: "destructive", title: "Error", description: "Parent node not found."});
@@ -457,7 +443,7 @@ export default function PlanDetailPage() {
         switch (initiatingDotTypeForDialog) {
             case 'N': newStepX = sourceNodeForPeerLink.x; newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y - NODE_BASE_MIN_HEIGHT - DEFAULT_SPACING_Y); break;
             case 'E': newStepX = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X); newStepY = sourceNodeForPeerLink.y; break;
-            case 'S': newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y + sourceHeight + DEFAULT_SPACING_Y); newStepX = sourceNodeForPeerLink.x; break; // Corrected X and Y assignment for S
+            case 'S': newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y + sourceHeight + DEFAULT_SPACING_Y); newStepX = sourceNodeForPeerLink.x; break; 
             default: 
                 newStepX = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollLeft + canvasRef.current.clientWidth / 2 - NODE_BASE_WIDTH / 2);
                 newStepY = Math.max(MIN_CANVAS_PADDING, canvasRef.current.scrollTop + canvasRef.current.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
@@ -811,17 +797,19 @@ export default function PlanDetailPage() {
   }, [planData, planId, toast]);
 
   const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersion: ClientPlanVersion | null) => {
-    if (!planData) return; // Should not happen if button is enabled
-
-    setDiffTarget({ current: versionToView, previous: previousVersion });
-    setDiffDetailsVersionId(versionToView.id); // Show details for this version
-    // Diff calculation will happen in the useEffect hook that depends on diffTarget
-  }, [planData, setDiffTarget, setDiffDetailsVersionId]);
+    if (!planData) return;
+    if (diffDetailsVersionId === versionToView.id && diffTarget) {
+        handleExitDiffView(); // If clicking the same "Hide Changes" button
+    } else {
+        setDiffTarget({ current: versionToView, previous: previousVersion });
+        setDiffDetailsVersionId(versionToView.id);
+    }
+  }, [planData, diffDetailsVersionId, diffTarget]);
 
   const handleExitDiffView = useCallback(() => {
-      setDiffTarget(null); // This will trigger the useEffect to reset states
-      // setDiffDetailsVersionId(null); // Now handled by the useEffect for diffTarget
-  }, [setDiffTarget]);
+      setDiffTarget(null); 
+      setDiffDetailsVersionId(null); 
+  }, []);
 
   const handleRestoreVersion = (version: ClientPlanVersion) => { setVersionToRestore(version); setIsRestoreConfirmOpen(true); };
   const confirmRestore = () => { if (!versionToRestore || !planId || !user) return; restorePlanMutation.mutate({ planId, versionIdToRestore: versionToRestore.id, currentUserId: user.uid }); };
@@ -1108,7 +1096,7 @@ export default function PlanDetailPage() {
         <main ref={canvasRef} className="flex-1 grid-background relative overflow-auto p-4 md:p-6" style={{ minHeight: canvasMinHeight }}>
          {diffTarget && (
             <div
-              className="absolute inset-0 bg-background/70 backdrop-blur-sm z-20 pointer-events-auto"
+              className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
               onClick={handleExitDiffView}
               title="Click to exit diff view"
             />
@@ -1204,7 +1192,7 @@ export default function PlanDetailPage() {
               <SheetFooter className="p-4 mt-auto border-t pt-4 space-y-2 sm:space-y-0 sm:flex sm:justify-between">
                 <div>{canEditPlan && editingTarget.data && (<Button type="button" variant="destructive" onClick={() => setNodeToDelete(editingTarget.data)} disabled={saveRoadmapMutation.isPending} className="w-full sm:w-auto"><Trash2 className="mr-2 h-4 w-4" /> Delete Node from Canvas</Button>)}</div>
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-                  <SheetClose asChild><Button type="button" variant="outline" onClick={() => setEditingTarget(null)} disabled={saveRoadmapMutation.isPending}>Close Panel</Button></SheetClose>
+                  <DialogClose asChild><Button type="button" variant="outline" onClick={() => setEditingTarget(null)} disabled={saveRoadmapMutation.isPending}>Close Panel</Button></DialogClose>
                   {canEditPlan && editingTarget.data && (isEditingNodeTitle || isEditingNodeDescription) && (<Button type="button" onClick={() => handleNodeDetailUpdate(editingTarget.data)} disabled={saveRoadmapMutation.isPending}>{saveRoadmapMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Node Changes</Button>)}
                 </div>
               </SheetFooter>
@@ -1246,7 +1234,7 @@ export default function PlanDetailPage() {
               <SheetFooter className="p-4 mt-auto border-t pt-4 space-y-2 sm:space-y-0 sm:flex sm:justify-between">
                 <div>{canEditPlan && (<Button type="button" variant="destructive" onClick={() => handleDeleteChildItem(editingTarget.data.id, editingTarget.parentNode.id)} disabled={saveRoadmapMutation.isPending} className="w-full sm:w-auto"><Trash2 className="mr-2 h-4 w-4" /> Delete Item</Button>)}</div>
                 <div className="flex flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
-                  <SheetClose asChild><Button type="button" variant="outline" onClick={() => setEditingTarget(null)} disabled={saveRoadmapMutation.isPending}>Close Panel</Button></SheetClose>
+                  <DialogClose asChild><Button type="button" variant="outline" onClick={() => setEditingTarget(null)} disabled={saveRoadmapMutation.isPending}>Close Panel</Button></DialogClose>
                   {canEditPlan && (<Button type="button" onClick={() => handleChildItemDetailUpdateInPanel(editingTarget.data, editingTarget.parentNode.id)} disabled={saveRoadmapMutation.isPending}>{saveRoadmapMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}Save Item Changes</Button>)}
                 </div>
               </SheetFooter>
@@ -1277,44 +1265,44 @@ export default function PlanDetailPage() {
       <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen}>
         <SheetContent className="sm:max-w-lg w-[90vw]" side="left">
           <SheetHeader className="border-b pb-4">
-            <SheetTitle>Plan Version History (v{planData?.version || 1})</SheetTitle>
+            <SheetTitle>Plan Version History (Live Version: {planData?.version || 1})</SheetTitle>
             <SheetDescription>Review past versions of this plan. You can restore to a previous version or view changes.</SheetDescription>
           </SheetHeader>
-          <ScrollArea className="h-[calc(100%-120px)]"> {/* Adjusted height for footer */}
+          <ScrollArea className="h-[calc(100%-60px)]"> {/* Adjusted height for NO footer */}
             <div className="p-4 space-y-1">
               {isLoadingVersions && (<div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/><p className="ml-2 text-muted-foreground">Loading versions...</p></div>)}
-              {!isLoadingVersions && planVersions.length === 0 && (<p className="text-sm text-muted-foreground text-center py-4">No version history.</p>)}
+              {!isLoadingVersions && planVersions.length === 0 && (<p className="text-sm text-muted-foreground text-center py-4">No version history available for this plan.</p>)}
               {!isLoadingVersions && planVersions.map((version, index) => {
                 const isCurrentLiveVersion = version.versionNumber === planData?.version;
-                const isDiffingThisVersion = diffDetailsVersionId === version.id && !!diffTarget;
-                const previousVersion = planVersions[index + 1] || null;
-                const canViewChanges = index < planVersions.length - 1; // Cannot view changes for the oldest version
+                const isViewingThisVersionDiff = diffDetailsVersionId === version.id && !!diffTarget;
+                const previousVersionForDiff = planVersions[index + 1] || null;
+                const canViewChangesForThis = index < planVersions.length - 1 || (planVersions.length === 1 && version.versionNumber > 1); // Can view changes if not oldest, or if it's the only version but not v1
                 
                 return (
-                  <div key={version.id} className={cn("p-3 border rounded-md bg-muted/30 hover:bg-muted/40 transition-colors", isCurrentLiveVersion && "border-primary ring-1 ring-primary", isDiffingThisVersion && "ring-2 ring-purple-500 border-purple-500")}>
+                  <div key={version.id} className={cn("p-3 border rounded-md bg-card hover:bg-muted/30 transition-colors", isCurrentLiveVersion && "border-primary ring-1 ring-primary", isViewingThisVersionDiff && "ring-2 ring-purple-500 border-purple-500")}>
                     <div className="flex justify-between items-center">
                         <div className="min-w-0">
-                            <p className="text-sm font-medium truncate">Version {version.versionNumber || "(Legacy)"} {isCurrentLiveVersion && <Badge variant="secondary" className="ml-2 text-xs">Current Live</Badge>}</p>
-                            <p className="text-xs text-muted-foreground truncate">Saved by: <span className="font-semibold text-foreground">{version.editorDisplayName || getInitials(version.editorUid) || version.editorUid}</span> on {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}</p>
-                        </div>
-                        <div className="flex flex-col sm:flex-row gap-1.5 flex-shrink-0">
-                            {isDiffingThisVersion ? (
-                                <Button variant="outline" size="xs" className="h-7 px-2 text-xs bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 border-purple-500" onClick={handleExitDiffView} disabled={restorePlanMutation.isPending}>
-                                    Hide Changes
-                                </Button>
-                            ) : (
-                                <Button variant="outline" size="xs" className="h-7 px-2 text-xs" onClick={() => handleViewChangesClick(version, previousVersion)} disabled={!canViewChanges || restorePlanMutation.isPending || !!diffTarget}>
-                                    <Eye className="h-3.5 w-3.5 mr-1.5" /> View Changes
-                                </Button>
-                            )}
-                            <Button variant="outline" size="xs" className="h-7 px-2 text-xs" onClick={() => handleRestoreVersion(version)} disabled={isCurrentLiveVersion || restorePlanMutation.isPending || !!diffTarget}>
-                                <History className="h-3.5 w-3.5 mr-1.5" /> Restore
-                            </Button>
+                            <div className="flex items-center gap-2">
+                                <p className="text-sm font-medium truncate text-foreground">Version {version.versionNumber || "(Legacy)"}</p>
+                                {isCurrentLiveVersion && <Badge variant="secondary" className="text-xs">Current Live</Badge>}
+                                 <div className="flex items-center gap-1.5">
+                                    <Button variant="outline" size="xs" className="h-7 px-2 text-xs" 
+                                        onClick={() => handleViewChangesClick(version, previousVersionForDiff)} 
+                                        disabled={!canViewChangesForThis || restorePlanMutation.isPending || (!!diffTarget && !isViewingThisVersionDiff)} // Disable if another diff is active
+                                    >
+                                        {isViewingThisVersionDiff ? <><View className="h-3.5 w-3.5 mr-1.5 text-purple-500"/>Hiding...</> : <><Eye className="h-3.5 w-3.5 mr-1.5" />View Changes</>}
+                                    </Button>
+                                    <Button variant="outline" size="xs" className="h-7 px-2 text-xs" onClick={() => handleRestoreVersion(version)} disabled={isCurrentLiveVersion || restorePlanMutation.isPending || !!diffTarget}>
+                                        <History className="h-3.5 w-3.5 mr-1.5" /> Restore
+                                    </Button>
+                                </div>
+                            </div>
+                            <p className="text-xs text-muted-foreground truncate">Saved by: <span className="font-semibold text-foreground/80">{version.editorDisplayName || getInitials(version.editorUid) || version.editorUid}</span> on {format(new Date(version.timestamp), "MMM d, yyyy, h:mm a")}</p>
                         </div>
                     </div>
-                    {isDiffingThisVersion && diffTarget && (
+                    {isViewingThisVersionDiff && diffTarget && (
                         <div className="mt-2 pt-2 border-t border-dashed border-purple-500/50 bg-purple-500/5 text-xs space-y-1 p-2 rounded-b-md">
-                            <div className="font-medium text-purple-700 dark:text-purple-300">Comparing Version {diffTarget.current.versionNumber} with Version {diffTarget.previous?.versionNumber || 'Initial State'}. Canvas interactions disabled.</div>
+                            <div className="font-medium text-purple-700 dark:text-purple-300">Displaying changes in Version {diffTarget.current.versionNumber} compared to Version {diffTarget.previous?.versionNumber || 'Initial State'}.</div>
                             {addedNodeIds.size > 0 && (
                                 <div><strong>Added Nodes:</strong> {Array.from(addedNodeIds).map(id => diffTarget.current.roadmap.find(n=>n.id===id)?.title || id).join(', ')}</div>
                             )}
@@ -1322,8 +1310,9 @@ export default function PlanDetailPage() {
                                 <div><strong>Removed Nodes:</strong> {removedNodeTitles.join(', ')}</div>
                             )}
                             {addedNodeIds.size === 0 && removedNodeTitles.length === 0 && (
-                                <p className="italic">No structural node additions or removals compared to the previous version.</p>
+                                <p className="italic">No structural node additions or removals compared to the previous version (content changes may exist).</p>
                             )}
+                             <Button variant="outline" size="xs" className="mt-1.5 h-6 px-1.5 text-xs" onClick={handleExitDiffView}>Exit Diff View</Button>
                         </div>
                     )}
                   </div>
@@ -1331,9 +1320,7 @@ export default function PlanDetailPage() {
               })}
             </div>
           </ScrollArea>
-          <SheetFooter className="border-t pt-4 p-4">
-            <SheetClose asChild><Button variant="outline" className="w-full">Close History</Button></SheetClose>
-          </SheetFooter>
+          {/* Footer removed to give more space to content */}
         </SheetContent>
       </Sheet>
       <AlertDialog open={isRestoreConfirmOpen} onOpenChange={setIsRestoreConfirmOpen}>
