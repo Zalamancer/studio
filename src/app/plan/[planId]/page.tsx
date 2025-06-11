@@ -20,7 +20,13 @@ import {
   History,
   Eye,
   ChevronsUpDown,
-  User, // Added User icon
+  User,
+  Info, // Added Info icon
+  FileText, // For plan info
+  CalendarDays, // For plan info
+  Users2, // For contributors
+  BoxSelect, // For nodes
+  ListTree, // For child items
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -49,8 +55,9 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFo
 import { format } from 'date-fns';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
-import { fetchUserProfileBasic } from '@/services/connectionService'; // Added for owner profile
-import type { UserProfileBasic } from '@/types/connection'; // Added for owner profile
+import { fetchUserProfileBasic } from '@/services/connectionService';
+import type { UserProfileBasic } from '@/types/connection';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card'; // For Plan Info Card
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
@@ -414,6 +421,23 @@ export default function PlanDetailPage() {
       return { ...currentVersion, addedNodesCount, removedNodesCount };
     });
   }, [planVersionsData]);
+
+  const totalChildItemCount = useMemo(() => {
+    return editableRoadmap.reduce((acc, step) => acc + (step.childrenData?.length || 0), 0);
+  }, [editableRoadmap]);
+
+  const uniqueContributorsCount = useMemo(() => {
+    if (!planData) return 1; // Only owner if no plan data
+    const editorUids = new Set<string>();
+    if (planData.ownerId) editorUids.add(planData.ownerId);
+    if (augmentedPlanVersions && augmentedPlanVersions.length > 0) {
+      augmentedPlanVersions.forEach(version => {
+        if (version.editorUid) editorUids.add(version.editorUid);
+      });
+    }
+    return editorUids.size;
+  }, [planData, augmentedPlanVersions]);
+
 
   const saveRoadmapMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; roadmapToSave: RoadmapStep[] }) => savePlanData(payload.planId, payload.currentUserId, payload.roadmapToSave),
@@ -942,7 +966,7 @@ export default function PlanDetailPage() {
       setDiffTarget({ current: versionToView, previous: previousVersionInHistory });
       setDiffDetailsVersionId(versionToView.id);
     }
-  }, [planData, diffDetailsVersionId, diffTarget]); // Added handleExitDiffView to dependencies
+  }, [planData, diffDetailsVersionId, diffTarget]);
 
   const handleExitDiffView = useCallback(() => {
     setDiffTarget(null);
@@ -1187,11 +1211,11 @@ export default function PlanDetailPage() {
   if (!planId || !isValidPlanId) { return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Invalid Plan ID</h1><p className="text-muted-foreground">The plan identifier in the URL is not valid.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>); }
 
   return (
-    <div className="flex flex-col flex-1">
-      <div className="sticky top-0 z-30 w-full border-b bg-background"> {/* Increased z-index for header */}
+    <div className="flex flex-col flex-1 h-full"> {/* Ensure full height for flex */}
+      <div className="sticky top-0 z-30 w-full border-b bg-background">
         <div className="container mx-auto flex h-16 max-w-screen-2xl items-center px-4 justify-between">
           <div className="flex items-center gap-2">
-            <Button variant="ghost" size="icon" className="md:hidden mr-1" onClick={() => router.back()} aria-label="Go back">
+            <Button variant="ghost" size="icon" className="mr-1" onClick={() => router.back()} aria-label="Go back">
               <ChevronLeft className="h-6 w-6" />
             </Button>
             <h1 className="text-lg sm:text-xl font-semibold truncate" title={planData?.name || "Loading Plan..."}>
@@ -1205,12 +1229,6 @@ export default function PlanDetailPage() {
             )}
           </div>
           <div className="flex flex-1 items-center justify-end space-x-1 sm:space-x-2">
-            {!canEditPlan && planData?.ownerId && (
-              <div className="flex sm:hidden items-center space-x-1 text-xs text-muted-foreground">
-                <User className="h-3 w-3" />
-                <span>{isLoadingOwnerProfile ? 'Owner...' : ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}</span>
-              </div>
-            )}
             {canEditPlan && (
               <>
                 <Button variant="outline" size="sm" onClick={() => setIsVersionHistorySheetOpen(true)} className="text-xs sm:text-sm h-8 sm:h-9">
@@ -1231,15 +1249,61 @@ export default function PlanDetailPage() {
         </div>
       </div>
 
+      {/* Plan Info Section */}
+      {planData && (
+        <Card className="m-4 mb-0 rounded-lg border shadow-sm bg-card">
+            <CardHeader className="p-3">
+                <CardTitle className="text-base font-semibold flex items-center gap-2">
+                    <Info className="h-4 w-4 text-primary" /> Plan Overview
+                </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 pt-0 text-xs grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2">
+                <div className="flex items-center gap-1.5">
+                    <User className="h-3.5 w-3.5 text-muted-foreground"/>
+                    <strong className="text-foreground/80">Created by:</strong>
+                    <span className="text-muted-foreground truncate" title={ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}>
+                        {ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}
+                    </span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <CalendarDays className="h-3.5 w-3.5 text-muted-foreground"/>
+                    <strong className="text-foreground/80">Created:</strong>
+                    <span className="text-muted-foreground">{format(new Date(planData.createdAt), 'PP')}</span>
+                </div>
+                 <div className="flex items-center gap-1.5">
+                    <History className="h-3.5 w-3.5 text-muted-foreground"/>
+                    <strong className="text-foreground/80">Updated:</strong>
+                    <span className="text-muted-foreground">{format(new Date(planData.updatedAt), 'PPp')}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <BoxSelect className="h-3.5 w-3.5 text-muted-foreground"/>
+                    <strong className="text-foreground/80">Nodes:</strong>
+                    <span className="text-muted-foreground">{editableRoadmap.length}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <ListTree className="h-3.5 w-3.5 text-muted-foreground"/>
+                    <strong className="text-foreground/80">Child Items:</strong>
+                    <span className="text-muted-foreground">{totalChildItemCount}</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <Users2 className="h-3.5 w-3.5 text-muted-foreground"/>
+                    <strong className="text-foreground/80">Contributors:</strong>
+                    <span className="text-muted-foreground">{uniqueContributorsCount}</span>
+                </div>
+            </CardContent>
+        </Card>
+      )}
+
+
       {diffTarget && (
         <div
-          className="absolute inset-0 bg-black/60 z-20 pointer-events-auto" // Dimming overlay, no blur
+          className="absolute inset-0 bg-black/60 z-20 pointer-events-auto"
           onClick={handleExitDiffView}
           aria-hidden="true"
         />
       )}
 
-      <div className="flex flex-1 items-center justify-center overflow-auto">
+      <div className="flex flex-1 items-center justify-center overflow-auto mt-4"> {/* Added mt-4 for spacing */}
         {planError ? (
           <div className="flex flex-col items-center justify-center p-4 text-center">
             <AlertTriangle className="h-10 w-10 text-destructive mb-2" />
@@ -1247,11 +1311,11 @@ export default function PlanDetailPage() {
             <p className="text-muted-foreground">{planError.message || "Failed to load plan."}</p>
           </div>
         ) : (
-          <ScrollArea className="flex flex-1">
+          <ScrollArea className="flex flex-1 w-full h-full"> {/* Ensure ScrollArea takes full width and height of its parent */}
             <div
               ref={canvasRef}
-              style={{ minWidth: '100%', minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'auto', touchAction: 'none' }}
-              className="bg-muted grid-background" // Added grid-background
+              style={{ minWidth: '100%', minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'visible' }} // Changed overflow to visible
+              className="bg-muted grid-background"
             >
               <svg
                 ref={svgRef}
@@ -1396,32 +1460,28 @@ export default function PlanDetailPage() {
             <SheetDescription>View, compare, and restore previous versions of your plan.</SheetDescription>
           </SheetHeader>
           <ScrollArea className="flex-1">
-            <div className="divide-y divide-border p-4 space-y-3"> {/* Increased space-y */}
-              {augmentedPlanVersions.map((version, index) => {
-                const previousVersionInHistory = augmentedPlanVersions[index + 1] || null;
-                const isViewingThisVersionDiff = diffDetailsVersionId === version.id && !!diffTarget;
+            <div className="divide-y divide-border p-4 space-y-3">
+              {augmentedPlanVersions.map((version) => {
+                const isThisVersionDiffActive = diffTarget?.current.id === version.id && diffDetailsVersionId === version.id;
                 const changeSummary = `(+${version.addedNodesCount} added, -${version.removedNodesCount} removed)`;
-
                 return (
-                  <div key={version.id} className={cn("pt-3 first:pt-0 mb-2", isViewingThisVersionDiff && "bg-muted/50 p-3 rounded-md -mx-3")}> {/* Added mb-2 */}
+                  <div key={version.id} className={cn("pt-3 first:pt-0 mb-2", isThisVersionDiffActive && "bg-muted/50 p-3 rounded-md -mx-3")}>
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex-grow min-w-0">
-                        <div className="flex items-baseline gap-2">
-                            <h3 className="text-sm font-semibold truncate" title={`Version ${version.versionNumber}`}>
+                        <div className="flex items-baseline gap-x-2 flex-wrap">
+                          <h3 className="text-sm font-semibold truncate" title={`Version ${version.versionNumber}`}>
                             Version {version.versionNumber}
-                            </h3>
-                            <span className={cn("text-xs", version.addedNodesCount > 0 && "text-green-600", version.removedNodesCount > 0 && "text-red-600")}>
-                                {changeSummary}
-                            </span>
-                        </div>
-                        <div className="text-xs text-muted-foreground flex items-center flex-wrap gap-x-2">
-                            <span>by {version.editorDisplayName || 'Unknown Editor'}</span>
-                            <span>{format(version.timestamp, 'MMM d, yyyy h:mm a')}</span>
+                          </h3>
+                          <span className="text-xs text-muted-foreground/80">by {version.editorDisplayName || 'Unknown'}</span>
+                          <span className="text-xs text-muted-foreground/80">({format(version.timestamp, 'MMM d, h:mma')})</span>
+                          <span className={cn("text-xs font-medium", version.addedNodesCount > 0 && "text-green-600", version.removedNodesCount > 0 && "text-red-600")}>
+                              {changeSummary}
+                          </span>
                         </div>
                       </div>
                       <div className="flex items-center space-x-1 flex-shrink-0">
-                        <Button variant="outline" size="xs" onClick={() => handleViewChangesClick(version, previousVersionInHistory)} className="h-7 px-2">
-                          {isViewingThisVersionDiff ? (<>Hide Changes</>) : (<><ChevronsUpDown className="mr-1 h-3.5 w-3.5" /> View Changes</>)}
+                        <Button variant="outline" size="xs" onClick={() => handleViewChangesClick(version, augmentedPlanVersions.find(v => v.versionNumber === version.versionNumber -1) || null)} className="h-7 px-2">
+                          {isThisVersionDiffActive ? (<><Eye className="mr-1 h-3.5 w-3.5" /> Viewing...</>) : (<><ChevronsUpDown className="mr-1 h-3.5 w-3.5" /> View Changes</>)}
                         </Button>
                         {canEditPlan && (
                           <Button variant="ghost" size="xs" onClick={() => handleRestoreVersion(version)} disabled={restorePlanMutation.isPending && versionToRestore?.id === version.id} className="h-7 px-2">
@@ -1431,7 +1491,7 @@ export default function PlanDetailPage() {
                         )}
                       </div>
                     </div>
-                    {isViewingThisVersionDiff && (
+                    {isThisVersionDiffActive && (
                       <div className="mt-2.5 pt-2.5 border-t border-border/50 text-xs space-y-1 pl-1">
                         <div className="font-medium text-foreground">Canvas highlights active. Interactions disabled.</div>
                         {addedNodeIds.size > 0 && (
@@ -1440,7 +1500,7 @@ export default function PlanDetailPage() {
                         {removedNodeTitles.length > 0 && (
                             <div><strong>Removed Nodes:</strong> {removedNodeTitles.join(', ')}</div>
                         )}
-                        {/* No "Hide Changes" button here, it's part of the main View/Hide button now */}
+                         {/* No "Hide Changes" button here, it's part of the main View/Hide button now */}
                       </div>
                     )}
                   </div>
@@ -1448,7 +1508,6 @@ export default function PlanDetailPage() {
               })}
             </div>
           </ScrollArea>
-          {/* "Close History" button removed from SheetFooter */}
         </SheetContent>
       </Sheet>
 
@@ -1473,4 +1532,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
+    
