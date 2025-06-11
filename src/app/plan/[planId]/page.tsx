@@ -50,14 +50,14 @@ import { v4 as uuidv4 } from 'uuid';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog'; // DialogClose removed
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { format } from 'date-fns';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
 import { fetchUserProfileBasic } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { Card, CardHeader, CardContent } from '@/components/ui/card'; // CardPrimitiveTitle, CardPrimitiveDescription removed as they are not direct exports
+import { Card, CardHeader, CardContent } from '@/components/ui/card';
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
@@ -82,9 +82,9 @@ function calculateNodeHeight(step: RoadmapStep, allSteps: RoadmapStep[]): number
 
   let childrenDataListHeight = 0;
   if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
-    childrenDataListHeight += 8; 
+    childrenDataListHeight += 8;
     childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
-    childrenDataListHeight += 8; 
+    childrenDataListHeight += 8;
   }
 
   contentAreaHeight = childrenDataListHeight;
@@ -311,7 +311,9 @@ const EditChildItemDialog: React.FC<EditChildItemDialogProps> = ({ isOpen, onOpe
             <Textarea id="child-item-description-dialog" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Details about this item..." rows={3} disabled={isSubmitting} />
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button> {/* Changed DialogClose to Button */}
+            <DialogClose asChild>
+              <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={isSubmitting}>Cancel</Button>
+            </DialogClose>
             <Button type="submit" disabled={isSubmitting || !title.trim()}>
               {isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
               Save Item
@@ -560,7 +562,6 @@ export default function PlanDetailPage() {
       return;
     }
     setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
-    // setOriginalEditingChildItemData(childItem); // This will be handled by Sheet's onOpenChange
     setIsStepDetailSheetOpen(true);
     setIsEditingChildItemTitle(false); setIsEditingChildItemDescription(false);
   }, [editableRoadmap, toast, diffTarget, setEditingTarget, setIsStepDetailSheetOpen]);
@@ -572,8 +573,6 @@ export default function PlanDetailPage() {
         ? { ...s, ...updatedStep, childrenData: updatedStep.childrenData || (s.childrenData || []) }
         : s
     ));
-    // Toast is removed here, will be handled on panel close if changes were made
-    // toast({ title: "Node Updated", description: `"${updatedStep.title}" details changed. Remember to save.`});
     setIsEditingNodeTitle(false); setIsEditingNodeDescription(false);
   }, [canEditPlan, diffTarget]);
 
@@ -588,8 +587,6 @@ export default function PlanDetailPage() {
       }
       return parentNode;
     }));
-    // Toast is removed here, will be handled on panel close
-    // toast({ title: "Item Updated", description: `"${updatedChildItem.title}" details changed. Remember to save.`});
     setIsEditingChildItemTitle(false); setIsEditingChildItemDescription(false);
   }, [canEditPlan, diffTarget]);
 
@@ -822,12 +819,10 @@ export default function PlanDetailPage() {
       parentNodeId: parentNodeIdOfChildItem
     };
     setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
-    // setOriginalEditingChildItemData(childItem); // This will be handled by Sheet's onOpenChange
     setIsStepDetailSheetOpen(true);
     setDynamicChildDialogTitle(`Edit Item: "${childItem.title}"`);
     setDefaultChildDialogTitle(childItem.title);
     setDefaultChildDialogDescription(childItem.description || "");
-    // setIsEditChildItemDialogOpen(true); // No, the panel is now used
   }, [canEditPlan, diffTarget, editableRoadmap, toast, setEditingTarget, setIsStepDetailSheetOpen]);
 
   const handleUnspawnNodeIfChildless = useCallback((nodeIdToCheck: string) => {
@@ -1130,8 +1125,84 @@ export default function PlanDetailPage() {
     };
   }, [isPointerDown, handleGlobalMove, handleGlobalPointerUp]);
 
+  const drawConnectionLines = useCallback(() => {
+    if (!editableRoadmap) return null;
+    const lines: JSX.Element[] = [];
+
+    editableRoadmap.forEach((parentStep) => {
+      const parentNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
+      if (parentStep.childrenData) {
+        parentStep.childrenData.forEach((childItem, index) => {
+          if (childItem.canvasNodeIdForThisItem) {
+            const childNode = editableRoadmap.find(node => node.id === childItem.canvasNodeIdForThisItem);
+            if (childNode) {
+              const startX = parentStep.x + NODE_BASE_WIDTH / 2;
+              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2);
+              const endX = childNode.x;
+              const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2;
+              const pathKey_child = `childconn-${parentStep.id}-to-${childNode.id}-${index}`;
+              lines.push(
+                <path
+                  key={pathKey_child}
+                  d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                  stroke={'hsl(var(--primary))'}
+                  strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY}
+                  fill="none"
+                  markerEnd="url(#arrowhead-main)"
+                  style={{ pointerEvents: "none" }}
+                />
+              );
+            }
+          }
+        });
+      }
+
+      if (parentStep.peerConnections) {
+        parentStep.peerConnections.forEach((peerConn, index) => {
+          const targetStep = editableRoadmap.find(node => node.id === peerConn.targetNodeId);
+          if (targetStep) {
+            const sourceNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
+            const targetNodeHeight = calculateNodeHeight(targetStep, editableRoadmap);
+
+            let startX, startY, endX, endY;
+            switch (peerConn.sourceDot) {
+              case 'N': startX = parentStep.x + NODE_BASE_WIDTH / 2; startY = parentStep.y; break;
+              case 'E': startX = parentStep.x + NODE_BASE_WIDTH; startY = parentStep.y + sourceNodeHeight / 2; break;
+              case 'S': startX = parentStep.x + NODE_BASE_WIDTH / 2; startY = parentStep.y + sourceNodeHeight; break;
+              default: return;
+            }
+            switch (peerConn.targetDot) {
+              case 'N': endX = targetStep.x + NODE_BASE_WIDTH / 2; endY = targetStep.y; break;
+              case 'E': endX = targetStep.x + NODE_BASE_WIDTH; endY = targetStep.y + targetNodeHeight / 2; break;
+              case 'S': endX = targetStep.x + NODE_BASE_WIDTH / 2; endY = targetStep.y + targetNodeHeight; break;
+              case 'W': endX = targetStep.x; endY = targetStep.y + targetNodeHeight / 2; break;
+              default: return;
+            }
+            const pathKey_peer = `peerconn-${parentStep.id}-${peerConn.sourceDot}-to-${targetStep.id}-${peerConn.targetDot}-${index}`;
+            lines.push(
+              <path
+                key={pathKey_peer}
+                d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                stroke={'hsl(var(--accent))'}
+                strokeWidth={CONNECTION_LINE_THICKNESS_PEER}
+                fill="none"
+                markerEnd="url(#arrowhead-accent)"
+                style={{ pointerEvents: "none" }}
+              />
+            );
+          }
+        });
+      }
+    });
+    return lines;
+  }, [editableRoadmap]);
+
+
   if (authLoading || (isLoadingPlan && isValidPlanId)) { return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>; }
   if (!planId || !isValidPlanId) { return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Invalid Plan ID</h1><p className="text-muted-foreground">The plan identifier in the URL is not valid.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>); }
+  if (planError) { return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Error Loading Plan</h1><p className="text-muted-foreground">{planError.message}</p><Button onClick={() => router.refresh()} className="mt-4">Try Again</Button></div>); }
+  if (!planData && !isLoadingPlan) { return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Plan Not Found</h1><p className="text-muted-foreground">The requested plan could not be found.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>); }
+
 
   return (
     <div className="flex flex-col flex-1 h-full">
@@ -1267,23 +1338,21 @@ export default function PlanDetailPage() {
       </div>
 
       <Sheet open={isStepDetailSheetOpen} onOpenChange={(newOpenState) => {
-          if (newOpenState) { // Sheet is opening
+          if (newOpenState) {
             if (editingTarget?.type === 'childItem') {
               const parentNode = editableRoadmap.find(n => n.id === editingTarget.parentNode.id);
               const currentItemData = parentNode?.childrenData.find(ci => ci.id === editingTarget.data.id);
               setOriginalEditingChildItemData(currentItemData || editingTarget.data);
             }
-          } else { // Sheet is closing
+          } else {
             if (editingTarget?.type === 'childItem' && originalEditingChildItemData) {
               const parentNode = editableRoadmap.find(n => n.id === editingTarget.parentNode.id);
               const latestItemData = parentNode?.childrenData.find(ci => ci.id === originalEditingChildItemData.id);
-
               if (latestItemData) {
                 const originalTitle = originalEditingChildItemData.title || "";
                 const latestTitle = latestItemData.title || "";
                 const originalDescription = originalEditingChildItemData.description || "";
                 const latestDescription = latestItemData.description || "";
-
                 if (originalTitle !== latestTitle || originalDescription !== latestDescription) {
                   toast({ title: "Item Updated", description: "Changes saved in draft. Click 'Save Plan' to persist."});
                 }
@@ -1301,8 +1370,8 @@ export default function PlanDetailPage() {
         <SheetContent className="sm:max-w-[486px]" side="right">
           <SheetHeader>
              <SheetTitle>
-                {editingTarget?.type === 'node' ? `Edit Step: "${editingTarget.data.title}"` : 
-                 editingTarget?.type === 'childItem' ? `Edit Item: "${editingTarget.data.title}"` 
+                {editingTarget?.type === 'node' ? `Edit Step: "${editingTarget.data.title}"` :
+                 editingTarget?.type === 'childItem' ? `Edit Item: "${editingTarget.data.title}"`
                  : "Details"}
              </SheetTitle>
             <SheetDescription>
@@ -1510,4 +1579,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-    
