@@ -40,6 +40,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 
 import { getPlanById, updatePlanRoadmap as savePlanData, getPlanVersions, restorePlanToVersion } from '@/services/planService';
 import type { ClientPlan, RoadmapStep, ChildDataItem, UpdatePlanData, ClientPlanVersion, PeerConnection } from '@/types/plan';
@@ -51,7 +52,6 @@ import { v4 as uuidv4 } from 'uuid';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose as SheetPrimitiveClose } from '@/components/ui/sheet'; // Added SheetClose for explicit close button styling
 import { format } from 'date-fns';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
@@ -106,7 +106,7 @@ interface RoadmapStepCardComponentProps {
   onEditStep: (step: RoadmapStep) => void;
   onAddGrandchildToChildDataItem: (parentChildItemId: string, parentCanvasNodeIdOfChildItem: string) => void;
   onChildItemTitleClick: (childItemId: string, parentCanvasNodeId: string) => void;
-  onAddChildItemToNode: (parentNodeId: string) => void; // New prop for adding child item
+  onAddChildItemToNode: (parentNodeId: string) => void;
   isActuallyDraggingThisNode?: boolean;
   diffHighlight?: 'added' | 'persisted';
 }
@@ -119,7 +119,7 @@ const RoadmapStepCardComponent = React.memo<RoadmapStepCardComponentProps>(({
   onEditStep,
   onAddGrandchildToChildDataItem,
   onChildItemTitleClick,
-  onAddChildItemToNode, // Destructure new prop
+  onAddChildItemToNode,
   isActuallyDraggingThisNode,
   diffHighlight,
 }) => {
@@ -603,7 +603,7 @@ export default function PlanDetailPage() {
       }
       return parentNode;
     }));
-    setIsEditingChildItemTitle(false); setIsEditingChildItemDescription(false);
+    // No toast here, will be handled on panel close
   }, [canEditPlan, diffTarget]);
 
   const handleInitiateAddNode = useCallback((sourceNodeId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
@@ -775,7 +775,6 @@ export default function PlanDetailPage() {
           const updatedParentNode = { ...tempRoadmap[parentCanvasNodeForGrandchildIndex] };
           updatedParentNode.childrenData = [...(updatedParentNode.childrenData || []), newGrandchildItem];
           tempRoadmap[parentCanvasNodeForGrandchildIndex] = updatedParentNode;
-          toast({ title: "Item Added", description: `"${data.title}" added to "${updatedParentNode.title}". Remember to save.` });
           operationSucceeded = true;
           const nodeThatBecameParent = tempRoadmap.find(n => n.id === spawnedNodeIdForContext);
           if (nodeThatBecameParent) {
@@ -800,7 +799,6 @@ export default function PlanDetailPage() {
           const updatedParentNode = { ...tempRoadmap[parentNodeIndex] };
           updatedParentNode.childrenData = [...(updatedParentNode.childrenData || []), newChildItem];
           tempRoadmap[parentNodeIndex] = updatedParentNode;
-          toast({ title: "Item Added to List", description: `"${data.title}" added. Remember to save.` });
           operationSucceeded = true;
         } else {
           toast({ variant: "destructive", title: "Error", description: `Parent node ${targetParentNodeId} not found for adding child.`});
@@ -833,7 +831,7 @@ export default function PlanDetailPage() {
       return tempRoadmap;
     });
 
-    if (operationSucceeded && context.operation !== 'edit') { // Only toast non-edit operations here, edit is handled by panel close
+    if (operationSucceeded && context.operation !== 'edit') {
         toast({ title: "Item Action Complete", description: "Remember to save the plan." });
     }
     if (operationSucceeded) {
@@ -854,12 +852,9 @@ export default function PlanDetailPage() {
       itemToEditId: childItem.id,
       parentNodeId: parentNodeIdOfChildItem
     };
-    // This function no longer opens the dialog, it sets context for panel
-    // The panel is opened by handleChildItemCanvasNodeFocus
     setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
     setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem)));
     setIsStepDetailSheetOpen(true);
-
   }, [canEditPlan, diffTarget, editableRoadmap, toast, setEditingTarget, setIsStepDetailSheetOpen, setOriginalEditingChildItemData]);
 
   const handleUnspawnNodeIfChildless = useCallback((nodeIdToCheck: string) => {
@@ -934,7 +929,7 @@ export default function PlanDetailPage() {
         const parentNodeAfterDelete = updatedRoadmap.find(n => n.id === parentCanvasNodeIdOfItem);
         if (parentNodeAfterDelete) {
              setEditingTarget({type: 'node', data: parentNodeAfterDelete});
-             setOriginalEditingChildItemData(null); // Clear as we are switching target
+             setOriginalEditingChildItemData(null);
         } else {
              setIsStepDetailSheetOpen(false); setEditingTarget(null); setOriginalEditingChildItemData(null);
         }
@@ -1016,7 +1011,7 @@ export default function PlanDetailPage() {
     if (('button' in event && (event as React.MouseEvent).button !== 0) || !canEditPlan || !canvasRef.current || diffTarget) return;
     const { clientX, clientY } = getPointerCoords(event);
     const nodeElement = (event.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement;
-    if (!nodeElement && !isDotDrag) return; // Ensure we have a node element if not dragging a dot
+    if (!nodeElement && !isDotDrag) return;
     const nodeRect = isDotDrag ? (event.currentTarget as HTMLElement).getBoundingClientRect() : nodeElement.getBoundingClientRect();
     const offsetX = clientX - nodeRect.left;
     const offsetY = clientY - nodeRect.top;
@@ -1175,10 +1170,10 @@ export default function PlanDetailPage() {
           if (childItem.canvasNodeIdForThisItem) {
             const childNode = editableRoadmap.find(node => node.id === childItem.canvasNodeIdForThisItem);
             if (childNode) {
-              // Hierarchical line: From Child Item in list to its Spawned Node (West side)
-              const startX = parentStep.x + 16; // Approximate visual start from parent card's left for the child item dot
+              // Hierarchical line: From Child Item in list to its Spawned Node (East side)
+              const startX = parentStep.x + 16;
               const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2);
-              const endX = childNode.x; // West side of the spawned child node
+              const endX = childNode.x + NODE_BASE_WIDTH; // Targets East side of the spawned node
               const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2;
               const pathKey_child = `hierarchical-${parentStep.id}-child${index}-to-${childNode.id}`;
               lines.push(
@@ -1317,7 +1312,6 @@ export default function PlanDetailPage() {
                             </div>
                         </div>
                     )}
-                    {/* Removed DialogClose from here to rely on X button */}
                 </DialogContent>
             </Dialog>
           </div>
@@ -1377,11 +1371,7 @@ export default function PlanDetailPage() {
       </div>
 
       <Sheet open={isStepDetailSheetOpen} onOpenChange={(newOpenState) => {
-          if (newOpenState) {
-            if (editingTarget?.type === 'childItem') {
-              setOriginalEditingChildItemData(JSON.parse(JSON.stringify(editingTarget.data)));
-            }
-          } else {
+          if (!newOpenState) { // Closing panel
             if (editingTarget?.type === 'childItem' && originalEditingChildItemData) {
               const parentNode = editableRoadmap.find(n => n.id === editingTarget.parentNode.id);
               const latestItemData = parentNode?.childrenData.find(ci => ci.id === originalEditingChildItemData.id);
@@ -1401,11 +1391,15 @@ export default function PlanDetailPage() {
             setIsEditingNodeDescription(false);
             setIsEditingChildItemTitle(false);
             setIsEditingChildItemDescription(false);
+          } else { // Opening panel
+            if (editingTarget?.type === 'childItem') {
+               setOriginalEditingChildItemData(JSON.parse(JSON.stringify(editingTarget.data)));
+            }
           }
           setIsStepDetailSheetOpen(newOpenState);
         }}>
         <SheetContent className="sm:max-w-[486px] w-[90vw]" side="right">
-           <SheetHeader className="flex flex-row justify-between items-center pr-12 relative"> {/* Added relative positioning for absolute close button */}
+           <SheetHeader className="flex flex-row justify-between items-center pr-12 relative">
             <div>
                 <SheetTitle>
                     {editingTarget?.type === 'node' ? `Edit Step: "${editingTarget.data.title}"` :
@@ -1437,7 +1431,6 @@ export default function PlanDetailPage() {
                     </AlertDialogContent>
                 </AlertDialog>
             )}
-            {/* The default X close button from SheetContent will be used if showCloseButton is true (default) */}
           </SheetHeader>
           {editingTarget?.type === 'node' && (
             <div className="grid gap-4 py-4">
@@ -1506,7 +1499,6 @@ export default function PlanDetailPage() {
                 )}
               </div>
           )}
-           {/* SheetFooter removed for node details as actions are moved */}
         </SheetContent>
       </Sheet>
 
@@ -1604,3 +1596,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
