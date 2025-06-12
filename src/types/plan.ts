@@ -28,8 +28,11 @@ export interface RoadmapStep {
   y: number;
   description?: string | null;
   childrenData: ChildDataItem[];
-  peerConnections?: PeerConnection[]; // ADDED: For peer-to-peer visual links
+  peerConnections?: PeerConnection[];
 }
+
+export type PlanVisibility = 'private' | 'unlisted' | 'public';
+export type PlanEditability = 'owner_only' | 'collaborators';
 
 export interface Plan {
   id: string;
@@ -44,13 +47,21 @@ export interface Plan {
   updatedAt: Timestamp;
   roadmap: RoadmapStep[];
   version?: number;
+  visibility: PlanVisibility;
+  editability: PlanEditability;
+  viewUserIds: string[];
+  editUserIds: string[];
 }
 
-export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'roadmap' | 'description'> {
+export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'roadmap' | 'description' | 'viewUserIds' | 'editUserIds'> {
   createdAt?: FieldValue;
   updatedAt?: FieldValue;
   description?: string | null;
   roadmap?: RoadmapStep[];
+  visibility: PlanVisibility; // Made mandatory for new plans
+  editability: PlanEditability; // Made mandatory for new plans
+  viewUserIds?: string[]; // Service will set defaults
+  editUserIds?: string[]; // Service will set defaults
 }
 
 // For updating the overall plan structure, not just a single node's details
@@ -64,6 +75,10 @@ export interface UpdatePlanData {
   subSector?: string | null;
   industry?: string | null;
   naicsCode?: string | null;
+  visibility?: PlanVisibility;
+  editability?: PlanEditability;
+  viewUserIds?: string[];
+  editUserIds?: string[];
 }
 
 export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
@@ -78,6 +93,9 @@ export interface PlanVersionData {
   editorUid: string;
   timestamp: FieldValue;
   versionNumber?: number;
+  // Version snapshots can also store permissions at that time if needed, but keeping it simple for now
+  visibility?: PlanVisibility;
+  editability?: PlanEditability;
 }
 
 export interface ClientPlanVersion extends Omit<PlanVersionData, 'timestamp' | 'editorUid'> {
