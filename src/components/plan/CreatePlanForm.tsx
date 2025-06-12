@@ -19,7 +19,7 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion, User } from 'lucide-react'; // Added User here
+import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion, User } from 'lucide-react';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import type { PlanVisibility, PlanEditability } from '@/types/plan';
 
@@ -28,11 +28,13 @@ const planFormSchema = z.object({
   sector: z.string().min(1, "Please select a sector."),
   subSector: z.string().optional(),
   industry: z.string().optional(),
-  visibility: z.custom<PlanVisibility>(val => ['private', 'unlisted', 'public'].includes(val as string), {
-    message: "Please select a visibility option.",
+  visibility: z.enum(['private', 'unlisted', 'public'], {
+    required_error: "Please select a visibility option.",
+    invalid_type_error: "Invalid visibility option selected.",
   }),
-  editability: z.custom<PlanEditability>(val => ['owner_only', 'collaborators'].includes(val as string), {
-    message: "Please select an editability option.",
+  editability: z.enum(['owner_only', 'collaborators'], {
+    required_error: "Please select an editability option.",
+    invalid_type_error: "Invalid editability option selected.",
   }),
 });
 
@@ -195,17 +197,17 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="private">
-                    <div className="flex items-center gap-2"><Lock className="h-4 w-4" /> Private (Only you)</div>
+                    <div className="flex items-center gap-2"><Lock className="h-4 w-4" /> Only you</div>
                   </SelectItem>
                   <SelectItem value="unlisted">
-                     <div className="flex items-center gap-2"><LinkIcon className="h-4 w-4" /> Unlisted (Anyone with the link can view)</div>
+                     <div className="flex items-center gap-2"><LinkIcon className="h-4 w-4" /> People who you invite</div>
                   </SelectItem>
                   <SelectItem value="public">
-                     <div className="flex items-center gap-2"><Eye className="h-4 w-4" /> Public (Anyone can discover and view)</div>
+                     <div className="flex items-center gap-2"><Eye className="h-4 w-4" /> Everyone</div>
                   </SelectItem>
                 </SelectContent>
               </Select>
-              <FormDescription>Control who can find and view your plan.</FormDescription>
+              <FormDescription>Control who can find and view your plan. "People who you invite" means anyone with the direct link.</FormDescription>
               <FormMessage />
             </FormItem>
           )}
@@ -225,15 +227,15 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                 </FormControl>
                 <SelectContent>
                   <SelectItem value="owner_only">
-                     <div className="flex items-center gap-2"><User className="h-4 w-4" /> Owner Only (Just you)</div>
+                     <div className="flex items-center gap-2"><User className="h-4 w-4" /> Only you (Owner)</div>
                   </SelectItem>
                   <SelectItem value="collaborators">
-                     <div className="flex items-center gap-2"><Users className="h-4 w-4" /> Specific Collaborators (You can invite others later)</div>
+                     <div className="flex items-center gap-2"><Users className="h-4 w-4" /> People who you invite (Collaborators)</div>
                   </SelectItem>
                 </SelectContent>
               </Select>
               <FormDescription>
-                Determine editing permissions. If 'Specific Collaborators', you will be the initial editor.
+                Determine editing permissions. If 'People who you invite', you will be the initial editor.
               </FormDescription>
               <FormMessage />
             </FormItem>
