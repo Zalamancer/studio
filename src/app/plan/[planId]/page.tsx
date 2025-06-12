@@ -577,7 +577,7 @@ export default function PlanDetailPage() {
       return;
     }
     setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
-    setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem))); // Deep copy for comparison on close
+    setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem)));
     setIsStepDetailSheetOpen(true);
     setIsEditingChildItemTitle(false); setIsEditingChildItemDescription(false);
   }, [editableRoadmap, toast, diffTarget, setEditingTarget, setIsStepDetailSheetOpen, setOriginalEditingChildItemData]);
@@ -691,8 +691,9 @@ export default function PlanDetailPage() {
       id: newSpawnedNodeId,
       title: childItem.title,
       description: childItem.description,
-      x: Math.max(MIN_CANVAS_PADDING, parentNode.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X),
-      y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 0.5))),
+      // Position new node to the WEST of the parent node
+      x: Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X),
+      y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 0.5))), // Align Y with child item
       childrenData: [],
       peerConnections: [],
     };
@@ -1161,7 +1162,7 @@ export default function PlanDetailPage() {
   const drawConnectionLines = useCallback(() => {
     if (!editableRoadmap) return null;
     const lines: JSX.Element[] = [];
-    const controlOffset = 50; // For S-curve control points
+    const controlOffset = 100; // Increased controlOffset for more pronounced S-curve
 
     editableRoadmap.forEach((parentStep) => {
       const parentNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
@@ -1170,10 +1171,12 @@ export default function PlanDetailPage() {
           if (childItem.canvasNodeIdForThisItem) {
             const childNode = editableRoadmap.find(node => node.id === childItem.canvasNodeIdForThisItem);
             if (childNode) {
-              // Hierarchical line: From Child Item in list to its Spawned Node (West side of spawned node)
-              const startX = parentStep.x + 16; // Position of green dot from left edge of parent card
-              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2);
-              const endX = childNode.x + NODE_BASE_WIDTH; // Targets East side (right) of the spawned node
+              // Hierarchical line: From Child Item in list to its Spawned Node
+              const startX = parentStep.x + 16; // X-pos of green dot area
+              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2); // Y-pos of green dot area
+              
+              // Target East (right) side of the spawned node
+              const endX = childNode.x + NODE_BASE_WIDTH; 
               const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2;
               const pathKey_child = `hierarchical-${parentStep.id}-child${index}-to-${childNode.id}`;
 
@@ -1227,7 +1230,7 @@ export default function PlanDetailPage() {
                 case 'N': c1x_p = sX; c1y_p = sY - controlOffset; break;
                 case 'E': c1x_p = sX + controlOffset; c1y_p = sY; break;
                 case 'S': c1x_p = sX; c1y_p = sY + controlOffset; break;
-                default: c1x_p = sX; c1y_p = sY; // Should not happen
+                default: c1x_p = sX; c1y_p = sY;
             }
             switch (peerConn.targetDot) {
                 case 'N': c2x_p = eX; c2y_p = eY - controlOffset; break;
@@ -1395,7 +1398,7 @@ export default function PlanDetailPage() {
       </div>
 
       <Sheet open={isStepDetailSheetOpen} onOpenChange={(newOpenState) => {
-          if (!newOpenState) { // Closing panel
+          if (!newOpenState) {
             if (editingTarget?.type === 'childItem' && originalEditingChildItemData) {
               const parentNode = editableRoadmap.find(n => n.id === editingTarget.parentNode.id);
               const latestItemData = parentNode?.childrenData.find(ci => ci.id === originalEditingChildItemData.id);
@@ -1415,31 +1418,19 @@ export default function PlanDetailPage() {
             setIsEditingNodeDescription(false);
             setIsEditingChildItemTitle(false);
             setIsEditingChildItemDescription(false);
-          } else { // Opening panel
+          } else { 
             if (editingTarget?.type === 'childItem') {
                setOriginalEditingChildItemData(JSON.parse(JSON.stringify(editingTarget.data)));
             }
           }
           setIsStepDetailSheetOpen(newOpenState);
         }}>
-        <SheetContent className="sm:max-w-[486px] w-[90vw]" side="right">
-           <SheetHeader className="flex flex-row justify-between items-center pr-12 relative">
-            <div>
-                <SheetTitle>
-                    {editingTarget?.type === 'node' ? `Edit Step: "${editingTarget.data.title}"` :
-                    editingTarget?.type === 'childItem' ? `Edit Item: "${editingTarget.data.title}"`
-                    : "Details"}
-                </SheetTitle>
-                <SheetDescription>
-                    {editingTarget?.type === 'node' ? "Modify the title and description for this roadmap step." :
-                    editingTarget?.type === 'childItem' ? `Modify the details for this item within "${editingTarget.parentNode.title}".`
-                    : "View and edit details."}
-                </SheetDescription>
-            </div>
-            {editingTarget?.type === 'node' && canEditPlan && !diffTarget && (
+        <SheetContent className="sm:max-w-[486px] w-[90vw]" side="right" showCloseButton={false}>
+           <div className="absolute right-4 top-4 flex items-center gap-1 z-10">
+             {editingTarget?.type === 'node' && canEditPlan && !diffTarget && (
                 <AlertDialog>
                     <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7 p-1" title="Delete Step">
+                    <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive h-7 w-7 p-0" title="Delete Step">
                         <Trash2 className="h-4 w-4" />
                     </Button>
                     </AlertDialogTrigger>
@@ -1454,7 +1445,23 @@ export default function PlanDetailPage() {
                     </AlertDialogFooter>
                     </AlertDialogContent>
                 </AlertDialog>
-            )}
+             )}
+             <SheetPrimitiveClose className="rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary h-7 w-7 p-0 flex items-center justify-center">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+             </SheetPrimitiveClose>
+           </div>
+           <SheetHeader className="pr-16"> {/* Add padding to avoid overlap with custom close buttons */}
+            <SheetTitle>
+                {editingTarget?.type === 'node' ? `Edit Step: "${editingTarget.data.title}"` :
+                editingTarget?.type === 'childItem' ? `Edit Item: "${editingTarget.data.title}"`
+                : "Details"}
+            </SheetTitle>
+            <SheetDescription>
+                {editingTarget?.type === 'node' ? "Modify the title and description for this roadmap step." :
+                editingTarget?.type === 'childItem' ? `Modify the details for this item within "${editingTarget.parentNode.title}".`
+                : "View and edit details."}
+            </SheetDescription>
           </SheetHeader>
           {editingTarget?.type === 'node' && (
             <div className="grid gap-4 py-4">
