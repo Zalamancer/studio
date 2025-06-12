@@ -691,9 +691,8 @@ export default function PlanDetailPage() {
       id: newSpawnedNodeId,
       title: childItem.title,
       description: childItem.description,
-      // Position new node to the WEST of the parent node
-      x: Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X),
-      y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 0.5))), // Align Y with child item
+      x: Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X), // Spawn to the WEST
+      y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 0.5))),
       childrenData: [],
       peerConnections: [],
     };
@@ -1162,7 +1161,7 @@ export default function PlanDetailPage() {
   const drawConnectionLines = useCallback(() => {
     if (!editableRoadmap) return null;
     const lines: JSX.Element[] = [];
-    const controlOffset = 100; // Increased controlOffset for more pronounced S-curve
+    const controlOffset = 100; 
 
     editableRoadmap.forEach((parentStep) => {
       const parentNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
@@ -1171,11 +1170,9 @@ export default function PlanDetailPage() {
           if (childItem.canvasNodeIdForThisItem) {
             const childNode = editableRoadmap.find(node => node.id === childItem.canvasNodeIdForThisItem);
             if (childNode) {
-              // Hierarchical line: From Child Item in list to its Spawned Node
-              const startX = parentStep.x + 16; // X-pos of green dot area
-              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2); // Y-pos of green dot area
+              const startX = parentStep.x + 16; 
+              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2);
               
-              // Target East (right) side of the spawned node
               const endX = childNode.x + NODE_BASE_WIDTH; 
               const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2;
               const pathKey_child = `hierarchical-${parentStep.id}-child${index}-to-${childNode.id}`;
@@ -1451,7 +1448,7 @@ export default function PlanDetailPage() {
                 <span className="sr-only">Close</span>
              </SheetPrimitiveClose>
            </div>
-           <SheetHeader className="pr-16"> {/* Add padding to avoid overlap with custom close buttons */}
+           <SheetHeader className="pr-16"> 
             <SheetTitle>
                 {editingTarget?.type === 'node' ? `Edit Step: "${editingTarget.data.title}"` :
                 editingTarget?.type === 'childItem' ? `Edit Item: "${editingTarget.data.title}"`
