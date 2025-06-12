@@ -19,7 +19,7 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion } from 'lucide-react';
+import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion, User } from 'lucide-react'; // Added User here
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import type { PlanVisibility, PlanEditability } from '@/types/plan';
 
