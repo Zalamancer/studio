@@ -28,6 +28,7 @@ import {
   BoxSelect,
   ListTree,
   X,
+  PlusCircle, // Added PlusCircle for the new button
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -1281,6 +1282,18 @@ export default function PlanDetailPage() {
             )}
           </div>
           <div className="flex flex-1 items-center justify-end space-x-1 sm:space-x-2">
+             {canEditPlan && !diffTarget && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleInitiateAddNode(null)}
+                className="text-xs sm:text-sm h-8 sm:h-9"
+                title="Add New Node"
+              >
+                <PlusCircle className="mr-1 sm:mr-2 h-3.5 sm:h-4 w-3.5 sm:w-4" />
+                <span className="hidden sm:inline">Node</span>
+              </Button>
+            )}
             {canEditPlan && (
               <>
                 <Button variant="outline" size="sm" onClick={() => setIsVersionHistorySheetOpen(true)} className="text-xs sm:text-sm h-8 sm:h-9">
