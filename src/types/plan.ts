@@ -37,7 +37,7 @@ export type PlanEditability = 'owner_only' | 'collaborators';
 export interface Plan {
   id: string;
   name: string;
-  description?: string | null;
+  description?: string | null; // Made optional
   ownerId: string;
   sector: string;
   subSector?: string | null;
@@ -47,21 +47,23 @@ export interface Plan {
   updatedAt: Timestamp;
   roadmap: RoadmapStep[];
   version?: number;
-  visibility: PlanVisibility;
-  editability: PlanEditability;
-  viewUserIds: string[];
-  editUserIds: string[];
+  visibility?: PlanVisibility; // Made optional to reflect reality that it might not be there on old docs
+  editability?: PlanEditability; // Made optional
+  viewUserIds?: string[]; // Made optional
+  editUserIds?: string[]; // Made optional
 }
 
-export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'roadmap' | 'description' | 'viewUserIds' | 'editUserIds'> {
+// NewPlanData ensures visibility and editability are provided from the form.
+// The service will then include them in the dataToSave if rules allow.
+export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt' | 'version' | 'roadmap' | 'viewUserIds' | 'editUserIds'> {
   createdAt?: FieldValue;
   updatedAt?: FieldValue;
   description?: string | null;
   roadmap?: RoadmapStep[];
-  visibility: PlanVisibility; // Made mandatory for new plans
-  editability: PlanEditability; // Made mandatory for new plans
-  viewUserIds?: string[]; // Service will set defaults
-  editUserIds?: string[]; // Service will set defaults
+  visibility: PlanVisibility; // Mandatory from form
+  editability: PlanEditability; // Mandatory from form
+  viewUserIds?: string[]; // Service can default these based on visibility/editability
+  editUserIds?: string[]; // Service can default these
 }
 
 // For updating the overall plan structure, not just a single node's details
@@ -81,9 +83,14 @@ export interface UpdatePlanData {
   editUserIds?: string[];
 }
 
-export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt'> {
+// ClientPlan should always have defaulted visibility/editability
+export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt' | 'visibility' | 'editability' | 'viewUserIds' | 'editUserIds'> {
   createdAt: number;
   updatedAt: number;
+  visibility: PlanVisibility; // Mandatory on client, defaulted if not in DB
+  editability: PlanEditability; // Mandatory on client, defaulted
+  viewUserIds: string[]; // Mandatory on client, defaulted
+  editUserIds: string[]; // Mandatory on client, defaulted
 }
 
 // For version history, storing a snapshot of the canvas nodes
@@ -93,14 +100,16 @@ export interface PlanVersionData {
   editorUid: string;
   timestamp: FieldValue;
   versionNumber?: number;
-  // Version snapshots can also store permissions at that time if needed, but keeping it simple for now
   visibility?: PlanVisibility;
   editability?: PlanEditability;
 }
 
-export interface ClientPlanVersion extends Omit<PlanVersionData, 'timestamp' | 'editorUid'> {
+// ClientPlanVersion should also have defaulted visibility/editability
+export interface ClientPlanVersion extends Omit<PlanVersionData, 'timestamp' | 'editorUid' | 'visibility' | 'editability'> {
   id: string;
   timestamp: number;
   editorUid: string;
   editorDisplayName?: string;
+  visibility: PlanVisibility; // Mandatory on client, defaulted
+  editability: PlanEditability; // Mandatory on client, defaulted
 }

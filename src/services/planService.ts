@@ -53,11 +53,8 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   }
 
   console.log(`%c[planService] createPlan - START. Received planData:`, "color: #FFD700;", JSON.parse(JSON.stringify(planData)));
-  console.log(`%c[planService] createPlan - typeof planData.visibility: ${typeof planData.visibility}, value: '${planData.visibility}'`, "color: #FFD700;");
-  console.log(`%c[planService] createPlan - typeof planData.editability: ${typeof planData.editability}, value: '${planData.editability}'`, "color: #FFD700;");
 
-  // Explicitly validate and default visibility and editability
-  let finalVisibility: PlanVisibility = 'private';
+  let finalVisibility: PlanVisibility = 'private'; // Strong default
   const validVisibilities: PlanVisibility[] = ['private', 'unlisted', 'public'];
   if (planData.hasOwnProperty('visibility') && typeof planData.visibility === 'string' && validVisibilities.includes(planData.visibility as PlanVisibility)) {
     finalVisibility = planData.visibility as PlanVisibility;
@@ -66,7 +63,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   }
   console.log(`%c[planService] createPlan - Determined finalVisibility: '${finalVisibility}' (type: ${typeof finalVisibility})`, "color: #FFD700; font-weight:bold;");
 
-  let finalEditability: PlanEditability = 'owner_only';
+  let finalEditability: PlanEditability = 'owner_only'; // Strong default
   const validEditabilities: PlanEditability[] = ['owner_only', 'collaborators'];
   if (planData.hasOwnProperty('editability') && typeof planData.editability === 'string' && validEditabilities.includes(planData.editability as PlanEditability)) {
     finalEditability = planData.editability as PlanEditability;
@@ -75,19 +72,22 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   }
   console.log(`%c[planService] createPlan - Determined finalEditability: '${finalEditability}' (type: ${typeof finalEditability})`, "color: #FFD700; font-weight:bold;");
 
-  // These fields are NOT being saved in this version due to strict security rules.
-  // let viewUserIds: string[] = [];
-  // if (finalVisibility === 'private' || finalVisibility === 'unlisted') {
-  //   viewUserIds = [planData.ownerId];
-  // }
-  // let editUserIds: string[] = [];
-  // if (finalEditability === 'owner_only' || finalEditability === 'collaborators') {
-  //   editUserIds = [planData.ownerId];
-  // }
+  let viewUserIds: string[] = [];
+  if (finalVisibility === 'private' || finalVisibility === 'unlisted') {
+    viewUserIds = [planData.ownerId]; // Owner can always view
+  } // For 'public', viewUserIds might be empty or managed differently by rules.
 
-  const dataToSave = {
+  let editUserIds: string[] = [];
+  if (finalEditability === 'owner_only') {
+    editUserIds = [planData.ownerId]; // Only owner can edit
+  } else if (finalEditability === 'collaborators') {
+    editUserIds = [planData.ownerId]; // Start with owner, others can be added later
+  }
+
+  const dataToSave: Omit<Plan, 'id'> & { createdAt: FieldValue, updatedAt: FieldValue } = {
     name: planData.name,
     ownerId: planData.ownerId,
+    description: planData.description?.trim() || null, // Add description back
     sector: planData.sector,
     subSector: planData.subSector || null,
     industry: planData.industry || null,
@@ -96,17 +96,16 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     updatedAt: serverTimestamp(),
     version: 1,
     roadmap: (planData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-    // The following fields are intentionally omitted to comply with current restrictive security rules:
-    // visibility: finalVisibility,
-    // editability: finalEditability,
-    // viewUserIds: viewUserIds,
-    // editUserIds: editUserIds,
-    // description: planData.description || null,
+    visibility: finalVisibility, // Add visibility
+    editability: finalEditability, // Add editability
+    viewUserIds: viewUserIds, // Add viewUserIds
+    editUserIds: editUserIds, // Add editUserIds
   };
-
-  console.log(`%c[planService] createPlan - finalPayloadForFirestore (STRICT 10 fields):`, "color: fuchsia;", JSON.parse(JSON.stringify(dataToSave, (key, value) => (value as any)?._methodName?.includes('serverTimestamp') ? 'FieldValue.serverTimestamp()' : value )));
-  // console.log(`  visibility type: ${typeof dataToSave.visibility}, value: ${dataToSave.visibility}`); // This would be undefined
-  // console.log(`  editability type: ${typeof dataToSave.editability}, value: ${dataToSave.editability}`); // This would be undefined
+  
+  const fieldCount = Object.keys(dataToSave).length;
+  console.log(`%c[planService] createPlan - finalPayloadForFirestore (Expected fields: name, ownerId, description, sector, subSector, industry, naicsCode, createdAt, updatedAt, version, roadmap, visibility, editability, viewUserIds, editUserIds - TOTAL: 15). Actual count: ${fieldCount}`, "color: fuchsia;", JSON.parse(JSON.stringify(dataToSave, (key, value) => (value as any)?._methodName?.includes('serverTimestamp') ? 'FieldValue.serverTimestamp()' : value)));
+  console.log(`  visibility type: ${typeof dataToSave.visibility}, value: ${dataToSave.visibility}`);
+  console.log(`  editability type: ${typeof dataToSave.editability}, value: ${dataToSave.editability}`);
 
 
   try {
@@ -120,20 +119,19 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
       console.error("%c  [planService] PERMISSION DENIED. Check Firestore security rules for creating documents in the 'plans' collection. Common checks include:", "color: red; font-weight:bold;")
       console.error(`    - Ensure 'request.auth.uid' is not null (user is authenticated). Current auth UID: '${auth.currentUser?.uid || 'NULL'}'`);
       console.error(`    - Ensure 'request.resource.data.ownerId == request.auth.uid'. Data ownerId: '${dataToSave.ownerId}', Auth UID: '${auth.currentUser?.uid || 'NULL'}'`);
-      console.error(`    - Ensure 'request.resource.data.createdAt == request.time' (if rule uses this). Data createdAt: serverTimestamp()`);
-      console.error(`    - Ensure 'request.resource.data.version == 1' (if rule uses this). Data version: ${dataToSave.version}`);
-      // Commenting out checks for fields not being sent:
-      // console.error(`    - Ensure 'request.resource.data.visibility' is one of ['private', 'unlisted', 'public']. Data visibility: '${(dataToSave as any).visibility}' (type: ${typeof (dataToSave as any).visibility})`);
-      // console.error(`    - Ensure 'request.resource.data.editability' is one of ['owner_only', 'collaborators']. Data editability: '${(dataToSave as any).editability}' (type: ${typeof (dataToSave as any).editability})`);
-      // console.error(`    - Ensure 'request.auth.uid in request.resource.data.viewUserIds'. Data viewUserIds: [${(dataToSave as any).viewUserIds?.join(', ')}]`);
-      // console.error(`    - Ensure 'request.auth.uid in request.resource.data.editUserIds'. Data editUserIds: [${(dataToSave as any).editUserIds?.join(', ')}]`);
-      console.error("    - Ensure all required fields by your rules are present and no disallowed fields are being written. Current rules enforce exactly 10 fields and specific names.");
+      console.error(`    - Ensure 'request.resource.data.createdAt == request.time'. Data createdAt: serverTimestamp()`);
+      console.error(`    - Ensure 'request.resource.data.version == 1'. Data version: ${dataToSave.version}`);
+      console.error(`    - Ensure 'request.resource.data.visibility' is one of ['private', 'unlisted', 'public']. Data visibility: '${dataToSave.visibility}' (type: ${typeof dataToSave.visibility})`);
+      console.error(`    - Ensure 'request.resource.data.editability' is one of ['owner_only', 'collaborators']. Data editability: '${dataToSave.editability}' (type: ${typeof dataToSave.editability})`);
+      console.error(`    - Ensure 'request.auth.uid in request.resource.data.viewUserIds'. Data viewUserIds: [${dataToSave.viewUserIds.join(', ')}]`);
+      console.error(`    - Ensure 'request.auth.uid in request.resource.data.editUserIds'. Data editUserIds: [${dataToSave.editUserIds.join(', ')}]`);
+      console.error("    - Ensure all required fields by your rules are present and no disallowed fields are being written. Expected 15 fields if including visibility, editability, description, viewUserIds, editUserIds.");
       console.error("    - The 'plans' collection path is correct and rules are applied to it.");
 
       if (error.message && error.message.toLowerCase().includes("undefined")) {
         console.error("    [DEBUG] Checking finalPayloadForFirestore for undefined values due to error message:");
         for (const key in dataToSave) {
-          if (dataToSave[key as keyof typeof dataToSave] === undefined) { // Type assertion might be needed if TS complains
+          if (dataToSave[key as keyof typeof dataToSave] === undefined) {
             console.error(`      UNDEFINED FIELD DETECTED in dataToSave: ${key}`);
           }
         }
@@ -159,11 +157,11 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
     const docSnap = await getDoc(planDocRef);
     if (docSnap.exists()) {
       const data = docSnap.data() as Plan;
-      // When retrieving, we can safely use the potentially missing fields with fallbacks.
       const clientPlan: ClientPlan = {
         id: docSnap.id,
         name: data.name,
         ownerId: data.ownerId,
+        description: data.description || null,
         sector: data.sector,
         subSector: data.subSector || null,
         industry: data.industry || null,
@@ -172,11 +170,10 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
         version: data.version || 1,
         roadmap: (data.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-        visibility: data.visibility || 'private', // Default if not present
-        editability: data.editability || 'owner_only', // Default if not present
-        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []), // Default if not present
-        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []), // Default if not present
-        description: data.description || null, // Default if not present
+        visibility: data.visibility || 'private',
+        editability: data.editability || 'owner_only',
+        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []),
+        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []),
       };
       return clientPlan;
     }
@@ -204,7 +201,6 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
 
     const currentPlanData = currentPlanSnap.data() as Plan;
     
-    // Use the stored visibility/editability for versioning. If they aren't stored, use a default.
     const currentVisibility = currentPlanData.visibility || 'private';
     const currentEditability = currentPlanData.editability || 'owner_only';
 
@@ -223,8 +219,8 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
       editorUid: currentUserId,
       timestamp: serverTimestamp(),
       versionNumber: currentVersionNumber,
-      visibility: currentVisibility, // Use potentially defaulted value
-      editability: currentEditability, // Use potentially defaulted value
+      visibility: currentVisibility, 
+      editability: currentEditability, 
     };
     batch.set(newVersionDocRef, versionData);
 
@@ -244,22 +240,28 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
 
 export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
   try {
-    // Corrected query for Firestore rules that only allow 'public' or 'unlisted' for general listing.
+    // Querying for plans that are either 'public' or 'unlisted'.
+    // This requires Firestore rules to allow such a query for unauthenticated users if Discover is public.
+    // Also requires a composite index on visibility (ASC/DESC) and createdAt (DESC).
     const q = query(
       plansCollectionRef,
       where('visibility', 'in', ['public', 'unlisted']),
       orderBy('createdAt', 'desc'),
       limit(count)
     );
+    console.log("[planService] getRecentPlans: Querying for public or unlisted plans, ordered by createdAt desc.");
 
     const querySnapshot = await getDocs(q);
+    console.log(`[planService] getRecentPlans: Firestore query executed. Found ${querySnapshot.docs.length} documents.`);
+
     const plans: ClientPlan[] = querySnapshot.docs
       .map((docSnap) => {
         const data = docSnap.data() as Plan;
-        return {
+        const clientPlan: ClientPlan = {
           id: docSnap.id,
           name: data.name,
           ownerId: data.ownerId,
+          description: data.description || null,
           sector: data.sector,
           subSector: data.subSector || null,
           industry: data.industry || null,
@@ -268,23 +270,31 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
           updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
           version: data.version || 1,
           roadmap: (data.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-          visibility: data.visibility || 'private', // Default if not present
-          editability: data.editability || 'owner_only', // Default if not present
-          viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []), // Default if not present
-          editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []), // Default if not present
-          description: data.description || null, // Default if not present
+          visibility: data.visibility || 'private', // Default if missing
+          editability: data.editability || 'owner_only', // Default if missing
+          viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []),
+          editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []),
         };
+        console.log(`  [getRecentPlans] Plan: ${clientPlan.id}, Name: ${clientPlan.name}, Visibility: ${clientPlan.visibility}`);
+        return clientPlan;
       });
-    return plans;
+
+    console.log(`[planService] getRecentPlans: Mapped ${plans.length} plans. Visibility check for public/unlisted was done by Firestore query.`);
+    return plans; // Firestore query already handled visibility, no client-side filter needed for this specific query.
   } catch (error: any) {
     console.error("[planService] Error fetching recent plans:", error);
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
       console.error("[planService] Firestore query for recent plans requires a composite index on 'visibility' (IN) and 'createdAt' (desc). Please create it.");
       throw new Error("Firestore query requires an index for recent plans. Please create it.");
     }
+    if (error.code === 'permission-denied') {
+      console.error("[planService] PERMISSION DENIED fetching recent plans. Check Firestore rules for 'list' on /plans. Query involves `where('visibility', 'in', ['public', 'unlisted'])` and `orderBy('createdAt', 'desc')`.");
+      throw new Error("Permission denied fetching recent plans. Check Firestore rules.");
+    }
     throw new Error(`Failed to fetch recent plans: ${error.message || 'Unknown error'}`);
   }
 };
+
 
 export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion[]> => {
   if (!planId) return [];
@@ -363,18 +373,14 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
       roadmap: (versionToRestoreData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
       updatedAt: serverTimestamp(),
       version: increment(1),
+      // Carry over visibility and editability settings from the version being restored
+      visibility: versionToRestoreData.visibility || 'private',
+      editability: versionToRestoreData.editability || 'owner_only',
     };
-
-    // Carry over visibility and editability settings from the version being restored
-    if (versionToRestoreData.visibility) {
-      mainPlanUpdateData.visibility = versionToRestoreData.visibility;
-    }
-    if (versionToRestoreData.editability) {
-      mainPlanUpdateData.editability = versionToRestoreData.editability;
-    }
+    
     // Recalculate view/editUserIds based on restored settings & owner
-    const restoredVisibility = mainPlanUpdateData.visibility || 'private';
-    const restoredEditability = mainPlanUpdateData.editability || 'owner_only';
+    const restoredVisibility = mainPlanUpdateData.visibility;
+    const restoredEditability = mainPlanUpdateData.editability;
     
     if (restoredVisibility === 'private' || restoredVisibility === 'unlisted') {
       mainPlanUpdateData.viewUserIds = [currentPlanData.ownerId];
@@ -384,8 +390,6 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     if (restoredEditability === 'owner_only') {
       mainPlanUpdateData.editUserIds = [currentPlanData.ownerId];
     } else { // collaborators
-      // When restoring, we generally keep existing collaborators unless explicitly managed.
-      // For simplicity, let's ensure at least the owner is an editor.
       mainPlanUpdateData.editUserIds = Array.from(new Set([currentPlanData.ownerId, ...(currentPlanData.editUserIds || [])]));
     }
 
