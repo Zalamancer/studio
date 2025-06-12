@@ -58,7 +58,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   // --- Explicitly define and default visibility ---
   let finalVisibility: PlanVisibility = 'private'; // Strong default
   if (planData.hasOwnProperty('visibility') && typeof planData.visibility === 'string') {
-    const incomingVisibility = planData.visibility as PlanVisibility; // Cast after check
+    const incomingVisibility = planData.visibility as PlanVisibility;
     if (['private', 'unlisted', 'public'].includes(incomingVisibility)) {
       finalVisibility = incomingVisibility;
     } else {
@@ -73,7 +73,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   // --- Explicitly define and default editability ---
   let finalEditability: PlanEditability = 'owner_only'; // Strong default
   if (planData.hasOwnProperty('editability') && typeof planData.editability === 'string') {
-    const incomingEditability = planData.editability as PlanEditability; // Cast after check
+    const incomingEditability = planData.editability as PlanEditability;
     if (['owner_only', 'collaborators'].includes(incomingEditability)) {
       finalEditability = incomingEditability;
     } else {
@@ -118,15 +118,26 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   console.log(`%c[planService] createPlan - FINAL dataToSave.editability: '${dataToSave.editability}' (type: ${typeof dataToSave.editability})`, "color: #32CD32; font-weight:bold;");
 
   try {
-    const docRef = await addDoc(plansCollectionRef, dataToSave as any); // Cast to any for addDoc, ensure dataToSave is correctly structured
+    const docRef = await addDoc(plansCollectionRef, dataToSave as any);
     console.log(`%c[planService] Plan CREATED successfully with ID: ${docRef.id}`, "color: green; font-weight:bold;");
     return docRef.id;
   } catch (error: any) {
     console.error(`%c[planService] createPlan - Firestore addDoc ERROR. Data attempted:`, "color: red; font-weight:bold;", JSON.parse(JSON.stringify(dataToSave)));
     console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
     if (error.code === 'permission-denied') {
-      console.error("  Firestore permission denied. Check security rules for creating plans.");
-      throw new Error('Permission denied. Check Firestore security rules.');
+      console.error("%c  [planService] PERMISSION DENIED. Check Firestore security rules for creating documents in the 'plans' collection. Common checks include:", "color: red; font-weight:bold;");
+      console.error(`    - Ensure 'request.auth.uid' is not null (user is authenticated). Current auth UID: '${auth.currentUser?.uid || 'NULL'}'`);
+      console.error(`    - Ensure 'request.resource.data.ownerId == request.auth.uid'. Data ownerId: '${dataToSave.ownerId}', Auth UID: '${auth.currentUser?.uid || 'NULL'}'`);
+      console.error(`    - Ensure 'request.resource.data.createdAt == request.time' (if rule uses this). Data createdAt: serverTimestamp()`);
+      console.error(`    - Ensure 'request.resource.data.updatedAt == request.time' (if rule uses this). Data updatedAt: serverTimestamp()`);
+      console.error(`    - Ensure 'request.resource.data.version == 1' (if rule uses this). Data version: ${dataToSave.version}`);
+      console.error(`    - Ensure 'request.resource.data.visibility' is one of ['private', 'unlisted', 'public']. Data visibility: '${dataToSave.visibility}' (type: ${typeof dataToSave.visibility})`);
+      console.error(`    - Ensure 'request.resource.data.editability' is one of ['owner_only', 'collaborators']. Data editability: '${dataToSave.editability}' (type: ${typeof dataToSave.editability})`);
+      console.error(`    - Ensure 'request.auth.uid in request.resource.data.viewUserIds'. Data viewUserIds: [${dataToSave.viewUserIds?.join(', ')}]`);
+      console.error(`    - Ensure 'request.auth.uid in request.resource.data.editUserIds'. Data editUserIds: [${dataToSave.editUserIds?.join(', ')}]`);
+      console.error("    - Ensure all required fields by your rules are present and no disallowed fields are being written.");
+      console.error("    - The 'plans' collection path is correct and rules are applied to it.");
+      throw new Error('Permission denied. Check Firestore security rules for creating plans. See console for details.');
     }
     if (error.message && error.message.includes("Unsupported field value: undefined")) {
       console.error("  [planService] Firestore received an undefined field value. Check the 'FINAL dataToSave object' log above. One of its properties is undefined.");
@@ -164,6 +175,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         editability: data.editability || 'owner_only',
         viewUserIds: data.viewUserIds || (data.visibility === 'private' ? [data.ownerId] : []),
         editUserIds: data.editUserIds || [data.ownerId],
+        description: data.description || null,
       };
       return clientPlan;
     }
@@ -355,4 +367,3 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     throw new Error(error.message || "Could not restore plan.");
   }
 };
-
