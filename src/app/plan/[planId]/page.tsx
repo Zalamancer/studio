@@ -27,7 +27,7 @@ import {
   Users2,
   BoxSelect,
   ListTree,
-  X, // Added X for panel close button
+  X,
 } from 'lucide-react';
 import {
   AlertDialog,
@@ -52,7 +52,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose as SheetPrimitiveClose } from '@/components/ui/sheet'; // Added SheetClose for explicit close button styling
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter, SheetClose as SheetPrimitiveClose } from '@/components/ui/sheet';
 import { format } from 'date-fns';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { AddRoadmapStepDialog, type AddRoadmapStepFormData } from '@/components/plan/AddRoadmapStepDialog';
@@ -603,7 +603,6 @@ export default function PlanDetailPage() {
       }
       return parentNode;
     }));
-    // No toast here, will be handled on panel close
   }, [canEditPlan, diffTarget]);
 
   const handleInitiateAddNode = useCallback((sourceNodeId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
@@ -692,8 +691,8 @@ export default function PlanDetailPage() {
       id: newSpawnedNodeId,
       title: childItem.title,
       description: childItem.description,
-      x: Math.max(MIN_CANVAS_PADDING, parentNode.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X), // Position to the right
-      y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 0.5))), // Align vertically with child item
+      x: Math.max(MIN_CANVAS_PADDING, parentNode.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X),
+      y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 0.5))),
       childrenData: [],
       peerConnections: [],
     };
@@ -1162,6 +1161,7 @@ export default function PlanDetailPage() {
   const drawConnectionLines = useCallback(() => {
     if (!editableRoadmap) return null;
     const lines: JSX.Element[] = [];
+    const controlOffset = 50; // For S-curve control points
 
     editableRoadmap.forEach((parentStep) => {
       const parentNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
@@ -1170,16 +1170,23 @@ export default function PlanDetailPage() {
           if (childItem.canvasNodeIdForThisItem) {
             const childNode = editableRoadmap.find(node => node.id === childItem.canvasNodeIdForThisItem);
             if (childNode) {
-              // Hierarchical line: From Child Item in list to its Spawned Node (East side)
-              const startX = parentStep.x + 16;
+              // Hierarchical line: From Child Item in list to its Spawned Node (West side of spawned node)
+              const startX = parentStep.x + 16; // Position of green dot from left edge of parent card
               const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2);
-              const endX = childNode.x + NODE_BASE_WIDTH; // Targets East side of the spawned node
+              const endX = childNode.x + NODE_BASE_WIDTH; // Targets East side (right) of the spawned node
               const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2;
               const pathKey_child = `hierarchical-${parentStep.id}-child${index}-to-${childNode.id}`;
+
+              const c1x = startX + controlOffset;
+              const c1y = startY;
+              const c2x = endX - controlOffset;
+              const c2y = endY;
+              const pathD = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`;
+
               lines.push(
                 <path
                   key={pathKey_child}
-                  d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                  d={pathD}
                   stroke={'hsl(var(--primary))'}
                   strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY}
                   fill="none"
@@ -1199,25 +1206,42 @@ export default function PlanDetailPage() {
             const sourceNodeHeight = calculateNodeHeight(parentStep, editableRoadmap);
             const targetNodeHeight = calculateNodeHeight(targetStep, editableRoadmap);
 
-            let startX, startY, endX, endY;
+            let sX, sY, eX, eY;
             switch (peerConn.sourceDot) {
-              case 'N': startX = parentStep.x + NODE_BASE_WIDTH / 2; startY = parentStep.y; break;
-              case 'E': startX = parentStep.x + NODE_BASE_WIDTH; startY = parentStep.y + sourceNodeHeight / 2; break;
-              case 'S': startX = parentStep.x + NODE_BASE_WIDTH / 2; startY = parentStep.y + sourceNodeHeight; break;
+              case 'N': sX = parentStep.x + NODE_BASE_WIDTH / 2; sY = parentStep.y; break;
+              case 'E': sX = parentStep.x + NODE_BASE_WIDTH; sY = parentStep.y + sourceNodeHeight / 2; break;
+              case 'S': sX = parentStep.x + NODE_BASE_WIDTH / 2; sY = parentStep.y + sourceNodeHeight; break;
               default: return;
             }
             switch (peerConn.targetDot) {
-              case 'N': endX = targetStep.x + NODE_BASE_WIDTH / 2; endY = targetStep.y; break;
-              case 'E': endX = targetStep.x + NODE_BASE_WIDTH; endY = targetStep.y + targetNodeHeight / 2; break;
-              case 'S': endX = targetStep.x + NODE_BASE_WIDTH / 2; endY = targetStep.y + targetNodeHeight; break;
-              case 'W': endX = targetStep.x; endY = targetStep.y + targetNodeHeight / 2; break;
+              case 'N': eX = targetStep.x + NODE_BASE_WIDTH / 2; eY = targetStep.y; break;
+              case 'E': eX = targetStep.x + NODE_BASE_WIDTH; eY = targetStep.y + targetNodeHeight / 2; break;
+              case 'S': eX = targetStep.x + NODE_BASE_WIDTH / 2; eY = targetStep.y + targetNodeHeight; break;
+              case 'W': eX = targetStep.x; eY = targetStep.y + targetNodeHeight / 2; break;
               default: return;
             }
             const pathKey_peer = `peerconn-${parentStep.id}-${peerConn.sourceDot}-to-${targetStep.id}-${peerConn.targetDot}-${index}`;
+
+            let c1x_p, c1y_p, c2x_p, c2y_p;
+            switch (peerConn.sourceDot) {
+                case 'N': c1x_p = sX; c1y_p = sY - controlOffset; break;
+                case 'E': c1x_p = sX + controlOffset; c1y_p = sY; break;
+                case 'S': c1x_p = sX; c1y_p = sY + controlOffset; break;
+                default: c1x_p = sX; c1y_p = sY; // Should not happen
+            }
+            switch (peerConn.targetDot) {
+                case 'N': c2x_p = eX; c2y_p = eY - controlOffset; break;
+                case 'E': c2x_p = eX + controlOffset; c2y_p = eY; break;
+                case 'S': c2x_p = eX; c2y_p = eY + controlOffset; break;
+                case 'W': c2x_p = eX - controlOffset; c2y_p = eY; break;
+                default: c2x_p = eX; c2y_p = eY;
+            }
+            const pathD_peer = `M ${sX} ${sY} C ${c1x_p} ${c1y_p}, ${c2x_p} ${c2y_p}, ${eX} ${eY}`;
+
             lines.push(
               <path
                 key={pathKey_peer}
-                d={`M ${startX} ${startY} L ${endX} ${endY}`}
+                d={pathD_peer}
                 stroke={'hsl(var(--accent))'}
                 strokeWidth={CONNECTION_LINE_THICKNESS_PEER}
                 fill="none"
@@ -1596,4 +1620,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
