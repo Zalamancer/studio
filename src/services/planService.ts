@@ -16,7 +16,7 @@ import {
   updateDoc,
   writeBatch,
   increment,
-  where, // Added where
+  where,
 } from 'firebase/firestore';
 import type { Plan, NewPlanData, ClientPlan, RoadmapStep, UpdatePlanData, PlanVersionData, ClientPlanVersion, ChildDataItem, PeerConnection, PlanVisibility, PlanEditability } from '@/types/plan';
 import { fetchUserProfileBasic } from './connectionService'; // For fetching editor display name
@@ -53,8 +53,6 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   }
 
   console.log(`%c[planService] createPlan - START. Received planData:`, "color: #FFD700;", JSON.parse(JSON.stringify(planData)));
-  console.log(`%c  Incoming planData.visibility: '${planData.visibility}' (type: ${typeof planData.visibility})`, "color: #FFD700;");
-  console.log(`%c  Incoming planData.editability: '${planData.editability}' (type: ${typeof planData.editability})`, "color: #FFD700;");
 
   let finalVisibility: PlanVisibility = 'private';
   if (planData && planData.hasOwnProperty('visibility') && typeof planData.visibility === 'string' && ['private', 'unlisted', 'public'].includes(planData.visibility)) {
@@ -72,15 +70,18 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   }
   console.log(`%c[planService] createPlan - Determined finalEditability: '${finalEditability}' (type: ${typeof finalEditability})`, "color: #FFD700; font-weight:bold;");
 
+
   let viewUserIds: string[] = [];
-  if (finalVisibility === 'private' || finalVisibility === 'unlisted') {
+  if (finalVisibility === 'private' || finalVisibility === 'unlisted') { // Owner always in viewUserIds for private/unlisted
     viewUserIds = [planData.ownerId];
   }
+  // For 'public', viewUserIds can be empty as rules will check `visibility == 'public'`
 
   let editUserIds: string[] = [];
-  if (finalEditability === 'owner_only' || finalEditability === 'collaborators') {
+  if (finalEditability === 'owner_only' || finalEditability === 'collaborators') { // Owner always in editUserIds
     editUserIds = [planData.ownerId];
   }
+
 
   const dataToSave: Omit<Plan, 'id' | 'createdAt'> & { updatedAt: FieldValue, version: number } = {
     name: planData.name,
@@ -98,54 +99,52 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     editUserIds: editUserIds,
     description: planData.description || null,
   };
+  
+  const finalPayloadForFirestore = {
+    ...dataToSave,
+    createdAt: serverTimestamp(),
+  };
 
-  console.log(`%c[planService] createPlan - FINAL dataToSave object PREPARED for Firestore (createdAt is not sent from client):`, "color: #32CD32;", JSON.parse(JSON.stringify(dataToSave, (key, value) => (value as any)?._methodName?.includes('serverTimestamp') ? 'FieldValue.serverTimestamp()' : value )));
-  console.log(`%c[planService] createPlan - dataToSave.visibility: '${dataToSave.visibility}' (type: ${typeof dataToSave.visibility})`, "color: #32CD32; font-weight:bold;");
-  console.log(`%c[planService] createPlan - dataToSave.editability: '${dataToSave.editability}' (type: ${typeof dataToSave.editability})`, "color: #32CD32; font-weight:bold;");
+  console.log(`%c[planService] createPlan - finalPayloadForFirestore:`, "color: fuchsia;", JSON.parse(JSON.stringify(finalPayloadForFirestore, (key, value) => (value as any)?._methodName?.includes('serverTimestamp') ? 'FieldValue.serverTimestamp()' : value )));
+  console.log(`  visibility type: ${typeof finalPayloadForFirestore.visibility}, value: ${finalPayloadForFirestore.visibility}`);
+  console.log(`  editability type: ${typeof finalPayloadForFirestore.editability}, value: ${finalPayloadForFirestore.editability}`);
+
 
   try {
-    // Add createdAt at the point of saving, Firestore rules often check if it is request.time
-    const finalPayloadForFirestore = {
-        ...dataToSave,
-        createdAt: serverTimestamp(), // Ensure createdAt is set at write time
-    };
-
-    console.log(`%c[planService] createPlan - PAYLOAD BEING SENT TO addDoc():`, "color: fuchsia;", JSON.parse(JSON.stringify(finalPayloadForFirestore, (key, value) => (value as any)?._methodName?.includes('serverTimestamp') ? 'FieldValue.serverTimestamp()' : value)));
     const docRef = await addDoc(plansCollectionRef, finalPayloadForFirestore);
     console.log(`%c[planService] Plan CREATED successfully with ID: ${docRef.id}`, "color: green; font-weight:bold;");
     return docRef.id;
   } catch (error: any) {
-    console.error(`%c[planService] createPlan - Firestore addDoc ERROR. Data attempted (finalPayloadForFirestore):`, "color: red; font-weight:bold;", JSON.parse(JSON.stringify(dataToSave)));
+    console.error(`%c[planService] createPlan - Firestore addDoc ERROR. Data attempted:`, "color: red; font-weight:bold;", JSON.parse(JSON.stringify(finalPayloadForFirestore, (key, value) => (value as any)?._methodName?.includes('serverTimestamp') ? 'FieldValue.serverTimestamp()' : value)));
     console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
     if (error.code === 'permission-denied') {
       console.error("%c  [planService] PERMISSION DENIED. Check Firestore security rules for creating documents in the 'plans' collection. Common checks include:", "color: red; font-weight:bold;")
       console.error(`    - Ensure 'request.auth.uid' is not null (user is authenticated). Current auth UID: '${auth.currentUser?.uid || 'NULL'}'`);
-      console.error(`    - Ensure 'request.resource.data.ownerId == request.auth.uid'. Data ownerId: '${dataToSave.ownerId}', Auth UID: '${auth.currentUser?.uid || 'NULL'}'`);
-      console.error(`    - Ensure 'request.resource.data.createdAt == request.time'. (Client now sends this at write)`);
-      console.error(`    - Ensure 'request.resource.data.updatedAt == request.time'. Data updatedAt: serverTimestamp()`);
-      console.error(`    - Ensure 'request.resource.data.version == 1'. Data version: ${dataToSave.version}`);
-      console.error(`    - Ensure 'request.resource.data.visibility' is one of ['private', 'unlisted', 'public']. Data visibility: '${dataToSave.visibility}' (type: ${typeof dataToSave.visibility})`);
-      console.error(`    - Ensure 'request.resource.data.editability' is one of ['owner_only', 'collaborators']. Data editability: '${dataToSave.editability}' (type: ${typeof dataToSave.editability})`);
-      console.error(`    - Ensure 'request.auth.uid in request.resource.data.viewUserIds'. Data viewUserIds: [${dataToSave.viewUserIds?.join(', ')}]`);
-      console.error(`    - Ensure 'request.auth.uid in request.resource.data.editUserIds'. Data editUserIds: [${dataToSave.editUserIds?.join(', ')}]`);
+      console.error(`    - Ensure 'request.resource.data.ownerId == request.auth.uid'. Data ownerId: '${finalPayloadForFirestore.ownerId}', Auth UID: '${auth.currentUser?.uid || 'NULL'}'`);
+      console.error(`    - Ensure 'request.resource.data.createdAt == request.time' (if rule uses this). Data createdAt: serverTimestamp()`);
+      console.error(`    - Ensure 'request.resource.data.version == 1' (if rule uses this). Data version: ${finalPayloadForFirestore.version}`);
+      console.error(`    - Ensure 'request.resource.data.visibility' is one of ['private', 'unlisted', 'public']. Data visibility: '${finalPayloadForFirestore.visibility}' (type: ${typeof finalPayloadForFirestore.visibility})`);
+      console.error(`    - Ensure 'request.resource.data.editability' is one of ['owner_only', 'collaborators']. Data editability: '${finalPayloadForFirestore.editability}' (type: ${typeof finalPayloadForFirestore.editability})`);
+      console.error(`    - Ensure 'request.auth.uid in request.resource.data.viewUserIds'. Data viewUserIds: [${finalPayloadForFirestore.viewUserIds?.join(', ')}]`);
+      console.error(`    - Ensure 'request.auth.uid in request.resource.data.editUserIds'. Data editUserIds: [${finalPayloadForFirestore.editUserIds?.join(', ')}]`);
       console.error("    - Ensure all required fields by your rules are present and no disallowed fields are being written.");
       console.error("    - The 'plans' collection path is correct and rules are applied to it.");
 
       if (error.message && error.message.toLowerCase().includes("undefined")) {
-        console.error("    [DEBUG] Checking dataToSave for undefined values due to error message:");
-        for (const key in dataToSave) {
-          if (dataToSave[key as keyof typeof dataToSave] === undefined) {
-            console.error(`      UNDEFINED FIELD DETECTED in dataToSave: ${key}`);
+        console.error("    [DEBUG] Checking finalPayloadForFirestore for undefined values due to error message:");
+        for (const key in finalPayloadForFirestore) {
+          if (finalPayloadForFirestore[key as keyof typeof finalPayloadForFirestore] === undefined) {
+            console.error(`      UNDEFINED FIELD DETECTED in finalPayloadForFirestore: ${key}`);
           }
         }
       }
       throw new Error('Permission denied. Check Firestore security rules and console logs for details.');
     }
     if (error.message && error.message.includes("Unsupported field value: undefined")) {
-      console.error("  [planService] Firestore received an undefined field value. Data attempted:", dataToSave);
-      for (const key in dataToSave) {
-        if (dataToSave[key as keyof typeof dataToSave] === undefined) {
-          console.error(`    UNDEFINED FIELD DETECTED in dataToSave (just before addDoc): ${key}`);
+      console.error("  [planService] Firestore received an undefined field value. Data attempted:", finalPayloadForFirestore);
+      for (const key in finalPayloadForFirestore) {
+        if (finalPayloadForFirestore[key as keyof typeof finalPayloadForFirestore] === undefined) {
+          console.error(`    UNDEFINED FIELD DETECTED in finalPayloadForFirestore (just before addDoc): ${key}`);
         }
       }
     }
@@ -239,13 +238,21 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
 
 export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
   try {
-    const q = query(plansCollectionRef, where('visibility', 'in', ['public', 'unlisted']), orderBy('createdAt', 'desc'), limit(count));
+    // WORKAROUND for missing composite index:
+    // Fetch more documents ordered by createdAt and filter client-side.
+    // This is less efficient than a Firestore query with the correct index.
+    // The recommended Firestore index is: Collection: 'plans', Fields: 'visibility' (ASC/DESC), 'createdAt' (DESC)
+    console.log("[planService] getRecentPlans: Using workaround due to missing Firestore index. Fetching more plans and filtering client-side.");
+    const fetchLimit = Math.max(count * 4, 25); // Fetch more to increase chance of getting `count` public/unlisted plans
+    const q = query(plansCollectionRef, orderBy('createdAt', 'desc'), limit(fetchLimit));
+
     const querySnapshot = await getDocs(q);
     const plans: ClientPlan[] = querySnapshot.docs
       .map((docSnap) => {
         const data = docSnap.data() as Plan;
+        // Client-side filter for visibility
         if (data.visibility !== 'public' && data.visibility !== 'unlisted') {
-            return null;
+            return null; // Filter out private plans
         }
         return {
           id: docSnap.id,
@@ -266,12 +273,15 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
           description: data.description || null,
         };
       })
-      .filter((plan): plan is ClientPlan => plan !== null);
+      .filter((plan): plan is ClientPlan => plan !== null)
+      .slice(0, count); // Take only the desired count after filtering
+
     return plans;
   } catch (error: any) {
     console.error("[planService] Error fetching recent plans:", error);
+    // The original error about the index might still be caught here if the fallback query also fails for some reason.
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      console.error("[planService] Firestore query for recent plans requires a composite index on 'visibility' (IN) and 'createdAt' (desc). Please create it.");
+      console.error("[planService] Firestore query for recent plans (even the fallback) requires an index. Please check Firestore console for index suggestions based on the orderBy('createdAt', 'desc') clause.");
       throw new Error("Firestore query requires an index for recent plans. Please create it.");
     }
     throw new Error(`Failed to fetch recent plans: ${error.message || 'Unknown error'}`);
@@ -357,21 +367,23 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
       version: increment(1),
     };
 
+    // Carry over visibility and editability settings from the version being restored
     if (versionToRestoreData.visibility) {
       mainPlanUpdateData.visibility = versionToRestoreData.visibility;
     }
     if (versionToRestoreData.editability) {
       mainPlanUpdateData.editability = versionToRestoreData.editability;
     }
-    if (mainPlanUpdateData.visibility === 'private') {
+    // Recalculate view/editUserIds based on restored settings & owner
+    if (mainPlanUpdateData.visibility === 'private' || mainPlanUpdateData.visibility === 'unlisted') {
       mainPlanUpdateData.viewUserIds = [currentPlanData.ownerId];
-    } else {
-      mainPlanUpdateData.viewUserIds = currentPlanData.viewUserIds;
+    } else { // public
+      mainPlanUpdateData.viewUserIds = []; // Or keep existing if logic dictates
     }
     if (mainPlanUpdateData.editability === 'owner_only') {
       mainPlanUpdateData.editUserIds = [currentPlanData.ownerId];
-    } else {
-      mainPlanUpdateData.editUserIds = currentPlanData.editUserIds;
+    } else { // collaborators
+      mainPlanUpdateData.editUserIds = currentPlanData.editUserIds; // Keep existing collaborators or reset to owner
     }
 
 
