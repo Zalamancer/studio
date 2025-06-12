@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Loader2, AlertTriangle } from 'lucide-react';
 import { CreatePlanForm, type CreatePlanFormData } from '@/components/plan/CreatePlanForm';
 import { createPlan } from '@/services/planService';
-import type { NewPlanData } from '@/types/plan';
+import type { NewPlanData, PlanVisibility, PlanEditability } from '@/types/plan'; // Import PlanVisibility and PlanEditability
 import { detailedSectorsData } from '@/components/layout/MainLayout'; // Import from MainLayout
 
 const CreatePlanPage = () => {
@@ -39,6 +39,10 @@ const CreatePlanPage = () => {
         industry: industryDetails?.name || null,       // Store name
         naicsCode: formData.industry || formData.subSector || formData.sector, // Store most specific code
         roadmap: [], // Initialize with an empty roadmap
+        visibility: formData.visibility as PlanVisibility, // Explicitly pass from form data
+        editability: formData.editability as PlanEditability, // Explicitly pass from form data
+        description: null, // Add description, defaulting to null if not in CreatePlanFormData (it's optional in Plan type)
+                           // If CreatePlanFormData were to include description, it would be formData.description
       };
       
       const planId = await createPlan(newPlanData);
@@ -93,3 +97,5 @@ const CreatePlanPage = () => {
 };
 
 export default CreatePlanPage;
+
+    
