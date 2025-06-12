@@ -56,17 +56,18 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   console.log(`%c[planService] createPlan - RAW planData.visibility: '${planData.visibility}' (type: ${typeof planData.visibility})`, "color: #FF4500;");
   console.log(`%c[planService] createPlan - RAW planData.editability: '${planData.editability}' (type: ${typeof planData.editability})`, "color: #FF4500;");
 
+
   const validVisibilities: PlanVisibility[] = ['private', 'unlisted', 'public'];
   let finalVisibility: PlanVisibility = planData.visibility;
   if (!validVisibilities.includes(finalVisibility)) {
-    console.warn(`%c[planService] createPlan - WARNING: Incoming planData.visibility ('${planData.visibility}') is invalid. Defaulting to 'private'.`, "color: red; font-weight:bold;");
+    console.warn(`%c[planService] createPlan - WARNING: Incoming planData.visibility ('${planData.visibility}') is invalid despite type enforcement. Defaulting to 'private'. This should not happen if Zod validation passed.`, "color: red; font-weight:bold;");
     finalVisibility = 'private';
   }
 
   const validEditabilities: PlanEditability[] = ['owner_only', 'collaborators'];
   let finalEditability: PlanEditability = planData.editability;
   if (!validEditabilities.includes(finalEditability)) {
-    console.warn(`%c[planService] createPlan - WARNING: Incoming planData.editability ('${planData.editability}') is invalid. Defaulting to 'owner_only'.`, "color: red; font-weight:bold;");
+    console.warn(`%c[planService] createPlan - WARNING: Incoming planData.editability ('${planData.editability}') is invalid despite type enforcement. Defaulting to 'owner_only'. This should not happen if Zod validation passed.`, "color: red; font-weight:bold;");
     finalEditability = 'owner_only';
   }
 
@@ -74,8 +75,10 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
   console.log(`%c[planService] createPlan - Determined finalEditability: '${finalEditability}'`, "color: #FFD700; font-weight:bold;");
 
   let viewUserIds: string[] = [];
-  if (finalVisibility === 'private' || finalVisibility === 'unlisted') {
-    viewUserIds = [planData.ownerId];
+  if (finalVisibility === 'public') {
+    viewUserIds = []; // Public means everyone can view, so no specific UIDs needed for view access control here
+  } else { // 'private' or 'unlisted'
+    viewUserIds = [planData.ownerId]; // Default to owner only for private/unlisted
   }
 
   let editUserIds: string[] = [];
@@ -129,7 +132,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
       console.error(`    - Ensure 'request.resource.data.editability' is one of ['owner_only', 'collaborators']. Data editability: '${dataToSave.editability}' (type: ${typeof dataToSave.editability})`);
       console.error(`    - Ensure 'request.auth.uid in request.resource.data.viewUserIds' (if not public). Data viewUserIds: [${dataToSave.viewUserIds?.join(', ')}]`);
       console.error(`    - Ensure 'request.auth.uid in request.resource.data.editUserIds'. Data editUserIds: [${dataToSave.editUserIds?.join(', ')}]`);
-      console.error("    - Ensure all required fields by your rules are present and no disallowed fields are being written (check against your hasAll() and size() rules).");
+      console.error("    - Ensure all required fields by your rules are present (e.g., 15 fields if rules expect all new ones) and no disallowed fields are being written (check against your hasAll() and size() rules).");
       console.error("    - The 'plans' collection path is correct and rules are applied to it.");
     }
     throw new Error(error.message || "Could not create plan.");
@@ -156,10 +159,10 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
         version: data.version || 1,
         roadmap: (data.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-        visibility: data.visibility || 'private',
-        editability: data.editability || 'owner_only',
-        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []),
-        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []),
+        visibility: data.visibility || 'private', // Default if missing
+        editability: data.editability || 'owner_only', // Default if missing
+        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []), // Default if missing
+        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []), // Default if missing
       };
       return clientPlan;
     }
@@ -187,7 +190,6 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
 
     const currentPlanData = currentPlanSnap.data() as Plan;
     
-    const currentVisibility = currentPlanData.visibility || 'private';
     const currentEditability = currentPlanData.editability || 'owner_only';
 
     const canEdit = currentPlanData.ownerId === currentUserId ||
@@ -199,18 +201,16 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
     const currentVersionNumber = currentPlanData.version || 1;
 
     const newVersionDocRef = doc(versionsCollectionRef);
+    // PlanVersionData now only includes the 5 fields allowed by the security rule
     const versionData: PlanVersionData = {
       planId: planId,
-      roadmap: (currentPlanData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
+      roadmap: (currentPlanData.roadmap || []).map(step => sanitizeRoadmapStep(step)), // Save current state before update
       editorUid: currentUserId,
       timestamp: serverTimestamp(),
       versionNumber: currentVersionNumber,
-      visibility: currentVisibility, 
-      editability: currentEditability, 
     };
     batch.set(newVersionDocRef, versionData);
 
-    // Only update roadmap, updatedAt, and version in the main plan document
     const dataToUpdateMainPlan: { roadmap: RoadmapStep[]; updatedAt: FieldValue; version: FieldValue } = {
       roadmap: updatedRoadmap.map(step => sanitizeRoadmapStep(step)),
       updatedAt: serverTimestamp(),
@@ -255,12 +255,12 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
         version: data.version || 1,
         roadmap: (data.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-        visibility: data.visibility || 'private',
-        editability: data.editability || 'owner_only',
-        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []),
-        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []),
+        visibility: data.visibility || 'private', // Default if missing
+        editability: data.editability || 'owner_only', // Default if missing
+        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []), // Default if missing
+        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []), // Default if missing
       };
-      console.log(`  - Plan ID: ${clientPlan.id}, Visibility: ${clientPlan.visibility}`);
+      console.log(`  - Plan ID: ${clientPlan.id}, Visibility from DB: ${data.visibility}, Mapped Visibility: ${clientPlan.visibility}`);
       return clientPlan;
     });
     
@@ -286,7 +286,7 @@ export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion
     const q = query(versionsRef, orderBy('timestamp', 'desc'), limit(50));
     const querySnapshot = await getDocs(q);
     const versionsPromises = querySnapshot.docs.map(async (docSnap) => {
-      const data = docSnap.data() as PlanVersionData & { timestamp: Timestamp };
+      const data = docSnap.data() as PlanVersionData & { timestamp: Timestamp }; // PlanVersionData no longer has vis/edit
       let editorDisplayName = data.editorUid;
       if (data.editorUid) {
         const profile = await fetchUserProfileBasic(data.editorUid);
@@ -300,8 +300,11 @@ export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion
         editorDisplayName: editorDisplayName,
         timestamp: data.timestamp.toMillis(),
         versionNumber: data.versionNumber,
-        visibility: data.visibility || 'private',
-        editability: data.editability || 'owner_only',
+        // visibility and editability are no longer expected from the version document directly
+        // They could be fetched from the main plan document at that version's timestamp if needed,
+        // but that's more complex and not implemented here. ClientPlanVersion makes them optional.
+        visibility: undefined, 
+        editability: undefined,
       } as ClientPlanVersion;
     });
     return await Promise.all(versionsPromises);
@@ -333,59 +336,50 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     if (!versionToRestoreSnap.exists()) throw new Error(`Version ID ${versionIdToRestore} not found.`);
 
     const currentPlanData = currentPlanSnap.data() as Plan;
-    const versionToRestoreData = versionToRestoreSnap.data() as PlanVersionData;
+    // Cast to any to read potentially existing vis/edit fields from old version docs, but don't rely on PlanVersionData type having them
+    const versionToRestoreData = versionToRestoreSnap.data() as any; 
 
     if (currentPlanData.ownerId !== currentUserId) {
         throw new Error("Permission denied: Only the plan owner can restore versions.");
     }
     const currentPlanVersionNumber = currentPlanData.version || 1;
 
+    // Create a snapshot of the current state before overwriting
     const newHistoryVersionDocRef = doc(newVersionHistoryCollectionRef);
-    const currentSnapshotVersionData: PlanVersionData = {
+    const currentSnapshotVersionData: PlanVersionData = { // Conforms to the 5-field rule
       planId: planId,
       roadmap: (currentPlanData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
       editorUid: currentUserId,
       timestamp: serverTimestamp(),
       versionNumber: currentPlanVersionNumber,
-      visibility: currentPlanData.visibility || 'private',
-      editability: currentPlanData.editability || 'owner_only',
     };
     batch.set(newHistoryVersionDocRef, currentSnapshotVersionData);
 
+    // Prepare data for updating the main plan document
     const mainPlanUpdateData: Partial<Plan> & {updatedAt: FieldValue, version: FieldValue } = {
       roadmap: (versionToRestoreData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
       updatedAt: serverTimestamp(),
       version: increment(1),
-      visibility: versionToRestoreData.visibility || 'private', // Restore visibility
-      editability: versionToRestoreData.editability || 'owner_only', // Restore editability
     };
     
-    // Derive viewUserIds and editUserIds based on restored visibility/editability
-    const restoredVisibility = mainPlanUpdateData.visibility;
-    const restoredEditability = mainPlanUpdateData.editability;
-    
-    if (restoredVisibility === 'private' || restoredVisibility === 'unlisted') {
-      mainPlanUpdateData.viewUserIds = [currentPlanData.ownerId];
-    } else { 
-      mainPlanUpdateData.viewUserIds = []; 
-    }
-    if (restoredEditability === 'owner_only') {
-      mainPlanUpdateData.editUserIds = [currentPlanData.ownerId];
-    } else { 
-      // When restoring, 'collaborators' editability means owner + any existing collaborators from current plan
-      // Or, if the version being restored has specific collaborators, that logic would be more complex.
-      // For now, assume collaborators list from current plan is maintained if editability is 'collaborators'.
-      mainPlanUpdateData.editUserIds = Array.from(new Set([currentPlanData.ownerId, ...(currentPlanData.editUserIds || [])]));
-    }
+    // Restore visibility and editability IF THEY EXIST on the version document being restored
+    // AND if the rules allow updating them. Your current update rule for /plans/{planId}
+    // is very restrictive: hasOnly(['roadmap', 'updatedAt', 'version'])
+    // So, for now, we CANNOT restore visibility/editability settings via this function
+    // unless the rules are changed. If they *were* allowed, it would be:
+    // if (versionToRestoreData.visibility) mainPlanUpdateData.visibility = versionToRestoreData.visibility;
+    // if (versionToRestoreData.editability) mainPlanUpdateData.editability = versionToRestoreData.editability;
+    // And viewUserIds/editUserIds would need recalculation based on restored vis/edit.
 
+    // To comply with existing strict update rules, we ONLY update roadmap, updatedAt, version.
+    // This means a restore operation will NOT change visibility/editability settings currently.
+    
     batch.update(planDocRef, mainPlanUpdateData as { [key: string]: any });
 
     await batch.commit();
-    console.log(`[planService] Plan ${planId} restored to version ${versionIdToRestore} by user ${currentUserId}. New current version: ${currentPlanVersionNumber + 1}`);
+    console.log(`[planService] Plan ${planId} restored to version ${versionIdToRestore} by user ${currentUserId}. New current version: ${currentPlanVersionNumber + 1}. Note: Visibility/editability settings were NOT restored due to current security rules.`);
   } catch (error: any) {
     console.error(`[planService] Error restoring plan ${planId} to version ${versionIdToRestore}:`, error);
-    // You might need to expand your update rule to allow changing visibility, editability, viewUserIds, editUserIds
-    // if the restore operation needs to modify them and they are not in the allowed 'hasOnly' list.
     throw new Error(error.message || "Could not restore plan.");
   }
 };

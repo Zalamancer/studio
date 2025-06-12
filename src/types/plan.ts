@@ -37,7 +37,7 @@ export type PlanEditability = 'owner_only' | 'collaborators';
 export interface Plan {
   id: string;
   name: string;
-  description?: string | null; // Made optional
+  description?: string | null;
   ownerId: string;
   sector: string;
   subSector?: string | null;
@@ -45,12 +45,12 @@ export interface Plan {
   naicsCode: string | null;
   createdAt: Timestamp;
   updatedAt: Timestamp;
-  roadmap: RoadmapStep[];
   version?: number;
-  visibility?: PlanVisibility; // Made optional to reflect reality that it might not be there on old docs
-  editability?: PlanEditability; // Made optional
-  viewUserIds?: string[]; // Made optional
-  editUserIds?: string[]; // Made optional
+  visibility?: PlanVisibility;
+  editability?: PlanEditability;
+  viewUserIds?: string[];
+  editUserIds?: string[];
+  roadmap: RoadmapStep[];
 }
 
 // NewPlanData ensures visibility and editability are provided from the form.
@@ -94,22 +94,22 @@ export interface ClientPlan extends Omit<Plan, 'createdAt' | 'updatedAt' | 'visi
 }
 
 // For version history, storing a snapshot of the canvas nodes
+// Only includes fields allowed by the strict 'versions' subcollection security rule
 export interface PlanVersionData {
   planId: string;
   roadmap: RoadmapStep[];
   editorUid: string;
   timestamp: FieldValue;
   versionNumber?: number;
-  visibility?: PlanVisibility;
-  editability?: PlanEditability;
+  // visibility and editability are NOT stored in the version document itself as per current rules
 }
 
-// ClientPlanVersion should also have defaulted visibility/editability
-export interface ClientPlanVersion extends Omit<PlanVersionData, 'timestamp' | 'editorUid' | 'visibility' | 'editability'> {
+// ClientPlanVersion for display
+export interface ClientPlanVersion extends Omit<PlanVersionData, 'timestamp' | 'editorUid'> {
   id: string;
   timestamp: number;
   editorUid: string;
   editorDisplayName?: string;
-  visibility: PlanVisibility; // Mandatory on client, defaulted
-  editability: PlanEditability; // Mandatory on client, defaulted
+  visibility?: PlanVisibility; // Optional: Reflects that this info might not be on the version doc itself
+  editability?: PlanEditability; // Optional: Reflects that this info might not be on the version doc itself
 }
