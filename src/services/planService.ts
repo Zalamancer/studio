@@ -14,8 +14,8 @@ import {
   Timestamp,
   type FieldValue,
   updateDoc,
-  writeBatch, 
-  increment, 
+  writeBatch,
+  increment,
 } from 'firebase/firestore';
 import type { Plan, NewPlanData, ClientPlan, RoadmapStep, UpdatePlanData, PlanVersionData, ClientPlanVersion, ChildDataItem, PeerConnection, PlanVisibility, PlanEditability } from '@/types/plan';
 import { fetchUserProfileBasic } from './connectionService'; // For fetching editor display name
@@ -28,7 +28,7 @@ const sanitizeRoadmapStep = (step: Partial<RoadmapStep>, defaultParentId?: strin
     id: typeof ci.id === 'string' && ci.id.trim() !== '' ? ci.id : `childitem_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
     title: ci.title || "Untitled Child",
     description: ci.description || null,
-    parentCanvasNodeId: ci.parentCanvasNodeId || step.id || defaultParentId || "", 
+    parentCanvasNodeId: ci.parentCanvasNodeId || step.id || defaultParentId || "",
     canvasNodeIdForThisItem: ci.canvasNodeIdForThisItem || null,
   }));
   return {
@@ -51,16 +51,47 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     throw new Error("Authenticated user does not match plan ownerId.");
   }
 
+  console.log(`%c[planService] createPlan - START. Received planData:`, "color: #FFD700;", JSON.parse(JSON.stringify(planData)));
+  console.log(`%c[planService] createPlan - typeof planData.visibility: ${typeof planData.visibility}, value: '${planData.visibility}'`, "color: #FFD700;");
+  console.log(`%c[planService] createPlan - typeof planData.editability: ${typeof planData.editability}, value: '${planData.editability}'`, "color: #FFD700;");
+
+  // --- Explicitly define and default visibility ---
+  let finalVisibility: PlanVisibility = 'private'; // Strong default
+  if (planData.hasOwnProperty('visibility') && typeof planData.visibility === 'string') {
+    const incomingVisibility = planData.visibility as PlanVisibility; // Cast after check
+    if (['private', 'unlisted', 'public'].includes(incomingVisibility)) {
+      finalVisibility = incomingVisibility;
+    } else {
+      console.warn(`%c[planService] createPlan - WARNING: Received invalid visibility value '${incomingVisibility}'. Defaulting to 'private'.`, "color: red; font-weight:bold;");
+    }
+  } else {
+    console.warn(`%c[planService] createPlan - WARNING: planData.visibility was missing, undefined, or not a string (value: '${planData.visibility}', type: ${typeof planData.visibility}). Defaulting to 'private'.`, "color: red; font-weight:bold;");
+  }
+  console.log(`%c[planService] createPlan - Determined finalVisibility: '${finalVisibility}' (type: ${typeof finalVisibility})`, "color: #FFD700; font-weight:bold;");
+
+
+  // --- Explicitly define and default editability ---
+  let finalEditability: PlanEditability = 'owner_only'; // Strong default
+  if (planData.hasOwnProperty('editability') && typeof planData.editability === 'string') {
+    const incomingEditability = planData.editability as PlanEditability; // Cast after check
+    if (['owner_only', 'collaborators'].includes(incomingEditability)) {
+      finalEditability = incomingEditability;
+    } else {
+      console.warn(`%c[planService] createPlan - WARNING: Received invalid editability value '${incomingEditability}'. Defaulting to 'owner_only'.`, "color: red; font-weight:bold;");
+    }
+  } else {
+    console.warn(`%c[planService] createPlan - WARNING: planData.editability was missing, undefined, or not a string (value: '${planData.editability}', type: ${typeof planData.editability}). Defaulting to 'owner_only'.`, "color: red; font-weight:bold;");
+  }
+  console.log(`%c[planService] createPlan - Determined finalEditability: '${finalEditability}' (type: ${typeof finalEditability})`, "color: #FFD700; font-weight:bold;");
+
+
   let viewUserIds: string[] = [];
-  if (planData.visibility === 'private' || planData.visibility === 'unlisted') {
+  if (finalVisibility === 'private' || finalVisibility === 'unlisted') {
     viewUserIds = [planData.ownerId];
-  } else if (planData.visibility === 'public') {
-    viewUserIds = []; // Public access is handled by rules checking the 'visibility' field
   }
 
   let editUserIds: string[] = [];
-  if (planData.editability === 'owner_only' || planData.editability === 'collaborators') {
-    // Owner is always an editor initially
+  if (finalEditability === 'owner_only' || finalEditability === 'collaborators') {
     editUserIds = [planData.ownerId];
   }
 
@@ -75,17 +106,37 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     updatedAt: serverTimestamp() as FieldValue,
     version: 1,
     roadmap: (planData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-    visibility: planData.visibility,
-    editability: planData.editability,
+    visibility: finalVisibility,
+    editability: finalEditability,
     viewUserIds: viewUserIds,
     editUserIds: editUserIds,
+    description: planData.description || null,
   };
 
+  console.log(`%c[planService] createPlan - FINAL dataToSave object prepared for Firestore:`, "color: #32CD32;", JSON.parse(JSON.stringify(dataToSave)));
+  console.log(`%c[planService] createPlan - FINAL dataToSave.visibility: '${dataToSave.visibility}' (type: ${typeof dataToSave.visibility})`, "color: #32CD32; font-weight:bold;");
+  console.log(`%c[planService] createPlan - FINAL dataToSave.editability: '${dataToSave.editability}' (type: ${typeof dataToSave.editability})`, "color: #32CD32; font-weight:bold;");
+
   try {
-    const docRef = await addDoc(plansCollectionRef, dataToSave);
+    const docRef = await addDoc(plansCollectionRef, dataToSave as any); // Cast to any for addDoc, ensure dataToSave is correctly structured
+    console.log(`%c[planService] Plan CREATED successfully with ID: ${docRef.id}`, "color: green; font-weight:bold;");
     return docRef.id;
   } catch (error: any) {
-    console.error("[planService] Error creating plan:", error);
+    console.error(`%c[planService] createPlan - Firestore addDoc ERROR. Data attempted:`, "color: red; font-weight:bold;", JSON.parse(JSON.stringify(dataToSave)));
+    console.error(`  Error Code: ${error.code}, Message: ${error.message}`);
+    if (error.code === 'permission-denied') {
+      console.error("  Firestore permission denied. Check security rules for creating plans.");
+      throw new Error('Permission denied. Check Firestore security rules.');
+    }
+    if (error.message && error.message.includes("Unsupported field value: undefined")) {
+      console.error("  [planService] Firestore received an undefined field value. Check the 'FINAL dataToSave object' log above. One of its properties is undefined.");
+      for (const key in dataToSave) {
+        if (dataToSave[key as keyof typeof dataToSave] === undefined) {
+          console.error(`    UNDEFINED FIELD DETECTED in dataToSave: ${key}`);
+        }
+      }
+      throw new Error(`Failed to create plan: Firestore received an undefined field value. ${error.message}`);
+    }
     throw new Error(error.message || "Could not create plan.");
   }
 };
@@ -109,8 +160,8 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
         version: data.version || 1,
         roadmap: (data.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-        visibility: data.visibility || 'private', // Default to private if not set
-        editability: data.editability || 'owner_only', // Default to owner_only
+        visibility: data.visibility || 'private',
+        editability: data.editability || 'owner_only',
         viewUserIds: data.viewUserIds || (data.visibility === 'private' ? [data.ownerId] : []),
         editUserIds: data.editUserIds || [data.ownerId],
       };
@@ -125,7 +176,7 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
 
 export const updatePlanRoadmap = async (planId: string, currentUserId: string, updatedRoadmap: RoadmapStep[]): Promise<void> => {
   const user = auth.currentUser;
-  if (!user || user.uid !== currentUserId) { 
+  if (!user || user.uid !== currentUserId) {
     throw new Error("User not authenticated or mismatch. Cannot update plan.");
   }
   if (!planId) throw new Error("Plan ID is required to update roadmap.");
@@ -137,10 +188,9 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
     const batch = writeBatch(db);
     const currentPlanSnap = await getDoc(planDocRef);
     if (!currentPlanSnap.exists()) throw new Error(`Plan with ID ${planId} not found.`);
-    
+
     const currentPlanData = currentPlanSnap.data() as Plan;
-    // Permission check: Owner or an editor in editUserIds (if collaborators mode)
-    const canEdit = currentPlanData.ownerId === currentUserId || 
+    const canEdit = currentPlanData.ownerId === currentUserId ||
                     (currentPlanData.editability === 'collaborators' && currentPlanData.editUserIds.includes(currentUserId));
 
     if (!canEdit) {
@@ -155,13 +205,13 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
       editorUid: currentUserId,
       timestamp: serverTimestamp() as FieldValue,
       versionNumber: currentVersionNumber,
-      visibility: currentPlanData.visibility, // Save current permissions with version
+      visibility: currentPlanData.visibility,
       editability: currentPlanData.editability,
     };
     batch.set(newVersionDocRef, versionData);
 
     const dataToUpdateMainPlan: Partial<Plan> & {updatedAt: FieldValue, version: FieldValue } = {
-      roadmap: updatedRoadmap.map(step => sanitizeRoadmapStep(step)), 
+      roadmap: updatedRoadmap.map(step => sanitizeRoadmapStep(step)),
       updatedAt: serverTimestamp() as FieldValue,
       version: increment(1) as FieldValue,
     };
@@ -176,19 +226,13 @@ export const updatePlanRoadmap = async (planId: string, currentUserId: string, u
 
 export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
   try {
-    // Add a filter for public plans. For now, this will fetch all plans.
-    // Firestore rules will ultimately control what's readable.
-    // For a true "discover" page, you'd query `where('visibility', '==', 'public')`
-    // but this requires an index and careful rule setup.
     const q = query(plansCollectionRef, orderBy('createdAt', 'desc'), limit(count));
     const querySnapshot = await getDocs(q);
     const plans: ClientPlan[] = querySnapshot.docs
       .map((docSnap) => {
         const data = docSnap.data() as Plan;
-        // Client-side filter for discover page - only show public or unlisted (for direct link access scenario if needed)
-        // However, a Discover page should primarily show 'public' plans based on Firestore query & rules.
         if (data.visibility !== 'public' && data.visibility !== 'unlisted') {
-            return null; 
+            return null;
         }
         return {
           id: docSnap.id,
@@ -238,8 +282,8 @@ export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion
         editorDisplayName: editorDisplayName,
         timestamp: data.timestamp.toMillis(),
         versionNumber: data.versionNumber,
-        visibility: data.visibility, // Include if stored in version
-        editability: data.editability, // Include if stored in version
+        visibility: data.visibility,
+        editability: data.editability,
       } as ClientPlanVersion;
     });
     return await Promise.all(versionsPromises);
@@ -273,12 +317,11 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     const currentPlanData = currentPlanSnap.data() as Plan;
     const versionToRestoreData = versionToRestoreSnap.data() as PlanVersionData;
 
-    if (currentPlanData.ownerId !== currentUserId) { 
+    if (currentPlanData.ownerId !== currentUserId) {
         throw new Error("Permission denied: Only the plan owner can restore versions.");
     }
     const currentPlanVersionNumber = currentPlanData.version || 1;
 
-    // Create a snapshot of the current state before restoring
     const newHistoryVersionDocRef = doc(newVersionHistoryCollectionRef);
     const currentSnapshotVersionData: PlanVersionData = {
       planId: planId,
@@ -286,13 +329,11 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
       editorUid: currentUserId,
       timestamp: serverTimestamp() as FieldValue,
       versionNumber: currentPlanVersionNumber,
-      visibility: currentPlanData.visibility, // Snapshot current permissions
+      visibility: currentPlanData.visibility,
       editability: currentPlanData.editability,
     };
     batch.set(newHistoryVersionDocRef, currentSnapshotVersionData);
 
-    // Update the main plan with the roadmap from the version being restored
-    // Also restore permissions if they were stored in the version snapshot
     const mainPlanUpdateData: Partial<Plan> & {updatedAt: FieldValue, version: FieldValue } = {
       roadmap: (versionToRestoreData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
       updatedAt: serverTimestamp() as FieldValue,
@@ -305,9 +346,6 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     if (versionToRestoreData.editability) {
       mainPlanUpdateData.editability = versionToRestoreData.editability;
     }
-    // Note: viewUserIds and editUserIds are not typically part of version history snapshots for simplicity,
-    // so restoring a version usually only restores content and the general permission *mode*.
-    // If granular user ID lists were also versioned, they would be restored here too.
 
     batch.update(planDocRef, mainPlanUpdateData as { [key: string]: any });
 
@@ -317,3 +355,4 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     throw new Error(error.message || "Could not restore plan.");
   }
 };
+
