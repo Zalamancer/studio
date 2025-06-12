@@ -1,3 +1,4 @@
+
 // src/services/collectionService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -16,7 +17,7 @@ import {
   arrayUnion,
   arrayRemove,
   writeBatch,
-  FieldValue,
+  type FieldValue,
   limit,
 } from 'firebase/firestore';
 import type { Collection, ClientCollection, NewCollectionData } from '@/types/collection';
@@ -50,8 +51,8 @@ export const createCollection = async (
     ownerId,
     postIds: initialPostId ? [initialPostId] : [],
     sharedWithUserIds: [],
-    createdAt: serverTimestamp() as Timestamp,
-    updatedAt: serverTimestamp() as Timestamp,
+    createdAt: serverTimestamp() as Timestamp, // serverTimestamp() returns FieldValue, but rule expects Timestamp for direct write, this is a common pattern
+    updatedAt: serverTimestamp() as Timestamp, // For initial creation, rules might check this.
   };
 
   console.log('%c[collectionService] createCollection: Data to be written to Firestore:', "color: #007bff;", newCollectionData);
@@ -80,52 +81,6 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
   console.log(`%c[collectionService] getUserCollections: Fetching for userId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
   try {
-    // Test 1: Basic read with just where clause
-    const testQuery1 = query(
-      collectionsCollectionRef,
-      where('ownerId', '==', userId),
-      limit(1)
-    );
-    console.log('%c[collectionService] Test 1 - Basic where query:', "color: dodgerblue;", testQuery1);
-    const testSnapshot1 = await getDocs(testQuery1);
-    console.log('%c[collectionService] Test 1 result:', "color: dodgerblue;", testSnapshot1.empty ? 'No documents found' : 'Found documents');
-
-    // Test 2: Try just orderBy without where
-    const testQuery2 = query(
-      collectionsCollectionRef,
-      orderBy('createdAt', 'desc'),
-      limit(1)
-    );
-    console.log('%c[collectionService] Test 2 - Just orderBy query:', "color: dodgerblue;", testQuery2);
-    try {
-      const testSnapshot2 = await getDocs(testQuery2);
-      console.log('%c[collectionService] Test 2 result:', "color: dodgerblue;", testSnapshot2.empty ? 'No documents found' : 'Found documents');
-    } catch (error: any) {
-      console.log('%c[collectionService] Test 2 error:', "color: orange;", error.message);
-      if (error.code === 'failed-precondition') {
-        console.log('%c[collectionService] Test 2: This error suggests we need a composite index', "color: orange;");
-      }
-    }
-
-    // Test 3: Try the compound query with limit
-    const testQuery3 = query(
-      collectionsCollectionRef,
-      where('ownerId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(1)
-    );
-    console.log('%c[collectionService] Test 3 - Compound query with limit:', "color: dodgerblue;", testQuery3);
-    try {
-      const testSnapshot3 = await getDocs(testQuery3);
-      console.log('%c[collectionService] Test 3 result:', "color: dodgerblue;", testSnapshot3.empty ? 'No documents found' : 'Found documents');
-    } catch (error: any) {
-      console.log('%c[collectionService] Test 3 error:', "color: orange;", error.message);
-      if (error.code === 'failed-precondition') {
-        console.log('%c[collectionService] Test 3: This error suggests we need a composite index', "color: orange;");
-      }
-    }
-
-    // If we get here, try the original queries with limits
     const ownedFilters = [where('ownerId', '==', userId)];
     const sharedFilters = [where('sharedWithUserIds', 'array-contains', userId)];
     const commonOptions = [orderBy('createdAt', 'desc'), limit(100)];
@@ -135,111 +90,54 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
       ...ownedFilters,
       ...commonOptions
     );
-    console.log('%c[collectionService] Full owned collections query:', "color: dodgerblue;", {
-      filters: qOwned._query.filters,
-      orderBy: qOwned._query.orderBy,
-      limit: qOwned._query.limit,
-      startAt: qOwned._query.startAt,
-      endAt: qOwned._query.endAt,
-      rawQuery: JSON.stringify(qOwned._query, null, 2)
-    });
-
     const qShared = query(
       collectionsCollectionRef,
       ...sharedFilters,
       ...commonOptions
     );
-    console.log('%c[collectionService] Full shared collections query:', "color: dodgerblue;", {
-      filters: qShared._query.filters.map(f => ({
-        field: f.field,
-        op: f.op,
-        value: f.value
-      })),
-      orderBy: qShared._query.orderBy,
-      limit: qShared._query.limit,
-      startAt: qShared._query.startAt,
-      endAt: qShared._query.endAt,
-      rawQuery: JSON.stringify(qShared._query, null, 2)
-    });
 
-    try {
-      // Define processSnapshot before using it
-      const processSnapshot = (snapshot: any, isSharedCollection: boolean) => {
-        snapshot.forEach((docSnap: any) => {
-          if (collectionsMap.has(docSnap.id)) return; 
+    const [ownedSnapshot, sharedSnapshot] = await Promise.all([
+      getDocs(qOwned),
+      getDocs(qShared),
+    ]);
 
-          const data = docSnap.data() as Collection;
-          const clientCollection: ClientCollection = {
-            id: docSnap.id,
-            name: data.name,
-            description: data.description,
-            ownerId: data.ownerId,
-            postIds: data.postIds || [],
-            sharedWithUserIds: data.sharedWithUserIds || [],
-            createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
-            updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
-            isSharedWithCurrentUser: isSharedCollection,
-          };
-          collectionsMap.set(docSnap.id, clientCollection);
-        });
-      };
+    const collectionsMap = new Map<string, ClientCollection>();
 
-      // Initialize collections map
-      const collectionsMap = new Map<string, ClientCollection>();
-
-      // Try each query separately to isolate any issues
-      console.log('%c[collectionService] Attempting owned collections query...', "color: dodgerblue;");
-      const ownedSnapshot = await getDocs(qOwned);
-      console.log('%c[collectionService] Owned query successful, got', "color: green;", ownedSnapshot.size, 'documents');
-
-      // Log the owned collections to see if any are shared
-      ownedSnapshot.forEach((doc: any) => {
-        const data = doc.data();
-        console.log('%c[collectionService] Owned collection:', "color: dodgerblue;", {
-          id: doc.id,
-          name: data.name,
-          sharedWithUserIds: data.sharedWithUserIds || []
-        });
-      });
-
-      // Process owned collections
-      processSnapshot(ownedSnapshot, false);
-
-      // Only attempt shared collections query if we have any owned collections that are shared
-      const hasSharedCollections = Array.from(ownedSnapshot.docs).some((doc: any) => {
-        const data = doc.data();
-        return (data.sharedWithUserIds || []).length > 0;
-      });
-
-      if (hasSharedCollections) {
-        console.log('%c[collectionService] Found owned collections with sharing, attempting shared collections query...', "color: dodgerblue;");
-        try {
-          const sharedSnapshot = await getDocs(qShared);
-          console.log('%c[collectionService] Shared query successful, got', "color: green;", sharedSnapshot.size, 'documents');
-          processSnapshot(sharedSnapshot, true);
-        } catch (error: any) {
-          // Log but don't throw - it's okay if there are no shared collections
-          console.log('%c[collectionService] No shared collections found (this is normal if no collections are shared with you)', "color: orange;");
+    const processSnapshot = (snapshot: any, isSharedCollection: boolean) => {
+      snapshot.forEach((docSnap: any) => {
+        if (collectionsMap.has(docSnap.id) && !isSharedCollection) return; // Don't overwrite owned with shared if already processed as owned
+        if (collectionsMap.has(docSnap.id) && isSharedCollection && !collectionsMap.get(docSnap.id)?.isSharedWithCurrentUser) {
+             // If already exists (must be owned), and now we see it as shared, update the flag.
+             const existing = collectionsMap.get(docSnap.id);
+             if(existing) collectionsMap.set(docSnap.id, { ...existing, isSharedWithCurrentUser: true });
+             return;
         }
-      } else {
-        console.log('%c[collectionService] No owned collections are shared, skipping shared collections query', "color: dodgerblue;");
-      }
+        if (collectionsMap.has(docSnap.id)) return;
 
-      const combinedCollections = Array.from(collectionsMap.values()).sort((a, b) => b.createdAt - a.createdAt);
-      console.log(`%c[collectionService] getUserCollections: Fetched ${combinedCollections.length} total collections for ${userId}.`, "color: green;");
-      return combinedCollections;
-    } catch (error: any) {
-      console.error(`[collectionService] Error fetching collections for ${userId}:`, "color: red;", error);
-      if (error.code === 'permission-denied') {
-        console.error("  Ensure Firestore rules allow `list` on `/collections` where `ownerId == request.auth.uid` OR `request.auth.uid in resource.data.sharedWithUserIds`.");
-        throw new Error('Permission denied fetching collections. Check Firestore rules.');
-      }
-      if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.error("  Firestore query for collections requires an index. Create relevant composite indexes in the Firebase console.");
-        throw new Error("Firestore query requires an index for collections. Please create it.");
-      }
-      throw new Error(error.message || "Could not fetch collections.");
-    }
+
+        const data = docSnap.data() as Collection;
+        const clientCollection: ClientCollection = {
+          id: docSnap.id,
+          name: data.name,
+          description: data.description,
+          ownerId: data.ownerId,
+          postIds: data.postIds || [],
+          sharedWithUserIds: data.sharedWithUserIds || [],
+          createdAt: (data.createdAt as Timestamp)?.toMillis() || Date.now(),
+          updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
+          isSharedWithCurrentUser: isSharedCollection || (clientAuthUid ? data.sharedWithUserIds.includes(clientAuthUid) : false),
+        };
+        collectionsMap.set(docSnap.id, clientCollection);
+      });
+    };
+
+    processSnapshot(ownedSnapshot, false);
+    processSnapshot(sharedSnapshot, true);
+
+
+    const combinedCollections = Array.from(collectionsMap.values()).sort((a, b) => b.createdAt - a.createdAt);
+    console.log(`%c[collectionService] getUserCollections: Fetched ${combinedCollections.length} total collections for ${userId}.`, "color: green;");
+    return combinedCollections;
   } catch (error: any) {
     console.error(`[collectionService] Error fetching collections for ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
@@ -417,7 +315,7 @@ export const getPostsForCollectionPage = async (collectionId: string): Promise<a
 
 export const updateCollectionDetails = async (
   collectionId: string,
-  ownerId: string, // ownerId is the current authenticated user's ID performing the action
+  ownerId: string, 
   updates: { name?: string; description?: string }
 ): Promise<void> => {
   const clientAuthUid = auth.currentUser?.uid;
@@ -440,7 +338,6 @@ export const updateCollectionDetails = async (
   }
 
   const payload: any = { ...updates, updatedAt: serverTimestamp() };
-  // Ensure empty strings become null for description if that's desired behavior
   if (updates.description === '') payload.description = null;
   if (updates.name !== undefined && updates.name.trim() === '') {
     console.error("[collectionService] updateCollectionDetails: Collection name cannot be empty.");
@@ -503,7 +400,7 @@ export const deleteCollection = async (collectionId: string, ownerId: string): P
 
 export const shareCollectionWithUser = async (
   collectionId: string,
-  ownerId: string, // Current authenticated user who owns the collection
+  ownerId: string, 
   userIdToShareWith: string
 ): Promise<void> => {
   const clientAuthUid = auth.currentUser?.uid;
@@ -551,7 +448,7 @@ export const shareCollectionWithUser = async (
 
 export const unshareCollectionFromUser = async (
   collectionId: string,
-  ownerId: string, // Current authenticated user who owns the collection
+  ownerId: string, 
   userIdToUnshare: string
 ): Promise<void> => {
   const clientAuthUid = auth.currentUser?.uid;
@@ -592,3 +489,4 @@ export const unshareCollectionFromUser = async (
     throw new Error(error.message || "Could not unshare collection.");
   }
 };
+
