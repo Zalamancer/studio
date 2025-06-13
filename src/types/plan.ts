@@ -48,8 +48,8 @@ export interface Plan {
   version?: number;
   visibility?: PlanVisibility;
   editability?: PlanEditability;
-  viewUserIds?: string[];
-  editUserIds?: string[];
+  viewUserIds?: string[]; // Array of UIDs who can view (owner always can)
+  editUserIds?: string[]; // Array of UIDs who can edit (owner always can, implies view)
   roadmap: RoadmapStep[];
 }
 
@@ -68,7 +68,7 @@ export interface NewPlanData extends Omit<Plan, 'id' | 'createdAt' | 'updatedAt'
 
 // For updating the overall plan structure, not just a single node's details
 export interface UpdatePlanData {
-  roadmap: RoadmapStep[];
+  roadmap?: RoadmapStep[]; // Made roadmap optional as settings update might not change it
   updatedAt: FieldValue;
   version?: FieldValue;
   name?: string;
@@ -79,8 +79,8 @@ export interface UpdatePlanData {
   naicsCode?: string | null;
   visibility?: PlanVisibility;
   editability?: PlanEditability;
-  viewUserIds?: string[];
-  editUserIds?: string[];
+  viewUserIds?: string[]; // Add these for permission updates
+  editUserIds?: string[]; // Add these for permission updates
 }
 
 // ClientPlan should always have defaulted visibility/editability
