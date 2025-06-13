@@ -390,25 +390,29 @@ export const updateUserProfileDetails = async (
 
 
 export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?: number): Promise<UserProfileBasic[]> => {
-  const trimmedPrefix = searchPrefix?.trim().toLowerCase();
-  const fieldToQueryAndOrder = 'mentionNameLowercase'; // Query the lowercase field
-  const effectiveLimit = !trimmedPrefix ? (limitCountArg || 25) : (limitCountArg || 10);
+  let queryablePrefix = searchPrefix?.trim().toLowerCase();
+  if (queryablePrefix?.startsWith('@')) {
+    queryablePrefix = queryablePrefix.substring(1);
+  }
 
-  console.log(`%c[connectionService] getSuggestibleUsers called. Prefix: '${trimmedPrefix}', Query Field: '${fieldToQueryAndOrder}', Effective Limit: ${effectiveLimit}`, "color: #BA55D3");
+  const fieldToQueryAndOrder = 'mentionNameLowercase';
+  const effectiveLimit = !queryablePrefix ? (limitCountArg || 25) : (limitCountArg || 10);
+
+  console.log(`%c[connectionService] getSuggestibleUsers called. Original Prefix: '${searchPrefix}', Queryable Prefix: '${queryablePrefix}', Query Field: '${fieldToQueryAndOrder}', Effective Limit: ${effectiveLimit}`, "color: #BA55D3");
   const clientAuthUid = auth.currentUser?.uid;
   console.log(`%c  [connectionService] Auth state for query: auth.currentUser?.uid = ${clientAuthUid || 'NULL'}`, "color: #BA55D3;");
 
   try {
     const constraints: QueryConstraint[] = [];
 
-    if (trimmedPrefix) {
-      console.log(`%c[connectionService] getSuggestibleUsers: Applying prefix search for '${trimmedPrefix}' on ${fieldToQueryAndOrder}.`, "color: #BA55D3");
-      constraints.push(where(fieldToQueryAndOrder, '>=', trimmedPrefix));
-      constraints.push(where(fieldToQueryAndOrder, '<=', trimmedPrefix + '\uf8ff'));
-      constraints.push(orderBy(fieldToQueryAndOrder));
+    if (queryablePrefix && queryablePrefix.length > 0) { // Ensure prefix is not empty after stripping "@"
+      console.log(`%c[connectionService] getSuggestibleUsers: Applying prefix search for '${queryablePrefix}' on ${fieldToQueryAndOrder}.`, "color: #BA55D3");
+      constraints.push(where(fieldToQueryAndOrder, '>=', queryablePrefix));
+      constraints.push(where(fieldToQueryAndOrder, '<=', queryablePrefix + '\uf8ff'));
+      constraints.push(orderBy(fieldToQueryAndOrder)); // Order by the same field for prefix search
     } else {
       console.log(`%c[connectionService] getSuggestibleUsers: No prefix, fetching general list ordered by ${fieldToQueryAndOrder}.`, "color: #BA55D3");
-      constraints.push(orderBy(fieldToQueryAndOrder));
+      constraints.push(orderBy(fieldToQueryAndOrder)); // Default order if no prefix
     }
     constraints.push(limit(effectiveLimit));
 
@@ -419,16 +423,15 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
 
     const users: UserProfileBasic[] = querySnapshot.docs.map(docSnap => {
       const data = docSnap.data() as UserProfileData;
-      const mentionName = data.mentionName || generateAnonymousName(docSnap.id); // Fallback if mentionName missing
+      const mentionName = data.mentionName || generateAnonymousName(docSnap.id);
 
       const profile: UserProfileBasic = {
         userId: docSnap.id,
-        displayName: data.companyName || mentionName, // Display company name or mentionName
-        mentionName: mentionName, // Always the ColorAnimalNumber
+        displayName: data.companyName || mentionName,
+        mentionName: mentionName,
         avatarUrl: data.avatarUrl || undefined,
         companyName: data.companyName || undefined,
       };
-      // console.log(`    [SuggestibleUsers] Mapped user: ${profile.userId}, Display: ${profile.displayName}, Mention: @${profile.mentionName}, Company: ${profile.companyName}`);
       return profile;
     });
     console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users.`, "color: green;");
@@ -747,3 +750,14 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
   }
 };
 
+
+interface MutualConnection { // Added this missing interface definition from types/connection.ts for context
+    id: string;
+    userIds: string[];
+    status: 'pending' | 'connected' | 'blocked';
+    requesterId: string;
+    createdAt: Timestamp | FieldValue;
+    updatedAt: Timestamp | FieldValue;
+    connectedAt?: Timestamp | FieldValue;
+    requestedAt?: Timestamp | FieldValue;
+}
