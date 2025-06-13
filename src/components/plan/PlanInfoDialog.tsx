@@ -72,6 +72,7 @@ interface PlanInfoDialogProps {
   onRemoveUserFromViewers: (userId: string) => void;
   onAddUserToEditors: (userProfile: UserProfileBasic) => void;
   onRemoveUserFromEditors: (userId: string) => void;
+  debugProp?: string;
 }
 
 const SkeletonListItem: React.FC = () => (
@@ -101,6 +102,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   onRemoveUserFromViewers,
   onAddUserToEditors,
   onRemoveUserFromEditors,
+  debugProp,
 }) => {
   const { user: currentUserFromAuth } = useAuth();
   const { toast } = useToast();
@@ -110,8 +112,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   const [visibility, setVisibility] = useState<PlanVisibility>('private');
   const [editability, setEditability] = useState<PlanEditability>('owner_only');
   
-  const [localViewUserIds, setLocalViewUserIds] = useState<string[]>([]);
-  const [localEditUserIds, setLocalEditUserIds] = useState<string[]>([]);
+  const [currentViewUserIds, setCurrentViewUserIds] = useState<string[]>([]);
+  const [currentEditUserIds, setCurrentEditUserIds] = useState<string[]>([]);
 
   const isOwnerForUIDisplay = useMemo(() => {
     return !!currentUserFromAuth && !!planData && planData.ownerId === currentUserFromAuth.uid;
@@ -123,59 +125,63 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       setDescription(planData.description || '');
       setVisibility(planData.visibility);
       setEditability(planData.editability);
-      setLocalViewUserIds(planData.viewUserIds?.filter(uid => uid !== planData.ownerId) || []);
-      setLocalEditUserIds(planData.editUserIds?.filter(uid => uid !== planData.ownerId) || []);
+      setCurrentViewUserIds(planData.viewUserIds?.filter(uid => uid !== planData.ownerId) || []);
+      setCurrentEditUserIds(planData.editUserIds?.filter(uid => uid !== planData.ownerId) || []);
     }
   }, [planData, isOpen]);
 
   const { data: viewerProfilesMap, isLoading: isLoadingViewerProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
-    queryKey: ['userProfilesBasic', 'planDialogViewers', planData?.id, localViewUserIds.join(',')],
+    queryKey: ['userProfilesBasic', 'planDialogViewers', planData?.id, currentViewUserIds.join(',')],
     queryFn: async () => {
       const profiles = new Map<string, UserProfileBasic | null>();
-      if (!localViewUserIds || localViewUserIds.length === 0) return profiles;
-      await Promise.all(localViewUserIds.map(async uid => {
+      if (!currentViewUserIds || currentViewUserIds.length === 0) return profiles;
+      await Promise.all(currentViewUserIds.map(async uid => {
         const profile = await fetchUserProfileBasic(uid);
         profiles.set(uid, profile);
       }));
       return profiles;
     },
-    enabled: isOpen && localViewUserIds.length > 0 && !!planData,
+    enabled: isOpen && currentViewUserIds.length > 0 && !!planData,
   });
 
   const { data: editorProfilesMap, isLoading: isLoadingEditorProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
-    queryKey: ['userProfilesBasic', 'planDialogEditors', planData?.id, localEditUserIds.join(',')],
+    queryKey: ['userProfilesBasic', 'planDialogEditors', planData?.id, currentEditUserIds.join(',')],
     queryFn: async () => {
       const profiles = new Map<string, UserProfileBasic | null>();
-      if (!localEditUserIds || localEditUserIds.length === 0) return profiles;
-      await Promise.all(localEditUserIds.map(async uid => {
+      if (!currentEditUserIds || currentEditUserIds.length === 0) return profiles;
+      await Promise.all(currentEditUserIds.map(async uid => {
         const profile = await fetchUserProfileBasic(uid);
         profiles.set(uid, profile);
       }));
       return profiles;
     },
-    enabled: isOpen && localEditUserIds.length > 0 && !!planData,
+    enabled: isOpen && currentEditUserIds.length > 0 && !!planData,
   });
 
-  const handleAddViewerToList = (userProfile: UserProfileBasic) => {
+  const handleInternalAddViewer = (userProfile: UserProfileBasic) => {
     if (userProfile.userId === planData?.ownerId) return;
-    setLocalViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+    setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+    onAddUserToViewers(userProfile);
     setViewPermissionsSearch('');
   };
 
-  const handleRemoveViewerFromList = (userIdToRemove: string) => {
-    setLocalViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    setLocalEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
+  const handleInternalRemoveViewer = (userIdToRemove: string) => {
+    setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
+    setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
+    onRemoveUserFromViewers(userIdToRemove);
   };
 
-  const handleAddEditorToList = (userProfile: UserProfileBasic) => {
+  const handleInternalAddEditor = (userProfile: UserProfileBasic) => {
     if (userProfile.userId === planData?.ownerId) return;
-    setLocalEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    setLocalViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+    setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+    setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+    onAddUserToEditors(userProfile);
     setEditPermissionsSearch('');
   };
 
-  const handleRemoveEditorFromList = (userIdToRemove: string) => {
-    setLocalEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
+  const handleInternalRemoveEditor = (userIdToRemove: string) => {
+    setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
+    onRemoveUserFromEditors(userIdToRemove);
   };
 
   const handleSave = () => {
@@ -183,7 +189,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       toast({ variant: "destructive", title: "Validation Error", description: "Plan name is required." });
       return;
     }
-    if (!isPlanOwner) {
+    if (!isPlanOwner) { // Use the prop passed from usePlanLogic for the save action guard
       toast({ variant: "destructive", title: "Permission Denied", description: "You do not have permission to save these settings." });
       return;
     }
@@ -192,8 +198,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       description: description.trim(),
       visibility,
       editability,
-      viewUserIds: localViewUserIds,
-      editUserIds: localEditUserIds,
+      viewUserIds: currentViewUserIds,
+      editUserIds: currentEditUserIds,
     });
   };
   
@@ -229,7 +235,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             className="h-5 w-5 p-0 text-destructive hover:text-destructive/80"
             onClick={() => onRemove(userId)}
             disabled={isSavingSettings}
-            title={`Remove ${roleContext.toLowerCase()}`}
+            title={`Remove ${roleContext.toLowerCase()} `}
           >
             <Trash2 className="h-3.5 w-3.5" />
           </Button>
@@ -240,14 +246,14 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
   const renderPermissionSection = (
     title: string,
-    currentPermittedUserIds: string[],
-    profilesMap: Map<string, UserProfileBasic | null> | undefined,
-    isLoadingProfilesMap: boolean,
+    currentUserIdsForSection: string[],
+    profilesMapForSection: Map<string, UserProfileBasic | null> | undefined,
+    isLoadingProfilesMapForSection: boolean,
     searchVal: string,
     setSearchVal: (val: string) => void,
     suggestionList: UserProfileBasic[],
-    onAddToList: (profile: UserProfileBasic) => void,
-    onRemoveFromList: (uid: string) => void,
+    onAddToListInternal: (profile: UserProfileBasic) => void,
+    onRemoveFromListInternal: (uid: string) => void,
     roleContext: 'Viewer' | 'Editor'
   ) => (
     <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm">
@@ -269,9 +275,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             <ScrollArea className="max-h-32 border rounded-md bg-popover">
               <div className="p-1">
                 {suggestionList
-                  .filter(sugg => sugg.userId !== planData?.ownerId && !currentPermittedUserIds.includes(sugg.userId))
+                  .filter(sugg => sugg.userId !== planData?.ownerId && !currentUserIdsForSection.includes(sugg.userId))
                   .map(sugg => (
-                    <Button key={`sugg-${roleContext}-${sugg.userId}`} variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2 hover:bg-accent" onClick={() => onAddToList(sugg)}>
+                    <Button key={`sugg-${roleContext}-${sugg.userId}`} variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2 hover:bg-accent" onClick={() => onAddToListInternal(sugg)}>
                       <Avatar className="h-5 w-5 mr-1.5"><AvatarImage src={sugg.avatarUrl} /><AvatarFallback className="text-xs">{getInitials(sugg.displayName || sugg.mentionName)}</AvatarFallback></Avatar>
                       <div className="flex flex-col items-start text-left min-w-0">
                         <span className="truncate font-medium">{sugg.displayName || sugg.mentionName}</span>
@@ -280,7 +286,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       <PlusCircle className="h-4 w-4 ml-auto text-primary flex-shrink-0"/>
                     </Button>
                   ))}
-                 {suggestionList.filter(sugg => sugg.userId !== planData?.ownerId && !currentPermittedUserIds.includes(sugg.userId)).length === 0 && searchVal && (
+                 {suggestionList.filter(sugg => sugg.userId !== planData?.ownerId && !currentUserIdsForSection.includes(sugg.userId)).length === 0 && searchVal && (
                     <p className="text-xs text-muted-foreground text-center p-2">No new users found matching "{searchVal}".</p>
                  )}
               </div>
@@ -288,12 +294,12 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           )}
         </>
       )}
-      <ScrollArea className={cn("max-h-28", currentPermittedUserIds.length === 0 && "border-none")}>
+      <ScrollArea className={cn("max-h-28", currentUserIdsForSection.length === 0 && "border-none")}>
         <div className="space-y-1 py-1">
-          {isLoadingProfilesMap && currentPermittedUserIds.length > 0 && !profilesMap?.size ? (
-            Array.from({length: Math.min(2, currentPermittedUserIds.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
-          ) : currentPermittedUserIds.length > 0 ? (
-            currentPermittedUserIds.map(uid => renderUserListItem(uid, profilesMap, onRemoveFromList, roleContext, isLoadingProfilesMap))
+          {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
+            Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
+          ) : currentUserIdsForSection.length > 0 ? (
+            currentUserIdsForSection.map(uid => renderUserListItem(uid, profilesMapForSection, onRemoveFromListInternal, roleContext, isLoadingProfilesMapForSection))
           ) : (
             <p className="text-xs text-muted-foreground text-center py-2">No specific {roleContext.toLowerCase()}s added (besides owner).</p>
           )}
@@ -309,11 +315,15 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          {/* Description removed as requested for debugging */}
-          {/* <DialogDescription>Key information about this collaboration plan.</DialogDescription> */}
+          {/* DialogDescription removed as requested for debugging */}
         </DialogHeader>
         <ScrollArea className="flex-grow min-h-0 pr-2">
           <div className="space-y-6 py-2 pr-4">
+            {/* DEBUG PROP DISPLAY */}
+            <p className="text-sm font-bold text-purple-600 p-2 bg-purple-100 border border-purple-300 rounded">
+              DEBUG PROP FROM PAGE.TSX: {debugProp || "PROP NOT RECEIVED"}
+            </p>
+            {/* END DEBUG PROP DISPLAY */}
             <div>
               <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
               <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
@@ -356,26 +366,26 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 <div className="space-y-3 pt-2">
                   {visibility !== 'public' && renderPermissionSection(
                     "Manage View Access (for Private/Unlisted plans)",
-                    localViewUserIds,
+                    currentViewUserIds,
                     viewerProfilesMap,
                     isLoadingViewerProfiles,
                     viewPermissionsSearch,
                     setViewPermissionsSearch,
                     viewPermissionSuggestions,
-                    handleAddViewerToList,
-                    handleRemoveViewerFromList,
+                    handleInternalAddViewer,
+                    handleInternalRemoveViewer,
                     "Viewer"
                   )}
                   {editability === 'collaborators' && renderPermissionSection(
                     "Manage Edit Access (Collaborators)",
-                    localEditUserIds,
+                    currentEditUserIds,
                     editorProfilesMap,
                     isLoadingEditorProfiles,
                     editPermissionsSearch,
                     setEditPermissionsSearch,
                     editPermissionSuggestions,
-                    handleAddEditorToList,
-                    handleRemoveEditorFromList,
+                    handleInternalAddEditor,
+                    handleInternalRemoveEditor,
                     "Editor"
                   )}
                 </div>
@@ -401,5 +411,3 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
-
-    
