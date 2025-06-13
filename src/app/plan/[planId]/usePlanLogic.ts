@@ -12,7 +12,7 @@ import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectio
 import type { UserProfileBasic } from '@/types/connection';
 import { v4 as uuidv4 } from 'uuid';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
-import { serverTimestamp } from 'firebase/firestore'; // Import serverTimestamp
+import { serverTimestamp } from 'firebase/firestore';
 
 
 const MIN_CANVAS_PADDING = 20;
@@ -89,11 +89,22 @@ export const usePlanLogic = () => {
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
+  // This state will hold the plan data used by PlanInfoDialog for its local permission lists
+  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
+
+
   const { data: planData, isLoading: isLoadingPlan, error: planError, refetch: refetchPlanData } = useQuery<ClientPlan | null>({
     queryKey: ['plan', planId],
     queryFn: async () => (planId && isValidPlanId) ? getPlanById(planId) : null,
     enabled: !!planId && isValidPlanId && !authLoading,
   });
+
+  // Effect to update planDataForDialog when planData changes (e.g., after fetching or saving)
+  useEffect(() => {
+    if (planData) {
+      setPlanDataForDialog(planData);
+    }
+  }, [planData]);
 
   useEffect(() => {
     const viewTimer = setTimeout(() => setDebouncedViewPermissionsSearch(viewPermissionsSearch), 300);
@@ -104,14 +115,15 @@ export const usePlanLogic = () => {
   const { data: viewPermissionSuggestions = [] } = useQuery<UserProfileBasic[]>({
     queryKey: ['suggestibleUsersForPlanPermissions', 'view', debouncedViewPermissionsSearch, user?.uid],
     queryFn: () => user ? getSuggestibleUsers(debouncedViewPermissionsSearch, 5) : Promise.resolve([]),
-    enabled: !!user && isPlanInfoDialogOpen && debouncedViewPermissionsSearch.length > 0,
+    enabled: !!user && isPlanInfoDialogOpen && !!debouncedViewPermissionsSearch.trim(), // Only fetch if search term is not empty
   });
 
   const { data: editPermissionSuggestions = [] } = useQuery<UserProfileBasic[]>({
     queryKey: ['suggestibleUsersForPlanPermissions', 'edit', debouncedEditPermissionsSearch, user?.uid],
     queryFn: () => user ? getSuggestibleUsers(debouncedEditPermissionsSearch, 5) : Promise.resolve([]),
-    enabled: !!user && isPlanInfoDialogOpen && debouncedEditPermissionsSearch.length > 0,
+    enabled: !!user && isPlanInfoDialogOpen && !!debouncedEditPermissionsSearch.trim(), // Only fetch if search term is not empty
   });
+
 
   const { data: ownerProfile, isLoading: isLoadingOwnerProfile } = useQuery<UserProfileBasic | null>({
     queryKey: ['userProfileBasic', planData?.ownerId, 'planOwner'],
@@ -132,7 +144,7 @@ export const usePlanLogic = () => {
       toast({ title: "Plan Settings Saved", description: "Your plan settings have been updated." });
       if (planId) {
          queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-         refetchPlanData(); // Explicitly refetch plan data
+         refetchPlanData();
       }
       setIsPlanInfoDialogOpen(false);
     },
@@ -147,7 +159,7 @@ export const usePlanLogic = () => {
       if (planId) {
         queryClient.invalidateQueries({ queryKey: ['plan', planId] });
         queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
-        refetchPlanData(); // Refetch plan data
+        refetchPlanData();
         refetchPlanVersions();
       }
     },
@@ -161,7 +173,7 @@ export const usePlanLogic = () => {
       toast({ title: "Plan Restored", description: "The plan has been restored." });
       queryClient.invalidateQueries({ queryKey: ['plan', planId] });
       queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
-      refetchPlanData(); // Refetch plan data
+      refetchPlanData();
       refetchPlanVersions();
       setIsRestoreConfirmOpen(false); setVersionToRestore(null);
       handleExitDiffView();
@@ -198,7 +210,7 @@ export const usePlanLogic = () => {
   const canEditPlan = useMemo(() => {
     if (!user || !planData) return false;
     if (planData.ownerId === user.uid) return true;
-    if (planData.editability === 'collaborators' && planData.editUserIds?.includes(user.uid)) return true;
+    if (planData.editability === 'collaborators' && (planData.editUserIds || []).includes(user.uid)) return true;
     return false;
   }, [user, planData]);
 
@@ -435,8 +447,18 @@ export const usePlanLogic = () => {
     saveRoadmapMutation.mutate({ planId, currentUserId: user.uid, roadmapToSave: editableRoadmap });
   }, [planData, user, planId, canEditPlan, editableRoadmap, saveRoadmapMutation, toast, diffTarget]);
 
-  const handleSavePlanSettings = useCallback((settings: { name: string; description: string; visibility: PlanVisibility; editability: PlanEditability; viewUserIds: string[]; editUserIds: string[] }) => {
-    if (!planData || !user || !planId || !canEditPlan) { toast({ variant: "destructive", title: "Error", description: "Cannot save settings." }); return; }
+  const handleSavePlanSettings = useCallback((settings: {
+    name: string;
+    description: string;
+    visibility: PlanVisibility;
+    editability: PlanEditability;
+    viewUserIds: string[];
+    editUserIds: string[];
+  }) => {
+    if (!planDataForDialog || !user || !planId || !canEditPlan) {
+      toast({ variant: "destructive", title: "Error", description: "Cannot save settings. Plan data missing or permissions issue." });
+      return;
+    }
     
     const updates: UpdatePlanData = {
         updatedAt: serverTimestamp() as any, 
@@ -444,11 +466,24 @@ export const usePlanLogic = () => {
         description: settings.description,
         visibility: settings.visibility,
         editability: settings.editability,
+        // Pass the updated lists. The service will ensure owner is always included.
         viewUserIds: settings.viewUserIds, 
         editUserIds: settings.editUserIds,
     };
+
+    // Optimistically update local planDataForDialog state for smoother UI in dialog
+    setPlanDataForDialog(prev => prev ? ({
+      ...prev,
+      name: settings.name,
+      description: settings.description,
+      visibility: settings.visibility,
+      editability: settings.editability,
+      viewUserIds: Array.from(new Set([prev.ownerId, ...settings.viewUserIds])), // Keep owner, add new
+      editUserIds: Array.from(new Set([prev.ownerId, ...settings.editUserIds])), // Keep owner, add new
+    }) : null);
+
     savePlanSettingsMutation.mutate({ planId, currentUserId: user.uid, updates });
-  }, [planData, user, planId, canEditPlan, savePlanSettingsMutation, toast]);
+  }, [planDataForDialog, user, planId, canEditPlan, savePlanSettingsMutation, toast, setPlanDataForDialog]);
 
 
     const handleExitDiffView = useCallback(() => {
@@ -612,11 +647,13 @@ export const usePlanLogic = () => {
     canEditPlan, saveRoadmapChanges,
     savePlanSettingsMutation, handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
+    planDataForDialog, // Pass this to PlanDetailPage to then pass to PlanInfoDialog
     originalEditingChildItemData, setOriginalEditingChildItemData,
     // Permissions
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
-    // Permission management callbacks are now internal to PlanInfoDialog, so not exposed here
     forceRender,
   };
 };
+
+    
