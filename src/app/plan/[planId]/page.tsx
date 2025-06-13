@@ -87,8 +87,9 @@ export default function PlanDetailPage() {
   const controlOffset = 100;
 
   useEffect(() => {
-    console.log('[PlanDetailPage] isPlanInfoDialogOpen state changed to:', isPlanInfoDialogOpen);
+    console.log('[PlanDetailPage] isPlanInfoDialogOpen state changed (from page):', isPlanInfoDialogOpen);
   }, [isPlanInfoDialogOpen]);
+
 
   useEffect(() => {
     if (isPointerDown && canvasRef.current) {
@@ -269,28 +270,25 @@ export default function PlanDetailPage() {
         </ScrollArea>
       </div>
 
-      {planDataForDialog && (
-        <PlanInfoDialog
-          isOpen={isPlanInfoDialogOpen}
-          onOpenChange={setIsPlanInfoDialogOpen}
-          planData={planDataForDialog}
-          ownerProfile={ownerProfile}
-          isPlanOwner={canEditPlan}
-          onSaveSettings={handleSavePlanSettings}
-          isSavingSettings={savePlanSettingsMutation.isPending}
-          viewPermissionsSearch={viewPermissionsSearch}
-          setViewPermissionsSearch={setViewPermissionsSearch}
-          editPermissionsSearch={editPermissionsSearch}
-          setEditPermissionsSearch={setEditPermissionsSearch}
-          viewPermissionSuggestions={viewPermissionSuggestions}
-          editPermissionSuggestions={editPermissionSuggestions}
-          onAddUserToViewers={handleAddUserToViewers}
-          onRemoveUserFromViewers={handleRemoveUserFromViewers}
-          onAddUserToEditors={handleAddUserToEditors}
-          onRemoveUserFromEditors={handleRemoveUserFromEditors}
-          debugProp="DEBUG_PROP_FROM_PAGE_TSX_SUCCESS"
-        />
-      )}
+      <PlanInfoDialog
+        isOpen={isPlanInfoDialogOpen}
+        onOpenChange={setIsPlanInfoDialogOpen}
+        planData={planDataForDialog}
+        ownerProfile={ownerProfile}
+        isPlanOwner={canEditPlan}
+        onSaveSettings={handleSavePlanSettings}
+        isSavingSettings={savePlanSettingsMutation.isPending}
+        viewPermissionsSearch={viewPermissionsSearch}
+        setViewPermissionsSearch={setViewPermissionsSearch}
+        editPermissionsSearch={editPermissionsSearch}
+        setEditPermissionsSearch={setEditPermissionsSearch}
+        viewPermissionSuggestions={viewPermissionSuggestions}
+        editPermissionSuggestions={editPermissionSuggestions}
+        onAddUserToViewers={handleAddUserToViewers}
+        onRemoveUserFromViewers={handleRemoveUserFromViewers}
+        onAddUserToEditors={handleAddUserToEditors}
+        onRemoveUserFromEditors={handleRemoveUserFromEditors}
+      />
        <AddRoadmapStepDialog
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
