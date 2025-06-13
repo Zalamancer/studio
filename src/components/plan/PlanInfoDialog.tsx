@@ -27,11 +27,11 @@ import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   Loader2,
   FileText,
-  Users, // Changed from Users2
-  User, // Added for "Owner Only" option
+  Users,
+  User,
   Eye,
   Lock,
-  Link as LinkIcon, // Using LinkIcon for clarity
+  Link as LinkIcon,
   ShieldQuestion,
   Trash2,
   Search,
@@ -51,8 +51,8 @@ interface PlanInfoDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   planData: ClientPlan | null;
-  ownerProfile: UserProfileBasic | null; // Prop for displaying owner, not for auth check inside dialog
-  isPlanOwner: boolean; // Prop to control if "Save Settings" button is enabled/shown (from usePlanLogic)
+  ownerProfile: UserProfileBasic | null;
+  isPlanOwner: boolean;
   onSaveSettings: (settings: {
     name: string;
     description: string;
@@ -68,7 +68,6 @@ interface PlanInfoDialogProps {
   setEditPermissionsSearch: (value: string) => void;
   viewPermissionSuggestions: UserProfileBasic[];
   editPermissionSuggestions: UserProfileBasic[];
-  // Callbacks to update local lists in usePlanLogic before saving
   onAddUserToViewers: (userProfile: UserProfileBasic) => void;
   onRemoveUserFromViewers: (userId: string) => void;
   onAddUserToEditors: (userProfile: UserProfileBasic) => void;
@@ -88,8 +87,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   isOpen,
   onOpenChange,
   planData,
-  ownerProfile, // Used for display
-  isPlanOwner,   // Used for enabling save button
+  ownerProfile,
+  isPlanOwner,
   onSaveSettings,
   isSavingSettings,
   viewPermissionsSearch,
@@ -111,11 +110,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   const [visibility, setVisibility] = useState<PlanVisibility>('private');
   const [editability, setEditability] = useState<PlanEditability>('owner_only');
   
-  // These will hold the UIDs for the lists managed locally in the dialog
   const [localViewUserIds, setLocalViewUserIds] = useState<string[]>([]);
   const [localEditUserIds, setLocalEditUserIds] = useState<string[]>([]);
 
-  // Determine if the currently authenticated user is the owner of the planData being displayed
   const isOwnerForUIDisplay = useMemo(() => {
     return !!currentUserFromAuth && !!planData && planData.ownerId === currentUserFromAuth.uid;
   }, [currentUserFromAuth, planData]);
@@ -126,7 +123,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       setDescription(planData.description || '');
       setVisibility(planData.visibility);
       setEditability(planData.editability);
-      // Initialize local lists from planData, excluding the owner from explicit lists
       setLocalViewUserIds(planData.viewUserIds?.filter(uid => uid !== planData.ownerId) || []);
       setLocalEditUserIds(planData.editUserIds?.filter(uid => uid !== planData.ownerId) || []);
     }
@@ -161,26 +157,25 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   });
 
   const handleAddViewerToList = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === planData?.ownerId) return; // Owner is implicitly a viewer
+    if (userProfile.userId === planData?.ownerId) return;
     setLocalViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    setViewPermissionsSearch(''); // Clear search after adding
+    setViewPermissionsSearch('');
   };
 
   const handleRemoveViewerFromList = (userIdToRemove: string) => {
     setLocalViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    setLocalEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove)); // Also remove from editors if they were there
+    setLocalEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
   };
 
   const handleAddEditorToList = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === planData?.ownerId) return; // Owner is implicitly an editor
+    if (userProfile.userId === planData?.ownerId) return;
     setLocalEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    setLocalViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId]))); // Editors are also viewers
-    setEditPermissionsSearch(''); // Clear search
+    setLocalViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+    setEditPermissionsSearch('');
   };
 
   const handleRemoveEditorFromList = (userIdToRemove: string) => {
     setLocalEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    // Note: Do not automatically remove from viewers here, as they might still have explicit view permission.
   };
 
   const handleSave = () => {
@@ -188,7 +183,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       toast({ variant: "destructive", title: "Validation Error", description: "Plan name is required." });
       return;
     }
-    if (!isPlanOwner) { // Use prop for save action control
+    if (!isPlanOwner) {
       toast({ variant: "destructive", title: "Permission Denied", description: "You do not have permission to save these settings." });
       return;
     }
@@ -197,7 +192,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       description: description.trim(),
       visibility,
       editability,
-      viewUserIds: localViewUserIds, // Pass the locally managed lists
+      viewUserIds: localViewUserIds,
       editUserIds: localEditUserIds,
     });
   };
@@ -212,7 +207,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     const profile = profilesMap?.get(userId);
     const displayName = profile?.displayName || profile?.mentionName || generateAnonymousName(userId);
     
-    if (userId === planData?.ownerId) return null; // Owner is not listed explicitly
+    if (userId === planData?.ownerId) return null;
 
     if (isLoadingMap && !profile) {
       return <SkeletonListItem key={`loading-${roleContext}-${userId}`} />;
@@ -314,7 +309,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          <DialogDescription>View and manage your plan's details and access permissions.</DialogDescription>
+          {/* Description removed as requested for debugging */}
+          {/* <DialogDescription>Key information about this collaboration plan.</DialogDescription> */}
         </DialogHeader>
         <ScrollArea className="flex-grow min-h-0 pr-2">
           <div className="space-y-6 py-2 pr-4">
@@ -366,8 +362,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                     viewPermissionsSearch,
                     setViewPermissionsSearch,
                     viewPermissionSuggestions,
-                    handleAddViewerToList, // Use local handler
-                    handleRemoveViewerFromList, // Use local handler
+                    handleAddViewerToList,
+                    handleRemoveViewerFromList,
                     "Viewer"
                   )}
                   {editability === 'collaborators' && renderPermissionSection(
@@ -378,8 +374,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                     editPermissionsSearch,
                     setEditPermissionsSearch,
                     editPermissionSuggestions,
-                    handleAddEditorToList, // Use local handler
-                    handleRemoveEditorFromList, // Use local handler
+                    handleAddEditorToList,
+                    handleRemoveEditorFromList,
                     "Editor"
                   )}
                 </div>
@@ -405,3 +401,5 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
+
+    
