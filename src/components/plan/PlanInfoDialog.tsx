@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogPrimitiveDescription, // Renamed to avoid conflict if local DialogDescription is used
+  DialogDescription as DialogPrimitiveDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
+import { ScrollArea } from '@/components/ui/scroll-area'; // Keep main ScrollArea for dialog content
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   Loader2,
@@ -338,20 +338,21 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           )}
         </Popover>
       )}
-      <ScrollArea
-        className={cn(currentUserIdsForSection.length === 0 && "border-none")}
-        style={{ maxHeight: '80px' }} // Direct style application
+      <div 
+        className={cn(
+            "space-y-1 py-1", 
+            currentUserIdsForSection.length === 0 && "border-none", 
+            "max-h-20 overflow-y-auto" // Directly apply max-height and overflow
+        )}
       >
-        <div className="space-y-1 py-1">
-          {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
-            Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
-          ) : currentUserIdsForSection.length > 0 ? (
-            currentUserIdsForSection.map(uid => renderUserListItem(uid, profilesMapForSection, onRemoveFromListInternal, roleContext, isLoadingProfilesMapForSection))
-          ) : (
-            <p className="text-xs text-muted-foreground text-center py-2">No specific {roleContext.toLowerCase()}s added (besides owner).</p>
-          )}
-        </div>
-      </ScrollArea>
+        {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
+          Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
+        ) : currentUserIdsForSection.length > 0 ? (
+          currentUserIdsForSection.map(uid => renderUserListItem(uid, profilesMapForSection, onRemoveFromListInternal, roleContext, isLoadingProfilesMapForSection))
+        ) : (
+          <p className="text-xs text-muted-foreground text-center py-2">No specific {roleContext.toLowerCase()}s added (besides owner).</p>
+        )}
+      </div>
     </div>
   );
 
@@ -373,7 +374,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           </div>
         ) : initialPlanData ? (
           <>
-            <ScrollArea className="flex-grow min-h-0 pr-2">
+            <ScrollArea className="flex-grow min-h-0 pr-2"> {/* Main scroll area for dialog content */}
               <div className="space-y-6 py-2 px-6 pr-4">
                 <div>
                   <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
@@ -473,5 +474,3 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   );
 };
 
-
-    
