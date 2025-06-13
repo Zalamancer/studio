@@ -8,10 +8,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogPrimitiveDescription, // Aliased to avoid conflict
+  DialogDescription as DialogPrimitiveDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
-import * as DialogPrimitive from "@radix-ui/react-dialog"; // Import all from radix for DialogPrimitive.Close
+import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -37,7 +37,6 @@ import {
   Trash2,
   Search,
   PlusCircle,
-  X, // Import X icon for the new close button
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -342,7 +341,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       )}
       <div
         className="space-y-1 py-1 flex-grow"
-        style={{ maxHeight: '10rem', overflowY: 'auto' }} // Directly using inline style for scroll
+        style={{ maxHeight: '10rem', overflowY: 'auto' }}
       >
         {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
           Array.from({length: Math.min(3, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -369,16 +368,11 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
             {isOwnerForUIDisplay && ( 
-              <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm">
+              <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm" className="w-full sm:w-auto">
                 {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save Settings
               </Button>
             )}
-            <DialogPrimitive.Close asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8">
-                <X className="h-4 w-4" />
-                <span className="sr-only">Close</span>
-              </Button>
-            </DialogPrimitive.Close>
+            {/* Removed the explicit X button from here, DialogContent provides one by default */}
           </div>
         </DialogHeader>
         
@@ -390,7 +384,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
         ) : initialPlanData ? (
           <>
             <ScrollArea className="flex-grow min-h-0">
-              <div className="p-6 space-y-6">
+              <div className="p-6">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
                   {/* Left Column */}
                   <div className="md:w-1/2 space-y-6 flex flex-col">
@@ -484,7 +478,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
               </div>
             </ScrollArea>
             <DialogFooter className="hidden"> 
-              {/* Footer can be used for a general close button if needed, but header actions are primary */}
             </DialogFooter>
           </>
         ) : null}
