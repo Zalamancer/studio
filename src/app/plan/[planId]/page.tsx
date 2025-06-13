@@ -12,6 +12,7 @@ import RoadmapStepCard from '@/components/plan/RoadmapStepCard'; // Corrected de
 import { AddRoadmapStepDialog } from '@/components/plan/AddRoadmapStepDialog';
 import { EditChildItemDialog } from '@/components/plan/EditChildItemDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet'; // Added missing imports for Sheet
+import { Card } from '@/components/ui/card'; // Added Card import
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
@@ -68,8 +69,8 @@ export default function PlanDetailPage() {
     defaultChildDialogTitle, setDefaultChildDialogTitle, defaultChildDialogDescription, setDefaultChildDialogDescription,
     handleChildItemDialogSubmit, handleEditChildItemText, handleDeleteChildItem,
     onAddGrandchildToChildDataItem, onAddChildItemToNode, onChildItemTitleClick: handleChildItemCanvasNodeFocus,
-    canEditPlan, saveRoadmapChanges,
-    savePlanSettingsMutation, handleSavePlanSettings,
+    canEditPlan, saveRoadmapChanges, savePlanSettingsMutation,
+    handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
     planDataForDialog,
     originalEditingChildItemData, setOriginalEditingChildItemData,
@@ -236,7 +237,7 @@ export default function PlanDetailPage() {
             <svg ref={svgRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', display: 'block' }} className="pointer-events-none">
               <defs>
                 <marker id="arrowhead-main" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--primary))" /></marker>
-                <marker id="arrowhead-accent" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--accent))" /></marker>
+                <marker id="arrowhead-accent" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--accent))" /></marker>
               </defs>
               {drawConnectionLines()}
               {activeConnectionLinePreviewRef.current?.path && (
@@ -281,6 +282,7 @@ export default function PlanDetailPage() {
           onRemoveUserFromViewers={handleRemoveUserFromViewers}
           onAddUserToEditors={handleAddUserToEditors}
           onRemoveUserFromEditors={handleRemoveUserFromEditors}
+          debugProp="DEBUG_PROP_FROM_PAGE_TSX_SUCCESS"
         />
       )}
        <AddRoadmapStepDialog
@@ -382,3 +384,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
