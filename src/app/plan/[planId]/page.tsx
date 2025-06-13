@@ -6,7 +6,7 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, AlertTriangle, Info } from 'lucide-react'; // Removed explicit 'Dialog' as it's used via Radix primitives
+import { Loader2, AlertTriangle, Info } from 'lucide-react';
 import { PlanInfoDialog } from '@/components/plan/PlanInfoDialog';
 import RoadmapStepCard from '@/components/plan/RoadmapStepCard';
 import { AddRoadmapStepDialog } from '@/components/plan/AddRoadmapStepDialog';
@@ -70,8 +70,8 @@ export default function PlanDetailPage() {
     onAddGrandchildToChildDataItem, onAddChildItemToNode, onChildItemTitleClick: handleChildItemCanvasNodeFocus,
     canEditPlan, saveRoadmapChanges, savePlanSettingsMutation,
     handleSavePlanSettings,
-    isPlanInfoDialogOpen, setIsPlanInfoDialogOpen, // Ensure these are destructured
-    planDataForDialog, // Ensure this is destructured
+    isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
+    planDataForDialog,
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
@@ -86,6 +86,9 @@ export default function PlanDetailPage() {
   const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const controlOffset = 100;
 
+  useEffect(() => {
+    console.log('[PlanDetailPage] isPlanInfoDialogOpen state changed to:', isPlanInfoDialogOpen);
+  }, [isPlanInfoDialogOpen]);
 
   useEffect(() => {
     if (isPointerDown && canvasRef.current) {
@@ -210,6 +213,7 @@ export default function PlanDetailPage() {
 
   return (
     <div className="flex flex-col flex-1 h-full">
+       <h1 className="text-3xl font-bold text-center text-blue-600 p-4 bg-yellow-100 border-b-4 border-blue-700">DEBUG: PLAN PAGE UPDATED - {new Date().toLocaleTimeString()}</h1>
       <PlanHeader
         planData={planData}
         ownerProfile={ownerProfile}
@@ -218,7 +222,10 @@ export default function PlanDetailPage() {
         onSavePlan={saveRoadmapChanges}
         isSavingPlan={savePlanSettingsMutation.isPending || restorePlanMutation.isPending}
         onOpenHistory={() => setIsVersionHistorySheetOpen(true)}
-        onOpenInfo={() => setIsPlanInfoDialogOpen(true)} // Connect to state
+        onOpenInfo={() => {
+          console.log('[PlanDetailPage] onOpenInfo called from PlanHeader. Setting isPlanInfoDialogOpen to true.');
+          setIsPlanInfoDialogOpen(true);
+        }}
         onInitiateAddNode={() => handleInitiateAddNode(null)}
         diffTargetActive={!!diffTarget}
       />
@@ -262,7 +269,7 @@ export default function PlanDetailPage() {
         </ScrollArea>
       </div>
 
-       {planDataForDialog && ( // Ensure planDataForDialog is available before rendering
+      {planDataForDialog && (
         <PlanInfoDialog
           isOpen={isPlanInfoDialogOpen}
           onOpenChange={setIsPlanInfoDialogOpen}
@@ -383,4 +390,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-    
