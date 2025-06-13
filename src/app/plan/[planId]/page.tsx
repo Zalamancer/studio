@@ -2,27 +2,26 @@
 // src/app/plan/[planId]/page.tsx
 "use client";
 
-import React, { useEffect, useRef, useCallback, useState } from 'react'; // Added useState for canvasMinHeight
+import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, AlertTriangle } from 'lucide-react';
+import { Loader2, AlertTriangle, Info } from 'lucide-react'; // Removed explicit 'Dialog' as it's used via Radix primitives
 import { PlanInfoDialog } from '@/components/plan/PlanInfoDialog';
-import RoadmapStepCard from '@/components/plan/RoadmapStepCard'; // Corrected default import
+import RoadmapStepCard from '@/components/plan/RoadmapStepCard';
 import { AddRoadmapStepDialog } from '@/components/plan/AddRoadmapStepDialog';
 import { EditChildItemDialog } from '@/components/plan/EditChildItemDialog';
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet'; // Added missing imports for Sheet
-import { Card } from '@/components/ui/card'; // Added Card import
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
+import { Card } from '@/components/ui/card';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic'; // Import from the hook
+import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic';
 import type { RoadmapStep, ClientPlanVersion } from '@/types/plan';
-import { PlanHeader } from './PlanHeader'; // Corrected import path
+import { PlanHeader } from './PlanHeader';
 
 
-// Constants from usePlanLogic moved here if they are purely presentational and used by drawConnectionLines
 const NODE_BASE_WIDTH = 220;
 const NODE_HEADER_HEIGHT = 40;
 const CHILD_ITEM_HEIGHT = 28;
@@ -71,14 +70,14 @@ export default function PlanDetailPage() {
     onAddGrandchildToChildDataItem, onAddChildItemToNode, onChildItemTitleClick: handleChildItemCanvasNodeFocus,
     canEditPlan, saveRoadmapChanges, savePlanSettingsMutation,
     handleSavePlanSettings,
-    isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
-    planDataForDialog,
+    isPlanInfoDialogOpen, setIsPlanInfoDialogOpen, // Ensure these are destructured
+    planDataForDialog, // Ensure this is destructured
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
     handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
     forceRender,
-    handleInitiateAddNode, // Expose handleInitiateAddNode for header
+    handleInitiateAddNode,
   } = usePlanLogic();
 
   const router = useRouter();
@@ -128,7 +127,7 @@ export default function PlanDetailPage() {
           if (childItem.canvasNodeIdForThisItem) {
             const childNode = editableRoadmap.find(node => node.id === childItem.canvasNodeIdForThisItem);
             if (childNode) {
-              const startX = parentStep.x + 16; 
+              const startX = parentStep.x + 16;
               const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2);
               const endX = childNode.x;
               const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2;
@@ -203,7 +202,7 @@ export default function PlanDetailPage() {
   if (!planData && !isLoadingPlan) {
     return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Plan Not Found</h1><p className="text-muted-foreground">The requested plan could not be found.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>);
   }
-  
+
   const augmentedPlanVersions = planVersionsData.map((version, index, array) => {
     const previousVersion = index < array.length - 1 ? array[index + 1] : null;
     return { ...version, previousVersion };
@@ -217,9 +216,9 @@ export default function PlanDetailPage() {
         isLoadingOwnerProfile={isLoadingOwnerProfile}
         canEditPlan={canEditPlan}
         onSavePlan={saveRoadmapChanges}
-        isSavingPlan={savePlanSettingsMutation.isPending || restorePlanMutation.isPending} // Combine pending states
+        isSavingPlan={savePlanSettingsMutation.isPending || restorePlanMutation.isPending}
         onOpenHistory={() => setIsVersionHistorySheetOpen(true)}
-        onOpenInfo={() => setIsPlanInfoDialogOpen(true)}
+        onOpenInfo={() => setIsPlanInfoDialogOpen(true)} // Connect to state
         onInitiateAddNode={() => handleInitiateAddNode(null)}
         diffTargetActive={!!diffTarget}
       />
@@ -263,13 +262,13 @@ export default function PlanDetailPage() {
         </ScrollArea>
       </div>
 
-       {planData && (
+       {planDataForDialog && ( // Ensure planDataForDialog is available before rendering
         <PlanInfoDialog
           isOpen={isPlanInfoDialogOpen}
           onOpenChange={setIsPlanInfoDialogOpen}
-          planData={planDataForDialog} 
+          planData={planDataForDialog}
           ownerProfile={ownerProfile}
-          isPlanOwner={canEditPlan} 
+          isPlanOwner={canEditPlan}
           onSaveSettings={handleSavePlanSettings}
           isSavingSettings={savePlanSettingsMutation.isPending}
           viewPermissionsSearch={viewPermissionsSearch}
@@ -289,13 +288,13 @@ export default function PlanDetailPage() {
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
         onSubmit={(data) => handleAddNode(data, canvasRef.current)}
-        isSubmitting={false} 
+        isSubmitting={false}
       />
       <EditChildItemDialog
         isOpen={isEditChildItemDialogOpen}
         onOpenChange={setIsEditChildItemDialogOpen}
         onSubmit={handleChildItemDialogSubmit}
-        isSubmitting={false} 
+        isSubmitting={false}
         dialogTitle={dynamicChildDialogTitle}
         defaultTitle={defaultChildDialogTitle}
         defaultDescription={defaultChildDialogDescription}
@@ -384,4 +383,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
+    

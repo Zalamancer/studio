@@ -94,10 +94,11 @@ export const usePlanLogic = () => {
     enabled: !!planId && isValidPlanId && !authLoading,
     onSuccess: (data) => {
       if (data) {
-        setPlanDataForDialog(data);
+        setPlanDataForDialog(JSON.parse(JSON.stringify(data))); // Deep copy for dialog state
         setEditableRoadmap((data.roadmap || []).map(s => sanitizeRoadmapStep(s)));
       } else {
         setEditableRoadmap([]);
+        setPlanDataForDialog(null);
       }
     },
   });
@@ -135,11 +136,13 @@ export const usePlanLogic = () => {
   const savePlanSettingsMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; updates: UpdatePlanData }) =>
       updatePlanDetails(payload.planId, payload.currentUserId, payload.updates),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast({ title: "Plan Settings Saved", description: "Your plan settings have been updated." });
-      if (planId) {
-         queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-         refetchPlanData();
+      if (variables.planId) {
+         queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
+         refetchPlanData().then(result => {
+             if (result.data) setPlanDataForDialog(JSON.parse(JSON.stringify(result.data))); // Update dialog data after refetch
+         });
       }
       setIsPlanInfoDialogOpen(false);
     },
@@ -149,12 +152,14 @@ export const usePlanLogic = () => {
   const saveRoadmapMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; roadmapToSave: RoadmapStep[] }) =>
       updatePlanDetails(payload.planId, payload.currentUserId, { roadmap: payload.roadmapToSave, updatedAt: serverTimestamp() as any }),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast({ title: "Plan State Saved", description: "The current plan state has been saved." });
-      if (planId) {
-        queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-        queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
-        refetchPlanData();
+      if (variables.planId) {
+        queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
+        queryClient.invalidateQueries({ queryKey: ['planVersions', variables.planId] });
+        refetchPlanData().then(result => {
+            if(result.data) setPlanDataForDialog(JSON.parse(JSON.stringify(result.data)));
+        });
         refetchPlanVersions();
       }
     },
@@ -164,11 +169,13 @@ export const usePlanLogic = () => {
   const restorePlanMutation = useMutation({
     mutationFn: (payload: { planId: string; versionIdToRestore: string; currentUserId: string; }) =>
       restorePlanToVersion(payload.planId, payload.versionIdToRestore, payload.currentUserId),
-    onSuccess: () => {
+    onSuccess: (_, variables) => {
       toast({ title: "Plan Restored", description: "The plan has been restored." });
-      queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-      queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
-      refetchPlanData();
+      queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
+      queryClient.invalidateQueries({ queryKey: ['planVersions', variables.planId] });
+      refetchPlanData().then(result => {
+        if(result.data) setPlanDataForDialog(JSON.parse(JSON.stringify(result.data)));
+      });
       refetchPlanVersions();
       setIsRestoreConfirmOpen(false); setVersionToRestore(null);
       handleExitDiffView();
@@ -201,7 +208,7 @@ export const usePlanLogic = () => {
       setEditableRoadmap([]);
     }
   }, [planData, diffTarget]);
-  
+
   const canEditPlan = useMemo(() => {
     if (!user || !planData) return false;
     if (planData.ownerId === user.uid) return true;
@@ -256,7 +263,7 @@ export const usePlanLogic = () => {
     const sourceNodeForPeerLink = targetParentIdForDialog ? editableRoadmap.find(s => s.id === targetParentIdForDialog) : null;
 
     if (sourceNodeForPeerLink && initiatingDotTypeForDialog) {
-      const sourceHeight = NODE_BASE_MIN_HEIGHT; 
+      const sourceHeight = NODE_BASE_MIN_HEIGHT;
       switch (initiatingDotTypeForDialog) {
         case 'N': newStepX = sourceNodeForPeerLink.x; newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y - NODE_BASE_MIN_HEIGHT - DEFAULT_SPACING_Y); break;
         case 'E': newStepX = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X); newStepY = sourceNodeForPeerLink.y; break;
@@ -398,7 +405,7 @@ export const usePlanLogic = () => {
     setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem)));
     setIsStepDetailSheetOpen(true);
   }, [canEditPlan, diffTarget, editableRoadmap, toast]);
-  
+
   const handleDeleteChildItem = useCallback((childItemIdToDelete: string, parentCanvasNodeIdOfItem: string) => {
     if (!canEditPlan || diffTarget) return;
     setEditableRoadmap(prev => {
@@ -454,15 +461,16 @@ export const usePlanLogic = () => {
       return;
     }
     const updates: UpdatePlanData = {
-        updatedAt: serverTimestamp() as any, 
+        updatedAt: serverTimestamp() as any,
         name: settings.name,
         description: settings.description,
         visibility: settings.visibility,
         editability: settings.editability,
-        viewUserIds: settings.viewUserIds, 
+        viewUserIds: settings.viewUserIds,
         editUserIds: settings.editUserIds,
     };
-    setPlanDataForDialog(prev => prev ? ({
+
+    setPlanDataForDialog(prev => prev ? ({ // Optimistically update local state for dialog
       ...prev,
       name: settings.name,
       description: settings.description,
@@ -488,7 +496,7 @@ export const usePlanLogic = () => {
       setPlanDataForDialog(prev => prev ? ({
         ...prev,
         viewUserIds: (prev.viewUserIds || []).filter(uid => uid !== userIdToRemove),
-        editUserIds: (prev.editUserIds || []).filter(uid => uid !== userIdToRemove), // Also remove from editors
+        editUserIds: (prev.editUserIds || []).filter(uid => uid !== userIdToRemove),
       }) : null);
     }
   }, [planDataForDialog]);
@@ -498,7 +506,7 @@ export const usePlanLogic = () => {
       setPlanDataForDialog(prev => prev ? ({
         ...prev,
         editUserIds: Array.from(new Set([...(prev.editUserIds || []), userProfile.userId])),
-        viewUserIds: Array.from(new Set([...(prev.viewUserIds || []), userProfile.userId])), // Editors are also viewers
+        viewUserIds: Array.from(new Set([...(prev.viewUserIds || []), userProfile.userId])),
       }) : null);
     }
   }, [planDataForDialog]);
@@ -568,7 +576,7 @@ export const usePlanLogic = () => {
           if (!sourceNode) return;
           const sourceDotType = nodeDragInfoRef.current!.dotType;
           let startX: number, startY: number;
-          const sourceNodeHeight = NODE_BASE_MIN_HEIGHT; 
+          const sourceNodeHeight = NODE_BASE_MIN_HEIGHT;
           switch(sourceDotType) {
               case 'N': startX = sourceNode.x + NODE_BASE_WIDTH / 2; startY = sourceNode.y; break;
               case 'E': startX = sourceNode.x + NODE_BASE_WIDTH; startY = sourceNode.y + sourceNodeHeight / 2; break;
@@ -598,7 +606,7 @@ export const usePlanLogic = () => {
       const { nodeId: sourceNodeId, dotType: sourceDotType, isDotDrag } = nodeDragInfoRef.current;
       const clickInfo = clickStartInfoRef.current;
       const isConsideredDrag = isDraggingRef.current;
-      
+
       if (isDotDrag && sourceDotType) {
           if (activeConnectionLinePreviewRef.current?.path) {
               const targetNodeIdUnderCursor = activeConnectionLinePreviewRef.current.targetNodeId;
@@ -681,5 +689,4 @@ export const usePlanLogic = () => {
     handleInitiateAddNode,
   };
 };
-
     
