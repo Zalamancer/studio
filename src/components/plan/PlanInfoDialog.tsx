@@ -8,10 +8,10 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogPrimitiveDescription,
+  DialogDescription as DialogPrimitiveDescription, // Alias to avoid conflict if you make your own
   DialogFooter,
 } from '@/components/ui/dialog';
-import * as DialogPrimitive from "@radix-ui/react-dialog";
+import * as DialogPrimitive from "@radix-ui/react-dialog"; // For DialogPrimitive.Close
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,7 @@ import {
   Trash2,
   Search,
   PlusCircle,
+  X, // Import X icon
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -340,8 +341,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
         </Popover>
       )}
       <div
-        className="space-y-1 py-1 flex-grow"
-        style={{ maxHeight: '10rem', overflowY: 'auto' }}
+        className="space-y-1 py-1 flex-grow overflow-y-auto" // Applied overflow-y-auto
+        style={{ maxHeight: '10rem' }} // Direct style for max-height
       >
         {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
           Array.from({length: Math.min(3, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -356,7 +357,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-6xl max-h-[90vh] flex flex-col p-0">
+      <DialogContent className="w-[95vw] max-w-6xl max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
         <DialogHeader className="pt-6 px-6 pb-4 border-b flex flex-row justify-between items-center">
           <div className="flex items-center gap-2 flex-grow min-w-0">
             <FileText className="h-5 w-5 text-primary flex-shrink-0" />
@@ -372,7 +373,11 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save Settings
               </Button>
             )}
-            {/* Removed the explicit X button from here, DialogContent provides one by default */}
+            <DialogPrimitive.Close asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8 p-1.5" aria-label="Close">
+                <X className="h-4 w-4" />
+              </Button>
+            </DialogPrimitive.Close>
           </div>
         </DialogHeader>
         
@@ -478,6 +483,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
               </div>
             </ScrollArea>
             <DialogFooter className="hidden"> 
+              {/* Footer actions are now in the header */}
             </DialogFooter>
           </>
         ) : null}
@@ -485,3 +491,4 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
+
