@@ -26,7 +26,7 @@ import Link from 'next/link';
 import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic';
 import type { RoadmapStep, ClientPlanVersion, ChildDataItem } from '@/types/plan';
 import { PlanHeader } from './PlanHeader';
-
+import { useToast } from '@/hooks/use-toast'; // Correctly import useToast
 
 const NODE_BASE_WIDTH = 220;
 const NODE_HEADER_HEIGHT = 40;
@@ -80,8 +80,8 @@ export default function PlanDetailPage() {
     childItemManagementContextRef, isEditChildItemDialogOpen, setIsEditChildItemDialogOpen, isChildItemDialogSubmitting, dynamicChildDialogTitle,
     defaultChildDialogTitle, setDefaultChildDialogTitle, defaultChildDialogDescription, setDefaultChildDialogDescription,
     handleChildItemDialogSubmit, handleEditChildItemText, handleDeleteChildItem,
-    onAddGrandchildToChildDataItem, onAddChildItemToNode, onChildItemTitleClick, // Use onChildItemTitleClick for focusing panel
-    canEditPlan, saveRoadmapChanges, savePlanSettingsMutation,
+    onAddGrandchildToChildDataItem, onAddChildItemToNode, onChildItemTitleClick,
+    canEditPlan, saveRoadmapChanges, savePlanSettingsMutation, saveRoadmapMutation,
     handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
     planDataForDialog,
@@ -173,9 +173,9 @@ export default function PlanDetailPage() {
     if (!isStepDetailSheetOpen && initialPanelDataRef.current && editingTarget?.type === 'node') {
         const currentValues = nodeDetailForm.getValues();
         if (currentValues.title !== initialPanelDataRef.current.title || currentValues.description !== initialPanelDataRef.current.description) {
-            // This toast logic might be redundant if onNodeDetailPanelSubmit already shows one.
-            // However, it catches unsaved changes if panel is closed by other means.
-            // Let's simplify: toast is shown on explicit save.
+            // Could prompt to save, or just save changes silently. For now, it saves on explicit submit.
+            // Or, if this is just a visual side effect:
+            // toast({ title: "Panel Closed", description: "Changes to node details in panel were not saved unless 'Update Details' was clicked."});
         }
         initialPanelDataRef.current = null; // Reset for next open
     }
@@ -348,7 +348,7 @@ export default function PlanDetailPage() {
                 allSteps={editableRoadmap}
                 onNodeInteractionStart={handleNodeInteractionStart}
                 isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
-                onEditStep={handleEditCanvasNode} // Use handleEditCanvasNode directly
+                onEditStep={onChildItemTitleClick}
                 onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
                 onChildItemTitleClick={onChildItemTitleClick}
                 onAddChildItemToNode={() => onAddChildItemToNode(step.id)}
@@ -385,7 +385,7 @@ export default function PlanDetailPage() {
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
         onSubmit={(data) => handleAddNode(data, canvasRef.current)}
-        isSubmitting={false}
+        isSubmitting={false} // This should ideally come from usePlanLogic state for this specific dialog if needed
       />
       <EditChildItemDialog
         isOpen={isEditChildItemDialogOpen}
@@ -597,5 +597,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
-
