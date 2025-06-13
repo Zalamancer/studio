@@ -12,12 +12,14 @@ import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectio
 import type { UserProfileBasic } from '@/types/connection';
 import { v4 as uuidv4 } from 'uuid';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
+import { serverTimestamp } from 'firebase/firestore'; // Import serverTimestamp
+
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
 const DEFAULT_SPACING_X = 80;
 const DEFAULT_SPACING_Y = 40;
-const NODE_BASE_MIN_HEIGHT = 80; // Ensure this is also defined if used by calculateNodeHeight
+const NODE_BASE_MIN_HEIGHT = 80; 
 const CHILD_ITEM_HEIGHT = 28;
 const NODE_HEADER_HEIGHT = 40;
 
@@ -79,7 +81,7 @@ export const usePlanLogic = () => {
   const [isPlanInfoDialogOpen, setIsPlanInfoDialogOpen] = useState(false);
   const [originalEditingChildItemData, setOriginalEditingChildItemData] = useState<ChildDataItem | null>(null);
 
-  // State for permission management in PlanInfoDialog
+  // State for permission management
   const [viewPermissionsSearch, setViewPermissionsSearch] = useState('');
   const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
@@ -87,13 +89,12 @@ export const usePlanLogic = () => {
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
-  const { data: planData, isLoading: isLoadingPlan, error: planError } = useQuery<ClientPlan | null>({
+  const { data: planData, isLoading: isLoadingPlan, error: planError, refetch: refetchPlanData } = useQuery<ClientPlan | null>({
     queryKey: ['plan', planId],
     queryFn: async () => (planId && isValidPlanId) ? getPlanById(planId) : null,
     enabled: !!planId && isValidPlanId && !authLoading,
   });
 
-  // Debounce for permission search
   useEffect(() => {
     const viewTimer = setTimeout(() => setDebouncedViewPermissionsSearch(viewPermissionsSearch), 300);
     const editTimer = setTimeout(() => setDebouncedEditPermissionsSearch(editPermissionsSearch), 300);
@@ -124,26 +125,29 @@ export const usePlanLogic = () => {
     enabled: isVersionHistorySheetOpen && !!planId && isValidPlanId,
   });
 
-  // Mutation for saving plan settings (name, description, visibility, editability, permissions)
   const savePlanSettingsMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; updates: UpdatePlanData }) =>
       updatePlanDetails(payload.planId, payload.currentUserId, payload.updates),
     onSuccess: () => {
       toast({ title: "Plan Settings Saved", description: "Your plan settings have been updated." });
-      if (planId) queryClient.invalidateQueries({ queryKey: ['plan', planId] });
-      setIsPlanInfoDialogOpen(false); // Close dialog on success
+      if (planId) {
+         queryClient.invalidateQueries({ queryKey: ['plan', planId] });
+         refetchPlanData(); // Explicitly refetch plan data
+      }
+      setIsPlanInfoDialogOpen(false);
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan settings." })
   });
 
   const saveRoadmapMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; roadmapToSave: RoadmapStep[] }) =>
-      updatePlanDetails(payload.planId, payload.currentUserId, { roadmap: payload.roadmapToSave, updatedAt: serverTimestamp() as any }), // Ensure serverTimestamp is any for type compatibility if needed
+      updatePlanDetails(payload.planId, payload.currentUserId, { roadmap: payload.roadmapToSave, updatedAt: serverTimestamp() as any }),
     onSuccess: () => {
       toast({ title: "Plan State Saved", description: "The current plan state has been saved." });
       if (planId) {
         queryClient.invalidateQueries({ queryKey: ['plan', planId] });
         queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
+        refetchPlanData(); // Refetch plan data
         refetchPlanVersions();
       }
     },
@@ -157,6 +161,7 @@ export const usePlanLogic = () => {
       toast({ title: "Plan Restored", description: "The plan has been restored." });
       queryClient.invalidateQueries({ queryKey: ['plan', planId] });
       queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
+      refetchPlanData(); // Refetch plan data
       refetchPlanVersions();
       setIsRestoreConfirmOpen(false); setVersionToRestore(null);
       handleExitDiffView();
@@ -245,8 +250,7 @@ export const usePlanLogic = () => {
     const sourceNodeForPeerLink = targetParentIdForDialog ? editableRoadmap.find(s => s.id === targetParentIdForDialog) : null;
 
     if (sourceNodeForPeerLink && initiatingDotTypeForDialog) {
-      // Calculate height using a similar function or import it. For now, assume NODE_BASE_MIN_HEIGHT.
-      const sourceHeight = NODE_BASE_MIN_HEIGHT; // Simplified, replace with actual calculateNodeHeight if needed
+      const sourceHeight = NODE_BASE_MIN_HEIGHT; 
       switch (initiatingDotTypeForDialog) {
         case 'N': newStepX = sourceNodeForPeerLink.x; newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y - NODE_BASE_MIN_HEIGHT - DEFAULT_SPACING_Y); break;
         case 'E': newStepX = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X); newStepY = sourceNodeForPeerLink.y; break;
@@ -339,13 +343,25 @@ export const usePlanLogic = () => {
         if (!spawnedNodeIdForContext) { toast({ variant: "destructive", title: "Error", description: "Failed to ensure parent." }); return prevRoadmap; }
         const parentIdx = tempRoadmap.findIndex(node => node.id === spawnedNodeIdForContext);
         if (parentIdx > -1) {
-          tempRoadmap[parentIdx].childrenData = [...(tempRoadmap[parentIdx].childrenData || []), sanitizeRoadmapStep({ parentCanvasNodeId: spawnedNodeIdForContext, title: data.title, description: data.description || null } as any).childrenData[0]]; // Simplified
+          const newGrandchildItem: ChildDataItem = {
+            id: `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`,
+            title: data.title, description: data.description || null,
+            parentCanvasNodeId: spawnedNodeIdForContext,
+            canvasNodeIdForThisItem: null,
+          };
+          tempRoadmap[parentIdx].childrenData = [...(tempRoadmap[parentIdx].childrenData || []), newGrandchildItem];
           operationSucceeded = true;
         }
       } else if (context.operation === 'createChild') {
         const parentIdx = tempRoadmap.findIndex(node => node.id === context.targetParentNodeId);
         if (parentIdx > -1) {
-          tempRoadmap[parentIdx].childrenData = [...(tempRoadmap[parentIdx].childrenData || []), sanitizeRoadmapStep({ parentCanvasNodeId: context.targetParentNodeId, title: data.title, description: data.description || null } as any).childrenData[0]];
+          const newChildItem: ChildDataItem = {
+            id: `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`,
+            title: data.title, description: data.description || null,
+            parentCanvasNodeId: context.targetParentNodeId,
+            canvasNodeIdForThisItem: null,
+          };
+          tempRoadmap[parentIdx].childrenData = [...(tempRoadmap[parentIdx].childrenData || []), newChildItem];
           operationSucceeded = true;
         }
       } else if (context.operation === 'edit') {
@@ -393,8 +409,6 @@ export const usePlanLogic = () => {
             updatedRoadmap = updatedRoadmap.filter(node => node.id !== canvasNodeIdThatWasRepresentedByDeletedItem);
             updatedRoadmap = updatedRoadmap.map(rn => ({ ...rn, peerConnections: (rn.peerConnections || []).filter(pc => pc.targetNodeId !== canvasNodeIdThatWasRepresentedByDeletedItem) }));
         }
-        // Logic for potentially unspawning parent if it becomes childless has been removed for brevity and focus on direct deletion.
-        // Consider re-adding if strict unspawning is required.
         if (editingTarget?.type === 'childItem' && editingTarget.data.id === childItemIdToDelete) {
           const parentNodeAfterDelete = updatedRoadmap.find(n => n.id === parentCanvasNodeIdOfItem);
           if (parentNodeAfterDelete) setEditingTarget({type: 'node', data: parentNodeAfterDelete});
@@ -421,60 +435,21 @@ export const usePlanLogic = () => {
     saveRoadmapMutation.mutate({ planId, currentUserId: user.uid, roadmapToSave: editableRoadmap });
   }, [planData, user, planId, canEditPlan, editableRoadmap, saveRoadmapMutation, toast, diffTarget]);
 
-  const handleSavePlanSettings = useCallback((newSettings: { name: string; description: string; visibility: PlanVisibility; editability: PlanEditability; viewUserIds: string[]; editUserIds: string[] }) => {
+  const handleSavePlanSettings = useCallback((settings: { name: string; description: string; visibility: PlanVisibility; editability: PlanEditability; viewUserIds: string[]; editUserIds: string[] }) => {
     if (!planData || !user || !planId || !canEditPlan) { toast({ variant: "destructive", title: "Error", description: "Cannot save settings." }); return; }
     
     const updates: UpdatePlanData = {
-        updatedAt: serverTimestamp() as any, // Cast to any due to FieldValue vs Timestamp
-        name: newSettings.name,
-        description: newSettings.description,
-        visibility: newSettings.visibility,
-        editability: newSettings.editability,
-        viewUserIds: newSettings.viewUserIds,
-        editUserIds: newSettings.editUserIds,
+        updatedAt: serverTimestamp() as any, 
+        name: settings.name,
+        description: settings.description,
+        visibility: settings.visibility,
+        editability: settings.editability,
+        viewUserIds: settings.viewUserIds, 
+        editUserIds: settings.editUserIds,
     };
     savePlanSettingsMutation.mutate({ planId, currentUserId: user.uid, updates });
   }, [planData, user, planId, canEditPlan, savePlanSettingsMutation, toast]);
 
-  // Permission management functions
-  const handleAddUserToViewers = useCallback((userId: string) => {
-    if (!planData || planData.ownerId === userId) return;
-    const newViewers = Array.from(new Set([...(planData.viewUserIds || []), userId]));
-    // Directly update local planData state; saving happens via PlanInfoDialog's save button
-    queryClient.setQueryData(['plan', planId], (oldData: ClientPlan | null | undefined) => oldData ? ({ ...oldData, viewUserIds: newViewers }) : null);
-    toast({ title: "Viewer Added (Draft)", description: "Save plan settings to confirm." });
-  }, [planData, planId, queryClient, toast]);
-
-  const handleRemoveUserFromViewers = useCallback((userId: string) => {
-    if (!planData || planData.ownerId === userId) return;
-    const newViewers = (planData.viewUserIds || []).filter(uid => uid !== userId);
-    const newEditors = (planData.editUserIds || []).filter(uid => uid !== userId); // Also remove from editors if they were there
-    queryClient.setQueryData(['plan', planId], (oldData: ClientPlan | null | undefined) => oldData ? ({ ...oldData, viewUserIds: newViewers, editUserIds: newEditors }) : null);
-    toast({ title: "Viewer Removed (Draft)", description: "Save plan settings to confirm." });
-  }, [planData, planId, queryClient, toast]);
-
-  const handleAddUserToEditors = useCallback((userId: string) => {
-    if (!planData || planData.ownerId === userId) return;
-    const newEditors = Array.from(new Set([...(planData.editUserIds || []), userId]));
-    const newViewers = Array.from(new Set([...(planData.viewUserIds || []), userId])); // Editors are also viewers
-    queryClient.setQueryData(['plan', planId], (oldData: ClientPlan | null | undefined) => oldData ? ({ ...oldData, editUserIds: newEditors, viewUserIds: newViewers }) : null);
-    toast({ title: "Editor Added (Draft)", description: "Save plan settings to confirm." });
-  }, [planData, planId, queryClient, toast]);
-
-  const handleRemoveUserFromEditors = useCallback((userId: string) => {
-    if (!planData || planData.ownerId === userId) return;
-    const newEditors = (planData.editUserIds || []).filter(uid => uid !== userId);
-    // Keep them as viewer unless explicitly removed from viewers
-    queryClient.setQueryData(['plan', planId], (oldData: ClientPlan | null | undefined) => oldData ? ({ ...oldData, editUserIds: newEditors }) : null);
-    toast({ title: "Editor Removed (Draft)", description: "Save plan settings to confirm." });
-  }, [planData, planId, queryClient, toast]);
-
-
-  // All other callbacks remain largely the same but will use `editableRoadmap`, `setEditableRoadmap`, `toast`, etc.
-  // These include: handleNodeInteractionStart, handleGlobalMove, handleGlobalPointerUp, handleViewChangesClick, handleExitDiffView, handleRestoreVersion, confirmRestore.
-  // The implementations should be moved from page.tsx into this hook.
-  // For brevity, I'm not re-listing them all here but they are part of the "state and logic" moved to this hook.
-  // The `drawConnectionLines` function can also live here if it primarily depends on `editableRoadmap`.
 
     const handleExitDiffView = useCallback(() => {
         setDiffTarget(null);
@@ -502,7 +477,7 @@ export const usePlanLogic = () => {
         if (('button' in event && (event as React.MouseEvent).button !== 0) || !canEditPlan || diffTarget) return;
         const { clientX, clientY } = getPointerCoords(event);
         const nodeElement = (event.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement;
-        if (!nodeElement && !isDotDrag) return; // This should not happen if called from onMouseDown/TouchStart of the card itself
+        if (!nodeElement && !isDotDrag) return;
         const nodeRect = isDotDrag ? (event.currentTarget as HTMLElement).getBoundingClientRect() : nodeElement.getBoundingClientRect();
         const offsetX = clientX - nodeRect.left;
         const offsetY = clientY - nodeRect.top;
@@ -510,7 +485,7 @@ export const usePlanLogic = () => {
         clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetElement: event.currentTarget };
         isDraggingRef.current = false;
         setIsPointerDown(true);
-        forceRender(); // To update preview line if starting dot drag
+        forceRender();
       }, [canEditPlan, getPointerCoords, diffTarget, forceRender]);
 
     const handleGlobalMove = useCallback((event: MouseEvent | TouchEvent, canvasRefCurrent: HTMLDivElement | null) => {
@@ -532,8 +507,7 @@ export const usePlanLogic = () => {
             if (!sourceNode) return;
             const sourceDotType = nodeDragInfoRef.current!.dotType;
             let startX: number, startY: number;
-            // Calculate height using a similar function or import calculateNodeHeight
-            const sourceNodeHeight = NODE_BASE_MIN_HEIGHT; // Simplified, replace with actual calculateNodeHeight if needed
+            const sourceNodeHeight = NODE_BASE_MIN_HEIGHT; 
             switch(sourceDotType) {
                 case 'N': startX = sourceNode.x + NODE_BASE_WIDTH / 2; startY = sourceNode.y; break;
                 case 'E': startX = sourceNode.x + NODE_BASE_WIDTH; startY = sourceNode.y + sourceNodeHeight / 2; break;
@@ -577,7 +551,7 @@ export const usePlanLogic = () => {
                             if (sourceNodeIndex === -1) return prev;
                             const updatedSourceNode = { ...map[sourceNodeIndex] };
                             updatedSourceNode.peerConnections = updatedSourceNode.peerConnections || [];
-                            let targetDotOnDropTarget: PeerConnection['targetDot'] = 'W'; // Default target dot
+                            let targetDotOnDropTarget: PeerConnection['targetDot'] = 'W';
                             if (sourceDotType === 'N') targetDotOnDropTarget = 'S';
                             else if (sourceDotType === 'S') targetDotOnDropTarget = 'N';
                             const alreadyConnected = updatedSourceNode.peerConnections.some(pc => pc.targetNodeId === dropTargetNode.id && pc.sourceDot === sourceDotType && pc.targetDot === targetDotOnDropTarget);
@@ -618,7 +592,7 @@ export const usePlanLogic = () => {
 
   return {
     user, authLoading, planId, isValidPlanId,
-    planData, isLoadingPlan, planError, ownerProfile,
+    planData, isLoadingPlan, planError, ownerProfile, isLoadingOwnerProfile,
     editableRoadmap, setEditableRoadmap,
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
     handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel,
@@ -642,9 +616,7 @@ export const usePlanLogic = () => {
     // Permissions
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
-    handleAddUserToViewers, handleRemoveUserFromViewers,
-    handleAddUserToEditors, handleRemoveUserFromEditors,
-    forceRender, // expose forceRender
+    // Permission management callbacks are now internal to PlanInfoDialog, so not exposed here
+    forceRender,
   };
 };
-
