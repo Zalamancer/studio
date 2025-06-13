@@ -2,7 +2,7 @@
 // src/components/plan/PlanInfoDialog.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -31,12 +31,13 @@ import {
   User,
   Eye,
   Lock,
-  Link as LinkIcon, 
+  Link as LinkIcon,
   ShieldQuestion,
   Trash2,
   Search,
   PlusCircle,
 } from 'lucide-react';
+import { Popover, PopoverContent, PopoverTrigger, PopoverAnchor } from '@/components/ui/popover'; // Added PopoverAnchor
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
 import type { UserProfileBasic } from '@/types/connection';
 import { useToast } from '@/hooks/use-toast';
@@ -86,7 +87,7 @@ const SkeletonListItem: React.FC = () => (
 export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   isOpen,
   onOpenChange,
-  planData,
+  planData: initialPlanData, // Renamed prop to avoid conflict with internal state
   ownerProfile,
   isPlanOwner,
   onSaveSettings,
@@ -113,23 +114,45 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   const [currentViewUserIds, setCurrentViewUserIds] = useState<string[]>([]);
   const [currentEditUserIds, setCurrentEditUserIds] = useState<string[]>([]);
 
+  // Popover open states
+  const [isViewSuggestionsOpen, setIsViewSuggestionsOpen] = useState(false);
+  const [isEditSuggestionsOpen, setIsEditSuggestionsOpen] = useState(false);
+  const viewSearchInputRef = useRef<HTMLInputElement>(null);
+  const editSearchInputRef = useRef<HTMLInputElement>(null);
+
+
   const isOwnerForUIDisplay = useMemo(() => {
-    return !!currentUserFromAuth && !!planData && planData.ownerId === currentUserFromAuth.uid;
-  }, [currentUserFromAuth, planData]);
+    return !!currentUserFromAuth && !!initialPlanData && initialPlanData.ownerId === currentUserFromAuth.uid;
+  }, [currentUserFromAuth, initialPlanData]);
 
   useEffect(() => {
-    if (planData && isOpen) {
-      setName(planData.name);
-      setDescription(planData.description || '');
-      setVisibility(planData.visibility);
-      setEditability(planData.editability);
-      setCurrentViewUserIds(planData.viewUserIds?.filter(uid => uid !== planData.ownerId) || []);
-      setCurrentEditUserIds(planData.editUserIds?.filter(uid => uid !== planData.ownerId) || []);
+    if (initialPlanData && isOpen) {
+      setName(initialPlanData.name);
+      setDescription(initialPlanData.description || '');
+      setVisibility(initialPlanData.visibility);
+      setEditability(initialPlanData.editability);
+      setCurrentViewUserIds(initialPlanData.viewUserIds?.filter(uid => uid !== initialPlanData.ownerId) || []);
+      setCurrentEditUserIds(initialPlanData.editUserIds?.filter(uid => uid !== initialPlanData.ownerId) || []);
+    } else if (!isOpen) {
+      // Reset search terms when dialog closes
+      setViewPermissionsSearch('');
+      setEditPermissionsSearch('');
+      setIsViewSuggestionsOpen(false);
+      setIsEditSuggestionsOpen(false);
     }
-  }, [planData, isOpen]);
+  }, [initialPlanData, isOpen, setViewPermissionsSearch, setEditPermissionsSearch]);
+
+
+  useEffect(() => {
+    setIsViewSuggestionsOpen(!!viewPermissionsSearch && viewPermissionSuggestions.length > 0);
+  }, [viewPermissionsSearch, viewPermissionSuggestions]);
+
+  useEffect(() => {
+    setIsEditSuggestionsOpen(!!editPermissionsSearch && editPermissionSuggestions.length > 0);
+  }, [editPermissionsSearch, editPermissionSuggestions]);
 
   const { data: viewerProfilesMap, isLoading: isLoadingViewerProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
-    queryKey: ['userProfilesBasic', 'planDialogViewers', planData?.id, currentViewUserIds.join(',')],
+    queryKey: ['userProfilesBasic', 'planDialogViewers', initialPlanData?.id, currentViewUserIds.join(',')],
     queryFn: async () => {
       const profiles = new Map<string, UserProfileBasic | null>();
       if (!currentViewUserIds || currentViewUserIds.length === 0) return profiles;
@@ -139,11 +162,11 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       }));
       return profiles;
     },
-    enabled: isOpen && currentViewUserIds.length > 0 && !!planData,
+    enabled: isOpen && currentViewUserIds.length > 0 && !!initialPlanData,
   });
 
   const { data: editorProfilesMap, isLoading: isLoadingEditorProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
-    queryKey: ['userProfilesBasic', 'planDialogEditors', planData?.id, currentEditUserIds.join(',')],
+    queryKey: ['userProfilesBasic', 'planDialogEditors', initialPlanData?.id, currentEditUserIds.join(',')],
     queryFn: async () => {
       const profiles = new Map<string, UserProfileBasic | null>();
       if (!currentEditUserIds || currentEditUserIds.length === 0) return profiles;
@@ -153,37 +176,41 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       }));
       return profiles;
     },
-    enabled: isOpen && currentEditUserIds.length > 0 && !!planData,
+    enabled: isOpen && currentEditUserIds.length > 0 && !!initialPlanData,
   });
 
   const handleInternalAddViewer = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === planData?.ownerId) return;
+    if (userProfile.userId === initialPlanData?.ownerId) return;
+    if (currentViewUserIds.includes(userProfile.userId)) return;
     setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    onAddUserToViewers(userProfile);
+    onAddUserToViewers(userProfile); // Propagate to parent
     setViewPermissionsSearch('');
+    setIsViewSuggestionsOpen(false);
   };
 
   const handleInternalRemoveViewer = (userIdToRemove: string) => {
     setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    onRemoveUserFromViewers(userIdToRemove);
+    setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove)); // Removing viewer also removes editor
+    onRemoveUserFromViewers(userIdToRemove); // Propagate to parent
   };
 
   const handleInternalAddEditor = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === planData?.ownerId) return;
+    if (userProfile.userId === initialPlanData?.ownerId) return;
+    if (currentEditUserIds.includes(userProfile.userId)) return;
     setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    onAddUserToEditors(userProfile);
+    setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId]))); // Editors are also viewers
+    onAddUserToEditors(userProfile); // Propagate to parent
     setEditPermissionsSearch('');
+    setIsEditSuggestionsOpen(false);
   };
 
   const handleInternalRemoveEditor = (userIdToRemove: string) => {
     setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    onRemoveUserFromEditors(userIdToRemove);
+    onRemoveUserFromEditors(userIdToRemove); // Propagate to parent
   };
 
   const handleSave = () => {
-    if (!planData || !name.trim()) {
+    if (!initialPlanData || !name.trim()) {
       toast({ variant: "destructive", title: "Validation Error", description: "Plan name is required." });
       return;
     }
@@ -211,7 +238,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     const profile = profilesMap?.get(userId);
     const displayName = profile?.displayName || profile?.mentionName || generateAnonymousName(userId);
     
-    if (userId === planData?.ownerId) return null;
+    if (userId === initialPlanData?.ownerId) return null;
 
     if (isLoadingMap && !profile) {
       return <SkeletonListItem key={`loading-${roleContext}-${userId}`} />;
@@ -252,30 +279,48 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     suggestionList: UserProfileBasic[],
     onAddToListInternal: (profile: UserProfileBasic) => void,
     onRemoveFromListInternal: (uid: string) => void,
-    roleContext: 'Viewer' | 'Editor'
+    roleContext: 'Viewer' | 'Editor',
+    isSuggestionsOpen: boolean,
+    setIsSuggestionsOpen: (open: boolean) => void,
+    inputRef: React.RefObject<HTMLInputElement>
   ) => (
     <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm">
       <Label className="text-sm font-semibold text-foreground">{title}</Label>
       {isOwnerForUIDisplay && (
-        <>
-          <div className="relative">
-            <Input
-              type="search"
-              placeholder="Search by @mentionName or name..."
-              value={searchVal}
-              onChange={(e) => setSearchVal(e.target.value)}
-              className="text-xs h-8 pr-8"
-              disabled={isSavingSettings}
-            />
-            <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-          </div>
-          {searchVal && suggestionList.length > 0 && (
-            <ScrollArea className="max-h-32 border rounded-md bg-popover">
-              <div className="p-1">
-                {suggestionList
-                  .filter(sugg => sugg.userId !== planData?.ownerId && !currentUserIdsForSection.includes(sugg.userId))
+        <Popover open={isSuggestionsOpen} onOpenChange={setIsSuggestionsOpen}>
+          <PopoverAnchor asChild>
+            <div className="relative">
+              <Input
+                ref={inputRef}
+                type="search"
+                placeholder="Search by @mentionName or name..."
+                value={searchVal}
+                onChange={(e) => {
+                  setSearchVal(e.target.value);
+                  if (e.target.value.trim() === '') setIsSuggestionsOpen(false);
+                }}
+                onFocus={() => { if (searchVal.trim() !== '') setIsSuggestionsOpen(true);}}
+                className="text-xs h-8 pr-8"
+                disabled={isSavingSettings}
+              />
+              <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+            </div>
+          </PopoverAnchor>
+          {isSuggestionsOpen && (
+            <PopoverContent 
+                className="w-[var(--radix-popover-trigger-width)] p-1 mt-1 max-h-36 overflow-y-auto" 
+                side="bottom" 
+                align="start"
+                onOpenAutoFocus={(e) => e.preventDefault()} // Prevent focus steal
+            >
+              {suggestionList.length > 0 ? (
+                suggestionList
+                  .filter(sugg => sugg.userId !== initialPlanData?.ownerId && !currentUserIdsForSection.includes(sugg.userId))
                   .map(sugg => (
-                    <Button key={`sugg-${roleContext}-${sugg.userId}`} variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2 hover:bg-accent" onClick={() => onAddToListInternal(sugg)}>
+                    <Button key={`sugg-${roleContext}-${sugg.userId}`} variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2 hover:bg-accent" 
+                      onClick={() => onAddToListInternal(sugg)}
+                      onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+                    >
                       <Avatar className="h-5 w-5 mr-1.5"><AvatarImage src={sugg.avatarUrl} /><AvatarFallback className="text-xs">{getInitials(sugg.displayName || sugg.mentionName)}</AvatarFallback></Avatar>
                       <div className="flex flex-col items-start text-left min-w-0">
                         <span className="truncate font-medium">{sugg.displayName || sugg.mentionName}</span>
@@ -283,14 +328,16 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       </div>
                       <PlusCircle className="h-4 w-4 ml-auto text-primary flex-shrink-0"/>
                     </Button>
-                  ))}
-                 {suggestionList.filter(sugg => sugg.userId !== planData?.ownerId && !currentUserIdsForSection.includes(sugg.userId)).length === 0 && searchVal && (
-                    <p className="text-xs text-muted-foreground text-center p-2">No new users found matching "{searchVal}".</p>
-                 )}
-              </div>
-            </ScrollArea>
+                  ))
+              ) : (
+                searchVal && <p className="text-xs text-muted-foreground text-center p-2">No users found matching "{searchVal}".</p>
+              )}
+              {suggestionList.filter(sugg => sugg.userId !== initialPlanData?.ownerId && !currentUserIdsForSection.includes(sugg.userId)).length === 0 && searchVal && (
+                 <p className="text-xs text-muted-foreground text-center p-2">No new users found matching "{searchVal}".</p>
+              )}
+            </PopoverContent>
           )}
-        </>
+        </Popover>
       )}
       <ScrollArea className={cn("max-h-28", currentUserIdsForSection.length === 0 && "border-none")}>
         <div className="space-y-1 py-1">
@@ -311,16 +358,17 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          <DialogDescription className="sr-only">View and manage plan details, settings, and permissions for the collaboration plan titled: {planData?.name || 'current plan'}</DialogDescription>
+          {/* Removed redundant DialogDescription for accessibility, sr-only one is added below for DialogContent */}
         </DialogHeader>
         
-        {!planData && isOpen ? (
+        {!initialPlanData && isOpen ? (
           <div className="flex-grow flex flex-col items-center justify-center p-6">
             <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
             <p className="text-sm text-muted-foreground">Loading plan details...</p>
           </div>
-        ) : planData ? (
+        ) : initialPlanData ? (
           <>
+            <DialogDescription className="sr-only">View and manage plan details, settings, and permissions for the collaboration plan titled: {initialPlanData.name}.</DialogDescription>
             <ScrollArea className="flex-grow min-h-0 pr-2">
               <div className="space-y-6 py-2 px-6 pr-4">
                 <div>
@@ -373,7 +421,10 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         viewPermissionSuggestions,
                         handleInternalAddViewer,
                         handleInternalRemoveViewer,
-                        "Viewer"
+                        "Viewer",
+                        isViewSuggestionsOpen,
+                        setIsViewSuggestionsOpen,
+                        viewSearchInputRef
                       )}
                       {editability === 'collaborators' && renderPermissionSection(
                         "Manage Edit Access (Collaborators)",
@@ -385,17 +436,20 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         editPermissionSuggestions,
                         handleInternalAddEditor,
                         handleInternalRemoveEditor,
-                        "Editor"
+                        "Editor",
+                        isEditSuggestionsOpen,
+                        setIsEditSuggestionsOpen,
+                        editSearchInputRef
                       )}
                     </div>
                   </>
                 )}
 
                 <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-4">
-                  <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}</p>
-                  <p><strong className="text-foreground">Created:</strong> {format(new Date(planData.createdAt), 'PPp')}</p>
-                  <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(planData.updatedAt), 'PPp')}</p>
-                  <p><strong className="text-foreground">Version:</strong> {planData.version}</p>
+                  <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId)}</p>
+                  <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
+                  <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
+                  <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
                 </div>
               </div>
             </ScrollArea>
