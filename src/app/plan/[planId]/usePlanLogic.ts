@@ -70,7 +70,7 @@ export const usePlanLogic = () => {
   const [initiatingDotTypeForDialog, setInitiatingDotTypeForDialog] = useState<'N' | 'E' | 'S' | null>(null);
   const childItemManagementContextRef = useRef<{ operation: 'createGrandchild'; targetChildToBecomeParentId: string; currentParentOfTargetChildId: string; } | { operation: 'createChild'; targetParentNodeId: string; } | { operation: 'edit'; itemToEditId: string; parentNodeId: string; } | null>(null);
   const [isEditChildItemDialogOpen, setIsEditChildItemDialogOpen] = useState(false);
-  const [isChildItemDialogSubmitting, setIsChildItemDialogSubmitting] = useState(false); // State for dialog submission
+  const [isChildItemDialogSubmitting, setIsChildItemDialogSubmitting] = useState(false); 
   const [dynamicChildDialogTitle, setDynamicChildDialogTitle] = useState("Manage Item");
   const [defaultChildDialogTitle, setDefaultChildDialogTitle] = useState("");
   const [defaultChildDialogDescription, setDefaultChildDialogDescription] = useState("");
@@ -238,7 +238,7 @@ export const usePlanLogic = () => {
 
   const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
     if (diffTarget) return;
-    console.log("[usePlanLogic] handleEditCanvasNode CALLED for node:", nodeToEdit.id, nodeToEdit.title);
+    console.log(`[usePlanLogic] handleEditCanvasNode CALLED for node: ${nodeToEdit.id} "${nodeToEdit.title}"`);
     setEditingTarget({ type: 'node', data: nodeToEdit });
     setIsStepDetailSheetOpen(true);
     childItemManagementContextRef.current = null;
@@ -250,11 +250,11 @@ export const usePlanLogic = () => {
   const handleChildItemCanvasNodeFocus = useCallback((childItemId: string, parentCanvasNodeId: string) => {
     if (diffTarget) return;
     const parentNode = editableRoadmap.find(n => n.id === parentCanvasNodeId);
-    if (!parentNode) { toast({ variant: "destructive", title: "Error", description: "Parent node not found."}); return; }
+    if (!parentNode) { toast({ variant: "destructive", title: "Error", description: "Parent node not found for child item focus."}); return; }
     const childItem = parentNode.childrenData.find(ci => ci.id === childItemId);
-    if (!childItem) { toast({ variant: "destructive", title: "Error", description: "Child item not found."}); return; }
+    if (!childItem) { toast({ variant: "destructive", title: "Error", description: "Child item not found for focus."}); return; }
     
-    console.log("[usePlanLogic] handleChildItemCanvasNodeFocus CALLED for childItem:", childItem.id, childItem.title, "in parent:", parentNode.id);
+    console.log(`[usePlanLogic] handleChildItemCanvasNodeFocus CALLED for childItem: ${childItem.id} "${childItem.title}" in parent: ${parentNode.id}`);
     
     setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
     setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem)));
@@ -336,30 +336,58 @@ export const usePlanLogic = () => {
     childItemId: string,
     parentCanvasNodeIdOfChildItem: string
   ): { updatedRoadmap: RoadmapStep[]; spawnedNodeId: string | null } => {
-    let newRoadmap = [...currentRoadmap];
+    console.log(`[SpawnNode] Attempting to spawn child ${childItemId} from parent ${parentCanvasNodeIdOfChildItem}.`);
+    let newRoadmap = [...currentRoadmap]; 
     const parentNodeIndex = newRoadmap.findIndex(s => s.id === parentCanvasNodeIdOfChildItem);
+
     if (parentNodeIndex === -1) {
-      toast({ variant: "destructive", title: "Error Spawning Node", description: `Parent node (ID: ${parentCanvasNodeIdOfChildItem}) for child item not found during spawn.` });
+      toast({ variant: "destructive", title: "Error Spawning Node", description: `Parent node (ID: ${parentCanvasNodeIdOfChildItem}) not found.` });
+      console.error(`[SpawnNode] Parent node ${parentCanvasNodeIdOfChildItem} not found.`);
       return { updatedRoadmap: currentRoadmap, spawnedNodeId: null };
     }
-    const parentNode = newRoadmap[parentNodeIndex];
+
+    const parentNode = { ...newRoadmap[parentNodeIndex] }; 
     const childItemIndex = (parentNode.childrenData || []).findIndex(ci => ci.id === childItemId);
+
     if (childItemIndex === -1) {
-      toast({ variant: "destructive", title: "Error Spawning Node", description: `Child item (ID: ${childItemId}) to spawn not found in parent (ID: ${parentCanvasNodeIdOfChildItem}).` });
+      toast({ variant: "destructive", title: "Error Spawning Node", description: `Child item (ID: ${childItemId}) not found in parent.` });
+      console.error(`[SpawnNode] Child item ${childItemId} not found in parent ${parentCanvasNodeIdOfChildItem}.`);
       return { updatedRoadmap: currentRoadmap, spawnedNodeId: null };
     }
-    const childItem = parentNode.childrenData[childItemIndex];
+
+    const childItem = { ...(parentNode.childrenData[childItemIndex]) }; 
+
     if (childItem.canvasNodeIdForThisItem && newRoadmap.some(n => n.id === childItem.canvasNodeIdForThisItem)) {
+      console.log(`[SpawnNode] Child item ${childItemId} already spawned as node ${childItem.canvasNodeIdForThisItem}. Returning existing ID.`);
       return { updatedRoadmap: currentRoadmap, spawnedNodeId: childItem.canvasNodeIdForThisItem };
     }
+
     const newSpawnedNodeId = `canvasnode-${childItem.id}-${uuidv4().substring(0, 4)}`;
+    console.log(`[SpawnNode] Generating newSpawnedNodeId: ${newSpawnedNodeId}`);
     const newSpawnedNode: RoadmapStep = sanitizeRoadmapStep({
-      id: newSpawnedNodeId, title: childItem.title, description: childItem.description,
+      id: newSpawnedNodeId,
+      title: childItem.title,
+      description: childItem.description,
       x: Math.max(MIN_CANVAS_PADDING, parentNode.x - NODE_BASE_WIDTH - DEFAULT_SPACING_X),
       y: Math.max(MIN_CANVAS_PADDING, parentNode.y + (childItemIndex * (CHILD_ITEM_HEIGHT * 0.5))),
+      childrenData: [],
+      peerConnections: [],
     });
-    newRoadmap[parentNodeIndex] = { ...parentNode, childrenData: parentNode.childrenData.map(ci => ci.id === childItemId ? { ...ci, canvasNodeIdForThisItem: newSpawnedNodeId } : ci) };
-    newRoadmap = [...newRoadmap, newSpawnedNode];
+    console.log(`[SpawnNode] Sanitized newSpawnedNode (ID should be ${newSpawnedNodeId}):`, newSpawnedNode);
+
+
+    const updatedChildrenData = parentNode.childrenData.map(ci =>
+      ci.id === childItemId ? { ...ci, canvasNodeIdForThisItem: newSpawnedNodeId } : ci
+    );
+    parentNode.childrenData = updatedChildrenData;
+    newRoadmap[parentNodeIndex] = parentNode;
+    newRoadmap = [...newRoadmap, newSpawnedNode]; // Add the spawned node to the new roadmap array
+
+    console.log(`[SpawnNode] Spawned child ${childItemId} as new node ${newSpawnedNodeId}. Roadmap length: ${newRoadmap.length}`);
+    const foundInReturned = newRoadmap.find(n => n.id === newSpawnedNodeId);
+    console.log(`[SpawnNode] FINAL CHECK BEFORE RETURN: Node with ID ${newSpawnedNodeId} found in newRoadmap to be returned?`, !!foundInReturned, "Actual ID returned:", newSpawnedNodeId);
+    console.log(`[SpawnNode] IDs in newRoadmap before return:`, newRoadmap.map(n => n.id));
+
     return { updatedRoadmap: newRoadmap, spawnedNodeId: newSpawnedNodeId };
   }, [toast]);
 
@@ -396,49 +424,61 @@ export const usePlanLogic = () => {
     }
 
     setIsChildItemDialogSubmitting(true);
-    let newRoadmapCandidate = [...editableRoadmap];
+    let roadmapForThisOperation = [...editableRoadmap]; // Start with a fresh copy of the current state
     let modificationSuccessful = false;
     const context = childItemManagementContextRef.current!;
 
     try {
       if (context.operation === 'createGrandchild') {
-        const originalParentNodeIndex = newRoadmapCandidate.findIndex(node => node.id === context.currentParentOfTargetChildId);
-        if (originalParentNodeIndex === -1) {
-          console.error("Error in 'createGrandchild': Original parent node not found. ID:", context.currentParentOfTargetChildId);
-          toast({ variant: "destructive", title: "Action Failed", description: "Original parent node for the target child not found." });
-        } else {
-          const childToSpawnIndex = newRoadmapCandidate[originalParentNodeIndex].childrenData.findIndex(ci => ci.id === context.targetChildToBecomeParentId);
-          if (childToSpawnIndex === -1) {
-            console.error("Error in 'createGrandchild': Child item to be spawned not found in original parent. ID:", context.targetChildToBecomeParentId);
-            toast({ variant: "destructive", title: "Action Failed", description: "Child item to add to (to become parent) not found." });
-          } else {
-            const spawnResult = handleSpawnChildDataItemAsCanvasNode(newRoadmapCandidate, context.targetChildToBecomeParentId, context.currentParentOfTargetChildId);
-            if (spawnResult.spawnedNodeId) {
-              newRoadmapCandidate = spawnResult.updatedRoadmap; // IMPORTANT: Update candidate with the result from spawn
-              const spawnedNodeAsParentIndex = newRoadmapCandidate.findIndex(node => node.id === spawnResult.spawnedNodeId);
-              if (spawnedNodeAsParentIndex > -1) {
-                const newGrandchildItem: ChildDataItem = {
-                  id: `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`,
-                  title: data.title, description: data.description || null,
-                  parentCanvasNodeId: spawnResult.spawnedNodeId, // Parent is the newly spawned node
-                  canvasNodeIdForThisItem: null,
-                };
-                if (!Array.isArray(newRoadmapCandidate[spawnedNodeAsParentIndex].childrenData)) {
-                  newRoadmapCandidate[spawnedNodeAsParentIndex].childrenData = [];
-                }
-                newRoadmapCandidate[spawnedNodeAsParentIndex].childrenData.push(newGrandchildItem);
-                modificationSuccessful = true;
-              } else {
-                console.error("Error in 'createGrandchild': Spawned node (to be parent of new item) not found after spawn. ID:", spawnResult.spawnedNodeId);
-                toast({ variant: "destructive", title: "Action Failed", description: "Error creating new parent step." });
-              }
-            } else {
-              console.error("Error in 'createGrandchild': Spawning child as node failed. `handleSpawnChildDataItemAsCanvasNode` likely toasted.");
+        console.log("[Submit] Create Grandchild: Context", context);
+        console.log("[Submit] Create Grandchild: Initial roadmapForThisOperation length:", roadmapForThisOperation.length);
+        
+        const spawnResult = handleSpawnChildDataItemAsCanvasNode(
+          [...roadmapForThisOperation], // Pass a fresh copy for the spawn operation to modify
+          context.targetChildToBecomeParentId,
+          context.currentParentOfTargetChildId
+        );
+        console.log("[Submit] Create Grandchild: Spawn Result", { spawnedNodeId: spawnResult.spawnedNodeId, updatedRoadmapLength: spawnResult.updatedRoadmap?.length });
+
+        if (spawnResult.spawnedNodeId && spawnResult.updatedRoadmap) {
+          const roadmapAfterSpawn = spawnResult.updatedRoadmap; // This IS the new authoritative roadmap
+          console.log("[Submit] Create Grandchild: Roadmap updated from spawn. New length:", roadmapAfterSpawn.length);
+          console.log("[Submit] Create Grandchild: Searching for spawnedNodeId:", spawnResult.spawnedNodeId, "in roadmapAfterSpawn IDs:", roadmapAfterSpawn.map(n=>n.id));
+
+          const spawnedNodeAsParentIndex = roadmapAfterSpawn.findIndex(node => String(node.id) === String(spawnResult.spawnedNodeId));
+          console.log("[Submit] Create Grandchild: Index of spawned node in roadmapAfterSpawn:", spawnedNodeAsParentIndex);
+
+          if (spawnedNodeAsParentIndex > -1) {
+            const newGrandchildItem: ChildDataItem = {
+              id: `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`,
+              title: data.title,
+              description: data.description || null,
+              parentCanvasNodeId: spawnResult.spawnedNodeId, // Parent IS the newly spawned node
+              canvasNodeIdForThisItem: null,
+            };
+            
+            const parentNodeToUpdate = { ...roadmapAfterSpawn[spawnedNodeAsParentIndex] }; // Create a mutable copy
+            if (!Array.isArray(parentNodeToUpdate.childrenData)) {
+              parentNodeToUpdate.childrenData = [];
             }
+            parentNodeToUpdate.childrenData = [...parentNodeToUpdate.childrenData, newGrandchildItem]; // Add grandchild
+            
+            // Update the roadmap by replacing the old version of parentNodeToUpdate with the new one
+            roadmapForThisOperation = roadmapAfterSpawn.map((node, index) => 
+              index === spawnedNodeAsParentIndex ? parentNodeToUpdate : node
+            );
+            modificationSuccessful = true;
+            console.log("[Submit] Create Grandchild: Grandchild added to spawned node. Modification successful.");
+          } else {
+            console.error("Error in 'createGrandchild': Spawned node not found in its own returned roadmap after spawn. Spawned ID:", spawnResult.spawnedNodeId);
+            toast({ variant: "destructive", title: "Action Failed", description: "Error locating newly created step. (S2_CG_SUBMIT)" });
           }
+        } else {
+          console.error("Error in 'createGrandchild': Spawning child as node failed. spawnResult.spawnedNodeId is null or updatedRoadmap is null.");
+          // Toast for spawn failure should have been shown by handleSpawnChildDataItemAsCanvasNode
         }
       } else if (context.operation === 'createChild') {
-        const parentIdx = newRoadmapCandidate.findIndex(node => node.id === context.targetParentNodeId);
+        const parentIdx = roadmapForThisOperation.findIndex(node => node.id === context.targetParentNodeId);
         if (parentIdx > -1) {
           const newChildItem: ChildDataItem = {
             id: `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`,
@@ -446,48 +486,49 @@ export const usePlanLogic = () => {
             parentCanvasNodeId: context.targetParentNodeId,
             canvasNodeIdForThisItem: null,
           };
-          if (!Array.isArray(newRoadmapCandidate[parentIdx].childrenData)) {
-            newRoadmapCandidate[parentIdx].childrenData = [];
+          const parentNodeToUpdate = { ...roadmapForThisOperation[parentIdx] };
+          if (!Array.isArray(parentNodeToUpdate.childrenData)) {
+            parentNodeToUpdate.childrenData = [];
           }
-          newRoadmapCandidate[parentIdx].childrenData.push(newChildItem);
+          parentNodeToUpdate.childrenData = [...parentNodeToUpdate.childrenData, newChildItem];
+          roadmapForThisOperation[parentIdx] = parentNodeToUpdate;
           modificationSuccessful = true;
         } else {
-          console.error("Error in 'createChild': Parent node not found. ID:", context.targetParentNodeId);
           toast({ variant: "destructive", title: "Action Failed", description: "Parent node not found for new item."});
         }
       } else if (context.operation === 'edit') {
-        const parentIdx = newRoadmapCandidate.findIndex(node => node.id === context.parentNodeId);
+        const parentIdx = roadmapForThisOperation.findIndex(node => node.id === context.parentNodeId);
         if (parentIdx > -1) {
           let itemThatWasEdited: ChildDataItem | undefined;
-          const updatedChildrenData = newRoadmapCandidate[parentIdx].childrenData.map(item =>
+          const parentNodeToUpdate = { ...roadmapForThisOperation[parentIdx] };
+          const updatedChildrenData = parentNodeToUpdate.childrenData.map(item =>
             item.id === context.itemToEditId ? (itemThatWasEdited = { ...item, title: data.title, description: data.description || null }) : item
           );
-          if (itemThatWasEdited) { // Check if the item was actually found and updated
-            newRoadmapCandidate[parentIdx] = { ...newRoadmapCandidate[parentIdx], childrenData: updatedChildrenData };
+          if (itemThatWasEdited) {
+            parentNodeToUpdate.childrenData = updatedChildrenData;
+            roadmapForThisOperation[parentIdx] = parentNodeToUpdate;
             if (itemThatWasEdited.canvasNodeIdForThisItem) {
-              const canvasNodeIdx = newRoadmapCandidate.findIndex(node => node.id === itemThatWasEdited!.canvasNodeIdForThisItem);
+              const canvasNodeIdx = roadmapForThisOperation.findIndex(node => node.id === itemThatWasEdited!.canvasNodeIdForThisItem);
               if (canvasNodeIdx > -1) {
-                newRoadmapCandidate[canvasNodeIdx] = { ...newRoadmapCandidate[canvasNodeIdx], title: data.title, description: data.description || null };
+                roadmapForThisOperation[canvasNodeIdx] = { ...roadmapForThisOperation[canvasNodeIdx], title: data.title, description: data.description || null };
               }
             }
             modificationSuccessful = true;
           } else {
-            console.error("Error in 'edit': Child item to edit not found. ID:", context.itemToEditId);
             toast({ variant: "destructive", title: "Action Failed", description: "Child item to edit not found."});
           }
         } else {
-          console.error("Error in 'edit': Parent node not found. ID:", context.parentNodeId);
           toast({ variant: "destructive", title: "Action Failed", description: "Parent node for item to edit not found."});
         }
       }
 
       if (modificationSuccessful) {
-        setEditableRoadmap(newRoadmapCandidate);
+        setEditableRoadmap(roadmapForThisOperation);
         toast({ title: "Item Action Complete", description: "Remember to save the plan changes." });
         setIsEditChildItemDialogOpen(false);
         childItemManagementContextRef.current = null;
       } else {
-        console.log("[handleChildItemDialogSubmit] Modification was not successful. Dialog will remain open. An error should have been toasted already.");
+        console.log("[Submit] Modification was not successful. Dialog remains open. An error should have been toasted if it's not the spawn issue.");
       }
     } catch (error) {
       console.error("Error submitting child item form (outer catch):", error);
@@ -495,15 +536,7 @@ export const usePlanLogic = () => {
     } finally {
       setIsChildItemDialogSubmitting(false);
     }
-  }, [
-    canEditPlan,
-    diffTarget,
-    editableRoadmap,
-    toast,
-    handleSpawnChildDataItemAsCanvasNode,
-    setIsEditChildItemDialogOpen,
-    setEditableRoadmap,
-  ]);
+  }, [canEditPlan, diffTarget, editableRoadmap, toast, handleSpawnChildDataItemAsCanvasNode, setIsEditChildItemDialogOpen, setEditableRoadmap, setIsChildItemDialogSubmitting]);
 
 
   const handleEditChildItemText = useCallback((childItem: ChildDataItem, parentNodeIdOfChildItem: string) => {
@@ -805,7 +838,7 @@ export const usePlanLogic = () => {
     handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
     forceRender,
     handleInitiateAddNode,
-    setIsChildItemDialogSubmitting, // Export the setter for the dialog submission state
+    setIsChildItemDialogSubmitting,
   };
 };
     
