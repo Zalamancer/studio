@@ -1,3 +1,4 @@
+
 // src/components/plan/PlanInfoDialog.tsx
 "use client";
 
@@ -36,7 +37,7 @@ import {
   Search,
   PlusCircle,
 } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'; // Removed PopoverAnchor
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
 import type { UserProfileBasic } from '@/types/connection';
 import { useToast } from '@/hooks/use-toast';
@@ -119,7 +120,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   const editSearchInputRef = useRef<HTMLInputElement>(null);
   const viewSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const editSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
-
+  
   const isOwnerForUIDisplay = useMemo(() => {
     return !!currentUserFromAuth && !!initialPlanData && initialPlanData.ownerId === currentUserFromAuth.uid;
   }, [currentUserFromAuth, initialPlanData]);
@@ -220,7 +221,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       description: description.trim(),
       visibility,
       editability,
-      viewUserIds: currentViewUserIds, // Pass the current state of these IDs
+      viewUserIds: currentViewUserIds, 
       editUserIds: currentEditUserIds,
     });
   };
@@ -235,7 +236,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     const profile = profilesMap?.get(userId);
     const displayName = profile?.displayName || profile?.mentionName || generateAnonymousName(userId);
     
-    if (userId === initialPlanData?.ownerId) return null; // Owner is implicitly included, not listed here
+    if (userId === initialPlanData?.ownerId) return null; 
     if (isLoadingMap && !profile) return <SkeletonListItem key={`loading-${roleContext}-${userId}`} />;
     
     return (
@@ -337,7 +338,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           )}
         </Popover>
       )}
-      <ScrollArea className={cn("max-h-28", currentUserIdsForSection.length === 0 && "border-none")}>
+      <ScrollArea className={cn("max-h-20", currentUserIdsForSection.length === 0 && "border-none")}> {/* Changed max-h-28 to max-h-20 */}
         <div className="space-y-1 py-1">
           {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
             Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -356,9 +357,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          <DialogDescription className="sr-only">
-             View and manage plan details, settings, and permissions for the collaboration plan titled: {initialPlanData?.name || 'the current plan'}.
-             The plan owner is {ownerProfile?.displayName || 'loading...'} and it was created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : 'loading...'}.
+           <DialogDescription className="sr-only">
+            View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
+            Owned by {ownerProfile?.displayName || '...'}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
           </DialogDescription>
         </DialogHeader>
         
@@ -468,3 +469,4 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
+
