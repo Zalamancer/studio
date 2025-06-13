@@ -14,8 +14,10 @@ import { EditChildItemDialog } from '@/components/plan/EditChildItemDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
 import { Card, CardContent } from '@/components/ui/card'; // Added CardContent
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form"; // For Node Detail form
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"; // For Node Detail form
 import { Input } from "@/components/ui/input"; // For Node Detail form
+import { Label } from "@/components/ui/label"; // For Node Detail form, **ADDED THIS IMPORT**
+import { FormLabel } from "@/components/ui/form"; // Ensure FormLabel is imported if used, or use Label from ui/label
 import { Textarea } from "@/components/ui/textarea"; // For Node Detail form
 import { useForm } from 'react-hook-form'; // For Node Detail form
 import { zodResolver } from '@hookform/resolvers/zod'; // For Node Detail form
@@ -26,7 +28,7 @@ import Link from 'next/link';
 import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic';
 import type { RoadmapStep, ClientPlanVersion, ChildDataItem } from '@/types/plan';
 import { PlanHeader } from './PlanHeader';
-import { useToast } from '@/hooks/use-toast'; // Correctly import useToast
+import { useToast } from '@/hooks/use-toast';
 
 const NODE_BASE_WIDTH = 220;
 const NODE_HEADER_HEIGHT = 40;
@@ -111,6 +113,7 @@ export default function PlanDetailPage() {
 
 
   useEffect(() => {
+    console.log(`[PlanDetailPage] Editing target changed. Type: ${editingTarget?.type}, Data ID: ${editingTarget?.type === 'node' ? editingTarget.data.id : (editingTarget?.type === 'childItem' ? editingTarget.data.id : 'N/A')}`);
     if (editingTarget?.type === 'node') {
       nodeDetailForm.reset({
         title: editingTarget.data.title,
@@ -121,7 +124,6 @@ export default function PlanDetailPage() {
         description: editingTarget.data.description || '',
       };
     } else if (editingTarget?.type === 'childItem') {
-      // If a child item is selected *and it has its own canvas node*, show its details in the panel
       const childItemAsNode = editableRoadmap.find(node => node.id === editingTarget.data.canvasNodeIdForThisItem);
       if (childItemAsNode) {
         nodeDetailForm.reset({
@@ -133,9 +135,6 @@ export default function PlanDetailPage() {
           description: childItemAsNode.description || '',
         };
       } else {
-        // If child item is NOT a canvas node, the main panel isn't for it.
-        // Text editing for such child items is done via EditChildItemDialog.
-        // For now, if panel is open and target is such a child, clear the form.
         nodeDetailForm.reset({ title: '', description: '' });
         initialPanelDataRef.current = null;
       }
@@ -147,37 +146,31 @@ export default function PlanDetailPage() {
       const updatedNode = { ...editingTarget.data, title: data.title, description: data.description || null };
       handleNodeDetailUpdate(updatedNode);
       toast({ title: "Step Updated", description: `"${data.title}" has been updated. Remember to save plan.`});
-      initialPanelDataRef.current = data; // Update initial data to prevent toast on re-open if unchanged
+      initialPanelDataRef.current = data; 
     } else if (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) {
-      // This case is for a child item that IS a canvas node
       const updatedNode = { 
         id: editingTarget.data.canvasNodeIdForThisItem,
         title: data.title, 
         description: data.description || null,
-        // Preserve other properties like x, y, childrenData, peerConnections
         x: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.x || 0,
         y: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.y || 0,
         childrenData: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.childrenData || [],
         peerConnections: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.peerConnections || [],
       };
-      handleNodeDetailUpdate(updatedNode as RoadmapStep); // Update the canvas node
-      // Also update the original child item's title/description if it's linked
+      handleNodeDetailUpdate(updatedNode as RoadmapStep); 
       handleChildItemDetailUpdateInPanel({ ...editingTarget.data, title: data.title, description: data.description || null }, editingTarget.parentNode.id);
       toast({ title: "Item Updated", description: `"${data.title}" (spawned node) has been updated. Remember to save plan.`});
       initialPanelDataRef.current = data;
     }
   };
   
-  // Handle closing the panel and showing toast if changes were made to node title/description
   useEffect(() => {
     if (!isStepDetailSheetOpen && initialPanelDataRef.current && editingTarget?.type === 'node') {
         const currentValues = nodeDetailForm.getValues();
         if (currentValues.title !== initialPanelDataRef.current.title || currentValues.description !== initialPanelDataRef.current.description) {
-            // Could prompt to save, or just save changes silently. For now, it saves on explicit submit.
-            // Or, if this is just a visual side effect:
-            // toast({ title: "Panel Closed", description: "Changes to node details in panel were not saved unless 'Update Details' was clicked."});
+            //
         }
-        initialPanelDataRef.current = null; // Reset for next open
+        initialPanelDataRef.current = null; 
     }
   }, [isStepDetailSheetOpen, editingTarget, nodeDetailForm]);
 
@@ -221,14 +214,14 @@ export default function PlanDetailPage() {
           if (childItem.canvasNodeIdForThisItem) {
             const childNode = editableRoadmap.find(node => node.id === childItem.canvasNodeIdForThisItem);
             if (childNode) {
-              const startX = parentStep.x + 16; // Start from left edge of parent, slightly indented
-              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2); // Mid-point of child item text in parent card
-              const endX = childNode.x; // Connect to left edge of child node
-              const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2; // Connect to middle-height of child node
+              const startX = parentStep.x + 16; 
+              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2); 
+              const endX = childNode.x; 
+              const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2; 
               const pathKey_child = `hierarchical-${parentStep.id}-child${index}-to-${childNode.id}`;
-              const c1x = startX - controlOffset / 2; // Control point for curve towards source
+              const c1x = startX - controlOffset / 2; 
               const c1y = startY;
-              const c2x = endX - controlOffset / 2;   // Control point for curve towards target
+              const c2x = endX - controlOffset / 2;   
               const c2y = endY;
               const pathD = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`;
               lines.push(
@@ -385,7 +378,7 @@ export default function PlanDetailPage() {
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
         onSubmit={(data) => handleAddNode(data, canvasRef.current)}
-        isSubmitting={false} // This should ideally come from usePlanLogic state for this specific dialog if needed
+        isSubmitting={false} 
       />
       <EditChildItemDialog
         isOpen={isEditChildItemDialogOpen}
@@ -483,18 +476,15 @@ export default function PlanDetailPage() {
         open={isStepDetailSheetOpen && (editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && !!editingTarget.data.canvasNodeIdForThisItem))}
         onOpenChange={(open) => {
           if (!open) {
-            // Check for unsaved changes only if node title/desc form was for a node
             if (initialPanelDataRef.current && (editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem))) {
                 const currentValues = nodeDetailForm.getValues();
                 if (currentValues.title !== initialPanelDataRef.current.title || currentValues.description !== initialPanelDataRef.current.description) {
-                    // Could prompt to save, or just save changes silently. For now, it saves on explicit submit.
-                    // Or, if this is just a visual side effect:
-                    // toast({ title: "Panel Closed", description: "Changes to node details in panel were not saved unless 'Update Details' was clicked."});
+                   //
                 }
             }
             setIsStepDetailSheetOpen(false);
             setEditingTarget(null);
-            initialPanelDataRef.current = null; // Reset for next open
+            initialPanelDataRef.current = null; 
           } else {
             setIsStepDetailSheetOpen(true);
           }
@@ -585,15 +575,11 @@ export default function PlanDetailPage() {
                    )}
                 </div>
               </ScrollArea>
-              {/* Panel Footer can be used for additional actions if needed */}
             </>
           )}
-          {/* If editingTarget.type is 'childItem' AND it's NOT a canvas node, then this panel section will be empty.
-              Text editing for non-canvas child items is via EditChildItemDialog.
-              If a child item IS a canvas node, the above block will render its details.
-           */}
         </SheetContent>
       </Sheet>
     </div>
   );
 }
+
