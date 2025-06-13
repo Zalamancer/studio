@@ -17,6 +17,7 @@ import {
   writeBatch,
   increment,
   where,
+  setDoc, // Added missing import
 } from 'firebase/firestore';
 import type { Plan, NewPlanData, ClientPlan, RoadmapStep, UpdatePlanData, PlanVersionData, ClientPlanVersion, ChildDataItem, PeerConnection, PlanVisibility, PlanEditability } from '@/types/plan';
 import { fetchUserProfileBasic } from './connectionService'; // For fetching editor display name
@@ -66,16 +67,16 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
 
   let viewUserIds: string[] = [];
   if (finalVisibility === 'public') {
-    viewUserIds = []; 
-  } else { 
-    viewUserIds = [planData.ownerId]; 
+    viewUserIds = [];
+  } else {
+    viewUserIds = [planData.ownerId];
   }
 
   let editUserIds: string[] = [];
   if (finalEditability === 'owner_only') {
     editUserIds = [planData.ownerId];
   } else if (finalEditability === 'collaborators') {
-    editUserIds = [planData.ownerId]; 
+    editUserIds = [planData.ownerId];
   }
 
   const dataToSave: Omit<Plan, 'id'> & { createdAt: FieldValue, updatedAt: FieldValue } = {
@@ -95,7 +96,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     viewUserIds: viewUserIds,
     editUserIds: editUserIds,
   };
-  
+
   try {
     const docRef = await addDoc(plansCollectionRef, dataToSave);
     return docRef.id;
@@ -125,10 +126,10 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
         version: data.version || 1,
         roadmap: (data.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-        visibility: data.visibility || 'private', 
-        editability: data.editability || 'owner_only', 
-        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []), 
-        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []), 
+        visibility: data.visibility || 'private',
+        editability: data.editability || 'owner_only',
+        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []),
+        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []),
       };
       return clientPlan;
     }
@@ -157,7 +158,7 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
     }
 
     const dataToUpdate: { [key: string]: any } = { updatedAt: serverTimestamp() };
-    
+
     if (updates.name !== undefined) dataToUpdate.name = updates.name;
     if (updates.description !== undefined) dataToUpdate.description = updates.description;
     if (updates.sector !== undefined) dataToUpdate.sector = updates.sector;
@@ -168,7 +169,7 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
     if (updates.editability !== undefined) dataToUpdate.editability = updates.editability;
     if (updates.viewUserIds !== undefined) dataToUpdate.viewUserIds = Array.from(new Set([currentUserId, ...(updates.viewUserIds || [])])); // Ensure owner is always a viewer
     if (updates.editUserIds !== undefined) dataToUpdate.editUserIds = Array.from(new Set([currentUserId, ...(updates.editUserIds || [])])); // Ensure owner is always an editor
-    
+
     // If visibility or editability changed, derive the correct viewUserIds and editUserIds
     const finalVisibility = updates.visibility || currentPlanData.visibility || 'private';
     const finalEditability = updates.editability || currentPlanData.editability || 'owner_only';
@@ -214,7 +215,7 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
         dataToUpdate.roadmap = updates.roadmap.map(step => sanitizeRoadmapStep(step));
         dataToUpdate.version = increment(1);
     }
-    
+
     // Firestore security rules need to allow updates to name, description, sector, subSector, industry, naicsCode,
     // visibility, editability, viewUserIds, editUserIds, updatedAt, and potentially roadmap and version.
     await updateDoc(planDocRef, dataToUpdate);
@@ -259,10 +260,10 @@ export const getRecentPlans = async (count = 6): Promise<ClientPlan[]> => {
         updatedAt: (data.updatedAt as Timestamp)?.toMillis() || Date.now(),
         version: data.version || 1,
         roadmap: (data.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-        visibility: data.visibility || 'private', 
-        editability: data.editability || 'owner_only', 
-        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []), 
-        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []), 
+        visibility: data.visibility || 'private',
+        editability: data.editability || 'owner_only',
+        viewUserIds: data.viewUserIds || (data.ownerId ? [data.ownerId] : []),
+        editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []),
       };
       return clientPlan;
     });
@@ -281,7 +282,7 @@ export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion
     const q = query(versionsRef, orderBy('timestamp', 'desc'), limit(50));
     const querySnapshot = await getDocs(q);
     const versionsPromises = querySnapshot.docs.map(async (docSnap) => {
-      const data = docSnap.data() as PlanVersionData & { timestamp: Timestamp }; 
+      const data = docSnap.data() as PlanVersionData & { timestamp: Timestamp };
       let editorDisplayName = data.editorUid;
       if (data.editorUid) {
         const profile = await fetchUserProfileBasic(data.editorUid);
@@ -295,7 +296,7 @@ export const getPlanVersions = async (planId: string): Promise<ClientPlanVersion
         editorDisplayName: editorDisplayName,
         timestamp: data.timestamp.toMillis(),
         versionNumber: data.versionNumber,
-        visibility: undefined, 
+        visibility: undefined,
         editability: undefined,
       } as ClientPlanVersion;
     });
@@ -315,7 +316,7 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
 
   const planDocRef = doc(plansCollectionRef, planId);
   const versionToRestoreDocRef = doc(db, PLANS_COLLECTION, planId, 'versions', versionIdToRestore);
-  
+
   try {
     const [currentPlanSnap, versionToRestoreSnap] = await Promise.all([
       getDoc(planDocRef),
@@ -326,12 +327,12 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     if (!versionToRestoreSnap.exists()) throw new Error(`Version ID ${versionIdToRestore} not found.`);
 
     const currentPlanData = currentPlanSnap.data() as Plan;
-    const versionToRestoreData = versionToRestoreSnap.data() as PlanVersionData; 
+    const versionToRestoreData = versionToRestoreSnap.data() as PlanVersionData;
 
     if (currentPlanData.ownerId !== currentUserId) {
         throw new Error("Permission denied: Only the plan owner can restore versions.");
     }
-   
+
     // Update the main plan with the roadmap from the version to restore
     // The version number increment and new history creation will be handled by updatePlanDetails
     await updatePlanDetails(planId, currentUserId, {
