@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
+  DialogDescription as DialogPrimitiveDescription, // Renamed to avoid conflict if local DialogDescription is used
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -338,7 +338,10 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           )}
         </Popover>
       )}
-      <ScrollArea className={cn("max-h-20", currentUserIdsForSection.length === 0 && "border-none")}>
+      <ScrollArea
+        className={cn(currentUserIdsForSection.length === 0 && "border-none")}
+        style={{ maxHeight: '80px' }} // Direct style application
+      >
         <div className="space-y-1 py-1">
           {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
             Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -357,10 +360,10 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          <DialogDescription className="sr-only">
+          <DialogPrimitiveDescription className="sr-only">
             View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
             Owned by {ownerProfile?.displayName || '...'}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
-          </DialogDescription>
+          </DialogPrimitiveDescription>
         </DialogHeader>
         
         {!initialPlanData && isOpen ? (
@@ -470,3 +473,5 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   );
 };
 
+
+    
