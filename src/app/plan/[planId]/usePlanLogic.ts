@@ -78,20 +78,21 @@ export const usePlanLogic = () => {
   const [persistedNodeIds, setPersistedNodeIds] = useState<Set<string>>(new Set());
   const [removedNodeTitles, setRemovedNodeTitles] = useState<string[]>([]);
   const [diffDetailsVersionId, setDiffDetailsVersionId] = useState<string | null>(null);
+  
+  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
   const [isPlanInfoDialogOpen, setIsPlanInfoDialogOpen] = useState(false);
   const [originalEditingChildItemData, setOriginalEditingChildItemData] = useState<ChildDataItem | null>(null);
   
-  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
+  const [viewPermissionsSearch, setViewPermissionsSearch] = useState('');
+  const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
+  const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
+  const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
+
   console.log(`[usePlanLogic] Initial planDataForDialog state:`, planDataForDialog ? 'Exists' : 'NULL');
   useEffect(() => {
     console.log(`%c[usePlanLogic] planDataForDialog STATE CHANGED. New value:`, "color: magenta; font-weight: bold;", planDataForDialog ? 'Exists' : 'NULL', planDataForDialog);
   }, [planDataForDialog]);
 
-
-  const [viewPermissionsSearch, setViewPermissionsSearch] = useState('');
-  const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
-  const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
-  const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
@@ -113,19 +114,8 @@ export const usePlanLogic = () => {
       if (data) {
         console.log(`%c[usePlanLogic] planData query onSuccess: Setting editableRoadmap based on received data.`, "color: green;");
         setEditableRoadmap((data.roadmap || []).map(s => sanitizeRoadmapStep(s)));
-        
-        console.log(`%c[usePlanLogic] planData query onSuccess: Attempting to set planDataForDialog with DEEP COPY of:`, "color: green;", data);
-        try {
-          const deepCopiedData = JSON.parse(JSON.stringify(data));
-          setPlanDataForDialog(deepCopiedData);
-          console.log(`%c[usePlanLogic] planData query onSuccess: setPlanDataForDialog CALLED with deep copy. Value should now be:`, "color: green; font-weight: bold;", deepCopiedData);
-        } catch (e) {
-          console.error("[usePlanLogic] planData query onSuccess: FAILED to deep copy planData for dialog:", e);
-          setPlanDataForDialog(null); // Fallback on error
-        }
+        // setPlanDataForDialog is now handled by useEffect below for reliability
       } else {
-        console.log(`%c[usePlanLogic] planData query onSuccess: Data is null, setting planDataForDialog to null and editableRoadmap to empty.`, "color: orange;");
-        setPlanDataForDialog(null);
         setEditableRoadmap([]);
       }
     },
@@ -135,6 +125,26 @@ export const usePlanLogic = () => {
         setEditableRoadmap([]);
     }
   });
+
+  // Effect to update planDataForDialog when planData changes
+  useEffect(() => {
+    console.log(`%c[usePlanLogic] useEffect for planData change: planData is`, "color: #DA70D6;", planData ? 'Populated' : 'NULL or Undefined');
+    if (planData) {
+      try {
+        const deepCopiedData = JSON.parse(JSON.stringify(planData));
+        console.log(`%c[usePlanLogic] useEffect for planData change: Setting planDataForDialog with deep copy of planData.`, "color: #DA70D6;");
+        setPlanDataForDialog(deepCopiedData);
+      } catch (e) {
+        console.error("[usePlanLogic] useEffect for planData change: FAILED to deep copy planData for dialog:", e);
+        setPlanDataForDialog(null);
+      }
+    } else if (!isLoadingPlan && planId && isValidPlanId) {
+      // If planData is null/undefined after loading and planId is valid, it means not found or error.
+      console.log(`%c[usePlanLogic] useEffect for planData change: planData is null/undefined after load, setting planDataForDialog to null.`, "color: #DA70D6;");
+      setPlanDataForDialog(null);
+    }
+  }, [planData, isLoadingPlan, planId, isValidPlanId]);
+
 
   useEffect(() => {
     const viewTimer = setTimeout(() => setDebouncedViewPermissionsSearch(viewPermissionsSearch), 300);
@@ -173,7 +183,7 @@ export const usePlanLogic = () => {
       toast({ title: "Plan Settings Saved", description: "Your plan settings have been updated." });
       if (variables.planId) {
          queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
-         refetchPlanData(); // This refetch will trigger the main query's onSuccess to update planDataForDialog
+         refetchPlanData(); 
       }
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan settings." })
@@ -707,7 +717,7 @@ export const usePlanLogic = () => {
     canEditPlan, saveRoadmapChanges, saveRoadmapMutation,
     savePlanSettingsMutation, handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
-    planDataForDialog,
+    planDataForDialog, // Expose this directly
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
