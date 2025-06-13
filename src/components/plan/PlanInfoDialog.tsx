@@ -8,8 +8,9 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogPrimitiveDescription,
+  DialogDescription as DialogPrimitiveDescription, // Aliased to avoid conflict
   DialogFooter,
+  DialogClose, // Keep for potential future use, though current close is via X
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -339,8 +340,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
         </Popover>
       )}
       <div
-        className="space-y-1 py-1 flex-grow overflow-y-auto" 
-        style={{ maxHeight: '10rem' }} // Direct style for maxHeight (160px)
+        className="space-y-1 py-1 flex-grow"
+        style={{ maxHeight: '10rem', overflowY: 'auto' }}
       >
         {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
           Array.from({length: Math.min(3, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -355,13 +356,21 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-6xl max-h-[90vh] flex flex-col">
-        <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
-          <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-           <DialogPrimitiveDescription className="sr-only">
-            View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
-            Owned by {ownerProfile?.displayName || '...'}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
-          </DialogPrimitiveDescription>
+      <DialogContent className="w-[95vw] max-w-6xl max-h-[90vh] flex flex-col p-0">
+        <DialogHeader className="pt-6 px-6 pb-4 border-b flex flex-row justify-between items-center">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+            <DialogTitle>Plan Information & Settings</DialogTitle>
+            <DialogPrimitiveDescription className="sr-only">
+              View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
+              Owned by {ownerProfile?.displayName || '...'}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
+            </DialogPrimitiveDescription>
+          </div>
+          {isOwnerForUIDisplay && ( 
+            <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm" className="ml-auto"> {/* Added ml-auto for desktop */}
+              {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save Settings
+            </Button>
+          )}
         </DialogHeader>
         
         {!initialPlanData && isOpen ? (
@@ -417,7 +426,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       </>
                     )}
 
-                    <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-4 flex-grow"> {/* Added flex-grow */}
+                    <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-auto flex-grow">
                       <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId)}</p>
                       <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
                       <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
@@ -427,7 +436,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
                   {/* Right Column */}
                   {isOwnerForUIDisplay && (
-                    <div className="md:w-1/2 space-y-4 flex flex-col"> {/* Added flex flex-col */}
+                    <div className="md:w-1/2 space-y-4 flex flex-col"> 
                       {visibility !== 'public' && renderPermissionSection(
                         "Manage View Access (Private/Unlisted)",
                         currentViewUserIds,
@@ -465,12 +474,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 </div>
               </div>
             </ScrollArea>
-            <DialogFooter className="p-6 pt-4 border-t mt-auto">
-              {isPlanOwner && ( 
-                <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles || !isOwnerForUIDisplay} className="w-full sm:w-auto">
-                  {isSavingSettings && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Settings
-                </Button>
-              )}
+            {/* Footer is now empty or could have a close button if desired. Removed "Save Settings" from here. */}
+            <DialogFooter className="p-6 pt-4 border-t mt-auto hidden"> 
             </DialogFooter>
           </>
         ) : null}
@@ -480,3 +485,4 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 };
 
     
+
