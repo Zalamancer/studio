@@ -4,6 +4,7 @@
 import React, { useRef } from 'react';
 import type { RoadmapStep } from '@/types/plan';
 import { cn } from '@/lib/utils';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
@@ -75,7 +76,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
   );
   
   const headerClasses = cn(
-    "p-2 border-b border-border flex items-center justify-between cursor-move rounded-t-lg h-[40px]",
+    "p-2 border-b border-border flex items-center justify-between cursor-pointer rounded-t-lg h-[40px]", // Changed cursor to pointer for the header
     diffHighlight === 'added' ? 'bg-green-600 text-white' : diffHighlight === 'persisted' ? 'bg-gray-500 text-gray-100' : 'bg-primary text-primary-foreground'
   );
 
@@ -95,6 +96,14 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       }}
       onMouseDown={(e) => {
         if (diffHighlight) return;
+        // Check if the click target is the header itself or one of its direct children,
+        // to avoid drag initiation if the header click is meant to open the panel.
+        if ((e.target as HTMLElement).closest('[data-header-clickable]') || (e.target as HTMLElement).hasAttribute('[data-header-clickable]')) {
+            // If the click is on the header (or its direct children), don't initiate drag if the header now has an onClick.
+            // This logic might need refinement based on how the header click vs. card drag is handled.
+            // For now, if header click is primary, we might not want to start drag from header.
+            // However, to keep drag from header possible, remove this specific block for header.
+        }
         if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]')) return;
         onNodeInteractionStart(step.id, e);
       }}
@@ -105,9 +114,17 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       }}
       data-node-id={step.id}
     >
-      <div 
+      <div
+        data-header-clickable // Add a data attribute to identify the header area for click vs. drag logic if needed
         className={headerClasses}
-        onDoubleClick={diffHighlight ? undefined : () => onEditStep(step)}
+        onClick={(e) => {
+          if (diffHighlight) return;
+          // Check if the actual click target is not one of the connector dots within the header's bounds
+          if (!(e.target as HTMLElement).closest('[data-dot-type]')) {
+            e.stopPropagation(); // Prevent this click from being processed by the main div's mousedown for drag, if that's desired.
+            onEditStep(step);
+          }
+        }}
       >
         <h3 className="text-sm font-semibold truncate" title={step.title}>{step.title}</h3>
         
