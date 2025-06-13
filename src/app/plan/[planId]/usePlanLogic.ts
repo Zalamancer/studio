@@ -83,10 +83,10 @@ export const usePlanLogic = () => {
   
   const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
   console.log(`[usePlanLogic] Initial planDataForDialog state:`, planDataForDialog ? 'Exists' : 'NULL');
-
   useEffect(() => {
     console.log(`%c[usePlanLogic] planDataForDialog STATE CHANGED. New value:`, "color: magenta; font-weight: bold;", planDataForDialog ? 'Exists' : 'NULL', planDataForDialog);
   }, [planDataForDialog]);
+
 
   const [viewPermissionsSearch, setViewPermissionsSearch] = useState('');
   const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
@@ -707,7 +707,7 @@ export const usePlanLogic = () => {
     canEditPlan, saveRoadmapChanges, saveRoadmapMutation,
     savePlanSettingsMutation, handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
-    planDataForDialog, // Ensure this is returned
+    planDataForDialog,
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,

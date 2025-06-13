@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  // DialogDescription, // Commented out as per previous request
+  DialogDescription, // Import DialogDescription
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ import {
   User,
   Eye,
   Lock,
-  Link as LinkIcon, // Renamed to avoid conflict with NextLink
+  Link as LinkIcon, 
   ShieldQuestion,
   Trash2,
   Search,
@@ -52,7 +52,7 @@ interface PlanInfoDialogProps {
   onOpenChange: (open: boolean) => void;
   planData: ClientPlan | null;
   ownerProfile: UserProfileBasic | null;
-  isPlanOwner: boolean; // This prop indicates if the current user can perform save actions
+  isPlanOwner: boolean;
   onSaveSettings: (settings: {
     name: string;
     description: string;
@@ -72,7 +72,6 @@ interface PlanInfoDialogProps {
   onRemoveUserFromViewers: (userId: string) => void;
   onAddUserToEditors: (userProfile: UserProfileBasic) => void;
   onRemoveUserFromEditors: (userId: string) => void;
-  debugProp?: string;
 }
 
 const SkeletonListItem: React.FC = () => (
@@ -89,7 +88,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   onOpenChange,
   planData,
   ownerProfile,
-  isPlanOwner, // Prop for enabling save button
+  isPlanOwner,
   onSaveSettings,
   isSavingSettings,
   viewPermissionsSearch,
@@ -102,7 +101,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   onRemoveUserFromViewers,
   onAddUserToEditors,
   onRemoveUserFromEditors,
-  debugProp,
 }) => {
   const { user: currentUserFromAuth } = useAuth();
   const { toast } = useToast();
@@ -115,23 +113,20 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   const [currentViewUserIds, setCurrentViewUserIds] = useState<string[]>([]);
   const [currentEditUserIds, setCurrentEditUserIds] = useState<string[]>([]);
 
-  // isOwnerForUIDisplay determines if owner-specific UI elements are shown
   const isOwnerForUIDisplay = useMemo(() => {
     return !!currentUserFromAuth && !!planData && planData.ownerId === currentUserFromAuth.uid;
   }, [currentUserFromAuth, planData]);
 
   useEffect(() => {
-    console.log('[PlanInfoDialog] Mounted/Updated. isOpen:', isOpen, 'planData prop:', planData ? 'Exists' : 'NULL');
+    console.log('[PlanInfoDialog] Effect: isOpen or planData changed. isOpen:', isOpen, 'planData:', planData ? 'Exists' : 'NULL');
     if (planData && isOpen) {
       setName(planData.name);
       setDescription(planData.description || '');
       setVisibility(planData.visibility);
       setEditability(planData.editability);
-      // Filter out owner from these lists as owner is implicitly included or handled separately
       setCurrentViewUserIds(planData.viewUserIds?.filter(uid => uid !== planData.ownerId) || []);
       setCurrentEditUserIds(planData.editUserIds?.filter(uid => uid !== planData.ownerId) || []);
-    } else if (!isOpen) {
-        // Reset state when dialog closes if needed, or rely on open effect
+       console.log('[PlanInfoDialog] Effect: State updated from planData.');
     }
   }, [planData, isOpen]);
 
@@ -164,33 +159,29 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   });
 
   const handleInternalAddViewer = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === planData?.ownerId) return; // Owner cannot be explicitly added here
+    if (userProfile.userId === planData?.ownerId) return;
     setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    onAddUserToViewers(userProfile); // Propagate to usePlanLogic's local state
+    onAddUserToViewers(userProfile);
     setViewPermissionsSearch('');
   };
 
   const handleInternalRemoveViewer = (userIdToRemove: string) => {
     setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    // If removing from viewers, also remove from editors if present
     setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    onRemoveUserFromViewers(userIdToRemove); // Propagate
+    onRemoveUserFromViewers(userIdToRemove);
   };
 
   const handleInternalAddEditor = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === planData?.ownerId) return; // Owner cannot be explicitly added here
+    if (userProfile.userId === planData?.ownerId) return;
     setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    // Adding to editors should implicitly add to viewers
     setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    onAddUserToEditors(userProfile); // Propagate
+    onAddUserToEditors(userProfile);
     setEditPermissionsSearch('');
   };
 
   const handleInternalRemoveEditor = (userIdToRemove: string) => {
     setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    // Note: Removing from editor does not automatically remove from viewer.
-    // This might be a desired behavior or might need adjustment based on UX.
-    onRemoveUserFromEditors(userIdToRemove); // Propagate
+    onRemoveUserFromEditors(userIdToRemove);
   };
 
   const handleSave = () => {
@@ -198,7 +189,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       toast({ variant: "destructive", title: "Validation Error", description: "Plan name is required." });
       return;
     }
-    if (!isPlanOwner) { // Use the prop for actual save action guard
+    if (!isPlanOwner) {
       toast({ variant: "destructive", title: "Permission Denied", description: "You do not have permission to save these settings." });
       return;
     }
@@ -207,8 +198,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       description: description.trim(),
       visibility,
       editability,
-      viewUserIds: currentViewUserIds, // Send only non-owner IDs
-      editUserIds: currentEditUserIds, // Send only non-owner IDs
+      viewUserIds: currentViewUserIds,
+      editUserIds: currentEditUserIds,
     });
   };
   
@@ -222,7 +213,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     const profile = profilesMap?.get(userId);
     const displayName = profile?.displayName || profile?.mentionName || generateAnonymousName(userId);
     
-    // Owner should not be listed here as they are implicitly included.
     if (userId === planData?.ownerId) return null;
 
     if (isLoadingMap && !profile) {
@@ -238,7 +228,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           </Avatar>
           <span className="text-xs truncate" title={displayName}>{displayName}</span>
         </div>
-        {isOwnerForUIDisplay && ( // Use local isOwnerForUIDisplay for UI elements inside dialog
+        {isOwnerForUIDisplay && (
           <Button
             variant="ghost"
             size="icon"
@@ -268,7 +258,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   ) => (
     <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm">
       <Label className="text-sm font-semibold text-foreground">{title}</Label>
-      {isOwnerForUIDisplay && ( // Use local isOwnerForUIDisplay
+      {isOwnerForUIDisplay && (
         <>
           <div className="relative">
             <Input
@@ -323,12 +313,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          {/* DialogDescription removed: <DialogDescription>Key information about this collaboration plan.</DialogDescription> */}
-           {debugProp && (
-             <p className="text-sm font-bold text-purple-600 p-2 bg-purple-100 border border-purple-300 rounded mt-2">
-                {debugProp}
-             </p>
-           )}
+           <DialogDescription className="sr-only">
+            View and manage plan details, settings, and permissions.
+          </DialogDescription>
         </DialogHeader>
         
         {!planData && isOpen ? (
@@ -339,7 +326,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
         ) : planData ? (
           <>
             <ScrollArea className="flex-grow min-h-0 pr-2">
-              <div className="space-y-6 py-2 px-6 pr-4"> {/* Adjusted padding to match header/footer */}
+              <div className="space-y-6 py-2 px-6 pr-4">
                 <div>
                   <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                   <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
@@ -417,14 +404,14 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
               </div>
             </ScrollArea>
             <DialogFooter className="p-6 pt-4 border-t mt-auto">
-              {isPlanOwner && ( // Use the prop from usePlanLogic for the save button itself
+              {isPlanOwner && ( 
                 <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles || !isOwnerForUIDisplay} className="w-full sm:w-auto">
                   {isSavingSettings && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Settings
                 </Button>
               )}
             </DialogFooter>
           </>
-        ) : null /* This case should ideally not be hit if isOpen is true and dialog is shown, but as a fallback */}
+        ) : null}
       </DialogContent>
     </Dialog>
   );
