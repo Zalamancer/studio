@@ -80,7 +80,14 @@ export const usePlanLogic = () => {
   const [diffDetailsVersionId, setDiffDetailsVersionId] = useState<string | null>(null);
   const [isPlanInfoDialogOpen, setIsPlanInfoDialogOpen] = useState(false);
   const [originalEditingChildItemData, setOriginalEditingChildItemData] = useState<ChildDataItem | null>(null);
-  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null); // Initialize to null
+  
+  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
+  console.log(`[usePlanLogic] Initial planDataForDialog state:`, planDataForDialog ? 'Exists' : 'NULL');
+
+  useEffect(() => {
+    console.log(`%c[usePlanLogic] planDataForDialog STATE CHANGED. New value:`, "color: magenta; font-weight: bold;", planDataForDialog ? 'Exists' : 'NULL', planDataForDialog);
+  }, [planDataForDialog]);
+
   const [viewPermissionsSearch, setViewPermissionsSearch] = useState('');
   const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
@@ -90,23 +97,42 @@ export const usePlanLogic = () => {
 
   const { data: planData, isLoading: isLoadingPlan, error: planError, refetch: refetchPlanData } = useQuery<ClientPlan | null>({
     queryKey: ['plan', planId],
-    queryFn: async () => (planId && isValidPlanId) ? getPlanById(planId) : null,
+    queryFn: async () => {
+      console.log(`%c[usePlanLogic] planData queryFn: STARTING fetch for planId: ${planId}`, "color: blue;");
+      if (planId && isValidPlanId) {
+        const result = await getPlanById(planId);
+        console.log(`%c[usePlanLogic] planData queryFn: FETCHED data for planId ${planId}:`, "color: blue;", result ? 'Data received' : 'No data (null)');
+        return result;
+      }
+      console.log(`%c[usePlanLogic] planData queryFn: planId or isValidPlanId FAILED. planId: ${planId}, isValidPlanId: ${isValidPlanId}`, "color: orange;");
+      return null;
+    },
     enabled: !!planId && isValidPlanId && !authLoading,
     onSuccess: (data) => {
-      console.log('[usePlanLogic] Main planData query onSuccess. Data:', data);
+      console.log(`%c[usePlanLogic] planData query onSuccess: TRIGGERED. Data received:`, "color: green;", data ? 'Data received' : 'No data (null)');
       if (data) {
-        console.log('[usePlanLogic] Setting planDataForDialog from onSuccess.');
-        setPlanDataForDialog(JSON.parse(JSON.stringify(data))); // Deep copy for dialog state
+        console.log(`%c[usePlanLogic] planData query onSuccess: Setting editableRoadmap based on received data.`, "color: green;");
         setEditableRoadmap((data.roadmap || []).map(s => sanitizeRoadmapStep(s)));
+        
+        console.log(`%c[usePlanLogic] planData query onSuccess: Attempting to set planDataForDialog with DEEP COPY of:`, "color: green;", data);
+        try {
+          const deepCopiedData = JSON.parse(JSON.stringify(data));
+          setPlanDataForDialog(deepCopiedData);
+          console.log(`%c[usePlanLogic] planData query onSuccess: setPlanDataForDialog CALLED with deep copy. Value should now be:`, "color: green; font-weight: bold;", deepCopiedData);
+        } catch (e) {
+          console.error("[usePlanLogic] planData query onSuccess: FAILED to deep copy planData for dialog:", e);
+          setPlanDataForDialog(null); // Fallback on error
+        }
       } else {
-        console.log('[usePlanLogic] Main planData is null/undefined, setting dialog data to null.');
+        console.log(`%c[usePlanLogic] planData query onSuccess: Data is null, setting planDataForDialog to null and editableRoadmap to empty.`, "color: orange;");
         setPlanDataForDialog(null);
         setEditableRoadmap([]);
       }
     },
     onError: (error) => {
-        console.error('[usePlanLogic] Error fetching main planData:', error);
-        setPlanDataForDialog(null); // Clear dialog data on error too
+        console.error(`%c[usePlanLogic] planData query onError: FAILED to fetch plan for planId ${planId}:`, "color: red; font-weight: bold;", error);
+        setPlanDataForDialog(null);
+        setEditableRoadmap([]);
     }
   });
 
@@ -149,7 +175,6 @@ export const usePlanLogic = () => {
          queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
          refetchPlanData(); // This refetch will trigger the main query's onSuccess to update planDataForDialog
       }
-      setIsPlanInfoDialogOpen(false);
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan settings." })
   });
@@ -162,7 +187,7 @@ export const usePlanLogic = () => {
       if (variables.planId) {
         queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
         queryClient.invalidateQueries({ queryKey: ['planVersions', variables.planId] });
-        refetchPlanData(); // This refetch will trigger the main query's onSuccess to update planDataForDialog
+        refetchPlanData(); 
         refetchPlanVersions();
       }
     },
@@ -176,7 +201,7 @@ export const usePlanLogic = () => {
       toast({ title: "Plan Restored", description: "The plan has been restored." });
       queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
       queryClient.invalidateQueries({ queryKey: ['planVersions', variables.planId] });
-      refetchPlanData(); // This refetch will trigger the main query's onSuccess to update planDataForDialog
+      refetchPlanData(); 
       refetchPlanVersions();
       setIsRestoreConfirmOpen(false); setVersionToRestore(null);
       handleExitDiffView();
@@ -471,7 +496,7 @@ export const usePlanLogic = () => {
         editUserIds: settings.editUserIds,
     };
 
-    setPlanDataForDialog(prev => prev ? ({ // Optimistically update local state for dialog
+    setPlanDataForDialog(prev => prev ? ({ 
       ...prev,
       name: settings.name,
       description: settings.description,
@@ -497,7 +522,7 @@ export const usePlanLogic = () => {
       setPlanDataForDialog(prev => prev ? ({
         ...prev,
         viewUserIds: (prev.viewUserIds || []).filter(uid => uid !== userIdToRemove),
-        editUserIds: (prev.editUserIds || []).filter(uid => uid !== userIdToRemove),
+        editUserIds: (prev.editUserIds || []).filter(uid => uid !== userIdToRemove), 
       }) : null);
     }
   }, [planDataForDialog]);
@@ -507,7 +532,7 @@ export const usePlanLogic = () => {
       setPlanDataForDialog(prev => prev ? ({
         ...prev,
         editUserIds: Array.from(new Set([...(prev.editUserIds || []), userProfile.userId])),
-        viewUserIds: Array.from(new Set([...(prev.viewUserIds || []), userProfile.userId])),
+        viewUserIds: Array.from(new Set([...(prev.viewUserIds || []), userProfile.userId])), 
       }) : null);
     }
   }, [planDataForDialog]);
@@ -520,6 +545,7 @@ export const usePlanLogic = () => {
       }) : null);
     }
   }, [planDataForDialog]);
+
 
   const handleExitDiffView = useCallback(() => {
       setDiffTarget(null);
@@ -681,7 +707,7 @@ export const usePlanLogic = () => {
     canEditPlan, saveRoadmapChanges, saveRoadmapMutation,
     savePlanSettingsMutation, handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
-    planDataForDialog,
+    planDataForDialog, // Ensure this is returned
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
