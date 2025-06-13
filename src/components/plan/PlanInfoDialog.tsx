@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogPrimitiveDescription, // Renamed to avoid conflict
+  DialogDescription as DialogPrimitiveDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -280,12 +280,12 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     inputRef: React.RefObject<HTMLInputElement>,
     popoverContentRef: React.RefObject<HTMLDivElement>
   ) => (
-    <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm">
-      <Label className="text-sm font-semibold text-foreground">{title}</Label>
+    <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col">
+      <Label className="text-sm font-semibold text-foreground flex-shrink-0">{title}</Label>
       {isOwnerForUIDisplay && (
         <Popover open={isSuggestionsOpenState} onOpenChange={setIsSuggestionsOpenState}>
           <PopoverTrigger asChild>
-            <div className="relative">
+            <div className="relative flex-shrink-0">
               <Input
                 ref={inputRef}
                 type="search"
@@ -338,12 +338,12 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           )}
         </Popover>
       )}
-      <div 
-        className="space-y-1 py-1 overflow-y-auto"
-        style={{ maxHeight: '80px' }}
+      <div
+        className="space-y-1 py-1 flex-grow overflow-y-auto" 
+        style={{ maxHeight: '10rem' }} // Direct style for maxHeight (160px)
       >
         {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
-          Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
+          Array.from({length: Math.min(3, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
         ) : currentUserIdsForSection.length > 0 ? (
           currentUserIdsForSection.map(uid => renderUserListItem(uid, profilesMapForSection, onRemoveFromListInternal, roleContext, isLoadingProfilesMapForSection))
         ) : (
@@ -373,9 +373,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           <>
             <ScrollArea className="flex-grow min-h-0">
               <div className="p-6 space-y-6">
-                <div className="flex flex-col md:flex-row md:gap-x-8 gap-y-6">
+                <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
                   {/* Left Column */}
-                  <div className="md:w-1/2 space-y-6">
+                  <div className="md:w-1/2 space-y-6 flex flex-col">
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
@@ -417,7 +417,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       </>
                     )}
 
-                    <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-4">
+                    <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-4 flex-grow"> {/* Added flex-grow */}
                       <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId)}</p>
                       <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
                       <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
@@ -427,7 +427,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
                   {/* Right Column */}
                   {isOwnerForUIDisplay && (
-                    <div className="md:w-1/2 space-y-4">
+                    <div className="md:w-1/2 space-y-4 flex flex-col"> {/* Added flex flex-col */}
                       {visibility !== 'public' && renderPermissionSection(
                         "Manage View Access (Private/Unlisted)",
                         currentViewUserIds,
