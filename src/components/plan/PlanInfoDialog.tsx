@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription,
+  // DialogDescription, // Commented out as per previous request
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -31,7 +31,7 @@ import {
   User,
   Eye,
   Lock,
-  Link as LinkIcon,
+  Link as LinkIcon, // Renamed to avoid conflict with NextLink
   ShieldQuestion,
   Trash2,
   Search,
@@ -52,7 +52,7 @@ interface PlanInfoDialogProps {
   onOpenChange: (open: boolean) => void;
   planData: ClientPlan | null;
   ownerProfile: UserProfileBasic | null;
-  isPlanOwner: boolean;
+  isPlanOwner: boolean; // This prop indicates if the current user can perform save actions
   onSaveSettings: (settings: {
     name: string;
     description: string;
@@ -89,7 +89,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   onOpenChange,
   planData,
   ownerProfile,
-  isPlanOwner,
+  isPlanOwner, // Prop for enabling save button
   onSaveSettings,
   isSavingSettings,
   viewPermissionsSearch,
@@ -115,18 +115,23 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   const [currentViewUserIds, setCurrentViewUserIds] = useState<string[]>([]);
   const [currentEditUserIds, setCurrentEditUserIds] = useState<string[]>([]);
 
+  // isOwnerForUIDisplay determines if owner-specific UI elements are shown
   const isOwnerForUIDisplay = useMemo(() => {
     return !!currentUserFromAuth && !!planData && planData.ownerId === currentUserFromAuth.uid;
   }, [currentUserFromAuth, planData]);
 
   useEffect(() => {
+    console.log('[PlanInfoDialog] Mounted/Updated. isOpen:', isOpen, 'planData prop:', planData ? 'Exists' : 'NULL');
     if (planData && isOpen) {
       setName(planData.name);
       setDescription(planData.description || '');
       setVisibility(planData.visibility);
       setEditability(planData.editability);
+      // Filter out owner from these lists as owner is implicitly included or handled separately
       setCurrentViewUserIds(planData.viewUserIds?.filter(uid => uid !== planData.ownerId) || []);
       setCurrentEditUserIds(planData.editUserIds?.filter(uid => uid !== planData.ownerId) || []);
+    } else if (!isOpen) {
+        // Reset state when dialog closes if needed, or rely on open effect
     }
   }, [planData, isOpen]);
 
@@ -159,29 +164,33 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   });
 
   const handleInternalAddViewer = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === planData?.ownerId) return;
+    if (userProfile.userId === planData?.ownerId) return; // Owner cannot be explicitly added here
     setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    onAddUserToViewers(userProfile);
+    onAddUserToViewers(userProfile); // Propagate to usePlanLogic's local state
     setViewPermissionsSearch('');
   };
 
   const handleInternalRemoveViewer = (userIdToRemove: string) => {
     setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
+    // If removing from viewers, also remove from editors if present
     setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    onRemoveUserFromViewers(userIdToRemove);
+    onRemoveUserFromViewers(userIdToRemove); // Propagate
   };
 
   const handleInternalAddEditor = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === planData?.ownerId) return;
+    if (userProfile.userId === planData?.ownerId) return; // Owner cannot be explicitly added here
     setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+    // Adding to editors should implicitly add to viewers
     setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    onAddUserToEditors(userProfile);
+    onAddUserToEditors(userProfile); // Propagate
     setEditPermissionsSearch('');
   };
 
   const handleInternalRemoveEditor = (userIdToRemove: string) => {
     setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    onRemoveUserFromEditors(userIdToRemove);
+    // Note: Removing from editor does not automatically remove from viewer.
+    // This might be a desired behavior or might need adjustment based on UX.
+    onRemoveUserFromEditors(userIdToRemove); // Propagate
   };
 
   const handleSave = () => {
@@ -189,7 +198,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       toast({ variant: "destructive", title: "Validation Error", description: "Plan name is required." });
       return;
     }
-    if (!isPlanOwner) { // Use the prop passed from usePlanLogic for the save action guard
+    if (!isPlanOwner) { // Use the prop for actual save action guard
       toast({ variant: "destructive", title: "Permission Denied", description: "You do not have permission to save these settings." });
       return;
     }
@@ -198,8 +207,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       description: description.trim(),
       visibility,
       editability,
-      viewUserIds: currentViewUserIds,
-      editUserIds: currentEditUserIds,
+      viewUserIds: currentViewUserIds, // Send only non-owner IDs
+      editUserIds: currentEditUserIds, // Send only non-owner IDs
     });
   };
   
@@ -213,6 +222,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     const profile = profilesMap?.get(userId);
     const displayName = profile?.displayName || profile?.mentionName || generateAnonymousName(userId);
     
+    // Owner should not be listed here as they are implicitly included.
     if (userId === planData?.ownerId) return null;
 
     if (isLoadingMap && !profile) {
@@ -228,7 +238,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           </Avatar>
           <span className="text-xs truncate" title={displayName}>{displayName}</span>
         </div>
-        {isOwnerForUIDisplay && (
+        {isOwnerForUIDisplay && ( // Use local isOwnerForUIDisplay for UI elements inside dialog
           <Button
             variant="ghost"
             size="icon"
@@ -258,7 +268,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   ) => (
     <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm">
       <Label className="text-sm font-semibold text-foreground">{title}</Label>
-      {isOwnerForUIDisplay && (
+      {isOwnerForUIDisplay && ( // Use local isOwnerForUIDisplay
         <>
           <div className="relative">
             <Input
@@ -308,105 +318,113 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </div>
   );
 
-  if (!planData) return null;
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
-        <DialogHeader className="pr-10">
+        <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          {/* DialogDescription removed as requested for debugging */}
+          {/* DialogDescription removed: <DialogDescription>Key information about this collaboration plan.</DialogDescription> */}
+           {debugProp && (
+             <p className="text-sm font-bold text-purple-600 p-2 bg-purple-100 border border-purple-300 rounded mt-2">
+                {debugProp}
+             </p>
+           )}
         </DialogHeader>
-        <ScrollArea className="flex-grow min-h-0 pr-2">
-          <div className="space-y-6 py-2 pr-4">
-            {/* DEBUG PROP DISPLAY */}
-            <p className="text-sm font-bold text-purple-600 p-2 bg-purple-100 border border-purple-300 rounded">
-              DEBUG PROP FROM PAGE.TSX: {debugProp || "PROP NOT RECEIVED"}
-            </p>
-            {/* END DEBUG PROP DISPLAY */}
-            <div>
-              <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
-              <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
-            </div>
-            <div>
-              <Label htmlFor="plan-description" className="text-sm">Description</Label>
-              <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
-            </div>
-            
-            {isOwnerForUIDisplay && (
-              <>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
-                    <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
-                      <SelectTrigger id="plan-visibility" className="text-sm h-9">
-                        <SelectValue placeholder="Select visibility" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
-                        <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
-                        <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div>
-                    <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
-                    <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
-                      <SelectTrigger id="plan-editability" className="text-sm h-9">
-                        <SelectValue placeholder="Select editability" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
-                        <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-
-                <div className="space-y-3 pt-2">
-                  {visibility !== 'public' && renderPermissionSection(
-                    "Manage View Access (for Private/Unlisted plans)",
-                    currentViewUserIds,
-                    viewerProfilesMap,
-                    isLoadingViewerProfiles,
-                    viewPermissionsSearch,
-                    setViewPermissionsSearch,
-                    viewPermissionSuggestions,
-                    handleInternalAddViewer,
-                    handleInternalRemoveViewer,
-                    "Viewer"
-                  )}
-                  {editability === 'collaborators' && renderPermissionSection(
-                    "Manage Edit Access (Collaborators)",
-                    currentEditUserIds,
-                    editorProfilesMap,
-                    isLoadingEditorProfiles,
-                    editPermissionsSearch,
-                    setEditPermissionsSearch,
-                    editPermissionSuggestions,
-                    handleInternalAddEditor,
-                    handleInternalRemoveEditor,
-                    "Editor"
-                  )}
-                </div>
-              </>
-            )}
-
-            <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-4">
-              <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}</p>
-              <p><strong className="text-foreground">Created:</strong> {format(new Date(planData.createdAt), 'PPp')}</p>
-              <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(planData.updatedAt), 'PPp')}</p>
-              <p><strong className="text-foreground">Version:</strong> {planData.version}</p>
-            </div>
+        
+        {!planData && isOpen ? (
+          <div className="flex-grow flex flex-col items-center justify-center p-6">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
+            <p className="text-sm text-muted-foreground">Loading plan details...</p>
           </div>
-        </ScrollArea>
-        <DialogFooter className="pt-4 border-t mt-auto p-6">
-          {isPlanOwner && (
-            <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles || !isOwnerForUIDisplay} className="w-full sm:w-auto">
-              {isSavingSettings && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Settings
-            </Button>
-          )}
-        </DialogFooter>
+        ) : planData ? (
+          <>
+            <ScrollArea className="flex-grow min-h-0 pr-2">
+              <div className="space-y-6 py-2 px-6 pr-4"> {/* Adjusted padding to match header/footer */}
+                <div>
+                  <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
+                  <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
+                </div>
+                <div>
+                  <Label htmlFor="plan-description" className="text-sm">Description</Label>
+                  <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
+                </div>
+                
+                {isOwnerForUIDisplay && (
+                  <>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <div>
+                        <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
+                        <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
+                          <SelectTrigger id="plan-visibility" className="text-sm h-9">
+                            <SelectValue placeholder="Select visibility" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
+                            <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
+                            <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
+                        <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
+                          <SelectTrigger id="plan-editability" className="text-sm h-9">
+                            <SelectValue placeholder="Select editability" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
+                            <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    <div className="space-y-3 pt-2">
+                      {visibility !== 'public' && renderPermissionSection(
+                        "Manage View Access (for Private/Unlisted plans)",
+                        currentViewUserIds,
+                        viewerProfilesMap,
+                        isLoadingViewerProfiles,
+                        viewPermissionsSearch,
+                        setViewPermissionsSearch,
+                        viewPermissionSuggestions,
+                        handleInternalAddViewer,
+                        handleInternalRemoveViewer,
+                        "Viewer"
+                      )}
+                      {editability === 'collaborators' && renderPermissionSection(
+                        "Manage Edit Access (Collaborators)",
+                        currentEditUserIds,
+                        editorProfilesMap,
+                        isLoadingEditorProfiles,
+                        editPermissionsSearch,
+                        setEditPermissionsSearch,
+                        editPermissionSuggestions,
+                        handleInternalAddEditor,
+                        handleInternalRemoveEditor,
+                        "Editor"
+                      )}
+                    </div>
+                  </>
+                )}
+
+                <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-4">
+                  <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}</p>
+                  <p><strong className="text-foreground">Created:</strong> {format(new Date(planData.createdAt), 'PPp')}</p>
+                  <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(planData.updatedAt), 'PPp')}</p>
+                  <p><strong className="text-foreground">Version:</strong> {planData.version}</p>
+                </div>
+              </div>
+            </ScrollArea>
+            <DialogFooter className="p-6 pt-4 border-t mt-auto">
+              {isPlanOwner && ( // Use the prop from usePlanLogic for the save button itself
+                <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles || !isOwnerForUIDisplay} className="w-full sm:w-auto">
+                  {isSavingSettings && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} Save Settings
+                </Button>
+              )}
+            </DialogFooter>
+          </>
+        ) : null /* This case should ideally not be hit if isOpen is true and dialog is shown, but as a fallback */}
       </DialogContent>
     </Dialog>
   );
