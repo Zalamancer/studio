@@ -37,7 +37,7 @@ import {
   Search,
   PlusCircle,
 } from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'; // Removed PopoverAnchor
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
 import type { UserProfileBasic } from '@/types/connection';
 import { useToast } from '@/hooks/use-toast';
@@ -181,30 +181,30 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     if (userProfile.userId === initialPlanData?.ownerId) return;
     if (currentViewUserIds.includes(userProfile.userId)) return;
     setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    onAddUserToViewers(userProfile); // Call the prop to update parent state
+    onAddUserToViewers(userProfile);
     setViewPermissionsSearch('');
     setIsViewSuggestionsOpen(false);
   };
 
   const handleInternalRemoveViewer = (userIdToRemove: string) => {
     setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove)); // If removed from viewers, also remove from editors
-    onRemoveUserFromViewers(userIdToRemove); // Call the prop
+    setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove)); 
+    onRemoveUserFromViewers(userIdToRemove);
   };
 
   const handleInternalAddEditor = (userProfile: UserProfileBasic) => {
     if (userProfile.userId === initialPlanData?.ownerId) return;
     if (currentEditUserIds.includes(userProfile.userId)) return;
     setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId]))); // Editors are implicitly viewers
-    onAddUserToEditors(userProfile); // Call the prop
+    setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId]))); 
+    onAddUserToEditors(userProfile);
     setEditPermissionsSearch('');
     setIsEditSuggestionsOpen(false);
   };
 
   const handleInternalRemoveEditor = (userIdToRemove: string) => {
     setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    onRemoveUserFromEditors(userIdToRemove); // Call the prop
+    onRemoveUserFromEditors(userIdToRemove);
   };
 
   const handleSave = () => {
@@ -338,7 +338,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           )}
         </Popover>
       )}
-      <ScrollArea className={cn("max-h-20", currentUserIdsForSection.length === 0 && "border-none")}> {/* Changed max-h-28 to max-h-20 */}
+      <ScrollArea className={cn("max-h-20", currentUserIdsForSection.length === 0 && "border-none")}>
         <div className="space-y-1 py-1">
           {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
             Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
