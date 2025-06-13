@@ -19,7 +19,7 @@ const MIN_CANVAS_PADDING = 20;
 const NODE_BASE_WIDTH = 220;
 const DEFAULT_SPACING_X = 80;
 const DEFAULT_SPACING_Y = 40;
-const NODE_BASE_MIN_HEIGHT = 80; 
+const NODE_BASE_MIN_HEIGHT = 80;
 const CHILD_ITEM_HEIGHT = 28;
 const NODE_HEADER_HEIGHT = 40;
 
@@ -80,8 +80,7 @@ export const usePlanLogic = () => {
   const [diffDetailsVersionId, setDiffDetailsVersionId] = useState<string | null>(null);
   const [isPlanInfoDialogOpen, setIsPlanInfoDialogOpen] = useState(false);
   const [originalEditingChildItemData, setOriginalEditingChildItemData] = useState<ChildDataItem | null>(null);
-
-  // State for permission management
+  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
   const [viewPermissionsSearch, setViewPermissionsSearch] = useState('');
   const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
@@ -89,22 +88,19 @@ export const usePlanLogic = () => {
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
-  // This state will hold the plan data used by PlanInfoDialog for its local permission lists
-  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
-
-
   const { data: planData, isLoading: isLoadingPlan, error: planError, refetch: refetchPlanData } = useQuery<ClientPlan | null>({
     queryKey: ['plan', planId],
     queryFn: async () => (planId && isValidPlanId) ? getPlanById(planId) : null,
     enabled: !!planId && isValidPlanId && !authLoading,
+    onSuccess: (data) => {
+      if (data) {
+        setPlanDataForDialog(data);
+        setEditableRoadmap((data.roadmap || []).map(s => sanitizeRoadmapStep(s)));
+      } else {
+        setEditableRoadmap([]);
+      }
+    },
   });
-
-  // Effect to update planDataForDialog when planData changes (e.g., after fetching or saving)
-  useEffect(() => {
-    if (planData) {
-      setPlanDataForDialog(planData);
-    }
-  }, [planData]);
 
   useEffect(() => {
     const viewTimer = setTimeout(() => setDebouncedViewPermissionsSearch(viewPermissionsSearch), 300);
@@ -115,15 +111,14 @@ export const usePlanLogic = () => {
   const { data: viewPermissionSuggestions = [] } = useQuery<UserProfileBasic[]>({
     queryKey: ['suggestibleUsersForPlanPermissions', 'view', debouncedViewPermissionsSearch, user?.uid],
     queryFn: () => user ? getSuggestibleUsers(debouncedViewPermissionsSearch, 5) : Promise.resolve([]),
-    enabled: !!user && isPlanInfoDialogOpen && !!debouncedViewPermissionsSearch.trim(), // Only fetch if search term is not empty
+    enabled: !!user && isPlanInfoDialogOpen && !!debouncedViewPermissionsSearch.trim(),
   });
 
   const { data: editPermissionSuggestions = [] } = useQuery<UserProfileBasic[]>({
     queryKey: ['suggestibleUsersForPlanPermissions', 'edit', debouncedEditPermissionsSearch, user?.uid],
     queryFn: () => user ? getSuggestibleUsers(debouncedEditPermissionsSearch, 5) : Promise.resolve([]),
-    enabled: !!user && isPlanInfoDialogOpen && !!debouncedEditPermissionsSearch.trim(), // Only fetch if search term is not empty
+    enabled: !!user && isPlanInfoDialogOpen && !!debouncedEditPermissionsSearch.trim(),
   });
-
 
   const { data: ownerProfile, isLoading: isLoadingOwnerProfile } = useQuery<UserProfileBasic | null>({
     queryKey: ['userProfileBasic', planData?.ownerId, 'planOwner'],
@@ -213,7 +208,6 @@ export const usePlanLogic = () => {
     if (planData.editability === 'collaborators' && (planData.editUserIds || []).includes(user.uid)) return true;
     return false;
   }, [user, planData]);
-
 
   const getPointerCoords = useCallback((event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent): { clientX: number; clientY: number } => {
     if ('touches' in event && event.touches.length > 0) return { clientX: event.touches[0].clientX, clientY: event.touches[0].clientY };
@@ -459,171 +453,202 @@ export const usePlanLogic = () => {
       toast({ variant: "destructive", title: "Error", description: "Cannot save settings. Plan data missing or permissions issue." });
       return;
     }
-    
     const updates: UpdatePlanData = {
         updatedAt: serverTimestamp() as any, 
         name: settings.name,
         description: settings.description,
         visibility: settings.visibility,
         editability: settings.editability,
-        // Pass the updated lists. The service will ensure owner is always included.
         viewUserIds: settings.viewUserIds, 
         editUserIds: settings.editUserIds,
     };
-
-    // Optimistically update local planDataForDialog state for smoother UI in dialog
     setPlanDataForDialog(prev => prev ? ({
       ...prev,
       name: settings.name,
       description: settings.description,
       visibility: settings.visibility,
       editability: settings.editability,
-      viewUserIds: Array.from(new Set([prev.ownerId, ...settings.viewUserIds])), // Keep owner, add new
-      editUserIds: Array.from(new Set([prev.ownerId, ...settings.editUserIds])), // Keep owner, add new
+      viewUserIds: Array.from(new Set([prev.ownerId, ...settings.viewUserIds])),
+      editUserIds: Array.from(new Set([prev.ownerId, ...settings.editUserIds])),
     }) : null);
-
     savePlanSettingsMutation.mutate({ planId, currentUserId: user.uid, updates });
   }, [planDataForDialog, user, planId, canEditPlan, savePlanSettingsMutation, toast, setPlanDataForDialog]);
 
+  const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
+    if (planDataForDialog && userProfile.userId !== planDataForDialog.ownerId) {
+      setPlanDataForDialog(prev => prev ? ({
+        ...prev,
+        viewUserIds: Array.from(new Set([...(prev.viewUserIds || []), userProfile.userId])),
+      }) : null);
+    }
+  }, [planDataForDialog]);
 
-    const handleExitDiffView = useCallback(() => {
-        setDiffTarget(null);
-        setDiffDetailsVersionId(null);
-        if (planData) {
+  const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
+    if (planDataForDialog && userIdToRemove !== planDataForDialog.ownerId) {
+      setPlanDataForDialog(prev => prev ? ({
+        ...prev,
+        viewUserIds: (prev.viewUserIds || []).filter(uid => uid !== userIdToRemove),
+        editUserIds: (prev.editUserIds || []).filter(uid => uid !== userIdToRemove), // Also remove from editors
+      }) : null);
+    }
+  }, [planDataForDialog]);
+
+  const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
+    if (planDataForDialog && userProfile.userId !== planDataForDialog.ownerId) {
+      setPlanDataForDialog(prev => prev ? ({
+        ...prev,
+        editUserIds: Array.from(new Set([...(prev.editUserIds || []), userProfile.userId])),
+        viewUserIds: Array.from(new Set([...(prev.viewUserIds || []), userProfile.userId])), // Editors are also viewers
+      }) : null);
+    }
+  }, [planDataForDialog]);
+
+  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
+    if (planDataForDialog && userIdToRemove !== planDataForDialog.ownerId) {
+      setPlanDataForDialog(prev => prev ? ({
+        ...prev,
+        editUserIds: (prev.editUserIds || []).filter(uid => uid !== userIdToRemove),
+      }) : null);
+    }
+  }, [planDataForDialog]);
+
+  const handleExitDiffView = useCallback(() => {
+      setDiffTarget(null);
+      setDiffDetailsVersionId(null);
+      if (planData) {
         setEditableRoadmap((planData.roadmap || []).map(s => sanitizeRoadmapStep(s)));
-        }
-    }, [planData]);
+      }
+  }, [planData]);
 
-    const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersionInHistory: ClientPlanVersion | null) => {
-        if (!planData) return;
-        const isCurrentlyViewingThisDiff = diffDetailsVersionId === versionToView.id && !!diffTarget;
-        if (isCurrentlyViewingThisDiff) {
+  const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersionInHistory: ClientPlanVersion | null) => {
+      if (!planData) return;
+      const isCurrentlyViewingThisDiff = diffDetailsVersionId === versionToView.id && !!diffTarget;
+      if (isCurrentlyViewingThisDiff) {
         handleExitDiffView();
-        } else {
+      } else {
         setDiffTarget({ current: versionToView, previous: previousVersionInHistory });
         setDiffDetailsVersionId(versionToView.id);
-        }
-    }, [planData, diffDetailsVersionId, diffTarget, handleExitDiffView]);
+      }
+  }, [planData, diffDetailsVersionId, diffTarget, handleExitDiffView]);
 
-    const handleRestoreVersion = (version: ClientPlanVersion) => { setVersionToRestore(version); setIsRestoreConfirmOpen(true); };
-    const confirmRestore = () => { if (!versionToRestore || !planId || !user) return; restorePlanMutation.mutate({ planId, versionIdToRestore: versionToRestore.id, currentUserId: user.uid }); };
+  const handleRestoreVersion = (version: ClientPlanVersion) => { setVersionToRestore(version); setIsRestoreConfirmOpen(true); };
+  const confirmRestore = () => { if (!versionToRestore || !planId || !user) return; restorePlanMutation.mutate({ planId, versionIdToRestore: versionToRestore.id, currentUserId: user.uid }); };
 
-    const handleNodeInteractionStart = useCallback((nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, isDotDrag: boolean = false, dotType?: 'N' | 'E' | 'S') => {
-        if (('button' in event && (event as React.MouseEvent).button !== 0) || !canEditPlan || diffTarget) return;
-        const { clientX, clientY } = getPointerCoords(event);
-        const nodeElement = (event.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement;
-        if (!nodeElement && !isDotDrag) return;
-        const nodeRect = isDotDrag ? (event.currentTarget as HTMLElement).getBoundingClientRect() : nodeElement.getBoundingClientRect();
-        const offsetX = clientX - nodeRect.left;
-        const offsetY = clientY - nodeRect.top;
-        nodeDragInfoRef.current = { nodeId, offsetX, offsetY, isDotDrag, dotType };
-        clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetElement: event.currentTarget };
-        isDraggingRef.current = false;
-        setIsPointerDown(true);
-        forceRender();
-      }, [canEditPlan, getPointerCoords, diffTarget, forceRender]);
+  const handleNodeInteractionStart = useCallback((nodeId: string, event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>, isDotDrag: boolean = false, dotType?: 'N' | 'E' | 'S') => {
+      if (('button' in event && (event as React.MouseEvent).button !== 0) || !canEditPlan || diffTarget) return;
+      const { clientX, clientY } = getPointerCoords(event);
+      const nodeElement = (event.currentTarget as HTMLElement).closest('[data-node-id]') as HTMLElement;
+      if (!nodeElement && !isDotDrag) return;
+      const nodeRect = isDotDrag ? (event.currentTarget as HTMLElement).getBoundingClientRect() : nodeElement.getBoundingClientRect();
+      const offsetX = clientX - nodeRect.left;
+      const offsetY = clientY - nodeRect.top;
+      nodeDragInfoRef.current = { nodeId, offsetX, offsetY, isDotDrag, dotType };
+      clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetElement: event.currentTarget };
+      isDraggingRef.current = false;
+      setIsPointerDown(true);
+      forceRender();
+    }, [canEditPlan, getPointerCoords, diffTarget, forceRender]);
 
-    const handleGlobalMove = useCallback((event: MouseEvent | TouchEvent, canvasRefCurrent: HTMLDivElement | null) => {
-        if (!isPointerDown || !canvasRefCurrent || diffTarget) return;
-        const { clientX, clientY } = getPointerCoords(event);
+  const handleGlobalMove = useCallback((event: MouseEvent | TouchEvent, canvasRefCurrent: HTMLDivElement | null) => {
+      if (!isPointerDown || !canvasRefCurrent || diffTarget) return;
+      const { clientX, clientY } = getPointerCoords(event);
 
-        if (clickStartInfoRef.current && !isDraggingRef.current) {
-            const deltaX = clientX - clickStartInfoRef.current.clientX;
-            const deltaY = clientY - clickStartInfoRef.current.clientY;
-            if ((deltaX * deltaX + deltaY * deltaY) > 25) isDraggingRef.current = true;
-        }
+      if (clickStartInfoRef.current && !isDraggingRef.current) {
+          const deltaX = clientX - clickStartInfoRef.current.clientX;
+          const deltaY = clientY - clickStartInfoRef.current.clientY;
+          if ((deltaX * deltaX + deltaY * deltaY) > 25) isDraggingRef.current = true;
+      }
 
-        if (nodeDragInfoRef.current?.isDotDrag) {
-            if (event.cancelable) event.preventDefault();
-            const canvasRect = canvasRefCurrent.getBoundingClientRect();
-            const currentX = clientX - canvasRect.left + canvasRefCurrent.scrollLeft;
-            const currentY = clientY - canvasRect.top + canvasRefCurrent.scrollTop;
-            const sourceNode = editableRoadmap.find(s => s.id === nodeDragInfoRef.current!.nodeId);
-            if (!sourceNode) return;
-            const sourceDotType = nodeDragInfoRef.current!.dotType;
-            let startX: number, startY: number;
-            const sourceNodeHeight = NODE_BASE_MIN_HEIGHT; 
-            switch(sourceDotType) {
-                case 'N': startX = sourceNode.x + NODE_BASE_WIDTH / 2; startY = sourceNode.y; break;
-                case 'E': startX = sourceNode.x + NODE_BASE_WIDTH; startY = sourceNode.y + sourceNodeHeight / 2; break;
-                case 'S': startX = sourceNode.x + NODE_BASE_WIDTH / 2; startY = sourceNode.y + sourceNodeHeight; break;
-                default: return;
+      if (nodeDragInfoRef.current?.isDotDrag) {
+          if (event.cancelable) event.preventDefault();
+          const canvasRect = canvasRefCurrent.getBoundingClientRect();
+          const currentX = clientX - canvasRect.left + canvasRefCurrent.scrollLeft;
+          const currentY = clientY - canvasRect.top + canvasRefCurrent.scrollTop;
+          const sourceNode = editableRoadmap.find(s => s.id === nodeDragInfoRef.current!.nodeId);
+          if (!sourceNode) return;
+          const sourceDotType = nodeDragInfoRef.current!.dotType;
+          let startX: number, startY: number;
+          const sourceNodeHeight = NODE_BASE_MIN_HEIGHT; 
+          switch(sourceDotType) {
+              case 'N': startX = sourceNode.x + NODE_BASE_WIDTH / 2; startY = sourceNode.y; break;
+              case 'E': startX = sourceNode.x + NODE_BASE_WIDTH; startY = sourceNode.y + sourceNodeHeight / 2; break;
+              case 'S': startX = sourceNode.x + NODE_BASE_WIDTH / 2; startY = sourceNode.y + sourceNodeHeight; break;
+              default: return;
+          }
+          let targetNodeIdUnderCursor: string | undefined = undefined;
+          const elementsAtPoint = document.elementsFromPoint(clientX, clientY);
+          const targetNodeElement = elementsAtPoint.find(el => el.hasAttribute('data-node-id') && (el as HTMLElement).dataset.nodeId !== sourceNode.id);
+          if (targetNodeElement) targetNodeIdUnderCursor = (targetNodeElement as HTMLElement).dataset.nodeId;
+          activeConnectionLinePreviewRef.current = { path: `M ${startX} ${startY} L ${currentX} ${currentY}`, targetNodeId: targetNodeIdUnderCursor, sourceDotType };
+      } else if (isDraggingRef.current && nodeDragInfoRef.current) {
+          if (event.cancelable) event.preventDefault();
+          const canvasRect = canvasRefCurrent.getBoundingClientRect();
+          const currentX = clientX - canvasRect.left + canvasRefCurrent.scrollLeft;
+          const currentY = clientY - canvasRect.top + canvasRefCurrent.scrollTop;
+          const { nodeId, offsetX = 0, offsetY = 0 } = nodeDragInfoRef.current;
+          let newX = Math.max(MIN_CANVAS_PADDING, currentX - offsetX);
+          let newY = Math.max(MIN_CANVAS_PADDING, currentY - offsetY);
+          setEditableRoadmap(prev => prev.map(step => step.id === nodeId ? { ...step, x: newX, y: newY } : step ));
+      }
+      forceRender();
+  }, [isPointerDown, getPointerCoords, editableRoadmap, diffTarget, forceRender]);
+
+  const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent) => {
+      if (!isPointerDown || !nodeDragInfoRef.current || diffTarget) { setIsPointerDown(false); return; }
+      const { nodeId: sourceNodeId, dotType: sourceDotType, isDotDrag } = nodeDragInfoRef.current;
+      const clickInfo = clickStartInfoRef.current;
+      const isConsideredDrag = isDraggingRef.current;
+      
+      if (isDotDrag && sourceDotType) {
+          if (activeConnectionLinePreviewRef.current?.path) {
+              const targetNodeIdUnderCursor = activeConnectionLinePreviewRef.current.targetNodeId;
+              const dropTargetNode = targetNodeIdUnderCursor ? editableRoadmap.find(s => s.id === targetNodeIdUnderCursor) : undefined;
+              if (dropTargetNode) {
+                  if (dropTargetNode.id === sourceNodeId) toast({ variant: "destructive", title: "Invalid Connection", description: "Cannot connect a node to itself." });
+                  else {
+                      setEditableRoadmap(prev => {
+                          const map = [...prev];
+                          const sourceNodeIndex = map.findIndex(s => s.id === sourceNodeId);
+                          if (sourceNodeIndex === -1) return prev;
+                          const updatedSourceNode = { ...map[sourceNodeIndex] };
+                          updatedSourceNode.peerConnections = updatedSourceNode.peerConnections || [];
+                          let targetDotOnDropTarget: PeerConnection['targetDot'] = 'W';
+                          if (sourceDotType === 'N') targetDotOnDropTarget = 'S';
+                          else if (sourceDotType === 'S') targetDotOnDropTarget = 'N';
+                          const alreadyConnected = updatedSourceNode.peerConnections.some(pc => pc.targetNodeId === dropTargetNode.id && pc.sourceDot === sourceDotType && pc.targetDot === targetDotOnDropTarget);
+                          if (!alreadyConnected) {
+                              updatedSourceNode.peerConnections.push({ targetNodeId: dropTargetNode.id, sourceDot: sourceDotType, targetDot: targetDotOnDropTarget });
+                              map[sourceNodeIndex] = updatedSourceNode;
+                              toast({ title: "Nodes Linked", description: `"${updatedSourceNode.title}" to "${dropTargetNode.title}".` });
+                          } else toast({ title: "Already Linked" });
+                          return map;
+                      });
+                  }
+              } else handleInitiateAddNode(sourceNodeId, sourceDotType);
+          } else if (!isConsideredDrag && clickInfo) handleInitiateAddNode(sourceNodeId, sourceDotType);
+      } else if (!isConsideredDrag && clickInfo) {
+          const finalCoords = getPointerCoords(event);
+          const timeElapsed = Date.now() - clickInfo.timestamp;
+          const deltaX = finalCoords.clientX - clickInfo.clientX;
+          const deltaY = finalCoords.clientY - clickInfo.clientY;
+          if ((deltaX * deltaX + deltaY * deltaY) < 25 && timeElapsed < 300) {
+            if (clickInfo.targetElement && (clickInfo.targetElement as HTMLElement).closest('[data-node-id]') &&
+               !(clickInfo.targetElement as HTMLElement).closest('[data-dot-type]') &&
+               !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-dot-id]') &&
+               !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-title-button]') &&
+               !(clickInfo.targetElement as HTMLElement).closest('[data-action-button="add-child"]')) {
+              const clickedStep = editableRoadmap.find(s => s.id === sourceNodeId);
+              if (clickedStep) handleEditCanvasNode(clickedStep);
             }
-            let targetNodeIdUnderCursor: string | undefined = undefined;
-            const elementsAtPoint = document.elementsFromPoint(clientX, clientY);
-            const targetNodeElement = elementsAtPoint.find(el => el.hasAttribute('data-node-id') && (el as HTMLElement).dataset.nodeId !== sourceNode.id);
-            if (targetNodeElement) targetNodeIdUnderCursor = (targetNodeElement as HTMLElement).dataset.nodeId;
-            activeConnectionLinePreviewRef.current = { path: `M ${startX} ${startY} L ${currentX} ${currentY}`, targetNodeId: targetNodeIdUnderCursor, sourceDotType };
-        } else if (isDraggingRef.current && nodeDragInfoRef.current) {
-            if (event.cancelable) event.preventDefault();
-            const canvasRect = canvasRefCurrent.getBoundingClientRect();
-            const currentX = clientX - canvasRect.left + canvasRefCurrent.scrollLeft;
-            const currentY = clientY - canvasRect.top + canvasRefCurrent.scrollTop;
-            const { nodeId, offsetX = 0, offsetY = 0 } = nodeDragInfoRef.current;
-            let newX = Math.max(MIN_CANVAS_PADDING, currentX - offsetX);
-            let newY = Math.max(MIN_CANVAS_PADDING, currentY - offsetY);
-            setEditableRoadmap(prev => prev.map(step => step.id === nodeId ? { ...step, x: newX, y: newY } : step ));
-        }
-        forceRender();
-    }, [isPointerDown, getPointerCoords, editableRoadmap, diffTarget, forceRender]);
-
-    const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent) => {
-        if (!isPointerDown || !nodeDragInfoRef.current || diffTarget) { setIsPointerDown(false); return; }
-        const { nodeId: sourceNodeId, dotType: sourceDotType, isDotDrag } = nodeDragInfoRef.current;
-        const clickInfo = clickStartInfoRef.current;
-        const isConsideredDrag = isDraggingRef.current;
-        
-        if (isDotDrag && sourceDotType) {
-            if (activeConnectionLinePreviewRef.current?.path) {
-                const targetNodeIdUnderCursor = activeConnectionLinePreviewRef.current.targetNodeId;
-                const dropTargetNode = targetNodeIdUnderCursor ? editableRoadmap.find(s => s.id === targetNodeIdUnderCursor) : undefined;
-                if (dropTargetNode) {
-                    if (dropTargetNode.id === sourceNodeId) toast({ variant: "destructive", title: "Invalid Connection", description: "Cannot connect a node to itself." });
-                    else {
-                        setEditableRoadmap(prev => {
-                            const map = [...prev];
-                            const sourceNodeIndex = map.findIndex(s => s.id === sourceNodeId);
-                            if (sourceNodeIndex === -1) return prev;
-                            const updatedSourceNode = { ...map[sourceNodeIndex] };
-                            updatedSourceNode.peerConnections = updatedSourceNode.peerConnections || [];
-                            let targetDotOnDropTarget: PeerConnection['targetDot'] = 'W';
-                            if (sourceDotType === 'N') targetDotOnDropTarget = 'S';
-                            else if (sourceDotType === 'S') targetDotOnDropTarget = 'N';
-                            const alreadyConnected = updatedSourceNode.peerConnections.some(pc => pc.targetNodeId === dropTargetNode.id && pc.sourceDot === sourceDotType && pc.targetDot === targetDotOnDropTarget);
-                            if (!alreadyConnected) {
-                                updatedSourceNode.peerConnections.push({ targetNodeId: dropTargetNode.id, sourceDot: sourceDotType, targetDot: targetDotOnDropTarget });
-                                map[sourceNodeIndex] = updatedSourceNode;
-                                toast({ title: "Nodes Linked", description: `"${updatedSourceNode.title}" to "${dropTargetNode.title}".` });
-                            } else toast({ title: "Already Linked" });
-                            return map;
-                        });
-                    }
-                } else handleInitiateAddNode(sourceNodeId, sourceDotType);
-            } else if (!isConsideredDrag && clickInfo) handleInitiateAddNode(sourceNodeId, sourceDotType);
-        } else if (!isConsideredDrag && clickInfo) {
-            const finalCoords = getPointerCoords(event);
-            const timeElapsed = Date.now() - clickInfo.timestamp;
-            const deltaX = finalCoords.clientX - clickInfo.clientX;
-            const deltaY = finalCoords.clientY - clickInfo.clientY;
-            if ((deltaX * deltaX + deltaY * deltaY) < 25 && timeElapsed < 300) {
-              if (clickInfo.targetElement && (clickInfo.targetElement as HTMLElement).closest('[data-node-id]') &&
-                 !(clickInfo.targetElement as HTMLElement).closest('[data-dot-type]') &&
-                 !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-dot-id]') &&
-                 !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-title-button]') &&
-                 !(clickInfo.targetElement as HTMLElement).closest('[data-action-button="add-child"]')) {
-                const clickedStep = editableRoadmap.find(s => s.id === sourceNodeId);
-                if (clickedStep) handleEditCanvasNode(clickedStep);
-              }
-            }
-        }
-        activeConnectionLinePreviewRef.current = null;
-        nodeDragInfoRef.current = null;
-        clickStartInfoRef.current = null;
-        isDraggingRef.current = false;
-        setIsPointerDown(false);
-        forceRender();
-    }, [isPointerDown, getPointerCoords, editableRoadmap, toast, handleInitiateAddNode, handleEditCanvasNode, diffTarget, forceRender]);
-
+          }
+      }
+      activeConnectionLinePreviewRef.current = null;
+      nodeDragInfoRef.current = null;
+      clickStartInfoRef.current = null;
+      isDraggingRef.current = false;
+      setIsPointerDown(false);
+      forceRender();
+  }, [isPointerDown, getPointerCoords, editableRoadmap, toast, handleInitiateAddNode, handleEditCanvasNode, diffTarget, forceRender]);
 
   return {
     user, authLoading, planId, isValidPlanId,
@@ -632,11 +657,11 @@ export const usePlanLogic = () => {
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
     handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel,
     nodeToDelete, setNodeToDelete, confirmDeleteNode,
-    handleNodeInteractionStart, activeConnectionLinePreviewRef,
+    handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
     handleGlobalMove, handleGlobalPointerUp, isPointerDown,
     isVersionHistorySheetOpen, setIsVersionHistorySheetOpen, planVersionsData, isLoadingVersions, refetchPlanVersions,
     handleViewChangesClick, handleExitDiffView, diffTarget, addedNodeIds, persistedNodeIds, removedNodeTitles, diffDetailsVersionId,
-    isRestoreConfirmOpen, setIsRestoreConfirmOpen, versionToRestore, handleRestoreVersion, confirmRestore,
+    isRestoreConfirmOpen, setIsRestoreConfirmOpen, versionToRestore, handleRestoreVersion, confirmRestore, restorePlanMutation,
     isAddNodeDialogOpen, setIsAddNodeDialogOpen, targetParentIdForDialog, initiatingDotTypeForDialog, handleAddNode,
     childItemManagementContextRef, isEditChildItemDialogOpen, setIsEditChildItemDialogOpen, dynamicChildDialogTitle,
     defaultChildDialogTitle, setDefaultChildDialogTitle, defaultChildDialogDescription, setDefaultChildDialogDescription,
@@ -644,15 +669,16 @@ export const usePlanLogic = () => {
     onAddGrandchildToChildDataItem: handleAddGrandchildToChildDataItem,
     onAddChildItemToNode: handleAddChildItemToNodeFromCard,
     onChildItemTitleClick: handleChildItemCanvasNodeFocus,
-    canEditPlan, saveRoadmapChanges,
+    canEditPlan, saveRoadmapChanges, saveRoadmapMutation,
     savePlanSettingsMutation, handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
-    planDataForDialog, // Pass this to PlanDetailPage to then pass to PlanInfoDialog
+    planDataForDialog,
     originalEditingChildItemData, setOriginalEditingChildItemData,
-    // Permissions
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
+    handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
     forceRender,
+    handleInitiateAddNode,
   };
 };
 
