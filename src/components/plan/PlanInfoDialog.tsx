@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription, // Import DialogDescription
+  DialogDescription,
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -118,7 +118,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   }, [currentUserFromAuth, planData]);
 
   useEffect(() => {
-    console.log('[PlanInfoDialog] Effect: isOpen or planData changed. isOpen:', isOpen, 'planData:', planData ? 'Exists' : 'NULL');
     if (planData && isOpen) {
       setName(planData.name);
       setDescription(planData.description || '');
@@ -126,7 +125,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       setEditability(planData.editability);
       setCurrentViewUserIds(planData.viewUserIds?.filter(uid => uid !== planData.ownerId) || []);
       setCurrentEditUserIds(planData.editUserIds?.filter(uid => uid !== planData.ownerId) || []);
-       console.log('[PlanInfoDialog] Effect: State updated from planData.');
     }
   }, [planData, isOpen]);
 
@@ -313,7 +311,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          <DialogDescription className="sr-only">View and manage plan details, settings, and permissions for the collaboration plan.</DialogDescription>
+          <DialogDescription className="sr-only">View and manage plan details, settings, and permissions for the collaboration plan titled: {planData?.name || 'current plan'}</DialogDescription>
         </DialogHeader>
         
         {!planData && isOpen ? (
@@ -414,3 +412,4 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
+

@@ -78,10 +78,7 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
         <Button
           variant="outline"
           size="sm"
-          onClick={() => {
-            console.log('[PlanHeader] Info button CLICKED!');
-            onOpenInfo();
-          }}
+          onClick={onOpenInfo}
           className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm"
         >
           <Info className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Info
@@ -96,3 +93,4 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
   );
 };
 PlanHeader.displayName = 'PlanHeader';
+

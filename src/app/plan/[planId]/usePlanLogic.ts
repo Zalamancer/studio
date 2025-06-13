@@ -88,59 +88,43 @@ export const usePlanLogic = () => {
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
   const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
 
-  console.log(`[usePlanLogic] Initial planDataForDialog state:`, planDataForDialog ? 'Exists' : 'NULL');
-  useEffect(() => {
-    console.log(`%c[usePlanLogic] planDataForDialog STATE CHANGED. New value:`, "color: magenta; font-weight: bold;", planDataForDialog ? 'Exists' : 'NULL', planDataForDialog);
-  }, [planDataForDialog]);
-
-
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
   const { data: planData, isLoading: isLoadingPlan, error: planError, refetch: refetchPlanData } = useQuery<ClientPlan | null>({
     queryKey: ['plan', planId],
     queryFn: async () => {
-      console.log(`%c[usePlanLogic] planData queryFn: STARTING fetch for planId: ${planId}`, "color: blue;");
       if (planId && isValidPlanId) {
         const result = await getPlanById(planId);
-        console.log(`%c[usePlanLogic] planData queryFn: FETCHED data for planId ${planId}:`, "color: blue;", result ? 'Data received' : 'No data (null)');
         return result;
       }
-      console.log(`%c[usePlanLogic] planData queryFn: planId or isValidPlanId FAILED. planId: ${planId}, isValidPlanId: ${isValidPlanId}`, "color: orange;");
       return null;
     },
     enabled: !!planId && isValidPlanId && !authLoading,
     onSuccess: (data) => {
-      console.log(`%c[usePlanLogic] planData query onSuccess: TRIGGERED. Data received:`, "color: green;", data ? 'Data received' : 'No data (null)');
       if (data) {
-        console.log(`%c[usePlanLogic] planData query onSuccess: Setting editableRoadmap based on received data.`, "color: green;");
         setEditableRoadmap((data.roadmap || []).map(s => sanitizeRoadmapStep(s)));
-        // setPlanDataForDialog is now handled by useEffect below for reliability
+        // setPlanDataForDialog(JSON.parse(JSON.stringify(data))); // This was the old way, now handled by useEffect
       } else {
         setEditableRoadmap([]);
+        // setPlanDataForDialog(null);
       }
     },
     onError: (error) => {
-        console.error(`%c[usePlanLogic] planData query onError: FAILED to fetch plan for planId ${planId}:`, "color: red; font-weight: bold;", error);
         setPlanDataForDialog(null);
         setEditableRoadmap([]);
     }
   });
 
-  // Effect to update planDataForDialog when planData changes
   useEffect(() => {
-    console.log(`%c[usePlanLogic] useEffect for planData change: planData is`, "color: #DA70D6;", planData ? 'Populated' : 'NULL or Undefined');
     if (planData) {
       try {
         const deepCopiedData = JSON.parse(JSON.stringify(planData));
-        console.log(`%c[usePlanLogic] useEffect for planData change: Setting planDataForDialog with deep copy of planData.`, "color: #DA70D6;");
         setPlanDataForDialog(deepCopiedData);
       } catch (e) {
         console.error("[usePlanLogic] useEffect for planData change: FAILED to deep copy planData for dialog:", e);
         setPlanDataForDialog(null);
       }
     } else if (!isLoadingPlan && planId && isValidPlanId) {
-      // If planData is null/undefined after loading and planId is valid, it means not found or error.
-      console.log(`%c[usePlanLogic] useEffect for planData change: planData is null/undefined after load, setting planDataForDialog to null.`, "color: #DA70D6;");
       setPlanDataForDialog(null);
     }
   }, [planData, isLoadingPlan, planId, isValidPlanId]);
@@ -179,11 +163,11 @@ export const usePlanLogic = () => {
   const savePlanSettingsMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; updates: UpdatePlanData }) =>
       updatePlanDetails(payload.planId, payload.currentUserId, payload.updates),
-    onSuccess: (_, variables) => {
+    onSuccess: async (_, variables) => {
       toast({ title: "Plan Settings Saved", description: "Your plan settings have been updated." });
       if (variables.planId) {
-         queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
-         refetchPlanData(); 
+         await refetchPlanData();
+         // planDataForDialog will be updated by the useEffect watching planData
       }
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan settings." })
@@ -192,13 +176,12 @@ export const usePlanLogic = () => {
   const saveRoadmapMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; roadmapToSave: RoadmapStep[] }) =>
       updatePlanDetails(payload.planId, payload.currentUserId, { roadmap: payload.roadmapToSave, updatedAt: serverTimestamp() as any }),
-    onSuccess: (_, variables) => {
+    onSuccess: async (_, variables) => {
       toast({ title: "Plan State Saved", description: "The current plan state has been saved." });
       if (variables.planId) {
-        queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
-        queryClient.invalidateQueries({ queryKey: ['planVersions', variables.planId] });
-        refetchPlanData(); 
-        refetchPlanVersions();
+        await refetchPlanData();
+        await refetchPlanVersions();
+         // planDataForDialog will be updated by the useEffect watching planData
       }
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan." })
@@ -207,12 +190,11 @@ export const usePlanLogic = () => {
   const restorePlanMutation = useMutation({
     mutationFn: (payload: { planId: string; versionIdToRestore: string; currentUserId: string; }) =>
       restorePlanToVersion(payload.planId, payload.versionIdToRestore, payload.currentUserId),
-    onSuccess: (_, variables) => {
+    onSuccess: async (_, variables) => {
       toast({ title: "Plan Restored", description: "The plan has been restored." });
-      queryClient.invalidateQueries({ queryKey: ['plan', variables.planId] });
-      queryClient.invalidateQueries({ queryKey: ['planVersions', variables.planId] });
-      refetchPlanData(); 
-      refetchPlanVersions();
+      await refetchPlanData();
+      await refetchPlanVersions();
+      // planDataForDialog will be updated by the useEffect watching planData
       setIsRestoreConfirmOpen(false); setVersionToRestore(null);
       handleExitDiffView();
     },
@@ -717,7 +699,7 @@ export const usePlanLogic = () => {
     canEditPlan, saveRoadmapChanges, saveRoadmapMutation,
     savePlanSettingsMutation, handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
-    planDataForDialog, // Expose this directly
+    planDataForDialog,
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,

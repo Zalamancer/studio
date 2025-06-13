@@ -87,11 +87,6 @@ export default function PlanDetailPage() {
   const controlOffset = 100;
 
   useEffect(() => {
-    console.log('[PlanDetailPage] isPlanInfoDialogOpen state changed (from page):', isPlanInfoDialogOpen);
-  }, [isPlanInfoDialogOpen]);
-
-
-  useEffect(() => {
     if (isPointerDown && canvasRef.current) {
       const currentCanvasRef = canvasRef.current;
       const moveHandler = (event: MouseEvent | TouchEvent) => handleGlobalMove(event, currentCanvasRef);
@@ -214,7 +209,6 @@ export default function PlanDetailPage() {
 
   return (
     <div className="flex flex-col flex-1 h-full">
-       <h1 className="text-3xl font-bold text-center text-blue-600 p-4 bg-yellow-100 border-b-4 border-blue-700">DEBUG: PLAN PAGE UPDATED - {new Date().toLocaleTimeString()}</h1>
       <PlanHeader
         planData={planData}
         ownerProfile={ownerProfile}
@@ -223,10 +217,7 @@ export default function PlanDetailPage() {
         onSavePlan={saveRoadmapChanges}
         isSavingPlan={savePlanSettingsMutation.isPending || restorePlanMutation.isPending}
         onOpenHistory={() => setIsVersionHistorySheetOpen(true)}
-        onOpenInfo={() => {
-          console.log('[PlanDetailPage] onOpenInfo called from PlanHeader. Setting isPlanInfoDialogOpen to true.');
-          setIsPlanInfoDialogOpen(true);
-        }}
+        onOpenInfo={() => setIsPlanInfoDialogOpen(true)}
         onInitiateAddNode={() => handleInitiateAddNode(null)}
         diffTargetActive={!!diffTarget}
       />
@@ -270,25 +261,27 @@ export default function PlanDetailPage() {
         </ScrollArea>
       </div>
 
-      <PlanInfoDialog
-        isOpen={isPlanInfoDialogOpen}
-        onOpenChange={setIsPlanInfoDialogOpen}
-        planData={planDataForDialog}
-        ownerProfile={ownerProfile}
-        isPlanOwner={canEditPlan}
-        onSaveSettings={handleSavePlanSettings}
-        isSavingSettings={savePlanSettingsMutation.isPending}
-        viewPermissionsSearch={viewPermissionsSearch}
-        setViewPermissionsSearch={setViewPermissionsSearch}
-        editPermissionsSearch={editPermissionsSearch}
-        setEditPermissionsSearch={setEditPermissionsSearch}
-        viewPermissionSuggestions={viewPermissionSuggestions}
-        editPermissionSuggestions={editPermissionSuggestions}
-        onAddUserToViewers={handleAddUserToViewers}
-        onRemoveUserFromViewers={handleRemoveUserFromViewers}
-        onAddUserToEditors={handleAddUserToEditors}
-        onRemoveUserFromEditors={handleRemoveUserFromEditors}
-      />
+      {planDataForDialog && (
+        <PlanInfoDialog
+          isOpen={isPlanInfoDialogOpen}
+          onOpenChange={setIsPlanInfoDialogOpen}
+          planData={planDataForDialog}
+          ownerProfile={ownerProfile}
+          isPlanOwner={canEditPlan}
+          onSaveSettings={handleSavePlanSettings}
+          isSavingSettings={savePlanSettingsMutation.isPending}
+          viewPermissionsSearch={viewPermissionsSearch}
+          setViewPermissionsSearch={setViewPermissionsSearch}
+          editPermissionsSearch={editPermissionsSearch}
+          setEditPermissionsSearch={setEditPermissionsSearch}
+          viewPermissionSuggestions={viewPermissionSuggestions}
+          editPermissionSuggestions={editPermissionSuggestions}
+          onAddUserToViewers={handleAddUserToViewers}
+          onRemoveUserFromViewers={handleRemoveUserFromViewers}
+          onAddUserToEditors={handleAddUserToEditors}
+          onRemoveUserFromEditors={handleRemoveUserFromEditors}
+        />
+      )}
        <AddRoadmapStepDialog
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
@@ -388,3 +381,4 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
