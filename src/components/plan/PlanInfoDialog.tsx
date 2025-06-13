@@ -10,8 +10,8 @@ import {
   DialogTitle,
   DialogDescription as DialogPrimitiveDescription, // Aliased to avoid conflict
   DialogFooter,
-  DialogClose, // Keep for potential future use, though current close is via X
 } from '@/components/ui/dialog';
+import * as DialogPrimitive from "@radix-ui/react-dialog"; // Import all from radix for DialogPrimitive.Close
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
@@ -37,6 +37,7 @@ import {
   Trash2,
   Search,
   PlusCircle,
+  X, // Import X icon for the new close button
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -341,7 +342,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       )}
       <div
         className="space-y-1 py-1 flex-grow"
-        style={{ maxHeight: '10rem', overflowY: 'auto' }}
+        style={{ maxHeight: '10rem', overflowY: 'auto' }} // Directly using inline style for scroll
       >
         {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
           Array.from({length: Math.min(3, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -358,19 +359,27 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] max-w-6xl max-h-[90vh] flex flex-col p-0">
         <DialogHeader className="pt-6 px-6 pb-4 border-b flex flex-row justify-between items-center">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-grow min-w-0">
             <FileText className="h-5 w-5 text-primary flex-shrink-0" />
-            <DialogTitle>Plan Information & Settings</DialogTitle>
+            <DialogTitle className="truncate">{name || initialPlanData?.name || 'Plan Details'}</DialogTitle>
             <DialogPrimitiveDescription className="sr-only">
               View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
               Owned by {ownerProfile?.displayName || '...'}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
             </DialogPrimitiveDescription>
           </div>
-          {isOwnerForUIDisplay && ( 
-            <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm" className="ml-auto"> {/* Added ml-auto for desktop */}
-              {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save Settings
-            </Button>
-          )}
+          <div className="flex items-center gap-2 flex-shrink-0">
+            {isOwnerForUIDisplay && ( 
+              <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm">
+                {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save Settings
+              </Button>
+            )}
+            <DialogPrimitive.Close asChild>
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <X className="h-4 w-4" />
+                <span className="sr-only">Close</span>
+              </Button>
+            </DialogPrimitive.Close>
+          </div>
         </DialogHeader>
         
         {!initialPlanData && isOpen ? (
@@ -474,8 +483,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 </div>
               </div>
             </ScrollArea>
-            {/* Footer is now empty or could have a close button if desired. Removed "Save Settings" from here. */}
-            <DialogFooter className="p-6 pt-4 border-t mt-auto hidden"> 
+            <DialogFooter className="hidden"> 
+              {/* Footer can be used for a general close button if needed, but header actions are primary */}
             </DialogFooter>
           </>
         ) : null}
@@ -483,6 +492,3 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
-
-    
-
