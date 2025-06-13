@@ -8,7 +8,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogPrimitiveDescription,
+  DialogDescription as DialogPrimitiveDescription, // Renamed to avoid conflict
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area'; // Keep main ScrollArea for dialog content
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import {
   Loader2,
@@ -339,11 +339,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
         </Popover>
       )}
       <div 
-        className={cn(
-            "space-y-1 py-1", 
-            currentUserIdsForSection.length === 0 && "border-none", 
-            "max-h-20 overflow-y-auto" // Directly apply max-height and overflow
-        )}
+        className="space-y-1 py-1 max-h-20 overflow-y-auto"
+        style={{ maxHeight: '80px' }} // Direct style for max-height
       >
         {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
           Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -358,10 +355,10 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg max-h-[90vh] flex flex-col">
+      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
-          <DialogPrimitiveDescription className="sr-only">
+           <DialogPrimitiveDescription className="sr-only">
             View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
             Owned by {ownerProfile?.displayName || '...'}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
           </DialogPrimitiveDescription>
@@ -374,50 +371,65 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           </div>
         ) : initialPlanData ? (
           <>
-            <ScrollArea className="flex-grow min-h-0 pr-2"> {/* Main scroll area for dialog content */}
-              <div className="space-y-6 py-2 px-6 pr-4">
-                <div>
-                  <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
-                  <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
-                </div>
-                <div>
-                  <Label htmlFor="plan-description" className="text-sm">Description</Label>
-                  <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
-                </div>
-                
-                {isOwnerForUIDisplay && (
-                  <>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div>
-                        <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
-                        <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
-                          <SelectTrigger id="plan-visibility" className="text-sm h-9">
-                            <SelectValue placeholder="Select visibility" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
-                            <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
-                            <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
-                        <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
-                          <SelectTrigger id="plan-editability" className="text-sm h-9">
-                            <SelectValue placeholder="Select editability" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
-                            <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
+            <ScrollArea className="flex-grow min-h-0"> {/* Main scroll area for dialog content */}
+              <div className="p-6 space-y-6">
+                <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
+                  {/* Left Column */}
+                  <div className="md:w-1/2 space-y-6">
+                    <div>
+                      <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
+                      <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
                     </div>
+                    <div>
+                      <Label htmlFor="plan-description" className="text-sm">Description</Label>
+                      <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
+                    </div>
+                    
+                    {isOwnerForUIDisplay && (
+                      <>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                          <div>
+                            <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
+                            <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
+                              <SelectTrigger id="plan-visibility" className="text-sm h-9">
+                                <SelectValue placeholder="Select visibility" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
+                                <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
+                                <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
+                            <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
+                              <SelectTrigger id="plan-editability" className="text-sm h-9">
+                                <SelectValue placeholder="Select editability" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
+                                <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                      </>
+                    )}
 
-                    <div className="space-y-3 pt-2">
+                    <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-4">
+                      <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId)}</p>
+                      <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
+                      <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
+                      <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
+                    </div>
+                  </div>
+
+                  {/* Right Column */}
+                  {isOwnerForUIDisplay && (
+                    <div className="md:w-1/2 space-y-4">
                       {visibility !== 'public' && renderPermissionSection(
-                        "Manage View Access (for Private/Unlisted plans)",
+                        "Manage View Access (Private/Unlisted)",
                         currentViewUserIds,
                         viewerProfilesMap,
                         isLoadingViewerProfiles,
@@ -449,14 +461,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         editSuggestionsPopoverRef
                       )}
                     </div>
-                  </>
-                )}
-
-                <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-4">
-                  <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId)}</p>
-                  <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
-                  <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
-                  <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
+                  )}
                 </div>
               </div>
             </ScrollArea>
@@ -474,3 +479,4 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   );
 };
 
+    
