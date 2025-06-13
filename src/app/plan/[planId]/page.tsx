@@ -64,7 +64,7 @@ export default function PlanDetailPage() {
     handleViewChangesClick, handleExitDiffView, diffTarget, addedNodeIds, persistedNodeIds, removedNodeTitles, diffDetailsVersionId,
     isRestoreConfirmOpen, setIsRestoreConfirmOpen, versionToRestore, handleRestoreVersion, confirmRestore, restorePlanMutation,
     isAddNodeDialogOpen, setIsAddNodeDialogOpen, handleAddNode,
-    childItemManagementContextRef, isEditChildItemDialogOpen, setIsEditChildItemDialogOpen, dynamicChildDialogTitle,
+    childItemManagementContextRef, isEditChildItemDialogOpen, setIsEditChildItemDialogOpen, isChildItemDialogSubmitting, dynamicChildDialogTitle, // Added isChildItemDialogSubmitting
     defaultChildDialogTitle, setDefaultChildDialogTitle, defaultChildDialogDescription, setDefaultChildDialogDescription,
     handleChildItemDialogSubmit, handleEditChildItemText, handleDeleteChildItem,
     onAddGrandchildToChildDataItem, onAddChildItemToNode, onChildItemTitleClick: handleChildItemCanvasNodeFocus,
@@ -292,7 +292,7 @@ export default function PlanDetailPage() {
         isOpen={isEditChildItemDialogOpen}
         onOpenChange={setIsEditChildItemDialogOpen}
         onSubmit={handleChildItemDialogSubmit}
-        isSubmitting={false}
+        isSubmitting={isChildItemDialogSubmitting} // Use the correct submitting state
         dialogTitle={dynamicChildDialogTitle}
         defaultTitle={defaultChildDialogTitle}
         defaultDescription={defaultChildDialogDescription}
