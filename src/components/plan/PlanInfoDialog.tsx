@@ -339,8 +339,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
         </Popover>
       )}
       <div 
-        className="space-y-1 py-1 max-h-20 overflow-y-auto"
-        style={{ maxHeight: '80px' }} // Direct style for max-height
+        className="space-y-1 py-1 overflow-y-auto"
+        style={{ maxHeight: '80px' }}
       >
         {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
           Array.from({length: Math.min(2, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -355,7 +355,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl max-h-[90vh] flex flex-col">
+      <DialogContent className="w-[95vw] max-w-6xl max-h-[90vh] flex flex-col">
         <DialogHeader className="pr-10 pt-6 px-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><FileText className="h-5 w-5 text-primary" /> Plan Information & Settings</DialogTitle>
            <DialogPrimitiveDescription className="sr-only">
@@ -371,9 +371,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           </div>
         ) : initialPlanData ? (
           <>
-            <ScrollArea className="flex-grow min-h-0"> {/* Main scroll area for dialog content */}
+            <ScrollArea className="flex-grow min-h-0">
               <div className="p-6 space-y-6">
-                <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
+                <div className="flex flex-col md:flex-row md:gap-x-8 gap-y-6">
                   {/* Left Column */}
                   <div className="md:w-1/2 space-y-6">
                     <div>
