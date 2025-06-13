@@ -115,21 +115,19 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
       <div
         data-header-clickable 
         className={headerClasses}
-        onClick={(e) => { // Changed from onDoubleClick to onClick
+        onClick={(e) => {
           if (diffHighlight) return;
-          // Ensure click is not on a connector dot or other specific interactive element within header
           if (
             !(e.target as HTMLElement).closest('[data-dot-type]') &&
-            !(e.target as HTMLElement).closest('[data-action-button="add-child"]') // Ensure click is not on "Add Child" button
+            !(e.target as HTMLElement).closest('[data-action-button="add-child"]')
           ) {
             e.stopPropagation(); 
-            onEditStep(step); // This should open the panel
+            onEditStep(step);
           }
         }}
       >
         <h3 className="text-sm font-semibold truncate flex-grow" title={step.title}>{step.title}</h3>
         
-        {/* Add Child Item Button - moved into header, styled appropriately */}
         {!diffHighlight && (
           <button
             data-action-button="add-child"
@@ -141,11 +139,11 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                'text-primary-foreground hover:bg-primary-foreground/10'
             )}
             onClick={(e) => {
-              e.stopPropagation(); // Prevent card drag or panel open
+              e.stopPropagation();
               onAddChildItemToNode(step.id);
             }}
-            onMouseDown={(e) => e.stopPropagation()} // Prevent card drag
-            onTouchStart={(e) => e.stopPropagation()} // Prevent card drag
+            onMouseDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             <span className="sr-only">Add child item</span>
@@ -176,12 +174,10 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         )}
       </div>
       <div 
-        className={cn("flex-grow min-h-0 p-2 text-xs space-y-1 overflow-y-auto", // Added overflow-y-auto here
+        className={cn("flex-grow min-h-0 p-2 text-xs space-y-1 overflow-y-auto",
                    diffHighlight === 'persisted' && 'opacity-80')}
-        style={{ backgroundColor: 'hsl(var(--card))' }} // Ensure card background for content area
-        // Removed direct click handler from content area; rely on main div's mouse down + global mouse up for panel open if not dragging.
+        style={{ backgroundColor: 'hsl(var(--card))' }}
       >
-          {/* Description is no longer displayed directly on the card */}
           
           {Array.isArray(step.childrenData) && step.childrenData.length > 0 && (
             <ul className="space-y-0.5 list-none p-0 m-0" style={{paddingTop: `8px`}}>
@@ -238,4 +234,3 @@ RoadmapStepCard.displayName = "RoadmapStepCard";
 
 export default RoadmapStepCard;
 
-    

@@ -238,9 +238,14 @@ export const usePlanLogic = () => {
 
   const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
     if (diffTarget) return;
+    console.log("[usePlanLogic] handleEditCanvasNode CALLED for node:", nodeToEdit.id, nodeToEdit.title);
     setEditingTarget({ type: 'node', data: nodeToEdit });
     setIsStepDetailSheetOpen(true);
-  }, [diffTarget]);
+    childItemManagementContextRef.current = null;
+    setDefaultChildDialogTitle("");
+    setDefaultChildDialogDescription("");
+    setOriginalEditingChildItemData(null);
+  }, [diffTarget, setEditingTarget, setIsStepDetailSheetOpen, setDefaultChildDialogTitle, setDefaultChildDialogDescription, setOriginalEditingChildItemData]);
 
   const handleChildItemCanvasNodeFocus = useCallback((childItemId: string, parentCanvasNodeId: string) => {
     if (diffTarget) return;
@@ -248,10 +253,14 @@ export const usePlanLogic = () => {
     if (!parentNode) { toast({ variant: "destructive", title: "Error", description: "Parent node not found."}); return; }
     const childItem = parentNode.childrenData.find(ci => ci.id === childItemId);
     if (!childItem) { toast({ variant: "destructive", title: "Error", description: "Child item not found."}); return; }
+    
+    console.log("[usePlanLogic] handleChildItemCanvasNodeFocus CALLED for childItem:", childItem.id, childItem.title, "in parent:", parentNode.id);
+    
     setEditingTarget({ type: 'childItem', data: childItem, parentNode: parentNode });
-    setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem)));
-    setIsStepDetailSheetOpen(true);
-  }, [editableRoadmap, toast, diffTarget]);
+    setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem))); // Deep copy for original data
+    setIsStepDetailSheetOpen(true); // Open the main panel for node-like child items.
+                                    // If direct text editing of child items is done elsewhere, this might change.
+  }, [editableRoadmap, toast, diffTarget, setEditingTarget, setIsStepDetailSheetOpen, setOriginalEditingChildItemData]);
 
   const handleNodeDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
     if (!canEditPlan || diffTarget) return;
@@ -261,6 +270,14 @@ export const usePlanLogic = () => {
   const handleChildItemDetailUpdateInPanel = useCallback((updatedChildItem: ChildDataItem, parentNodeId: string) => {
     if (!canEditPlan || diffTarget) return;
     setEditableRoadmap(prev => prev.map(parentNode => parentNode.id === parentNodeId ? { ...parentNode, childrenData: parentNode.childrenData.map(ci => ci.id === updatedChildItem.id ? updatedChildItem : ci) } : parentNode ));
+    // If this child item was also a canvas node, update its title/desc on the canvas
+    if (updatedChildItem.canvasNodeIdForThisItem) {
+      setEditableRoadmap(prev => prev.map(node => 
+        node.id === updatedChildItem.canvasNodeIdForThisItem 
+        ? { ...node, title: updatedChildItem.title, description: updatedChildItem.description } 
+        : node
+      ));
+    }
   }, [canEditPlan, diffTarget]);
 
   const handleInitiateAddNode = useCallback((sourceNodeId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
@@ -336,7 +353,7 @@ export const usePlanLogic = () => {
     return { updatedRoadmap: newRoadmap, spawnedNodeId: newSpawnedNodeId };
   }, [toast]);
 
-  const handleAddChildItemToNodeFromCard = useCallback((parentNodeId: string) => {
+  const handleAddChildItemToNode = useCallback((parentNodeId: string) => { // Changed name for clarity
     if (!canEditPlan || diffTarget) return;
     const parentNode = editableRoadmap.find(n => n.id === parentNodeId);
     if (!parentNode) { toast({ variant: "destructive", title: "Error", description: "Parent node not found." }); return; }
@@ -344,7 +361,7 @@ export const usePlanLogic = () => {
     setDynamicChildDialogTitle(`Add Item to Step: "${parentNode.title}"`);
     setDefaultChildDialogTitle(""); setDefaultChildDialogDescription("");
     setIsEditChildItemDialogOpen(true);
-  }, [canEditPlan, editableRoadmap, toast, diffTarget]);
+  }, [canEditPlan, editableRoadmap, toast, diffTarget, setDynamicChildDialogTitle, setDefaultChildDialogTitle, setDefaultChildDialogDescription, setIsEditChildItemDialogOpen]);
 
   const handleAddGrandchildToChildDataItem = useCallback((clickedChildItemId: string, parentCanvasNodeIdOfClickedItem: string) => {
     if (!canEditPlan || diffTarget) return;
@@ -355,31 +372,31 @@ export const usePlanLogic = () => {
     setDynamicChildDialogTitle(`Add Item to "${childItemWhoseDotWasClicked.title}"`);
     setDefaultChildDialogTitle(""); setDefaultChildDialogDescription("");
     setIsEditChildItemDialogOpen(true);
-  }, [canEditPlan, editableRoadmap, toast, diffTarget]);
+  }, [canEditPlan, editableRoadmap, toast, diffTarget, setDynamicChildDialogTitle, setDefaultChildDialogTitle, setDefaultChildDialogDescription, setIsEditChildItemDialogOpen]);
 
   const handleChildItemDialogSubmit = useCallback((data: { title: string; description?: string }) => {
     if (!childItemManagementContextRef.current) {
-      toast({variant: "warning", title: "Action Blocked", description: "Cannot determine action context."});
-      setIsEditChildItemDialogOpen(false); // Close dialog if context is broken
+      toast({ variant: "warning", title: "Action Blocked", description: "Cannot determine action context." });
+      setIsEditChildItemDialogOpen(false);
       return;
     }
     if (!canEditPlan || diffTarget) {
-      toast({variant: "warning", title: "Action Blocked", description: "Cannot perform action currently."});
+      toast({ variant: "warning", title: "Action Blocked", description: "Cannot perform action currently." });
       return;
     }
-    
+
     setIsChildItemDialogSubmitting(true);
-    let newRoadmapCandidate = [...editableRoadmap];
+    let finalRoadmap = [...editableRoadmap];
     let modificationSuccessful = false;
     const context = childItemManagementContextRef.current!;
 
     try {
       if (context.operation === 'createGrandchild') {
-        const spawnResult = handleSpawnChildDataItemAsCanvasNode(newRoadmapCandidate, context.targetChildToBecomeParentId, context.currentParentOfTargetChildId);
-        newRoadmapCandidate = spawnResult.updatedRoadmap; 
+        const spawnResult = handleSpawnChildDataItemAsCanvasNode(finalRoadmap, context.targetChildToBecomeParentId, context.currentParentOfTargetChildId);
+        finalRoadmap = spawnResult.updatedRoadmap;
         const spawnedNodeIdForContext = spawnResult.spawnedNodeId;
         if (spawnedNodeIdForContext) {
-          const parentIdx = newRoadmapCandidate.findIndex(node => node.id === spawnedNodeIdForContext);
+          const parentIdx = finalRoadmap.findIndex(node => node.id === spawnedNodeIdForContext);
           if (parentIdx > -1) {
             const newGrandchildItem: ChildDataItem = {
               id: `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`,
@@ -387,17 +404,16 @@ export const usePlanLogic = () => {
               parentCanvasNodeId: spawnedNodeIdForContext,
               canvasNodeIdForThisItem: null,
             };
-            // Ensure childrenData exists before pushing
-            if (!Array.isArray(newRoadmapCandidate[parentIdx].childrenData)) {
-                newRoadmapCandidate[parentIdx].childrenData = [];
+            if (!Array.isArray(finalRoadmap[parentIdx].childrenData)) {
+              finalRoadmap[parentIdx].childrenData = [];
             }
-            newRoadmapCandidate[parentIdx].childrenData.push(newGrandchildItem);
+            finalRoadmap[parentIdx].childrenData.push(newGrandchildItem);
             modificationSuccessful = true;
           } else { console.error("Error in 'createGrandchild': Spawned/target parent node not found in temp roadmap."); }
         } else { console.error("Error in 'createGrandchild': Failed to spawn or identify parent node."); }
-      
+
       } else if (context.operation === 'createChild') {
-        const parentIdx = newRoadmapCandidate.findIndex(node => node.id === context.targetParentNodeId);
+        const parentIdx = finalRoadmap.findIndex(node => node.id === context.targetParentNodeId);
         if (parentIdx > -1) {
           const newChildItem: ChildDataItem = {
             id: `childitem-${Date.now()}-${uuidv4().substring(0, 8)}`,
@@ -405,24 +421,26 @@ export const usePlanLogic = () => {
             parentCanvasNodeId: context.targetParentNodeId,
             canvasNodeIdForThisItem: null,
           };
-          if (!Array.isArray(newRoadmapCandidate[parentIdx].childrenData)) {
-            newRoadmapCandidate[parentIdx].childrenData = [];
+          if (!Array.isArray(finalRoadmap[parentIdx].childrenData)) {
+            finalRoadmap[parentIdx].childrenData = [];
           }
-          newRoadmapCandidate[parentIdx].childrenData.push(newChildItem);
+          finalRoadmap[parentIdx].childrenData.push(newChildItem);
           modificationSuccessful = true;
         } else { console.error("Error in 'createChild': Parent node not found."); }
-      
+
       } else if (context.operation === 'edit') {
-        const parentIdx = newRoadmapCandidate.findIndex(node => node.id === context.parentNodeId);
+        const parentIdx = finalRoadmap.findIndex(node => node.id === context.parentNodeId);
         if (parentIdx > -1) {
           let itemThatWasEdited: ChildDataItem | undefined;
-          newRoadmapCandidate[parentIdx].childrenData = newRoadmapCandidate[parentIdx].childrenData.map(item => 
+          const updatedChildrenData = finalRoadmap[parentIdx].childrenData.map(item =>
             item.id === context.itemToEditId ? (itemThatWasEdited = { ...item, title: data.title, description: data.description || null }) : item
           );
+          finalRoadmap[parentIdx] = { ...finalRoadmap[parentIdx], childrenData: updatedChildrenData };
+
           if (itemThatWasEdited?.canvasNodeIdForThisItem) {
-            const canvasNodeIdx = newRoadmapCandidate.findIndex(node => node.id === itemThatWasEdited!.canvasNodeIdForThisItem);
+            const canvasNodeIdx = finalRoadmap.findIndex(node => node.id === itemThatWasEdited!.canvasNodeIdForThisItem);
             if (canvasNodeIdx > -1) {
-              newRoadmapCandidate[canvasNodeIdx] = { ...newRoadmapCandidate[canvasNodeIdx], title: data.title, description: data.description || null };
+              finalRoadmap[canvasNodeIdx] = { ...finalRoadmap[canvasNodeIdx], title: data.title, description: data.description || null };
             }
           }
           modificationSuccessful = true;
@@ -430,15 +448,15 @@ export const usePlanLogic = () => {
       }
 
       if (modificationSuccessful) {
-        setEditableRoadmap(newRoadmapCandidate);
+        setEditableRoadmap(finalRoadmap);
         if (childItemManagementContextRef.current?.operation !== 'edit') {
           toast({ title: "Item Action Complete", description: "Remember to save the plan changes." });
         }
         setIsEditChildItemDialogOpen(false);
         childItemManagementContextRef.current = null;
       } else {
-        if (!toast.isActive('spawn-error')) { // Check if a specific error was already toasted by a sub-function
-             toast({variant: "destructive", title: "Action Failed", description: "Could not process item action. Please check console for details."});
+        if (!toast.isActive('spawn-error')) { // Avoid double-toasting if sub-function already toasted
+          toast({ variant: "destructive", title: "Action Failed", description: "Could not process item action. Please check console." });
         }
       }
     } catch (error) {
@@ -448,8 +466,8 @@ export const usePlanLogic = () => {
       setIsChildItemDialogSubmitting(false);
     }
   }, [
-    canEditPlan, diffTarget, editableRoadmap, 
-    toast, handleSpawnChildDataItemAsCanvasNode, setIsEditChildItemDialogOpen, setEditableRoadmap
+    canEditPlan, diffTarget, editableRoadmap, toast, handleSpawnChildDataItemAsCanvasNode,
+    setIsEditChildItemDialogOpen, setEditableRoadmap // Removed childItemManagementContextRef from deps as it's a ref
   ]);
 
 
@@ -457,11 +475,21 @@ export const usePlanLogic = () => {
     if (!canEditPlan || diffTarget) return;
     const parentNode = editableRoadmap.find(n => n.id === parentNodeIdOfChildItem);
     if (!parentNode) { toast({ variant: "destructive", title: "Error", description: "Parent node not found." }); return; }
+    
     childItemManagementContextRef.current = { operation: 'edit', itemToEditId: childItem.id, parentNodeId: parentNodeIdOfChildItem };
-    setEditingTarget({ type: 'childItem', data: childItem, parentNode });
-    setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem)));
-    setIsStepDetailSheetOpen(true);
-  }, [canEditPlan, diffTarget, editableRoadmap, toast]);
+    
+    // Instead of setting editingTarget for the main panel, directly open the EditChildItemDialog
+    setDynamicChildDialogTitle(`Edit Item: "${childItem.title}"`);
+    setDefaultChildDialogTitle(childItem.title);
+    setDefaultChildDialogDescription(childItem.description || "");
+    setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem))); // For pre-filling the dialog
+    setIsEditChildItemDialogOpen(true); // Open the specific dialog for editing text
+
+    // Do not open the main side panel:
+    // setEditingTarget({ type: 'childItem', data: childItem, parentNode });
+    // setIsStepDetailSheetOpen(true);
+
+  }, [canEditPlan, diffTarget, editableRoadmap, toast, setDynamicChildDialogTitle, setDefaultChildDialogTitle, setDefaultChildDialogDescription, setIsEditChildItemDialogOpen, setOriginalEditingChildItemData]);
 
   const handleDeleteChildItem = useCallback((childItemIdToDelete: string, parentCanvasNodeIdOfItem: string) => {
     if (!canEditPlan || diffTarget) return;
@@ -704,7 +732,10 @@ export const usePlanLogic = () => {
                !(clickInfo.targetElement as HTMLElement).closest('[data-child-item-title-button]') &&
                !(clickInfo.targetElement as HTMLElement).closest('[data-action-button="add-child"]')) {
               const clickedStep = editableRoadmap.find(s => s.id === sourceNodeId);
-              if (clickedStep) handleEditCanvasNode(clickedStep);
+              if (clickedStep) {
+                  console.log(`[usePlanLogic] handleGlobalPointerUp determined CLICK on node ${sourceNodeId}. Calling handleEditCanvasNode.`);
+                  handleEditCanvasNode(clickedStep);
+              }
             }
           }
       }
@@ -733,7 +764,7 @@ export const usePlanLogic = () => {
     defaultChildDialogTitle, setDefaultChildDialogTitle, defaultChildDialogDescription, setDefaultChildDialogDescription,
     handleChildItemDialogSubmit, handleEditChildItemText, handleDeleteChildItem,
     onAddGrandchildToChildDataItem: handleAddGrandchildToChildDataItem,
-    onAddChildItemToNode: handleAddChildItemToNodeFromCard,
+    onAddChildItemToNode: handleAddChildItemToNode,
     onChildItemTitleClick: handleChildItemCanvasNodeFocus,
     canEditPlan, saveRoadmapChanges, saveRoadmapMutation,
     savePlanSettingsMutation, handleSavePlanSettings,
@@ -748,3 +779,4 @@ export const usePlanLogic = () => {
   };
 };
     
+
