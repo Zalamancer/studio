@@ -1,4 +1,5 @@
 
+// src/components/board-page/PostList.tsx
 "use client";
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
@@ -221,7 +222,14 @@ export const PostList: React.FC<PostListProps> = ({
         {isMobile ? (
           <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" size="sm" className="flex-grow h-9 text-xs">
+              <Button
+                size="sm"
+                className={cn(
+                  "text-xs flex-grow h-9",
+                  "bg-amber-400 text-amber-900 border border-amber-500 hover:bg-amber-500 hover:text-amber-900 focus-visible:ring-amber-400"
+                )}
+                type="button"
+              >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
                 Filters
                 {activeFilterCount > 0 && (
@@ -247,7 +255,13 @@ export const PostList: React.FC<PostListProps> = ({
         ) : (
           <Popover open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
             <PopoverTrigger asChild>
-              <Button variant="outline" size="sm" className="h-9 text-xs">
+              <Button
+                size="sm"
+                className={cn(
+                  "text-xs h-9",
+                  "bg-amber-400 text-amber-900 border border-amber-500 hover:bg-amber-500 hover:text-amber-900 focus-visible:ring-amber-400"
+                )}
+              >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
                 Filters
                 {activeFilterCount > 0 && (
