@@ -47,10 +47,7 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
       // miroBoardEmbedUrl removed
     };
 
-    console.log("[postService] addPostToFirestore: Data being sent to Firestore:", JSON.stringify(dataForFirestore, null, 2));
-
     const docRef = await addDoc(postsCollectionRef, dataForFirestore);
-    console.log("[postService] Post added successfully with ID: ", docRef.id);
     return docRef.id;
   } catch (error: any) {
     console.error('[postService] Error adding post to Firestore:', error);
@@ -67,7 +64,6 @@ export const addPostToFirestore = async (postData: NewPostData): Promise<string>
 };
 
 export const getPostsFromFirestore = async (): Promise<Post[]> => {
-  console.log("[postService] getPostsFromFirestore: Fetching posts...");
   try {
     const q = query(postsCollectionRef, orderBy('createdAt', 'desc'), limit(50));
     const querySnapshot = await getDocs(q);
@@ -100,7 +96,6 @@ export const getPostsFromFirestore = async (): Promise<Post[]> => {
             // miroBoardEmbedUrl removed
        } as Post;
     });
-    console.log(`[postService] Fetched ${posts.length} posts from Firestore.`);
     return posts;
   } catch (error: any) {
     if (error.code === 'permission-denied') {
@@ -116,7 +111,6 @@ export const deletePostFromFirestore = async (postId: string): Promise<void> => 
     try {
         const postDocRef = doc(db, 'posts', postId);
         await deleteDoc(postDocRef);
-        console.log(`Post with ID ${postId} deleted successfully.`);
     } catch (error: any) {
         console.error(`Error deleting post with ID ${postId}:`, error);
         if (error.code === 'permission-denied') {
@@ -132,7 +126,6 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
     console.warn("[postService] getPostsByUserId called with invalid userId.");
     return [];
   }
-  console.log(`[postService] Fetching posts for user ${userId}`);
 
   try {
     const q = query(
@@ -172,7 +165,6 @@ export const getPostsByUserId = async (userId: string): Promise<Post[]> => {
         // miroBoardEmbedUrl removed
       } as Post;
     });
-    console.log(`[postService] Successfully mapped ${posts.length} posts for user ${userId}`);
     return posts;
 
   } catch (error: any) {
