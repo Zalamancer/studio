@@ -36,7 +36,8 @@ import {
   Trash2,
   Search,
   PlusCircle,
-  X, // Import X icon
+  X, 
+  Save // Added Save icon
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -357,16 +358,31 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
-        <DialogHeader className="pt-6 px-6 pb-4 border-b flex flex-row justify-between items-center">
-          <div className="flex items-center gap-2 flex-grow min-w-0">
-            <FileText className="h-5 w-5 text-primary flex-shrink-0" />
-            <DialogTitle className="truncate">{name || initialPlanData?.name || 'Plan Details'}</DialogTitle>
-            <DialogPrimitiveDescription className="sr-only">
-              View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
-              Owned by {ownerProfile?.displayName || '...'}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
-            </DialogPrimitiveDescription>
+        <DialogHeader className="pt-6 px-6 pb-4 border-b">
+          <div className="flex justify-between items-center">
+            <DialogTitle className="flex items-center gap-2 truncate">
+              <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+              <span className="truncate">{name || initialPlanData?.name || 'Plan Details'}</span>
+            </DialogTitle>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {isOwnerForUIDisplay && ( 
+                <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm">
+                  {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save Settings
+                </Button>
+              )}
+              <DialogPrimitive.Close asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Close</span>
+                </Button>
+              </DialogPrimitive.Close>
+            </div>
           </div>
-          {/* Close button is now in the footer */}
+          <DialogPrimitiveDescription className="text-sm text-muted-foreground mt-1">
+            View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
+            Owned by {ownerProfile?.displayName || generateAnonymousName(initialPlanData?.ownerId || '')}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
+          </DialogPrimitiveDescription>
         </DialogHeader>
         
         {!initialPlanData && isOpen ? (
@@ -470,18 +486,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 </div>
               </div>
             </ScrollArea>
-             <DialogFooter className="p-4 border-t bg-background sticky bottom-0 flex justify-between sm:justify-end">
-              <DialogPrimitive.Close asChild>
-                 <Button variant="outline" size="sm">
-                   <X className="h-4 w-4 mr-2 sm:hidden"/> {/* Show icon only on small screens if text is too long */}
-                   Close
-                 </Button>
-              </DialogPrimitive.Close>
-              {isOwnerForUIDisplay && ( 
-                <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm">
-                  {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Save Settings
-                </Button>
-              )}
+            <DialogFooter className="p-4 border-t bg-background sticky bottom-0">
+              {/* Footer is now intentionally empty as actions moved to header or removed */}
             </DialogFooter>
           </>
         ) : null}
@@ -489,4 +495,3 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
-
