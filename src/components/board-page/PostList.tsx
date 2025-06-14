@@ -9,6 +9,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Input } from "@/components/ui/input"; // Import Input
 import {
   Dialog,
   DialogContent,
@@ -18,7 +19,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/dialog";
-import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping } from "lucide-react";
+import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search } from "lucide-react"; // Import Search
 import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
@@ -45,13 +46,14 @@ export const PostList: React.FC<PostListProps> = ({
   detailedSectorsData,
 }) => {
   const isMobile = useIsMobile();
-  const [isFilterContainerOpen, setIsFilterContainerOpen] = useState(false); // Unified state for Popover/Dialog
+  const [isFilterContainerOpen, setIsFilterContainerOpen] = useState(false);
 
   const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string | undefined>(undefined);
   const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string | undefined>(undefined);
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
+  const [searchTerm, setSearchTerm] = useState(''); // State for search term
 
   const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
   const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
@@ -94,6 +96,7 @@ export const PostList: React.FC<PostListProps> = ({
     setSelectedPostType("all");
     setSelectedTags([]);
     setSelectedSectorFilter(undefined);
+    setSearchTerm(''); // Clear search term
     // Sub-sector and industry will be reset by the useEffect hooks above
   }, []);
 
@@ -101,9 +104,10 @@ export const PostList: React.FC<PostListProps> = ({
     let count = 0;
     if (selectedPostType !== "all") count++;
     if (selectedTags.length > 0) count++;
-    if (selectedSectorFilter) count++; // Counting sector as one filter group
+    if (selectedSectorFilter) count++;
+    if (searchTerm.trim() !== '') count++; // Count search term as an active filter
     return count;
-  }, [selectedPostType, selectedTags, selectedSectorFilter]);
+  }, [selectedPostType, selectedTags, selectedSectorFilter, searchTerm]);
 
   const filteredPosts = useMemo(() => {
     if (!Array.isArray(posts)) return [];
@@ -139,12 +143,20 @@ export const PostList: React.FC<PostListProps> = ({
         );
     }
 
+    if (searchTerm.trim() !== '') {
+      const searchTermLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(post =>
+        post.question.toLowerCase().includes(searchTermLower) ||
+        (post.descriptionDetails && post.descriptionDetails.toLowerCase().includes(searchTermLower))
+      );
+    }
+
     return filtered.sort((a, b) => {
       const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : (typeof a.createdAt === 'number' ? a.createdAt : (a.createdAt as any)?.toMillis?.() || 0);
       const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() || 0);
       return timeB - timeA;
     });
-  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, detailedSectorsData, availableSubSectors]);
+  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, detailedSectorsData, availableSubSectors, searchTerm]);
 
 
   if (isLoading && posts.length === 0) {
@@ -216,15 +228,14 @@ export const PostList: React.FC<PostListProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Unified Filter Bar for Desktop and Mobile */}
-      <div className="mb-4 p-1 flex items-center gap-2 border-b pb-3">
+      <div className="mb-4 p-1 flex flex-col sm:flex-row flex-wrap items-center gap-2 border-b pb-3">
         {isMobile ? (
           <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                variant="default" // Changed from specific amber classes
-                className={cn("text-xs flex-grow h-9")} // Kept necessary layout/sizing
+                variant="default"
+                className={cn("text-xs flex-grow h-9 w-full sm:w-auto sm:flex-grow-0")}
                 type="button"
               >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
@@ -254,8 +265,8 @@ export const PostList: React.FC<PostListProps> = ({
             <PopoverTrigger asChild>
               <Button
                 size="sm"
-                variant="default" // Changed from specific amber classes
-                className={cn("text-xs h-9")} // Kept necessary layout/sizing
+                variant="default"
+                className={cn("text-xs h-9")}
               >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
                 Filters
@@ -269,9 +280,23 @@ export const PostList: React.FC<PostListProps> = ({
             <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
           </Popover>
         )}
+
+        {/* Search Input Field */}
+        <div className="relative flex items-center flex-grow w-full sm:w-auto">
+          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            placeholder="Search posts..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 pr-3 h-9 text-xs w-full rounded-md border-input focus:ring-primary focus:border-primary"
+            aria-label="Search posts"
+          />
+        </div>
+
         {activeFilterCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0">
-            <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All
+          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0 w-full sm:w-auto">
+            <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All ({activeFilterCount})
           </Button>
         )}
       </div>
@@ -285,7 +310,7 @@ export const PostList: React.FC<PostListProps> = ({
                 post={post}
                 onOpen={onPostSelect}
                 isSelected={selectedPostId === post.id}
-                isPriority={index < 2} // Prioritize first few images
+                isPriority={index < 2}
               />
             ))
           ) : (
