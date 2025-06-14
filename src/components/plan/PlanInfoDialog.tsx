@@ -438,7 +438,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         onChange={(e) => setDescription(e.target.value)}
                         disabled={!isOwnerForUIDisplay || isSavingSettings}
                         placeholder="A brief overview of this plan's purpose."
-                        className="text-sm resize-y flex-grow"
+                        className="text-sm flex-grow" 
                       />
                     </div>
                     
@@ -479,7 +479,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                             </>
                             )}
                         </div>
-                        <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
+                        <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
                             <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
                             <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
                             <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
