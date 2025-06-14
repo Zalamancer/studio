@@ -281,7 +281,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     inputRef: React.RefObject<HTMLInputElement>,
     popoverContentRef: React.RefObject<HTMLDivElement>
   ) => (
-    <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col">
+    <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col md:flex-grow md:min-h-0">
       <Label className="text-sm font-semibold text-foreground flex-shrink-0">{title}</Label>
       {isOwnerForUIDisplay && (
         <Popover open={isSuggestionsOpenState} onOpenChange={setIsSuggestionsOpenState}>
@@ -339,9 +339,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
           )}
         </Popover>
       )}
-      <div
-        className="space-y-1 py-1 flex-grow overflow-y-auto"
-        style={{ maxHeight: '10rem' }} 
+      <ScrollArea
+        className="space-y-1 py-1 md:flex-grow md:min-h-[6rem]"
       >
         {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
           Array.from({length: Math.min(3, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
@@ -350,7 +349,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
         ) : (
           <p className="text-xs text-muted-foreground text-center py-2">No specific {roleContext.toLowerCase()}s added (besides owner).</p>
         )}
-      </div>
+      </ScrollArea>
     </div>
   );
   
@@ -383,7 +382,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
+      <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl h-[90vh] max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
         <DialogHeader className="pt-6 px-6 pb-4 border-b flex flex-row justify-between items-center">
             <div className="flex items-center gap-2 min-w-0">
                 <FileText className="h-5 w-5 text-primary flex-shrink-0" />
@@ -418,116 +417,120 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             <p className="text-sm text-muted-foreground">Loading plan details...</p>
           </div>
         ) : initialPlanData ? (
-          <>
-            <ScrollArea className="flex-grow min-h-0">
-              <div className="p-6 h-full flex flex-col flex-grow">
-                <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6 flex-grow">
-                  {/* Left Column */}
-                  <div className="md:w-1/2 flex flex-col">
-                    <div className="mb-6 flex-shrink-0">
-                      <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
-                      <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
-                    </div>
-                    
-                    <div className="flex flex-col flex-grow min-h-0 mb-6"> {/* Description Block */}
-                      <Label htmlFor="plan-description" className="text-sm flex-shrink-0 mb-1">Description</Label>
-                      <Textarea
-                        id="plan-description"
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        disabled={!isOwnerForUIDisplay || isSavingSettings}
-                        placeholder="A brief overview of this plan's purpose."
-                        className="text-sm flex-grow min-h-[16rem] overflow-y-auto resize-none" // Increased min-height
-                      />
-                    </div>
-                    
-                    <div className="space-y-4 mt-6 flex-shrink-0"> {/* Changed mt-auto to mt-6 for consistent spacing */}
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            {isOwnerForUIDisplay ? (
-                            <>
-                                <div>
-                                <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
-                                <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
-                                    <SelectTrigger id="plan-visibility" className="text-sm h-9">
-                                    <SelectValue placeholder="Select visibility" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                    <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
-                                    <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
-                                    <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                </div>
-                                <div>
-                                <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
-                                <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
-                                    <SelectTrigger id="plan-editability" className="text-sm h-9">
-                                    <SelectValue placeholder="Select editability" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                    <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
-                                    <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                                    </SelectContent>
-                                </Select>
-                                </div>
-                            </>
-                            ) : ( 
-                            <>
-                                {renderStaticSetting("Visibility", initialPlanData.visibility, ShieldQuestion)}
-                                {renderStaticSetting("Editability", initialPlanData.editability, Users)}
-                            </>
-                            )}
-                        </div>
-                        <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
-                            <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
-                            <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
-                            <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
-                            <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
-                        </div>
-                    </div>
+          <ScrollArea className="flex-grow min-h-0">
+            <div className="p-6 h-full flex flex-col">
+              <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6 flex-grow">
+                {/* Left Column */}
+                <div className="md:w-1/2 flex flex-col">
+                  <div className="mb-4 flex-shrink-0">
+                    <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
+                    <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9 mt-1"/>
                   </div>
-
-                  {isOwnerForUIDisplay && (
-                    <div className="md:w-1/2 space-y-4 flex flex-col"> 
-                      {visibility !== 'public' && renderPermissionSection(
-                        "Manage View Access (Private/Unlisted)",
-                        currentViewUserIds,
-                        viewerProfilesMap,
-                        isLoadingViewerProfiles,
-                        viewPermissionsSearch,
-                        setViewPermissionsSearch,
-                        viewPermissionSuggestions,
-                        handleInternalAddViewer,
-                        handleInternalRemoveViewer,
-                        "Viewer",
-                        isViewSuggestionsOpen,
-                        setIsViewSuggestionsOpen,
-                        viewSearchInputRef,
-                        viewSuggestionsPopoverRef
+                  
+                  <div className="flex flex-col md:flex-grow md:min-h-0 mb-4"> {/* Description Block */}
+                    <Label htmlFor="plan-description" className="text-sm flex-shrink-0 mb-1">Description</Label>
+                    <Textarea
+                      id="plan-description"
+                      value={description}
+                      onChange={(e) => setDescription(e.target.value)}
+                      disabled={!isOwnerForUIDisplay || isSavingSettings}
+                      placeholder="A brief overview of this plan's purpose."
+                      className={cn(
+                        "text-sm overflow-y-auto resize-none",
+                        "min-h-[10rem] max-h-[20rem] md:max-h-none", // Mobile height constraints
+                        "md:flex-grow md:min-h-0" // Desktop flex growth
                       )}
-                      {editability === 'collaborators' && renderPermissionSection(
-                        "Manage Edit Access (Collaborators)",
-                        currentEditUserIds,
-                        editorProfilesMap,
-                        isLoadingEditorProfiles,
-                        editPermissionsSearch,
-                        setEditPermissionsSearch,
-                        editPermissionSuggestions,
-                        handleInternalAddEditor,
-                        handleInternalRemoveEditor,
-                        "Editor",
-                        isEditSuggestionsOpen,
-                        setIsEditSuggestionsOpen,
-                        editSearchInputRef,
-                        editSuggestionsPopoverRef
-                      )}
-                      {(visibility === 'public' && editability === 'owner_only') && <div className="flex-grow"></div>}
-                    </div>
-                  )}
+                    />
+                  </div>
+                  
+                  <div className="space-y-3 mt-auto flex-shrink-0"> {/* Static Info Block */}
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {isOwnerForUIDisplay ? (
+                          <>
+                              <div>
+                              <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
+                              <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
+                                  <SelectTrigger id="plan-visibility" className="text-sm h-9 mt-1">
+                                  <SelectValue placeholder="Select visibility" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                  <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
+                                  <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
+                                  <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
+                                  </SelectContent>
+                              </Select>
+                              </div>
+                              <div>
+                              <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
+                              <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
+                                  <SelectTrigger id="plan-editability" className="text-sm h-9 mt-1">
+                                  <SelectValue placeholder="Select editability" />
+                                  </SelectTrigger>
+                                  <SelectContent>
+                                  <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
+                                  <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
+                                  </SelectContent>
+                              </Select>
+                              </div>
+                          </>
+                          ) : ( 
+                          <>
+                              {renderStaticSetting("Visibility", initialPlanData.visibility, ShieldQuestion)}
+                              {renderStaticSetting("Editability", initialPlanData.editability, Users)}
+                          </>
+                          )}
+                      </div>
+                      <div className="space-y-1 border-t pt-3 text-xs text-muted-foreground">
+                          <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
+                          <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
+                          <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
+                          <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
+                      </div>
+                  </div>
                 </div>
+
+                {/* Right Column - Permissions */}
+                {isOwnerForUIDisplay && (
+                  <div className="md:w-1/2 space-y-4 flex flex-col"> 
+                    {visibility !== 'public' && renderPermissionSection(
+                      "Manage View Access (Private/Unlisted)",
+                      currentViewUserIds,
+                      viewerProfilesMap,
+                      isLoadingViewerProfiles,
+                      viewPermissionsSearch,
+                      setViewPermissionsSearch,
+                      viewPermissionSuggestions,
+                      handleInternalAddViewer,
+                      handleInternalRemoveViewer,
+                      "Viewer",
+                      isViewSuggestionsOpen,
+                      setIsViewSuggestionsOpen,
+                      viewSearchInputRef,
+                      viewSuggestionsPopoverRef
+                    )}
+                    {editability === 'collaborators' && renderPermissionSection(
+                      "Manage Edit Access (Collaborators)",
+                      currentEditUserIds,
+                      editorProfilesMap,
+                      isLoadingEditorProfiles,
+                      editPermissionsSearch,
+                      setEditPermissionsSearch,
+                      editPermissionSuggestions,
+                      handleInternalAddEditor,
+                      handleInternalRemoveEditor,
+                      "Editor",
+                      isEditSuggestionsOpen,
+                      setIsEditSuggestionsOpen,
+                      editSearchInputRef,
+                      editSuggestionsPopoverRef
+                    )}
+                    {/* Add a flexible spacer if both permission sections are hidden */}
+                    {(visibility === 'public' && editability === 'owner_only') && <div className="flex-grow"></div>}
+                  </div>
+                )}
               </div>
-            </ScrollArea>
-          </>
+            </div>
+          </ScrollArea>
         ) : null}
       </DialogContent>
     </Dialog>
