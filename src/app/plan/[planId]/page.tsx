@@ -1,3 +1,4 @@
+
 // src/app/plan/[planId]/page.tsx
 "use client";
 
@@ -71,7 +72,7 @@ export default function PlanDetailPage() {
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
     initialPanelDataRef,
     onNodeDetailPanelSubmit,
-    handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel, // These are still needed if onNodeDetailPanelSubmit calls them
+    handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel,
     nodeToDelete, setNodeToDelete, confirmDeleteNode,
     handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
     handleGlobalMove, handleGlobalPointerUp, isPointerDown,
@@ -93,7 +94,8 @@ export default function PlanDetailPage() {
     handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
     forceRender,
     handleInitiateAddNode,
-    handleEditCanvasNode, // Added missing destructure
+    handleEditCanvasNode, // Ensure this is destructured
+    setIsChildItemDialogSubmitting, 
   } = usePlanLogic();
 
   const router = useRouter();
@@ -107,7 +109,6 @@ export default function PlanDetailPage() {
     defaultValues: { title: '', description: '' },
   });
   
-  // Toast for child item updates in panel
   const { toast } = useToast();
   
 
@@ -118,15 +119,14 @@ export default function PlanDetailPage() {
         title: editingTarget.data.title,
         description: editingTarget.data.description || '',
       });
-      // initialPanelDataRef is set inside usePlanLogic's handleEditCanvasNode / handleChildItemCanvasNodeFocus
     } else if (editingTarget?.type === 'childItem') {
       const childItemAsNode = editableRoadmap.find(node => node.id === editingTarget.data.canvasNodeIdForThisItem);
-      if (childItemAsNode) { // If child item is spawned as a node, panel edits that node
+      if (childItemAsNode) { 
         nodeDetailForm.reset({
           title: childItemAsNode.title,
           description: childItemAsNode.description || '',
         });
-      } else { // If child item is NOT spawned, panel edits the child item's own title/desc
+      } else { 
         nodeDetailForm.reset({ 
             title: editingTarget.data.title, 
             description: editingTarget.data.description || '' 
@@ -437,12 +437,13 @@ export default function PlanDetailPage() {
         open={isStepDetailSheetOpen && (editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && !!editingTarget.data.canvasNodeIdForThisItem) || (editingTarget?.type === 'childItem' && !editingTarget.data.canvasNodeIdForThisItem))}
         onOpenChange={async (open) => {
           if (!open) {
-            if (initialPanelDataRef.current && editingTarget) {
+            if (initialPanelDataRef.current && editingTarget && (editingTarget.type === 'node' || editingTarget.type === 'childItem')) {
                 const currentValues = nodeDetailForm.getValues();
                 if (currentValues.title !== initialPanelDataRef.current.title || (currentValues.description || '') !== (initialPanelDataRef.current.description || '')) {
                    if (canEditPlan && !diffTarget) {
                        try {
                            await nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)();
+                           toast({ title: "Step details saved", description: `Changes to "${currentValues.title}" were saved.` });
                        } catch (submitError) {
                            console.error("Error submitting node details on panel close:", submitError);
                            toast({ variant: "destructive", title: "Save Error", description: "Could not auto-save step details." });
@@ -461,6 +462,7 @@ export default function PlanDetailPage() {
             setIsStepDetailSheetOpen(true);
           }
         }}
+        disableAnimation={true}
       >
         <SheetContent className="w-[400px] sm:w-[540px] p-0 flex flex-col" side="right" disableAnimation={true}>
           {(editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) || (editingTarget?.type === 'childItem' && !editingTarget.data.canvasNodeIdForThisItem) ) && (
@@ -558,6 +560,5 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
     
     
