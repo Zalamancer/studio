@@ -1,4 +1,3 @@
-
 // src/components/plan/PlanInfoDialog.tsx
 "use client";
 
@@ -425,26 +424,24 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6 flex-grow">
                   {/* Left Column */}
                   <div className="md:w-1/2 flex flex-col">
-                    <div className="mb-6 flex-shrink-0"> {/* Name Input Block */}
+                    <div className="mb-6 flex-shrink-0">
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
                     </div>
                     
-                    {/* Description Block - This is the TARGET FOR FLEX-GROW */}
-                    <div className="space-y-1 flex flex-col flex-grow min-h-0 mb-6">
-                      <Label htmlFor="plan-description" className="text-sm flex-shrink-0">Description</Label>
+                    <div className="flex flex-col flex-grow min-h-0 mb-6"> {/* Description Block */}
+                      <Label htmlFor="plan-description" className="text-sm flex-shrink-0 mb-1">Description</Label>
                       <Textarea
                         id="plan-description"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         disabled={!isOwnerForUIDisplay || isSavingSettings}
                         placeholder="A brief overview of this plan's purpose."
-                        className="text-sm flex-grow min-h-0 overflow-y-auto resize-none"
+                        className="text-sm flex-grow min-h-[16rem] overflow-y-auto resize-none" // Increased min-height
                       />
                     </div>
                     
-                    {/* Visibility, Editability, Static Info Block */}
-                    <div className="space-y-4 mt-auto flex-shrink-0"> {/* Use mt-auto to push to bottom if space allows, or remove if natural flow preferred */}
+                    <div className="space-y-4 mt-6 flex-shrink-0"> {/* Changed mt-auto to mt-6 for consistent spacing */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {isOwnerForUIDisplay ? (
                             <>
@@ -536,3 +533,4 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
+
