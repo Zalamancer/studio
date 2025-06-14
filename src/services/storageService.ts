@@ -23,12 +23,12 @@ export const uploadPostImage = async (file: File, userId: string): Promise<strin
   const imageRef = ref(storage, storagePath);
 
   try {
-    console.log(`[StorageService] Uploading image to: ${storagePath}`);
+    // console.log(`[StorageService] Uploading image to: ${storagePath}`); // Removed
     const snapshot = await uploadBytes(imageRef, file);
-    console.log('[StorageService] Uploaded a blob or file!', snapshot);
+    // console.log('[StorageService] Uploaded a blob or file!', snapshot); // Removed
 
     const downloadURL = await getDownloadURL(snapshot.ref);
-    console.log('[StorageService] File available at', downloadURL);
+    // console.log('[StorageService] File available at', downloadURL); // Removed
     if (!downloadURL) {
         throw new Error("Failed to get download URL after upload.");
     }
@@ -47,3 +47,4 @@ export const uploadPostImage = async (file: File, userId: string): Promise<strin
     throw new Error(`Image upload failed: ${error.message || 'Unknown storage error'}`);
   }
 };
+
