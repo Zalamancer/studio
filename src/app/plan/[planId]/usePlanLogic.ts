@@ -505,7 +505,33 @@ export const usePlanLogic = () => {
         }
 
         if (modificationSuccessful) {
-          setEditableRoadmap(newRoadmapCandidate); 
+          setEditableRoadmap(newRoadmapCandidate);
+
+          // === START OF FIX ===
+          // If the currently edited node in the panel had a child added to it,
+          // we need to refresh the editingTarget to reflect this change in its childrenData list.
+          if (context.operation === 'createChild' && editingTarget?.type === 'node' && editingTarget.data.id === context.targetParentNodeId) {
+              const updatedParentNodeFromRoadmap = newRoadmapCandidate.find((node: RoadmapStep) => node.id === context.targetParentNodeId);
+              if (updatedParentNodeFromRoadmap) {
+                  console.log(`[Submit] createChild: Refreshing editingTarget for panel with updated childrenData for node ${updatedParentNodeFromRoadmap.id}`);
+                  setEditingTarget({ type: 'node', data: { ...updatedParentNodeFromRoadmap } });
+              } else {
+                  console.warn(`[Submit] createChild: Parent node ${context.targetParentNodeId} not found in newRoadmapCandidate after adding child. Panel may not update.`);
+              }
+          }
+          // If a child item was edited (and potentially spawned as a node or its text changed)
+          // and that child item belongs to the node currently open in the panel.
+          else if (context.operation === 'edit' && editingTarget?.type === 'node' && editingTarget.data.id === context.parentNodeId) {
+               const updatedParentNodeFromRoadmap = newRoadmapCandidate.find((node: RoadmapStep) => node.id === context.parentNodeId);
+               if (updatedParentNodeFromRoadmap) {
+                   console.log(`[Submit] editChild: Refreshing editingTarget for panel with updated childrenData for node ${updatedParentNodeFromRoadmap.id} after child edit.`);
+                   setEditingTarget({ type: 'node', data: { ...updatedParentNodeFromRoadmap } });
+               } else {
+                   console.warn(`[Submit] editChild: Parent node ${context.parentNodeId} not found in newRoadmapCandidate after editing child. Panel may not update.`);
+               }
+          }
+          // === END OF FIX ===
+
           toast({ title: "Item Action Complete", description: "Remember to save the plan changes." });
           setIsEditChildItemDialogOpen(false);
           childItemManagementContextRef.current = null;
@@ -519,7 +545,7 @@ export const usePlanLogic = () => {
       } finally {
         setIsChildItemDialogSubmitting(false);
       }
-  }, [canEditPlan, diffTarget, toast, handleSpawnChildDataItemAsCanvasNode, editableRoadmap]);
+  }, [canEditPlan, diffTarget, toast, handleSpawnChildDataItemAsCanvasNode, editableRoadmap, editingTarget, setEditingTarget]);
 
 
   const handleEditChildItemText = useCallback((childItem: ChildDataItem, parentNodeIdOfChildItem: string) => {
@@ -559,11 +585,17 @@ export const usePlanLogic = () => {
           else {setIsStepDetailSheetOpen(false); setEditingTarget(null);}
         } else if (editingTarget?.type === 'node' && editingTarget.data.id === canvasNodeIdThatWasRepresentedByDeletedItem) {
           setIsStepDetailSheetOpen(false); setEditingTarget(null);
+        } else if (editingTarget?.type === 'node' && editingTarget.data.id === parentCanvasNodeIdOfItem) {
+          // If the panel is open for the parent of the deleted child, refresh its children list
+          const updatedParentNode = updatedRoadmap.find(n => n.id === parentCanvasNodeIdOfItem);
+          if (updatedParentNode) {
+            setEditingTarget({ type: 'node', data: { ...updatedParentNode } });
+          }
         }
         return updatedRoadmap;
     });
     toast({ title: "Item Removed", description: "Remember to save the plan." });
-  }, [canEditPlan, toast, editingTarget, diffTarget]);
+  }, [canEditPlan, toast, editingTarget, diffTarget, setEditingTarget, setIsStepDetailSheetOpen]);
 
   const confirmDeleteNode = useCallback(() => {
     if (!nodeToDelete || !canEditPlan || diffTarget) return;
@@ -572,7 +604,7 @@ export const usePlanLogic = () => {
     if (editingTarget?.type === 'node' && editingTarget.data.id === idToDelete) { setIsStepDetailSheetOpen(false); setEditingTarget(null); }
     toast({ title: `Node "${nodeToDelete.title}" Deleted`, description: "Remember to save." });
     setNodeToDelete(null);
-  }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget]);
+  }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget, setEditingTarget, setIsStepDetailSheetOpen]);
 
   const saveRoadmapChanges = useCallback(async () => {
     if (!planData || !user || !planId || !canEditPlan || diffTarget) { toast({ variant: "destructive", title: "Error", description: "Cannot save." }); return; }
@@ -850,7 +882,7 @@ export const usePlanLogic = () => {
     forceRender,
     handleInitiateAddNode,
     setIsChildItemDialogSubmitting,
-    handleEditCanvasNode, // Ensure this is returned
+    handleEditCanvasNode, 
   };
 };
     
@@ -859,3 +891,4 @@ export const usePlanLogic = () => {
 
 
     
+
