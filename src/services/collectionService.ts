@@ -141,10 +141,11 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
   } catch (error: any) {
     console.error(`[collectionService] Error fetching collections for ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
-      console.error("  [Firestore Rule Hint] Ensure your Firestore rules for the 'collections' collection allow 'read' access if the following conditions are met:");
-      console.error("  1. For owned collections (when querying where ownerId == yourId): `allow read: if request.auth.uid == resource.data.ownerId;`");
-      console.error("  2. For collections shared with you (when querying where yourId in sharedWithUserIds): `allow read: if request.auth.uid in resource.data.sharedWithUserIds;`");
-      console.error("  A combined rule for reading might look like: `match /collections/{collectionId} { allow read: if request.auth != null && (request.auth.uid == resource.data.ownerId || request.auth.uid in resource.data.sharedWithUserIds); }`");
+      console.error("  [Firestore Rule Hint] Ensure your Firestore rules for the 'collections' collection allow 'list' operations based on the queries being made:");
+      console.error("  1. For owned collections query (e.g., `where('ownerId', '==', request.auth.uid)`): Ensure your rule allows this based on `request.query.filters`.");
+      console.error("  2. For shared collections query (e.g., `where('sharedWithUserIds', 'array-contains', request.auth.uid)`): Ensure your rule allows this based on `request.query.filters`. Crucially, for `list` rules, you cannot use `resource.data` to check `sharedWithUserIds`; the `array-contains` query itself should be sufficient for the rule's condition.");
+      console.error("  Example of a problematic 'list' rule part: `... && resource.data.sharedWithUserIds.hasAny([request.auth.uid])` (remove the `resource.data` check for 'list').");
+      console.error("  A correct 'list' rule might look like: `allow list: if request.auth != null && ((request.query.filters[0].field == 'ownerId' && request.query.filters[0].value == request.auth.uid) || (request.query.filters[0].field == 'sharedWithUserIds' && request.query.filters[0].op == 'array-contains' && request.query.filters[0].value == request.auth.uid));` (This is simplified and assumes specific query structures and that filters array has at least one element).");
       console.error("  Also ensure that any indexes required by your queries (e.g., on 'ownerId' and 'createdAt', or 'sharedWithUserIds' and 'createdAt') exist.");
       throw new Error('Permission denied fetching collections. Please check your Firestore security rules and required indexes.');
     }
@@ -319,7 +320,7 @@ export const getPostsForCollectionPage = async (collectionId: string): Promise<a
 
 export const updateCollectionDetails = async (
   collectionId: string,
-  ownerId: string, 
+  ownerId: string,
   updates: { name?: string; description?: string }
 ): Promise<void> => {
   const clientAuthUid = auth.currentUser?.uid;
@@ -404,7 +405,7 @@ export const deleteCollection = async (collectionId: string, ownerId: string): P
 
 export const shareCollectionWithUser = async (
   collectionId: string,
-  ownerId: string, 
+  ownerId: string,
   userIdToShareWith: string
 ): Promise<void> => {
   const clientAuthUid = auth.currentUser?.uid;
@@ -452,7 +453,7 @@ export const shareCollectionWithUser = async (
 
 export const unshareCollectionFromUser = async (
   collectionId: string,
-  ownerId: string, 
+  ownerId: string,
   userIdToUnshare: string
 ): Promise<void> => {
   const clientAuthUid = auth.currentUser?.uid;
