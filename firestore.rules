@@ -1,3 +1,8 @@
+// do not change or update any rule that is not relavant to your prompt
+// do not remove rules that is used by other tasks
+// only add rules that you need.
+// don't change or remove the rules that you have no business with.
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -39,7 +44,6 @@ service cloud.firestore {
       }
     }
 
-    // Collections rules (from user)
     match /collections/{collectionId} {
       // Helper functions for collections
       function isCollectionOwner() {
@@ -57,8 +61,8 @@ service cloud.firestore {
                request.resource.data.postIds is list &&
                request.resource.data.sharedWithUserIds is list;
       }
-      
-      // List rules - Separate owned and shared cases more explicitly
+
+      // More robust list rule
       allow list: if isAuthUser() &&
                   (
                     // Allow querying for collections owned by the user
@@ -98,7 +102,7 @@ service cloud.firestore {
 
       allow delete: if isAuthUser() && isCollectionOwner();
     }
-
+    
     // Posts, their comments, and bids
     match /posts/{postId} {
       allow read: if true; // Anyone can read posts
@@ -210,7 +214,7 @@ service cloud.firestore {
         return resource.data.participants.hasAny([request.auth.uid]);
       }
       function wasAuthUserParticipant() {
-        return resource.data.formerParticipants != null &&
+        return resource.data.formerParticipants != null && 
                resource.data.formerParticipants[request.auth.uid] != null;
       }
       function isGroupOwner(authUid, convData) {
@@ -239,7 +243,7 @@ service cloud.firestore {
           request.resource.data.participants.size() >= 2 && // At least 2 participants
           request.resource.data.ownerId == request.auth.uid && // Creator must be owner
           request.resource.data.adminIds.hasAny([request.auth.uid]) && // Creator must be admin
-          request.resource.data.groupName is string &&
+          request.resource.data.groupName is string && 
           request.resource.data.groupName.size() > 0 && // Group name required
           request.resource.data.createdAt == request.time &&
           request.resource.data.lastMessageTimestamp == request.time
@@ -336,15 +340,15 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isAuthUser() && (
           get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]) ||
-          (get(/databases/$(database)/documents/conversations/$(conversationId)).data.type == 'group' &&
+          (get(/databases/$(database)/documents/conversations/$(conversationId)).data.type == 'group' && 
            get(/databases/$(database)/documents/conversations/$(conversationId)).data.formerParticipants != null &&
            get(/databases/$(database)/documents/conversations/$(conversationId)).data.formerParticipants[request.auth.uid] != null)
         );
         allow create: if isAuthUser() &&
                       get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]) &&
                       request.resource.data.senderId == request.auth.uid &&
-                      request.resource.data.timestamp == request.time;
-        allow update, delete: if false;
+                      request.resource.data.timestamp == request.time; // Message timestamp must be server time
+        allow update, delete: if false; // Messages are immutable
       }
     }
 
@@ -419,10 +423,11 @@ service cloud.firestore {
                             resource.data.reviewerId == request.auth.uid &&
                             (request.method == 'delete' || request.resource.data.updatedAt == request.time);
     }
-
-
+            
+            
     match /plans/{planId} {
-      allow create: if request.auth != null &&
+      // ... your create, list, get rules ...
+            allow create: if request.auth != null &&
                        request.auth.uid == request.resource.data.ownerId &&
                        // Core plan fields (existing)
                        request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
@@ -448,18 +453,19 @@ service cloud.firestore {
                          'visibility', 'editability', 'viewUserIds', 'editUserIds'
                        ]) &&
                        request.resource.data.size() == 15; // Updated size to 15 fields
+				// ... rest of your rules (list, get, update, delete) ..
 
       allow list: if (request.query.filters.size() > 0 &&
                  request.query.filters[0].field == 'visibility' &&
-                 request.query.filters[0].op == 'in' && // Corrected from operator to op
+                 request.query.filters[0].operator == 'in' &&
                  (request.query.filters[0].value.hasAny(['public', 'unlisted'])) &&
                  (request.query.limit == null || request.query.limit <= 20)
                 ) || request.auth != null;
-
+          
 			allow get: if resource.data.visibility in ['public', 'unlisted'] ||
               (request.auth != null && request.auth.uid == resource.data.ownerId) ||
               (request.auth != null && resource.data.viewUserIds.hasAny([request.auth.uid]));
-
+  
 
       function isOwner() {
         return request.auth.uid == resource.data.ownerId;
@@ -519,7 +525,7 @@ service cloud.firestore {
                          // SCENARIO 2: An authorized editor (owner or collaborator) is updating the roadmap
                          (isPlanEditor() && isValidRoadmapUpdate(request.resource.data, resource.data))
                        );
-
+                       
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
 
       match /versions/{versionId} {
@@ -543,4 +549,3 @@ service cloud.firestore {
   }
 }
 
-    
