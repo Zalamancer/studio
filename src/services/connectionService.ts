@@ -33,7 +33,7 @@ const getConnectionDocId = (userId1: string, userId2: string): string => {
   const id1 = String(userId1 || "").trim();
   const id2 = String(userId2 || "").trim();
   if (!id1 || !id2 || !IS_VALID_FIREBASE_UID_REGEX.test(id1) || !IS_VALID_FIREBASE_UID_REGEX.test(id2)) {
-    console.error(`%c[connectionService] getConnectionDocId CRITICAL: Called with invalid UID(s). userId1: '${id1}', userId2: '${id2}'.`, "color: red; font-weight: bold;");
+    // console.error(`%c[connectionService] getConnectionDocId CRITICAL: Called with invalid UID(s). userId1: '${id1}', userId2: '${id2}'.`, "color: red; font-weight: bold;");
     return `INVALID_CONNECTION_ID_DUE_TO_BAD_UIDS_${id1}_${id2}`;
   }
   return [id1, id2].sort().join('_');
@@ -55,13 +55,13 @@ async function findUniqueMentionName(
       candidateName = originalBaseName;
     } else if (attempt < maxRandomRetries) {
       // Subsequent attempts (up to maxRandomRetries) try a new random name
-      console.log(`[findUniqueMentionName] Collision on attempt ${attempt}. Trying new random name for baseUid ${baseUid}.`);
+      // console.log(`[findUniqueMentionName] Collision on attempt ${attempt}. Trying new random name for baseUid ${baseUid}.`);
       candidateName = generateAnonymousName(baseUid + "_retry" + attempt); // Alter seed for new random name
     } else {
       // After random retries, start suffixing the *original* base name
       const suffixNumber = attempt - maxRandomRetries + 1;
       candidateName = `${originalBaseName}_${suffixNumber}`;
-      console.log(`[findUniqueMentionName] Collision on attempt ${attempt}. Trying suffixed name: ${candidateName} for baseUid ${baseUid}.`);
+      // console.log(`[findUniqueMentionName] Collision on attempt ${attempt}. Trying suffixed name: ${candidateName} for baseUid ${baseUid}.`);
     }
     candidateNameLower = candidateName.toLowerCase();
 
@@ -69,14 +69,14 @@ async function findUniqueMentionName(
     const snapshot = await getDocs(q);
 
     if (snapshot.empty) {
-      console.log(`[findUniqueMentionName] Found unique name '${candidateName}' for baseUid ${baseUid} on attempt ${attempt + 1}.`);
+      // console.log(`[findUniqueMentionName] Found unique name '${candidateName}' for baseUid ${baseUid} on attempt ${attempt + 1}.`);
       return { uniqueName: candidateName, uniqueNameLower: candidateNameLower };
     }
     attempt++;
   }
 
   // Fallback if all attempts fail
-  console.error(`[findUniqueMentionName] Max attempts (${maxAttempts}) reached for base UID ${baseUid}. Using ultimate fallback.`);
+  // console.error(`[findUniqueMentionName] Max attempts (${maxAttempts}) reached for base UID ${baseUid}. Using ultimate fallback.`);
   const fallbackSuffix = Date.now().toString().slice(-5) + Math.random().toString(36).substring(2, 5);
   candidateName = `${originalBaseName}_fb_${fallbackSuffix}`;
   candidateNameLower = candidateName.toLowerCase();
@@ -86,10 +86,10 @@ async function findUniqueMentionName(
 
 export const initializeUserProfile = async (userData: InitializeUserProfileArgs): Promise<void> => {
   const clientAuthUser = auth.currentUser;
-  console.log(`%c[connectionService] initializeUserProfile: Called. Client auth UID: ${clientAuthUser?.uid || 'NULL'}. Incoming userData:`, "color: orange", userData);
+  // console.log(`%c[connectionService] initializeUserProfile: Called. Client auth UID: ${clientAuthUser?.uid || 'NULL'}. Incoming userData:`, "color: orange", userData);
 
   if (!userData.uid || !IS_VALID_FIREBASE_UID_REGEX.test(userData.uid)) {
-    console.error('%c[connectionService] initializeUserProfile: ERROR - UID is missing or invalid in userData. Aborting.', "color: red; font-weight:bold;", userData);
+    // console.error('%c[connectionService] initializeUserProfile: ERROR - UID is missing or invalid in userData. Aborting.', "color: red; font-weight:bold;", userData);
     return;
   }
 
@@ -112,7 +112,7 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
     let finalAuthPhotoURL: string | null = null;
 
     if (!docSnap.exists()) {
-      console.log(`%c[connectionService] initializeUserProfile: CREATING NEW PROFILE for UID ${userData.uid}.`, "color: green; font-weight: bold;");
+      // console.log(`%c[connectionService] initializeUserProfile: CREATING NEW PROFILE for UID ${userData.uid}.`, "color: green; font-weight: bold;");
       operationType = 'CREATE';
       const { uniqueName, uniqueNameLower } = await findUniqueMentionName(userData.uid);
       finalMentionName = uniqueName;
@@ -134,11 +134,11 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
     } else {
       operationType = 'UPDATE';
       const existingData = docSnap.data() as UserProfileData;
-      console.log(`%c[connectionService] initializeUserProfile: UPDATING EXISTING PROFILE for UID ${userData.uid}. Existing data:`, "color: blue; font-weight: bold;", existingData);
+      // console.log(`%c[connectionService] initializeUserProfile: UPDATING EXISTING PROFILE for UID ${userData.uid}. Existing data:`, "color: blue; font-weight: bold;", existingData);
       dataPayload.lastLoginAt = serverTimestamp();
 
       if (!existingData.mentionName || !existingData.mentionNameLowercase) {
-        console.log(`%c[connectionService] initializeUserProfile: Existing profile for ${userData.uid} missing mentionName. Generating unique one.`, "color: orange;");
+        // console.log(`%c[connectionService] initializeUserProfile: Existing profile for ${userData.uid} missing mentionName. Generating unique one.`, "color: orange;");
         const { uniqueName, uniqueNameLower } = await findUniqueMentionName(userData.uid);
         finalMentionName = uniqueName;
         finalMentionNameLowercase = uniqueNameLower;
@@ -172,9 +172,9 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
       }
     });
     
-    console.log(`%c[connectionService] initializeUserProfile: Data to ${operationType} to Firestore for UID ${userData.uid}:`, "color: #1E90FF; font-weight:bold;", dataToWrite);
+    // console.log(`%c[connectionService] initializeUserProfile: Data to ${operationType} to Firestore for UID ${userData.uid}:`, "color: #1E90FF; font-weight:bold;", dataToWrite);
     await setDoc(userDocRef, dataToWrite, { merge: operationType === 'UPDATE' });
-    console.log(`%c[connectionService] initializeUserProfile: User profile ${operationType}D successfully in Firestore for UID ${userData.uid}.`, "color: green; font-weight:bold;");
+    // console.log(`%c[connectionService] initializeUserProfile: User profile ${operationType}D successfully in Firestore for UID ${userData.uid}.`, "color: green; font-weight:bold;");
 
     if (clientAuthUser && clientAuthUser.uid === userData.uid) {
       const authProfileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
@@ -186,20 +186,20 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
       }
 
       if (Object.keys(authProfileUpdates).length > 0) {
-        console.log(`%c[connectionService] initializeUserProfile: Attempting to update auth.currentUser profile with:`, "color: #FF8C00;", authProfileUpdates);
+        // console.log(`%c[connectionService] initializeUserProfile: Attempting to update auth.currentUser profile with:`, "color: #FF8C00;", authProfileUpdates);
         try {
           await updateProfile(clientAuthUser, authProfileUpdates);
-          console.log(`%c[connectionService] initializeUserProfile: auth.currentUser profile updated successfully.`, "color: #FF8C00;");
+          // console.log(`%c[connectionService] initializeUserProfile: auth.currentUser profile updated successfully.`, "color: #FF8C00;");
         } catch (authUpdateError) {
-          console.error(`%c[connectionService] initializeUserProfile: FAILED to update auth.currentUser profile. Error:`, "color: red;", authUpdateError);
+          // console.error(`%c[connectionService] initializeUserProfile: FAILED to update auth.currentUser profile. Error:`, "color: red;", authUpdateError);
         }
       } else {
-        console.log(`%c[connectionService] initializeUserProfile: No changes needed for auth.currentUser profile.`, "color: #FF8C00;");
+        // console.log(`%c[connectionService] initializeUserProfile: No changes needed for auth.currentUser profile.`, "color: #FF8C00;");
       }
     }
 
   } catch (error: any) {
-    console.error(`%c[connectionService] initializeUserProfile: Firestore Error on setDoc for UID ${userData.uid}:`, "color: red; font-weight:bold;", error);
+    // console.error(`%c[connectionService] initializeUserProfile: Firestore Error on setDoc for UID ${userData.uid}:`, "color: red; font-weight:bold;", error);
   }
 };
 
@@ -207,10 +207,10 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
 export const fetchUserProfileBasic = async (userIdParam: string): Promise<UserProfileBasic | null> => {
   const userId = String(userIdParam || "").trim();
   const clientAuthUid = auth.currentUser?.uid;
-  // console.log(`%c[connectionService] fetchUserProfileBasic: Fetching for targetUserId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: teal;");
+  // // console.log(`%c[connectionService] fetchUserProfileBasic: Fetching for targetUserId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: teal;");
 
   if (!userId || !IS_VALID_FIREBASE_UID_REGEX.test(userId)) {
-    // console.warn(`%c[connectionService] fetchUserProfileBasic: Invalid or empty userId: '${userId}'. Returning minimal fallback.`, "color: orange;");
+    // // console.warn(`%c[connectionService] fetchUserProfileBasic: Invalid or empty userId: '${userId}'. Returning minimal fallback.`, "color: orange;");
     const generatedName = generateAnonymousName(userId || "unknown_user_id");
     return { userId: userId || "unknown_user_id", displayName: generatedName, mentionName: generatedName, companyName: undefined };
   }
@@ -230,19 +230,19 @@ export const fetchUserProfileBasic = async (userIdParam: string): Promise<UserPr
         avatarUrl: userData.avatarUrl || undefined,
         companyName: userData.companyName || undefined,
       };
-      // console.log(`%c[connectionService] fetchUserProfileBasic: Profile FOUND for '${userId}':`, "color: green;", profile);
+      // // console.log(`%c[connectionService] fetchUserProfileBasic: Profile FOUND for '${userId}':`, "color: green;", profile);
       return profile;
     }
-    // console.warn(`%c[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${userId}'. Generating anonymous fallback.`, "color: orange;");
+    // // console.warn(`%c[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${userId}'. Generating anonymous fallback.`, "color: orange;");
     const generatedNameFallback = generateAnonymousName(userId);
     return { userId: userId, displayName: generatedNameFallback, mentionName: generatedNameFallback, companyName: undefined };
   } catch (error: any) {
     const errorCatchAuthUid = auth.currentUser?.uid;
     if (error.code === 'permission-denied') {
-      console.warn(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: orange;", error.message);
-      console.warn(`%c  PERMISSION DENIED for reading 'users/${userId}'. Client auth state at error catch: '${errorCatchAuthUid || 'NULL'}'. Returning minimal fallback.`, "color: orange; font-weight: bold;");
+      // console.warn(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: orange;", error.message);
+      // console.warn(`%c  PERMISSION DENIED for reading 'users/${userId}'. Client auth state at error catch: '${errorCatchAuthUid || 'NULL'}'. Returning minimal fallback.`, "color: orange; font-weight: bold;");
     } else {
-      console.error(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: red;", error);
+      // console.error(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: red;", error);
     }
     const generatedNameOnError = generateAnonymousName(userId);
     return { userId: userId, displayName: generatedNameOnError, mentionName: generatedNameOnError, companyName: undefined };
@@ -254,10 +254,10 @@ export const fetchFullUserProfile = async (userIdParam: string): Promise<UserPro
   const trimmedUserId = String(userIdParam || "").trim();
   const clientAuthUid = auth.currentUser?.uid;
 
-  // console.log(`%c[connectionService] fetchFullUserProfile: Attempting to fetch for targetUserId: '${trimmedUserId}'. Client Auth UID (at call time): '${clientAuthUid || 'NULL'}'`, "color: darkcyan; font-weight: bold;");
+  // // console.log(`%c[connectionService] fetchFullUserProfile: Attempting to fetch for targetUserId: '${trimmedUserId}'. Client Auth UID (at call time): '${clientAuthUid || 'NULL'}'`, "color: darkcyan; font-weight: bold;");
 
   if (!trimmedUserId || !IS_VALID_FIREBASE_UID_REGEX.test(trimmedUserId)) {
-    console.warn(`%c[connectionService] fetchFullUserProfile: Invalid or empty userId: '${trimmedUserId}'. Returning null.`, "color: orange;");
+    // console.warn(`%c[connectionService] fetchFullUserProfile: Invalid or empty userId: '${trimmedUserId}'. Returning null.`, "color: orange;");
     return null;
   }
 
@@ -294,16 +294,16 @@ export const fetchFullUserProfile = async (userIdParam: string): Promise<UserPro
         lastLoginAt: userData.lastLoginAt,
         updatedAt: userData.updatedAt,
       };
-      // console.log(`%c[connectionService] fetchFullUserProfile: Full profile FOUND for '${trimmedUserId}'.`, "color: green;");
+      // // console.log(`%c[connectionService] fetchFullUserProfile: Full profile FOUND for '${trimmedUserId}'.`, "color: green;");
       return fullProfile;
     }
-    // console.warn(`%c[connectionService] fetchFullUserProfile: Profile document NOT FOUND for userId: '${trimmedUserId}'. Returning null.`, "color: orange;");
+    // // console.warn(`%c[connectionService] fetchFullUserProfile: Profile document NOT FOUND for userId: '${trimmedUserId}'. Returning null.`, "color: orange;");
     return null;
   } catch (error: any) {
     const errorCatchAuthUid = auth.currentUser?.uid;
-    console.error(`%c[connectionService] fetchFullUserProfile: Error fetching full profile for '${trimmedUserId}':`, "color: red;", error);
+    // console.error(`%c[connectionService] fetchFullUserProfile: Error fetching full profile for '${trimmedUserId}':`, "color: red;", error);
     if (error.code === 'permission-denied') {
-      console.error(`%c  PERMISSION DENIED specifically for reading 'users/${trimmedUserId}'. Client auth state at error catch: '${errorCatchAuthUid || 'NULL'}'`, "color: red; font-weight: bold;");
+      // console.error(`%c  PERMISSION DENIED specifically for reading 'users/${trimmedUserId}'. Client auth state at error catch: '${errorCatchAuthUid || 'NULL'}'`, "color: red; font-weight: bold;");
     }
     return null;
   }
@@ -315,17 +315,17 @@ export const updateUserProfileDetails = async (
 ): Promise<void> => {
   const trimmedUserId = String(userId || "").trim();
   if (!trimmedUserId || !IS_VALID_FIREBASE_UID_REGEX.test(trimmedUserId)) {
-    console.error("[connectionService] updateUserProfileDetails: userId is missing or invalid.");
+    // console.error("[connectionService] updateUserProfileDetails: userId is missing or invalid.");
     throw new Error("User ID is required and must be valid to update profile details.");
   }
   const clientAuthUser = auth.currentUser;
   if (!clientAuthUser || clientAuthUser.uid !== trimmedUserId) {
-    console.error(`[connectionService] updateUserProfileDetails: Auth mismatch or not authenticated. Client UID: ${clientAuthUser?.uid}, Target UserID: ${trimmedUserId}`);
+    // console.error(`[connectionService] updateUserProfileDetails: Auth mismatch or not authenticated. Client UID: ${clientAuthUser?.uid}, Target UserID: ${trimmedUserId}`);
     throw new Error("Authentication error: Cannot update profile for another user or without authentication.");
   }
 
   const userDocRef = doc(usersCollectionRef, trimmedUserId);
-  console.log(`%c[connectionService] updateUserProfileDetails: Attempting to update profile for UID ${trimmedUserId} with data:`, "color: purple", dataToUpdate);
+  // console.log(`%c[connectionService] updateUserProfileDetails: Attempting to update profile for UID ${trimmedUserId} with data:`, "color: purple", dataToUpdate);
 
   const sanitizedData: { [key: string]: any } = {};
   const allowedUpdateFields: (keyof UserProfileUpdateData)[] = [
@@ -341,7 +341,7 @@ export const updateUserProfileDetails = async (
   });
 
   if (Object.keys(sanitizedData).length === 0) {
-    console.log(`%c[connectionService] updateUserProfileDetails: No actual data to update for UID ${trimmedUserId}. Skipping Firestore write.`, "color: orange");
+    // console.log(`%c[connectionService] updateUserProfileDetails: No actual data to update for UID ${trimmedUserId}. Skipping Firestore write.`, "color: orange");
     return;
   }
 
@@ -349,7 +349,7 @@ export const updateUserProfileDetails = async (
 
   try {
     await updateDoc(userDocRef, sanitizedData);
-    console.log(`%c[connectionService] User profile details UPDATED successfully in Firestore for UID ${trimmedUserId}.`, "color: green;");
+    // console.log(`%c[connectionService] User profile details UPDATED successfully in Firestore for UID ${trimmedUserId}.`, "color: green;");
 
     if (clientAuthUser) {
       const authProfileUpdates: { displayName?: string | null; photoURL?: string | null } = {};
@@ -370,19 +370,19 @@ export const updateUserProfileDetails = async (
       }
 
       if (Object.keys(authProfileUpdates).length > 0) {
-        console.log(`%c[connectionService] updateUserProfileDetails: Attempting to update auth.currentUser profile with:`, "color: #FF8C00;", authProfileUpdates);
+        // console.log(`%c[connectionService] updateUserProfileDetails: Attempting to update auth.currentUser profile with:`, "color: #FF8C00;", authProfileUpdates);
         await updateProfile(clientAuthUser, authProfileUpdates);
-        console.log(`%c[connectionService] updateUserProfileDetails: auth.currentUser profile updated successfully.`, "color: #FF8C00;");
+        // console.log(`%c[connectionService] updateUserProfileDetails: auth.currentUser profile updated successfully.`, "color: #FF8C00;");
       }
     }
 
   } catch (error: any) {
-    console.error(`%c[connectionService] updateUserProfileDetails: Firestore Error updating profile for UID ${userId}:`, "color: red;", error);
+    // console.error(`%c[connectionService] updateUserProfileDetails: Firestore Error updating profile for UID ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
       throw new Error('Permission denied. Check Firestore security rules for updating your user document.');
     }
     if (error.message && error.message.includes("Unsupported field value: undefined")) {
-      console.error("[connectionService] updateUserProfileDetails: Firestore received an undefined value. Data sent:", sanitizedData);
+      // console.error("[connectionService] updateUserProfileDetails: Firestore received an undefined value. Data sent:", sanitizedData);
     }
     throw error;
   }
@@ -398,28 +398,28 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
   const fieldToQueryAndOrder = 'mentionNameLowercase';
   const effectiveLimit = !queryablePrefix ? (limitCountArg || 25) : (limitCountArg || 10);
 
-  console.log(`%c[connectionService] getSuggestibleUsers called. Original Prefix: '${searchPrefix}', Queryable Prefix: '${queryablePrefix}', Query Field: '${fieldToQueryAndOrder}', Effective Limit: ${effectiveLimit}`, "color: #BA55D3");
+  // // console.log(`%c[connectionService] getSuggestibleUsers called. Original Prefix: '${searchPrefix}', Queryable Prefix: '${queryablePrefix}', Query Field: '${fieldToQueryAndOrder}', Effective Limit: ${effectiveLimit}`, "color: #BA55D3");
   const clientAuthUid = auth.currentUser?.uid;
-  console.log(`%c  [connectionService] Auth state for query: auth.currentUser?.uid = ${clientAuthUid || 'NULL'}`, "color: #BA55D3;");
+  // // console.log(`%c  [connectionService] Auth state for query: auth.currentUser?.uid = ${clientAuthUid || 'NULL'}`, "color: #BA55D3;");
 
   try {
     const constraints: QueryConstraint[] = [];
 
     if (queryablePrefix && queryablePrefix.length > 0) { // Ensure prefix is not empty after stripping "@"
-      console.log(`%c[connectionService] getSuggestibleUsers: Applying prefix search for '${queryablePrefix}' on ${fieldToQueryAndOrder}.`, "color: #BA55D3");
+      // // console.log(`%c[connectionService] getSuggestibleUsers: Applying prefix search for '${queryablePrefix}' on ${fieldToQueryAndOrder}.`, "color: #BA55D3");
       constraints.push(where(fieldToQueryAndOrder, '>=', queryablePrefix));
       constraints.push(where(fieldToQueryAndOrder, '<=', queryablePrefix + '\uf8ff'));
       constraints.push(orderBy(fieldToQueryAndOrder)); // Order by the same field for prefix search
     } else {
-      console.log(`%c[connectionService] getSuggestibleUsers: No prefix, fetching general list ordered by ${fieldToQueryAndOrder}.`, "color: #BA55D3");
+      // // console.log(`%c[connectionService] getSuggestibleUsers: No prefix, fetching general list ordered by ${fieldToQueryAndOrder}.`, "color: #BA55D3");
       constraints.push(orderBy(fieldToQueryAndOrder)); // Default order if no prefix
     }
     constraints.push(limit(effectiveLimit));
 
     const q = query(usersCollectionRef, ...constraints);
-    console.log("%c[connectionService] getSuggestibleUsers: Executing Firestore query...", "color: #BA55D3;");
+    // // console.log("%c[connectionService] getSuggestibleUsers: Executing Firestore query...", "color: #BA55D3;");
     const querySnapshot = await getDocs(q);
-    console.log(`%c[connectionService] getSuggestibleUsers: Firestore query executed. Found ${querySnapshot.docs.length} documents.`, "color: #BA55D3");
+    // // console.log(`%c[connectionService] getSuggestibleUsers: Firestore query executed. Found ${querySnapshot.docs.length} documents.`, "color: #BA55D3");
 
     const users: UserProfileBasic[] = querySnapshot.docs.map(docSnap => {
       const data = docSnap.data() as UserProfileData;
@@ -434,16 +434,16 @@ export const getSuggestibleUsers = async (searchPrefix?: string, limitCountArg?:
       };
       return profile;
     });
-    console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users.`, "color: green;");
+    // // console.log(`%c[connectionService] getSuggestibleUsers: Successfully mapped ${users.length} users.`, "color: green;");
     return users;
   } catch (error: any) {
-    console.error('%c[connectionService] Error fetching suggestible users:', "color: red;", error);
+    // // console.error('%c[connectionService] Error fetching suggestible users:', "color: red;", error);
     if (error.code === 'permission-denied') {
-      console.error('%c  PERMISSION DENIED. Check Firestore rules for listing users (users collection, list operation).', "color: red;");
+      // // console.error('%c  PERMISSION DENIED. Check Firestore rules for listing users (users collection, list operation).', "color: red;");
       throw new Error('Permission denied fetching users. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      console.error(`%c  MISSING INDEX. Firestore query for suggestible users requires an index on '${fieldToQueryAndOrder}' (ascending). Create this in Firebase console.`, "color: red;");
+      // // console.error(`%c  MISSING INDEX. Firestore query for suggestible users requires an index on '${fieldToQueryAndOrder}' (ascending). Create this in Firebase console.`, "color: red;");
       throw new Error(`Query for suggestible users requires an index on ${fieldToQueryAndOrder} (ascending).`);
     }
     return [];
@@ -487,15 +487,15 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
     requestedAt: serverTimestamp(),
   };
 
-  console.log(`%c[connectionService] sendConnectionRequest - Pre-check:`, "color: blue;");
-  console.log(`  Param requesterId:               '${requesterId}'`);
-  console.log(`  Param recipientId:               '${recipientId}'`);
-  console.log(`  Client auth.currentUser?.uid:    '${clientAuthUid || 'NULL'}'`);
-  console.log(`%c[connectionService] sendConnectionRequest - Rule Check Values:`, "color: green;");
-  console.log(`  1. request.auth != null:                            ${!!clientAuthUid}`);
-  console.log(`  2. request.resource.data.requesterId == request.auth.uid: ${newConnectionData.requesterId === clientAuthUid} (Data: '${newConnectionData.requesterId}', Auth: '${clientAuthUid}')`);
-  console.log(`  3. request.resource.data.userIds.hasAll([request.auth.uid]): ${clientAuthUid ? newConnectionData.userIds.includes(clientAuthUid) : false} (Data: [${newConnectionData.userIds.join(', ')}], Auth: '${clientAuthUid}')`);
-  console.log(`%c[connectionService] sendConnectionRequest - Data to write:`, "color: darkorange;", newConnectionData);
+  // // console.log(`%c[connectionService] sendConnectionRequest - Pre-check:`, "color: blue;");
+  // // console.log(`  Param requesterId:               '${requesterId}'`);
+  // // console.log(`  Param recipientId:               '${recipientId}'`);
+  // // console.log(`  Client auth.currentUser?.uid:    '${clientAuthUid || 'NULL'}'`);
+  // // console.log(`%c[connectionService] sendConnectionRequest - Rule Check Values:`, "color: green;");
+  // // console.log(`  1. request.auth != null:                            ${!!clientAuthUid}`);
+  // // console.log(`  2. request.resource.data.requesterId == request.auth.uid: ${newConnectionData.requesterId === clientAuthUid} (Data: '${newConnectionData.requesterId}', Auth: '${clientAuthUid}')`);
+  // // console.log(`  3. request.resource.data.userIds.hasAll([request.auth.uid]): ${clientAuthUid ? newConnectionData.userIds.includes(clientAuthUid) : false} (Data: [${newConnectionData.userIds.join(', ')}], Auth: '${clientAuthUid}')`);
+  // // console.log(`%c[connectionService] sendConnectionRequest - Data to write:`, "color: darkorange;", newConnectionData);
 
 
   try {
@@ -511,22 +511,22 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
     }
 
     await setDoc(connectionDocRef, { ...newConnectionData, updatedAt: serverTimestamp() });
-    console.log(`[connectionService] Connection request sent successfully: ${connectionId}`);
+    // // console.log(`[connectionService] Connection request sent successfully: ${connectionId}`);
 
     await createNotification({
       userId: recipientId,
       type: 'connection_request',
       senderId: requesterId,
     });
-    console.log(`[connectionService] Notification created for connection request to ${recipientId}`);
+    // // console.log(`[connectionService] Notification created for connection request to ${recipientId}`);
 
   } catch (error: any) {
-    console.error(`%c[connectionService] Error sending connection request (${connectionId}):`, "color: red;", error);
+    // // console.error(`%c[connectionService] Error sending connection request (${connectionId}):`, "color: red;", error);
     if (error.code === 'permission-denied') {
-      console.error(`%c[connectionService] PERMISSION_DENIED details at time of error:`, "color: red; font-weight:bold;");
-      console.error(`  - auth.currentUser?.uid (at error): '${auth.currentUser?.uid || 'NULL'}'`);
-      console.error(`  - param requesterId (at error):   '${requesterId}'`);
-      console.error(`  - Data that was attempted for write (newConnectionData variable):`, newConnectionData);
+      // // console.error(`%c[connectionService] PERMISSION_DENIED details at time of error:`, "color: red; font-weight:bold;");
+      // // console.error(`  - auth.currentUser?.uid (at error): '${auth.currentUser?.uid || 'NULL'}'`);
+      // // console.error(`  - param requesterId (at error):   '${requesterId}'`);
+      // // console.error(`  - Data that was attempted for write (newConnectionData variable):`, newConnectionData);
       throw new Error('Permission denied. Check Firestore rules for creating mutuals documents.');
     }
     throw new Error(`${error.message}`);
@@ -535,7 +535,7 @@ export const sendConnectionRequest = async (requesterIdParam: string, recipientI
 
 export const acceptConnectionRequest = async (connectionId: string, acceptorId: string): Promise<void> => {
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
-  console.log(`[connectionService] Accepting connection request: ${connectionId} by user ${acceptorId}`);
+  // // console.log(`[connectionService] Accepting connection request: ${connectionId} by user ${acceptorId}`);
   try {
     const connectionDocSnap = await getDoc(connectionDocRef);
     if (!connectionDocSnap.exists()) throw new Error("Connection request not found.");
@@ -546,7 +546,7 @@ export const acceptConnectionRequest = async (connectionId: string, acceptorId: 
     if (connectionData.status !== 'pending') throw new Error("Connection request is not pending.");
 
     await updateDoc(connectionDocRef, { status: 'connected', connectedAt: serverTimestamp(), updatedAt: serverTimestamp() });
-    console.log(`[connectionService] Connection request accepted successfully: ${connectionId}`);
+    // // console.log(`[connectionService] Connection request accepted successfully: ${connectionId}`);
 
     const originalRequesterId = connectionData.requesterId;
     if (originalRequesterId) {
@@ -555,11 +555,11 @@ export const acceptConnectionRequest = async (connectionId: string, acceptorId: 
         type: 'connection_accepted',
         senderId: acceptorId,
       });
-      console.log(`[connectionService] Notification created for accepted connection to ${originalRequesterId}`);
+      // // console.log(`[connectionService] Notification created for accepted connection to ${originalRequesterId}`);
     }
 
   } catch (error: any) {
-    console.error(`[connectionService] Error accepting connection request (${connectionId}):`, error);
+    // // console.error(`[connectionService] Error accepting connection request (${connectionId}):`, error);
     if (error.code === 'permission-denied') throw new Error('Permission denied. Check Firestore rules for updating mutuals documents.');
     throw new Error(`Failed to accept connection request: ${error.message}`);
   }
@@ -567,7 +567,7 @@ export const acceptConnectionRequest = async (connectionId: string, acceptorId: 
 
 export const rejectOrCancelConnectionRequest = async (connectionId: string, userId: string): Promise<void> => {
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
-  console.log(`[connectionService] Rejecting/Cancelling connection request: ${connectionId} by user ${userId}`);
+  // // console.log(`[connectionService] Rejecting/Cancelling connection request: ${connectionId} by user ${userId}`);
   try {
     const connectionDocSnap = await getDoc(connectionDocRef);
     if (!connectionDocSnap.exists()) throw new Error("Connection request not found.");
@@ -575,9 +575,9 @@ export const rejectOrCancelConnectionRequest = async (connectionId: string, user
     if (!connectionData || !connectionData.userIds.includes(userId)) throw new Error("User not part of this connection request.");
     if (connectionData.status !== 'pending') throw new Error("Cannot reject/cancel a non-pending request.");
     await deleteDoc(connectionDocRef);
-    console.log(`[connectionService] Connection request rejected/cancelled successfully: ${connectionId}`);
+    // // console.log(`[connectionService] Connection request rejected/cancelled successfully: ${connectionId}`);
   } catch (error: any) {
-    console.error(`[connectionService] Error rejecting/cancelling connection request (${connectionId}):`, error);
+    // // console.error(`[connectionService] Error rejecting/cancelling connection request (${connectionId}):`, error);
     if (error.code === 'permission-denied') throw new Error('Permission denied. Check Firestore rules for deleting mutuals documents.');
     throw new Error(`Failed to reject/cancel connection request: ${error.message}`);
   }
@@ -585,7 +585,7 @@ export const rejectOrCancelConnectionRequest = async (connectionId: string, user
 
 export const removeConnection = async (connectionId: string, userId: string): Promise<void> => {
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
-  console.log(`[connectionService] Removing connection: ${connectionId} by user ${userId}`);
+  // // console.log(`[connectionService] Removing connection: ${connectionId} by user ${userId}`);
   try {
     const connectionDocSnap = await getDoc(connectionDocRef);
     if (!connectionDocSnap.exists()) throw new Error("Connection not found.");
@@ -593,9 +593,9 @@ export const removeConnection = async (connectionId: string, userId: string): Pr
     if (!connectionData || !connectionData.userIds.includes(userId)) throw new Error("User not part of this connection.");
     if (connectionData.status !== 'connected') throw new Error("Cannot remove a non-connected relationship.");
     await deleteDoc(connectionDocRef);
-    console.log(`[connectionService] Connection removed successfully: ${connectionId}`);
+    // // console.log(`[connectionService] Connection removed successfully: ${connectionId}`);
   } catch (error: any) {
-    console.error(`[connectionService] Error removing connection (${connectionId}):`, error);
+    // // console.error(`[connectionService] Error removing connection (${connectionId}):`, error);
     if (error.code === 'permission-denied') throw new Error('Permission denied. Check Firestore rules for deleting mutuals documents.');
     throw new Error(`Failed to remove connection: ${error.message}`);
   }
@@ -607,48 +607,48 @@ export const getConnectionStatus = async (userId1Param: string, userId2Param: st
   const userId2 = String(userId2Param || "").trim();
   const currentClientAuthUid = auth.currentUser?.uid;
 
-  // console.log(`%c[connectionService] getConnectionStatus called. User1: '${userId1}', User2: '${userId2}'. Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: #FF00FF");
+  // // // console.log(`%c[connectionService] getConnectionStatus called. User1: '${userId1}', User2: '${userId2}'. Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: #FF00FF");
 
   if (!userId1 || !userId2) {
-    // console.warn(`%c[connectionService] getConnectionStatus: Called with empty or invalid userId. userId1: '${userId1}', userId2: '${userId2}'`, "color: orange");
+    // // // console.warn(`%c[connectionService] getConnectionStatus: Called with empty or invalid userId. userId1: '${userId1}', userId2: '${userId2}'`, "color: orange");
     return 'not_connected';
   }
   if (userId1 === userId2) return 'self';
 
   if (!IS_VALID_FIREBASE_UID_REGEX.test(userId1) || !IS_VALID_FIREBASE_UID_REGEX.test(userId2)) {
-    console.error(`%c[connectionService] getConnectionStatus: CRITICAL - One or both IDs do not look like UIDs. userId1: '${userId1}', userId2: '${userId2}'. Returning 'not_connected'.`, "color: red; font-weight: bold");
+    // // console.error(`%c[connectionService] getConnectionStatus: CRITICAL - One or both IDs do not look like UIDs. userId1: '${userId1}', userId2: '${userId2}'. Returning 'not_connected'.`, "color: red; font-weight: bold");
     return 'not_connected';
   }
 
   const connectionId = getConnectionDocId(userId1, userId2);
   if (connectionId.startsWith("INVALID_CONNECTION_ID")) {
-    console.error(`%c[connectionService] getConnectionStatus - ERROR: Could not generate valid connectionId for ('${userId1}', '${userId2}'). Aborting.`, "color: red; font-weight:bold;");
+    // // console.error(`%c[connectionService] getConnectionStatus - ERROR: Could not generate valid connectionId for ('${userId1}', '${userId2}'). Aborting.`, "color: red; font-weight:bold;");
     return 'not_connected';
   }
   const connectionDocRef = doc(mutualsCollectionRef, connectionId);
 
   try {
-    // console.log(`%c  [getConnectionStatus] Attempting to getDoc for mutuals/${connectionId}. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: #FF00FF;");
+    // // // console.log(`%c  [getConnectionStatus] Attempting to getDoc for mutuals/${connectionId}. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: #FF00FF;");
     const docSnap = await getDoc(connectionDocRef);
     if (!docSnap.exists()) {
-      // console.log(`%c  [getConnectionStatus] Document mutuals/${connectionId} does not exist. Status: not_connected`, "color: #FF00FF;");
+      // // // console.log(`%c  [getConnectionStatus] Document mutuals/${connectionId} does not exist. Status: not_connected`, "color: #FF00FF;");
       return 'not_connected';
     }
     const data = docSnap.data();
     if (!data || !data.status || !data.requesterId || !data.userIds) {
-      // console.warn(`%c  [getConnectionStatus] Document mutuals/${connectionId} is malformed or missing key fields. Status: not_connected`, "color: orange;");
+      // // // console.warn(`%c  [getConnectionStatus] Document mutuals/${connectionId} is malformed or missing key fields. Status: not_connected`, "color: orange;");
       return 'not_connected';
     }
 
     if (data.status === 'connected') return 'connected';
     if (data.status === 'pending') return data.requesterId === userId1 ? 'pending_sent' : 'pending_received';
     if (data.status === 'blocked') return 'blocked';
-    // console.log(`%c  [getConnectionStatus] Document mutuals/${connectionId} found with status: ${data.status}. Requester: ${data.requesterId}`, "color: #FF00FF;");
+    // // // console.log(`%c  [getConnectionStatus] Document mutuals/${connectionId} found with status: ${data.status}. Requester: ${data.requesterId}`, "color: #FF00FF;");
     return 'not_connected';
   } catch (error: any) {
-    console.error(`[connectionService] Error fetching connection status between ${userId1} and ${userId2} (ID: ${connectionId}):`, error);
+    // // console.error(`[connectionService] Error fetching connection status between ${userId1} and ${userId2} (ID: ${connectionId}):`, error);
     if (error.code === 'permission-denied') {
-       console.error(`  PERMISSION_DENIED for reading mutuals/${connectionId}. Client auth UID: '${currentClientAuthUid || 'NULL'}'. Rule expects 'userIds' in doc to contain this UID if doc exists.`);
+       // // console.error(`  PERMISSION_DENIED for reading mutuals/${connectionId}. Client auth UID: '${currentClientAuthUid || 'NULL'}'. Rule expects 'userIds' in doc to contain this UID if doc exists.`);
     }
     return null;
   }
@@ -656,10 +656,10 @@ export const getConnectionStatus = async (userId1Param: string, userId2Param: st
 
 export const getPendingRequests = async (userId: string): Promise<ConnectionRequest[]> => {
   if (!userId || !IS_VALID_FIREBASE_UID_REGEX.test(userId)) {
-    console.warn("[connectionService] getPendingRequests called with invalid or empty userId:", userId);
+    // // console.warn("[connectionService] getPendingRequests called with invalid or empty userId:", userId);
     return [];
   }
-  console.log(`%c[connectionService] Fetching pending requests for user: ${userId}`, "color: #4682B4;");
+  // // console.log(`%c[connectionService] Fetching pending requests for user: ${userId}`, "color: #4682B4;");
   try {
     const q = query(
       mutualsCollectionRef,
@@ -684,16 +684,16 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
         });
       }
     }
-    console.log(`%c[connectionService] getPendingRequests: Found ${requests.length} pending requests for user ${userId}.`, "color: green;");
+    // // console.log(`%c[connectionService] getPendingRequests: Found ${requests.length} pending requests for user ${userId}.`, "color: green;");
     return requests;
   } catch (error: any) {
-    console.error(`%c[connectionService] Error fetching pending requests for user ${userId}:`, "color: red;", error);
+    // // console.error(`%c[connectionService] Error fetching pending requests for user ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied fetching pending requests. Check rules for 'mutuals' collection.");
+        // // console.error("Firestore permission denied fetching pending requests. Check rules for 'mutuals' collection.");
         throw new Error('Permission denied fetching pending requests. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.error("Firestore query for pending requests requires an index. Create a composite index on 'userIds' (array-contains), 'status' (==), and 'requestedAt' (desc) in the Firebase console for the 'mutuals' collection.");
+        // // console.error("Firestore query for pending requests requires an index. Create a composite index on 'userIds' (array-contains), 'status' (==), and 'requestedAt' (desc) in the Firebase console for the 'mutuals' collection.");
         throw new Error('Firestore query requires an index for pending requests. Please create it in the Firebase console.');
     }
     throw new Error(`Failed to fetch pending requests: ${error.message}`);
@@ -702,10 +702,10 @@ export const getPendingRequests = async (userId: string): Promise<ConnectionRequ
 
 export const getConnections = async (userId: string): Promise<Connection[]> => {
   if (!userId || !IS_VALID_FIREBASE_UID_REGEX.test(userId)) {
-    console.warn("[connectionService] getConnections called with invalid or empty userId:", userId);
+    // // console.warn("[connectionService] getConnections called with invalid or empty userId:", userId);
     return [];
   }
-  console.log(`%c[connectionService] Fetching connections for user: ${userId}`, "color: #2E8B57;");
+  // // console.log(`%c[connectionService] Fetching connections for user: ${userId}`, "color: #2E8B57;");
   try {
     const q = query(
       mutualsCollectionRef,
@@ -734,16 +734,16 @@ export const getConnections = async (userId: string): Promise<Connection[]> => {
         });
       }
     }
-    console.log(`%c[connectionService] getConnections: Found ${connections.length} connections for user ${userId}.`, "color: green;");
+    // // console.log(`%c[connectionService] getConnections: Found ${connections.length} connections for user ${userId}.`, "color: green;");
     return connections;
   } catch (error: any) {
-    console.error(`%c[connectionService] Error fetching connections for user ${userId}:`, "color: red;", error);
+    // // console.error(`%c[connectionService] Error fetching connections for user ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
-        console.error("Firestore permission denied fetching connections. Check rules for 'mutuals' collection.");
+        // // console.error("Firestore permission denied fetching connections. Check rules for 'mutuals' collection.");
         throw new Error('Permission denied fetching connections. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.error("Firestore query for connections requires an index. Create a composite index on 'userIds' (array-contains), 'status' (==), and 'connectedAt' (desc) in the Firebase console for the 'mutuals' collection.");
+        // // console.error("Firestore query for connections requires an index. Create a composite index on 'userIds' (array-contains), 'status' (==), and 'connectedAt' (desc) in the Firebase console for the 'mutuals' collection.");
         throw new Error('Firestore query requires an index for connections. Please create it in the Firebase console.');
     }
     throw new Error(`Failed to fetch connections: ${error.message}`);
@@ -758,6 +758,7 @@ interface MutualConnection { // Added this missing interface definition from typ
     requesterId: string;
     createdAt: Timestamp | FieldValue;
     updatedAt: Timestamp | FieldValue;
-    connectedAt?: Timestamp | FieldValue;
-    requestedAt?: Timestamp | FieldValue;
+    connectedAt?: Timestamp | FieldValue; // Added when status becomes 'connected'
+    requestedAt?: Timestamp | FieldValue; // Specifically for pending
 }
+
