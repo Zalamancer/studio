@@ -8,7 +8,6 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription as DialogPrimitiveDescription,
-  // DialogFooter, // Removed import
 } from '@/components/ui/dialog';
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from '@/components/ui/button';
@@ -37,7 +36,7 @@ import {
   Search,
   PlusCircle,
   X,
-  Save, // Keep Save icon if used, remove if not
+  Save,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -385,7 +384,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
+      <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
         <DialogHeader className="pt-6 px-6 pb-4 border-b flex flex-row justify-between items-center">
             <div className="flex items-center gap-2 min-w-0">
                 <FileText className="h-5 w-5 text-primary flex-shrink-0" />
@@ -424,7 +423,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             <ScrollArea className="flex-grow min-h-0">
               <div className="p-6">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
-                  <div className="md:w-1/2 space-y-6"> 
+                  {/* Left Column for Details */}
+                  <div className="md:w-1/2 space-y-6">
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
@@ -434,7 +434,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
                     </div>
                     
-                    <div className="space-y-4"> 
+                    <div className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {isOwnerForUIDisplay ? (
                           <>
@@ -472,8 +472,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         )}
                       </div>
                     </div>
-
-                    <div className="text-xs text-muted-foreground space-y-1 border-t pt-4 border-2 border-red-500 p-1"> {/* DEBUG BORDER */}
+                    {/* Static Info Block - Removed debug border */}
+                    <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
                       <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
                       <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
                       <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
@@ -481,8 +481,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                     </div>
                   </div>
 
+                  {/* Right Column for Permissions */}
                   {isOwnerForUIDisplay && (
-                    <div className="md:w-1/2 space-y-4 flex flex-col"> 
+                    <div className="md:w-1/2 space-y-4 flex flex-col">
                       {visibility !== 'public' && renderPermissionSection(
                         "Manage View Access (Private/Unlisted)",
                         currentViewUserIds,
@@ -520,11 +521,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 </div>
               </div>
             </ScrollArea>
-            {/* Footer is intentionally left empty or can be removed if not needed for spacing */}
           </>
         ) : null}
       </DialogContent>
     </Dialog>
   );
 };
-
