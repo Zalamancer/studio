@@ -349,10 +349,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   }, [suggestibleUsers, isLoadingSuggestibleUsers, showProblemDetailsSuggestions, debouncedProblemDetailsQuery, currentUserId]);
 
   const handleImageChange = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    console.log("[DEBUG] handleImageChange started");
     const files = event.target.files;
     if (!files || files.length === 0) {
-      console.log("[DEBUG] No files selected in handleImageChange.");
       return;
     }
 
@@ -360,26 +358,21 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     const newlyProcessedFiles: File[] = [];
     const newFilesToProcess = Array.from(files);
 
-    console.log(`[DEBUG] Processing ${newFilesToProcess.length} new files. Already have ${currentSelectedFiles.length} files.`);
     setIsCompressing(true);
     toast({ title: "Processing images...", description: "Please wait.", duration: newFilesToProcess.length * 1500 });
 
     try {
       for (const file of newFilesToProcess) {
-        console.log(`[DEBUG] Processing file: ${file.name}, size: ${file.size}, type: ${file.type}`);
         if (currentSelectedFiles.length + newlyProcessedFiles.length >= MAX_IMAGE_FILES) {
           toast({ variant: "destructive", title: "Limit Reached", description: `You can only upload up to ${MAX_IMAGE_FILES} images.` });
-          console.log("[DEBUG] Max image files limit reached.");
           break;
         }
         if (!file.type || typeof file.type !== 'string' || !ACCEPTED_IMAGE_TYPES.includes(file.type.toLowerCase())) {
           toast({ variant: "destructive", title: "Invalid File Type", description: `${file.name} is not a supported image type.` });
-          console.log(`[DEBUG] Invalid file type: ${file.type} for file ${file.name}`);
           continue;
         }
 
         try {
-          console.log(`[DEBUG] Compressing ${file.name}...`);
           const compressionOptions = {
             maxSizeMB: MAX_OUTPUT_FILE_SIZE_MB,
             maxWidthOrHeight: MAX_UPLOAD_DIMENSION,
@@ -393,30 +386,24 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             ? new File([compressedOutput], finalFileName, { type: 'image/webp', lastModified: compressedOutput.lastModified })
             : new File([compressedOutput], finalFileName, { type: 'image/webp' });
 
-          console.log(`[DEBUG] Compressed ${file.name} to ${finalFileToAdd.name}, new size: ${finalFileToAdd.size}, final type: ${finalFileToAdd.type}`);
 
           if (finalFileToAdd.type && ACCEPTED_IMAGE_TYPES.includes(finalFileToAdd.type.toLowerCase())) {
             newlyProcessedFiles.push(finalFileToAdd);
           } else {
-            console.warn(`[DEBUG] Compressed file ${finalFileToAdd.name} has an unexpected final type ${finalFileToAdd.type}. Skipping.`);
             toast({ variant: "destructive", title: `Unsupported Resulting Type`, description: `Compressed file ${finalFileToAdd.name} resulted in an unsupported type: ${finalFileToAdd.type}. It was not added.`});
           }
 
         } catch (error) {
-          console.error(`[DEBUG] Error compressing ${file.name}:`, error);
           toast({ variant: "destructive", title: `Compression Failed for ${file.name}`, description: "Could not process this image. Please try another." });
         }
       }
 
       if (newlyProcessedFiles.length > 0) {
         const updatedFiles = [...currentSelectedFiles, ...newlyProcessedFiles];
-        console.log("[DEBUG] Files to be set via form.setValue (updatedFiles):", updatedFiles.map(f => ({ name: f.name, type: f.type, size: f.size, isFile: f instanceof File })));
         try {
           form.setValue("imageFiles", updatedFiles, { shouldValidate: true, shouldDirty: true });
-          console.log("[DEBUG] form.setValue for imageFiles successful. Current form errors:", JSON.stringify(form.formState.errors, null, 2));
-          console.log("[DEBUG] Form values for imageFiles after set:", form.getValues("imageFiles"));
         } catch (setValueError) {
-          console.error("[DEBUG] Error during form.setValue for imageFiles:", setValueError);
+          // console.error("[DEBUG] Error during form.setValue for imageFiles:", setValueError);
         }
 
         const updatePreviews = async () => {
@@ -429,18 +416,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             });
           }));
           setImagePreviewUrls(prev => [...prev, ...previews]);
-          console.log("[DEBUG] Image previews updated.");
         };
         updatePreviews().catch(error => {
-          console.error("[DEBUG] Error updating image previews:", error);
           toast({ variant: "destructive", title: "Preview Error", description: "Some image previews could not be generated." });
         });
       }
     } catch (e) {
-      console.error("[DEBUG] Unexpected error in handleImageChange:", e);
       toast({ variant: "destructive", title: "Image Processing Error", description: "An unexpected error occurred." });
     } finally {
-      console.log("[DEBUG] handleImageChange finally block. Resetting isCompressing to false.");
       setIsCompressing(false);
       if (fileInputRef.current) fileInputRef.current.value = "";
     }
@@ -454,17 +437,13 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   };
 
   const handleSubmitForm = (values: z.infer<typeof postFormSchema>) => {
-    console.log("[DEBUG] handleSubmitForm entered. Form values:", values);
     if (form.formState.isSubmitting || isSubmitting) {
-        console.log("[DEBUG] Form is already submitting. Preventing duplicate submit.");
         return;
     }
     if (!currentUserId) {
         toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to create a post." });
-        console.error("[DEBUG] Attempted to submit post without currentUserId.");
         return;
     }
-    console.log("[DEBUG] Form is not currently submitting. Proceeding with submission logic...");
 
     const finalMentionedUserIds = Array.from(selectedMentionedUserIds);
 
@@ -483,51 +462,18 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       maxBudget: values.requestType === 'help_request' && values.maxBudget !== undefined ? Number(values.maxBudget) : undefined,
       deadline: values.requestType === 'help_request' && values.deadline ? values.deadline : undefined,
     };
-    console.log("[DEBUG] Prepared submitData for onSubmit prop:", submitData);
     onSubmit(submitData);
   };
 
   const handleValidationErrors = (errors: any) => {
-    console.error("Form validation errors (raw object):", errors);
-    try {
-      console.error("Form validation errors (stringified, might be partial):", JSON.stringify(errors, null, 2));
-    } catch (e) {
-      console.error("Form validation errors (could not stringify):", errors);
-    }
-
+    // Removed console.error statements
     if (Object.keys(errors).length === 0) {
-      console.warn("[DEBUG] handleValidationErrors called with empty errors object. Attempting manual parse...");
       const currentFormValues = form.getValues();
-      console.log("[DEBUG] Current form values for manual parse:", currentFormValues);
       const parseResult = postFormSchema.safeParse(currentFormValues);
       if (!parseResult.success) {
-        console.error("[DEBUG] Manual safeParse FAILED. ZodError details:", parseResult.error.flatten());
         toast({ variant: "destructive", title: "Validation Error", description: "Manual Zod parse failed. Check console."});
       } else {
-        console.log("[DEBUG] Manual safeParse SUCCEEDED, but react-hook-form reported errors. This is unusual.");
         toast({ variant: "destructive", title: "Validation Inconsistency", description: "Please check console."});
-      }
-      const imageFilesValue = form.getValues("imageFiles");
-      console.log("[DEBUG] Image files in form at time of empty error:", imageFilesValue?.map(f => ({name: f.name, type: f.type, size: f.size, isFile: f instanceof File})));
-    }
-
-    if (errors && errors.imageFiles) {
-      const imageFilesError = errors.imageFiles;
-      console.error("[DEBUG] Image files error object:", imageFilesError);
-      if (imageFilesError.message) {
-        console.error("[DEBUG] Image files error message (array level):", imageFilesError.message);
-      } else if (Array.isArray(imageFilesError)) {
-          imageFilesError.forEach((err: any, idx: number) => {
-              if(err && err._errors && err._errors.length > 0) {
-                  console.error(`[DEBUG] Image file error at index ${idx}:`, err._errors.join(', '));
-              } else if (err && err.message) {
-                  console.error(`[DEBUG] Image file error at index ${idx} (direct message):`, err.message);
-              } else if (err) {
-                  console.error(`[DEBUG] Image file error at index ${idx} (unknown structure):`, err);
-              }
-          });
-      } else if (typeof imageFilesError === 'object' && (imageFilesError as any)._errors) {
-          console.error("[DEBUG] Image files error message (_errors):", (imageFilesError as any)._errors.join(', '));
       }
     }
     toast({ variant: "destructive", title: "Validation Error", description: "Please check the form for errors. Details logged in console." });
@@ -909,7 +855,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                       reader.readAsDataURL(compressedFile);
                       toast({ title: "Image Compressed & Added" });
                   } catch (error) {
-                      console.error("Error compressing image:", error);
+                      // console.error("Error compressing image:", error);
                       toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress the image." });
                   } finally {
                       setIsCompressing(false);

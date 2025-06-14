@@ -415,24 +415,17 @@ export default function MainLayout({
   const addPostMutation = useMutation({
     mutationFn: async (formData: CreatePostFormData) => {
       if (!user) throw new Error("User not authenticated to create post.");
-      console.log(`%c[MainLayout] addPostMutation: Initiated by user: ${user.uid}`, "color: magenta;");
-      console.log(`%c[MainLayout] addPostMutation: Form data received:`, "color: magenta;", formData);
 
       let currentRatingScore = 0;
       try {
-        console.log(`[MainLayout] addPostMutation: Fetching reviews for user ${user.uid} to calculate current rating score.`);
         const reviews = await getReviewsForProfile(user.uid);
-        console.log(`[MainLayout] addPostMutation: Fetched ${reviews.length} reviews for user ${user.uid}.`);
         if (reviews && reviews.length > 0) {
           const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
           currentRatingScore = parseFloat((totalRating / reviews.length).toFixed(1));
-        } else {
-           console.log(`[MainLayout] addPostMutation: No reviews found for ${user.uid}, ratingScore will be 0.`);
         }
       } catch (ratingError: any) {
-        console.error("[MainLayout] addPostMutation: Error fetching reviews for rating score:", ratingError.message);
+        // console.error("[MainLayout] addPostMutation: Error fetching reviews for rating score:", ratingError.message);
       }
-      console.log(`%c[MainLayout] addPostMutation: User ${user.uid} rating score for new post: ${currentRatingScore}`, "color: magenta; font-weight: bold;");
 
       let uploadedImageUrls: string[] = [];
       if (formData.imageFiles && formData.imageFiles.length > 0 && user) {
@@ -480,7 +473,6 @@ export default function MainLayout({
         deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
         commentCount: 0,
       };
-      console.log(`%c[MainLayout] addPostMutation: Post data PREPARED for service. RatingScore: ${newPostData.ratingScore}. Data:`, "color: #FF00FF;", newPostData);
       return addPostToFirestore(newPostData);
     },
     onSuccess: (newlyCreatedPostId, variables) => {
@@ -504,7 +496,7 @@ export default function MainLayout({
                 textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "",
               });
             } catch (notifyError) {
-              console.error(`[MainLayout] Failed to create mention notification for post ${newlyCreatedPostId}:`, notifyError);
+              // console.error(`[MainLayout] Failed to create mention notification for post ${newlyCreatedPostId}:`, notifyError);
             }
           }
         });
@@ -521,7 +513,6 @@ export default function MainLayout({
         toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
         return;
       }
-      console.log("[MainLayout] handleCreatePostSubmit formData RECEIVED:", JSON.stringify(formData, null, 2));
       addPostMutation.mutate(formData);
     },
     [user, toast, addPostMutation]
@@ -533,7 +524,7 @@ export default function MainLayout({
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/login');
     } catch (error) {
-      console.error("Logout Error:", error);
+      // console.error("Logout Error:", error);
       toast({ variant: "destructive", title: "Logout Failed", description: "An error occurred. Please try again." });
     }
   };
@@ -715,4 +706,3 @@ export default function MainLayout({
     </div>
   );
 }
-

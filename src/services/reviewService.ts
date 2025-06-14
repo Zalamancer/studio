@@ -1,3 +1,4 @@
+
 // src/services/reviewService.ts
 // Client-side service
 
@@ -30,11 +31,11 @@ type FirestoreNewReviewData = Omit<Review, 'id' | 'createdAt' | 'updatedAt'> & {
 
 export const getReviewsGivenByUserId = async (reviewerId: string): Promise<ClientReview[]> => {
   if (!reviewerId) {
-    console.warn("[reviewService] getReviewsGivenByUserId: No reviewerId provided.");
+    // console.warn("[reviewService] getReviewsGivenByUserId: No reviewerId provided.");
     return [];
   }
   const clientAuthUid = auth.currentUser?.uid;
-  console.log(`%c[reviewService] getReviewsGivenByUserId: Fetching reviews given by reviewerId: '${reviewerId}'. Client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
+  // console.log(`%c[reviewService] getReviewsGivenByUserId: Fetching reviews given by reviewerId: '${reviewerId}'. Client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
   try {
     const q = query(
@@ -59,16 +60,16 @@ export const getReviewsGivenByUserId = async (reviewerId: string): Promise<Clien
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
       });
     });
-    console.log(`%c[reviewService] getReviewsGivenByUserId: Fetched ${reviews.length} reviews given by ${reviewerId}`, "color: green;");
+    // console.log(`%c[reviewService] getReviewsGivenByUserId: Fetched ${reviews.length} reviews given by ${reviewerId}`, "color: green;");
     return reviews;
   } catch (error: any) {
-    console.error(`[reviewService] Error fetching reviews given by ${reviewerId}:`, error);
+    // console.error(`[reviewService] Error fetching reviews given by ${reviewerId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error(`[reviewService] PERMISSION DENIED fetching reviews given by ${reviewerId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Check Firestore rules for reading 'reviews' collection (ensure query by reviewerId is allowed).`);
+      // console.error(`[reviewService] PERMISSION DENIED fetching reviews given by ${reviewerId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Check Firestore rules for reading 'reviews' collection (ensure query by reviewerId is allowed).`);
       throw new Error('Permission denied fetching reviews by user. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.error("[reviewService] Firestore query for reviews by reviewerId requires an index. Create a composite index on 'reviewerId' (==) and 'createdAt' (desc) in the Firebase console for the 'reviews' collection.");
+        // console.error("[reviewService] Firestore query for reviews by reviewerId requires an index. Create a composite index on 'reviewerId' (==) and 'createdAt' (desc) in the Firebase console for the 'reviews' collection.");
         throw new Error("Firestore query requires an index for reviews by user. Please create it in the Firebase console.");
     }
     throw new Error(error.message || "Could not fetch reviews by user.");
@@ -77,31 +78,31 @@ export const getReviewsGivenByUserId = async (reviewerId: string): Promise<Clien
 
 
 export const addReview = async (reviewData: NewReviewDataType): Promise<string> => {
-  console.log("[reviewService] addReview: Called with data:", reviewData);
+  // console.log("[reviewService] addReview: Called with data:", reviewData);
   if (!reviewData.targetUserId || !reviewData.reviewerId || !reviewData.rating) {
-    console.error("[reviewService] addReview: Missing required fields.");
+    // console.error("[reviewService] addReview: Missing required fields.");
     throw new Error("Target user, reviewer ID, and rating are required.");
   }
   const clientAuthUid = auth.currentUser?.uid;
   if (!clientAuthUid || clientAuthUid !== reviewData.reviewerId) {
-      console.error(`[reviewService] addReview: Authentication mismatch or not authenticated. Client UID: ${clientAuthUid}, Reviewer ID in data: ${reviewData.reviewerId}`);
+      // console.error(`[reviewService] addReview: Authentication mismatch or not authenticated. Client UID: ${clientAuthUid}, Reviewer ID in data: ${reviewData.reviewerId}`);
       throw new Error("Authentication error: Cannot create review for another user or without authentication.");
   }
 
   // Fetch previous reviews by this reviewer to calculate their historical average rating
   let calculatedHistoricalAvgRating: number | null = null;
   try {
-    console.log(`[reviewService] addReview: Fetching previous reviews given by ${reviewData.reviewerId} to calculate historical average.`);
+    // console.log(`[reviewService] addReview: Fetching previous reviews given by ${reviewData.reviewerId} to calculate historical average.`);
     const previousReviewsGiven = await getReviewsGivenByUserId(reviewData.reviewerId);
     if (previousReviewsGiven.length > 0) {
       const sumOfPreviousRatings = previousReviewsGiven.reduce((sum, r) => sum + r.rating, 0);
       calculatedHistoricalAvgRating = sumOfPreviousRatings / previousReviewsGiven.length;
-      console.log(`[reviewService] addReview: Calculated historical average rating for ${reviewData.reviewerId}: ${calculatedHistoricalAvgRating} based on ${previousReviewsGiven.length} reviews.`);
+      // console.log(`[reviewService] addReview: Calculated historical average rating for ${reviewData.reviewerId}: ${calculatedHistoricalAvgRating} based on ${previousReviewsGiven.length} reviews.`);
     } else {
-      console.log(`[reviewService] addReview: No previous reviews found for ${reviewData.reviewerId}. Historical average rating will be null.`);
+      // console.log(`[reviewService] addReview: No previous reviews found for ${reviewData.reviewerId}. Historical average rating will be null.`);
     }
   } catch (e) {
-    console.error(`[reviewService] addReview: Error fetching previous reviews for ${reviewData.reviewerId}. Historical average rating will be null. Error:`, e);
+    // console.error(`[reviewService] addReview: Error fetching previous reviews for ${reviewData.reviewerId}. Historical average rating will be null. Error:`, e);
   }
 
   try {
@@ -117,18 +118,18 @@ export const addReview = async (reviewData: NewReviewDataType): Promise<string> 
       updatedAt: serverTimestamp() as Timestamp,
     };
 
-    console.log("[reviewService] addReview: Data being sent to Firestore:", dataToSave);
+    // console.log("[reviewService] addReview: Data being sent to Firestore:", dataToSave);
 
     const docRef = await addDoc(collection(db, REVIEWS_COLLECTION), dataToSave);
-    console.log(`[reviewService] Review added for target ${reviewData.targetUserId} by ${reviewData.reviewerId} with ID: ${docRef.id}`);
+    // console.log(`[reviewService] Review added for target ${reviewData.targetUserId} by ${reviewData.reviewerId} with ID: ${docRef.id}`);
     return docRef.id;
   } catch (error: any) {
-    console.error("[reviewService] Error adding review:", error);
+    // console.error("[reviewService] Error adding review:", error);
     if (error.code === 'permission-denied') {
-      console.error(`[reviewService] PERMISSION DENIED adding review. Auth UID: ${clientAuthUid}. Data:`, reviewData);
+      // console.error(`[reviewService] PERMISSION DENIED adding review. Auth UID: ${clientAuthUid}. Data:`, reviewData);
     }
     if (error.message && error.message.includes("Unsupported field value: undefined")) {
-      console.error("[reviewService] Firestore received an undefined value. Data sent:", reviewData);
+      // console.error("[reviewService] Firestore received an undefined value. Data sent:", reviewData);
     }
     throw new Error(error.message || "Could not add review.");
   }
@@ -136,12 +137,12 @@ export const addReview = async (reviewData: NewReviewDataType): Promise<string> 
 
 export const getReviewsForProfile = async (targetUserId: string): Promise<ClientReview[]> => {
   if (!targetUserId) {
-    console.warn("[reviewService] getReviewsForProfile: No targetUserId provided.");
+    // console.warn("[reviewService] getReviewsForProfile: No targetUserId provided.");
     return [];
   }
   const clientAuthUid = auth.currentUser?.uid;
-  console.log(`%c[userPreferenceService] getUserPreferences - Internal Auth Check: auth.currentUser?.uid = ${auth.currentUser?.uid || 'NULL'}`, "color: darkgoldenrod;");
-  console.log(`%c[reviewService] getReviewsForProfile: Fetching for targetUserId: '${targetUserId}'. Client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
+  // console.log(`%c[userPreferenceService] getUserPreferences - Internal Auth Check: auth.currentUser?.uid = ${auth.currentUser?.uid || 'NULL'}`, "color: darkgoldenrod;");
+  // console.log(`%c[reviewService] getReviewsForProfile: Fetching for targetUserId: '${targetUserId}'. Client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
 
   try {
@@ -167,16 +168,16 @@ export const getReviewsForProfile = async (targetUserId: string): Promise<Client
         updatedAt: (data.updatedAt as Timestamp).toMillis(), 
       });
     });
-    console.log(`%c[reviewService] getReviewsForProfile: Fetched ${reviews.length} reviews for profile ${targetUserId}`, "color: green;");
+    // console.log(`%c[reviewService] getReviewsForProfile: Fetched ${reviews.length} reviews for profile ${targetUserId}`, "color: green;");
     return reviews;
   } catch (error: any) {
-    console.error(`[reviewService] Error fetching reviews for profile ${targetUserId}:`, error);
+    // console.error(`[reviewService] Error fetching reviews for profile ${targetUserId}:`, error);
     if (error.code === 'permission-denied') {
-      console.error(`[reviewService] PERMISSION DENIED fetching reviews for target ${targetUserId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Check Firestore rules for reading 'reviews' collection.`);
+      // console.error(`[reviewService] PERMISSION DENIED fetching reviews for target ${targetUserId}. Client auth UID: '${clientAuthUid || 'NULL'}'. Check Firestore rules for reading 'reviews' collection.`);
       throw new Error('Permission denied fetching reviews. Check Firestore rules.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        console.error("[reviewService] Firestore query for reviews requires an index. Create a composite index on 'targetUserId' (==) and 'createdAt' (desc) in the Firebase console for the 'reviews' collection.");
+        // console.error("[reviewService] Firestore query for reviews requires an index. Create a composite index on 'targetUserId' (==) and 'createdAt' (desc) in the Firebase console for the 'reviews' collection.");
         throw new Error("Firestore query requires an index for reviews. Please create it in the Firebase console.");
     }
     throw new Error(error.message || "Could not fetch reviews.");
@@ -185,14 +186,14 @@ export const getReviewsForProfile = async (targetUserId: string): Promise<Client
 
 
 export const updateReview = async (reviewId: string, currentUserId: string, data: UpdateReviewData): Promise<void> => {
-  console.log(`[reviewService] updateReview: Called for reviewId '${reviewId}' by userId '${currentUserId}'. Data:`, data);
+  // console.log(`[reviewService] updateReview: Called for reviewId '${reviewId}' by userId '${currentUserId}'. Data:`, data);
   if (!reviewId || !currentUserId) {
-    console.error("[reviewService] updateReview: Missing reviewId or currentUserId.");
+    // console.error("[reviewService] updateReview: Missing reviewId or currentUserId.");
     throw new Error("Review ID and User ID are required for update.");
   }
   const clientAuthUid = auth.currentUser?.uid;
   if (!clientAuthUid || clientAuthUid !== currentUserId) {
-      console.error(`[reviewService] updateReview: Auth mismatch. Client UID: ${clientAuthUid}, currentUserId param: ${currentUserId}`);
+      // console.error(`[reviewService] updateReview: Auth mismatch. Client UID: ${clientAuthUid}, currentUserId param: ${currentUserId}`);
       throw new Error("Authentication error: Cannot update review.");
   }
 
@@ -200,7 +201,7 @@ export const updateReview = async (reviewId: string, currentUserId: string, data
   try {
     const reviewSnap = await getDoc(reviewDocRef);
     if (!reviewSnap.exists() || reviewSnap.data()?.reviewerId !== currentUserId) {
-        console.warn(`[reviewService] updateReview: Review not found or permission denied. Reviewer ID: ${reviewSnap.data()?.reviewerId}, Current User: ${currentUserId}`);
+        // console.warn(`[reviewService] updateReview: Review not found or permission denied. Reviewer ID: ${reviewSnap.data()?.reviewerId}, Current User: ${currentUserId}`);
         throw new Error("Review not found or permission denied for update.");
     }
 
@@ -210,25 +211,25 @@ export const updateReview = async (reviewId: string, currentUserId: string, data
       comment: data.comment,
       updatedAt: serverTimestamp(),
     });
-    console.log(`[reviewService] Review ${reviewId} updated successfully by ${currentUserId}.`);
+    // console.log(`[reviewService] Review ${reviewId} updated successfully by ${currentUserId}.`);
   } catch (error: any) {
-    console.error(`[reviewService] Error updating review ${reviewId}:`, error);
+    // console.error(`[reviewService] Error updating review ${reviewId}:`, error);
     if (error.code === 'permission-denied') {
-        console.error(`[reviewService] PERMISSION DENIED updating review ${reviewId}. Auth UID: ${clientAuthUid}.`);
+        // console.error(`[reviewService] PERMISSION DENIED updating review ${reviewId}. Auth UID: ${clientAuthUid}.`);
     }
     throw new Error(error.message || "Could not update review.");
   }
 };
 
 export const deleteReview = async (reviewId: string, currentUserId: string): Promise<void> => {
-  console.log(`[reviewService] deleteReview: Called for reviewId '${reviewId}' by userId '${currentUserId}'.`);
+  // console.log(`[reviewService] deleteReview: Called for reviewId '${reviewId}' by userId '${currentUserId}'.`);
   if (!reviewId || !currentUserId) {
-    console.error("[reviewService] deleteReview: Missing reviewId or currentUserId.");
+    // console.error("[reviewService] deleteReview: Missing reviewId or currentUserId.");
     throw new Error("Review ID and User ID are required for deletion.");
   }
    const clientAuthUid = auth.currentUser?.uid;
    if (!clientAuthUid || clientAuthUid !== currentUserId) {
-       console.error(`[reviewService] deleteReview: Auth mismatch. Client UID: ${clientAuthUid}, currentUserId param: ${currentUserId}`);
+       // console.error(`[reviewService] deleteReview: Auth mismatch. Client UID: ${clientAuthUid}, currentUserId param: ${currentUserId}`);
        throw new Error("Authentication error: Cannot delete review.");
    }
 
@@ -236,15 +237,15 @@ export const deleteReview = async (reviewId: string, currentUserId: string): Pro
   try {
     const reviewSnap = await getDoc(reviewDocRef);
     if (!reviewSnap.exists() || reviewSnap.data()?.reviewerId !== currentUserId) {
-        console.warn(`[reviewService] deleteReview: Review not found or permission denied. Reviewer ID: ${reviewSnap.data()?.reviewerId}, Current User: ${currentUserId}`);
+        // console.warn(`[reviewService] deleteReview: Review not found or permission denied. Reviewer ID: ${reviewSnap.data()?.reviewerId}, Current User: ${currentUserId}`);
         throw new Error("Review not found or permission denied for deletion.");
     }
     await deleteDoc(reviewDocRef);
-    console.log(`[reviewService] Review ${reviewId} deleted successfully by ${currentUserId}.`);
+    // console.log(`[reviewService] Review ${reviewId} deleted successfully by ${currentUserId}.`);
   } catch (error: any) {
-    console.error(`[reviewService] Error deleting review ${reviewId}:`, error);
+    // console.error(`[reviewService] Error deleting review ${reviewId}:`, error);
     if (error.code === 'permission-denied') {
-        console.error(`[reviewService] PERMISSION DENIED deleting review ${reviewId}. Auth UID: ${clientAuthUid}.`);
+        // console.error(`[reviewService] PERMISSION DENIED deleting review ${reviewId}. Auth UID: ${clientAuthUid}.`);
     }
     throw new Error(error.message || "Could not delete review.");
   }
