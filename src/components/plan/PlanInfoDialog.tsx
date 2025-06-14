@@ -425,7 +425,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
               <div className="p-6">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
                   {/* --- LEFT COLUMN (All Details) --- */}
-                  <div className="md:w-1/2 space-y-6 flex flex-col">
+                  <div className="md:w-1/2 space-y-6 flex flex-col"> {/* Ensured flex-col for left column */}
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
@@ -435,9 +435,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
                     </div>
                     
-                    {/* Visibility and Editability Section */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      {isOwnerForUIDisplay ? ( // Editable Selects for Owner
+                      {isOwnerForUIDisplay ? (
                         <>
                           <div>
                             <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
@@ -465,7 +464,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                             </Select>
                           </div>
                         </>
-                      ) : ( // Static display for Non-Owners
+                      ) : ( 
                         <>
                           {renderStaticSetting("Visibility", initialPlanData.visibility, ShieldQuestion)}
                           {renderStaticSetting("Editability", initialPlanData.editability, Users)}
@@ -473,8 +472,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       )}
                     </div>
 
-                    {/* Static Info: Owner, Created, Updated, Version - always in left column */}
-                    <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-auto flex-grow">
+                    {/* Static Info (Owner, Created, Updated, Version) - repositioned here */}
+                    <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t">
                       <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
                       <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
                       <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
@@ -522,9 +521,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 </div>
               </div>
             </ScrollArea>
-             {/* Footer is now intentionally empty as per previous changes */}
-             <DialogFooter className="p-4 border-t bg-background sticky bottom-0">
-             </DialogFooter>
+            <DialogFooter className="p-4 border-t bg-background sticky bottom-0">
+            </DialogFooter>
           </>
         ) : null}
       </DialogContent>
