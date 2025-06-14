@@ -16,7 +16,6 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogTrigger,
   DialogClose,
 } from "@/components/ui/dialog";
 import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping } from "lucide-react";
@@ -24,7 +23,7 @@ import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface PostListProps {
   posts: Post[];
@@ -224,8 +223,8 @@ export const PostList: React.FC<PostListProps> = ({
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                variant="default"
-                className={cn("text-xs flex-grow h-9")}
+                variant="default" // Changed from specific amber classes
+                className={cn("text-xs flex-grow h-9")} // Kept necessary layout/sizing
                 type="button"
               >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
@@ -255,8 +254,8 @@ export const PostList: React.FC<PostListProps> = ({
             <PopoverTrigger asChild>
               <Button
                 size="sm"
-                variant="default"
-                className={cn("text-xs h-9")}
+                variant="default" // Changed from specific amber classes
+                className={cn("text-xs h-9")} // Kept necessary layout/sizing
               >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
                 Filters
@@ -303,4 +302,3 @@ export const PostList: React.FC<PostListProps> = ({
 };
 
 PostList.displayName = "PostList";
-
