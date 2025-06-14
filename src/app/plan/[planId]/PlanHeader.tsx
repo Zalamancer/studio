@@ -41,7 +41,7 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
 
   return (
     <div className="border-b bg-card sticky top-0 z-30 h-16 flex-shrink-0">
-      <div className="container mx-auto px-4 h-full flex items-center justify-between">
+      <div className="container mx-auto px-4 max-w-screen-2xl h-full flex items-center justify-between">
         {/* Back Button and Plan Title/Owner */}
         <div className="flex items-center gap-2 flex-grow min-w-0">
           <Button variant="ghost" size="icon" onClick={() => router.push('/discover')} className="h-8 w-8 flex-shrink-0">

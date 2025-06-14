@@ -92,10 +92,10 @@ export default function PlanDetailPage() {
     originalEditingChildItemData, setOriginalEditingChildItemData, 
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
-    handleAddUserToViewers, // Added
-    handleRemoveUserFromViewers, // Added
-    handleAddUserToEditors, // Added
-    handleRemoveUserFromEditors, // Added
+    handleAddUserToViewers, 
+    handleRemoveUserFromViewers, 
+    handleAddUserToEditors, 
+    handleRemoveUserFromEditors, 
     forceRender,
     handleInitiateAddNode,
     handleEditCanvasNode,
@@ -274,7 +274,7 @@ export default function PlanDetailPage() {
         diffTargetActive={!!diffTarget}
       />
 
-      <div className="container mx-auto px-4 flex flex-1 items-center justify-center overflow-auto relative">
+      <div className="container mx-auto px-4 max-w-screen-2xl flex flex-1 items-center justify-center overflow-auto relative">
         <ScrollArea className="flex flex-1 w-full h-full">
           <div
             ref={canvasRef}
@@ -578,6 +578,7 @@ export default function PlanDetailPage() {
 }
     
     
+
 
 
 
