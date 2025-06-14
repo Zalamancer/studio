@@ -106,46 +106,58 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   useEffect(() => {
     const fetchAISuggestions = async () => {
       if (currentUser && post && currentUser.uid !== post.userId && !aiSuggestions && !isLoadingAISuggestions && !aiSuggestionsError) {
+        console.log("[PostDetailPanel] Attempting to fetch AI suggestions.");
         setIsLoadingAISuggestions(true);
         setAiSuggestionsError(null);
         try {
           const currentUserProfile = await fetchFullUserProfile(currentUser.uid);
           if (!currentUserProfile) {
-            throw new Error("Could not fetch current user's profile for AI suggestions.");
+            console.error("[PostDetailPanel] Current user's profile data not found for AI suggestions.");
+            throw new Error("Could not fetch your profile data for AI suggestions.");
           }
+          console.log("[PostDetailPanel] Current user profile for AI input:", JSON.stringify(currentUserProfile, null, 2));
+
 
           const aiInput: AIConnectionMatcherInput = {
             postContent: `${post.question} ${post.descriptionDetails || ''} ${post.descriptionTried || ''} ${post.descriptionOutcome || ''}`.trim(),
-            userProfile: `Viewing user's industry: ${currentUserProfile.industry || currentUserProfile.industryName || 'Not specified'}. Profile: ${currentUserProfile.description || 'No description provided.'}`,
-            industry: currentUserProfile.industry || currentUserProfile.industryName || 'General',
+            userProfile: `Viewing user's industry: ${currentUserProfile.industryName || currentUserProfile.industry || 'Not specified'}. Profile: ${currentUserProfile.description || 'No description provided.'}`,
+            industry: currentUserProfile.industryName || currentUserProfile.industry || 'General',
             tags: post.tags || [],
           };
-          
-          console.log("[PostDetailPanel] AIConnectionMatcher Input:", aiInput);
+          console.log("[PostDetailPanel] Preparing to call AIConnectionMatcher with input:", JSON.stringify(aiInput, null, 2));
+
           const suggestionsOutput = await aiConnectionMatcher(aiInput);
-          console.log("[PostDetailPanel] AIConnectionMatcher Output:", suggestionsOutput);
-          setAiSuggestions(suggestionsOutput);
+          console.log("[PostDetailPanel] AIConnectionMatcher raw output:", JSON.stringify(suggestionsOutput, null, 2));
+
+          if (suggestionsOutput && suggestionsOutput.suggestedConnections && suggestionsOutput.suggestedConnections.length > 0) {
+            setAiSuggestions(suggestionsOutput);
+            console.log("[PostDetailPanel] AI suggestions set to state:", suggestionsOutput);
+          } else {
+            setAiSuggestions({ suggestedConnections: [], reasoning: "No specific connections suggested by AI at this time." });
+            console.log("[PostDetailPanel] AI returned no suggestions or an empty/null output.");
+          }
 
         } catch (error: any) {
-          console.error("[PostDetailPanel] Error fetching AI suggestions:", error);
+          console.error("[PostDetailPanel] Detailed error fetching AI suggestions:", error.message, error.stack, error);
           setAiSuggestionsError(error.message || "Failed to load AI suggestions.");
         } finally {
           setIsLoadingAISuggestions(false);
+          console.log("[PostDetailPanel] Finished AI suggestion fetch attempt.");
         }
       } else if (currentUser && post && currentUser.uid === post.userId) {
-        // Clear suggestions if user is viewing their own post
         setAiSuggestions(null);
         setIsLoadingAISuggestions(false);
         setAiSuggestionsError(null);
+        console.log("[PostDetailPanel] AI suggestions cleared for own post.");
       }
     };
 
-    // Only fetch if the post is not null and the post has changed, or if currentUser becomes available
     if (post?.id) {
         fetchAISuggestions();
     }
   // Removed aiSuggestions, isLoadingAISuggestions, aiSuggestionsError from dependency array to avoid loop if they are set inside
-  }, [post, currentUser]); 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [post, currentUser]);
 
 
   // --- @Mention Suggestions for New Comment Input ---
@@ -162,7 +174,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     enabled: !!post && !!currentUser && showNewCommentSuggestions,
     staleTime: 1000 * 60 * 5,
   });
-  
+
   const newCommentMentionProfilesMap = useMemo(() => {
     const map = new Map<string, UserProfileBasic>();
     if (generalSuggestibleUsers) {
@@ -281,16 +293,16 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showNewCommentSuggestions]);
-  
+
   const filteredNewCommentSuggestions = useMemo(() => {
     if (!showNewCommentSuggestions) return [];
     if (isLoadingGeneralSuggestions) return [{ userId: 'loading-main-comment', mentionName: 'loading-main-comment', displayName: 'Loading users...' } as UserProfileBasic];
-    
-    let source = generalSuggestibleUsers || []; 
+
+    let source = generalSuggestibleUsers || [];
 
     if (debouncedNewCommentMentionQuery.trim() !== "" && source.length > 0) {
         const queryLower = debouncedNewCommentMentionQuery.toLowerCase();
-        source = source.filter(p => 
+        source = source.filter(p =>
             p.mentionName.toLowerCase().includes(queryLower) ||
             (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
             (p.companyName && p.companyName.toLowerCase().includes(queryLower))
@@ -304,7 +316,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 
 
   // --- Bidding Logic ---
-  const addBidMutation = useMutation({
+  const addBidMutationInternal = useMutation({ // Renamed to avoid conflict
     mutationFn: addBidToPost,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['bids', variables.postId] });
@@ -347,7 +359,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   }, [post, setInlineBidAmount, setInlineBidError]);
 
   const handleOfferHelpAndBid = useCallback(async () => {
-    if (!user || !post || addBidMutation.isPending || isProcessingOffer || post.userId === user.uid || post.maxBudget == null) {
+    if (!user || !post || addBidMutationInternal.isPending || isProcessingOffer || post.userId === user.uid || post.maxBudget == null) {
       toast({ variant: "destructive", title: "Action Not Allowed", description: "Cannot place bid or offer help." });
       return;
     }
@@ -377,7 +389,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     };
 
     try {
-      await addBidMutation.mutateAsync(bidDetails);
+      await addBidMutationInternal.mutateAsync(bidDetails);
       const conversationId = await findOrCreateConversation(user.uid, post.userId, post.id);
       if (conversationId) {
         toast({ title: "Bid Placed & Conversation Started", description: "Redirecting to Messages..." });
@@ -393,8 +405,8 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     } finally {
       setIsProcessingOffer(false);
     }
-  }, [user, post, inlineBidAmount, addBidMutation, router, toast, queryClient, onClose, isProcessingOffer, setInlineBidAmount, setInlineBidError, setIsProcessingOffer]);
-  
+  }, [user, post, inlineBidAmount, addBidMutationInternal, router, toast, queryClient, onClose, isProcessingOffer, setInlineBidAmount, setInlineBidError, setIsProcessingOffer]);
+
   const minimumBidAmount = useMemo(() => {
     if (!bids || bids.length === 0) return null;
     return Math.min(...bids.map(bid => bid.bidAmount));
@@ -416,7 +428,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       />
       <ScrollArea className="flex-grow bg-background">
         <PostDetailContentBody post={post} />
-        
+
         {/* AI Connection Suggestions Section */}
         {currentUser && post && currentUser.uid !== post.userId && (
             <div className="mt-6 border-t pt-4 px-4">
@@ -438,7 +450,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
               {aiSuggestions && !isLoadingAISuggestions && !aiSuggestionsError && (
                 <div className="space-y-3 text-sm p-3 bg-muted/30 rounded-md">
                   <div>
-                    <p className="font-medium text-foreground mb-2">Suggested Profiles:</p>
+                    <p className="font-medium text-foreground mb-2">Suggested Profiles for Collaboration:</p>
                     {aiSuggestions.suggestedConnections.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {aiSuggestions.suggestedConnections.map((suggestion, index) => (
@@ -449,7 +461,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground italic">No specific profiles suggested at this time.</p>
+                      <p className="text-xs text-muted-foreground italic">No specific profiles suggested by AI at this time.</p>
                     )}
                   </div>
                   <div className="pt-2">
@@ -519,7 +531,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
             </Label>
             <div className="flex flex-col sm:flex-row items-stretch gap-2">
                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button variant="outline" size="sm" className="h-9 px-3 text-xs" onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }} disabled={isProcessingOffer || addBidMutation.isPending || currentUserHasBid}>Bid FREE</Button>
+                    <Button variant="outline" size="sm" className="h-9 px-3 text-xs" onClick={() => { setInlineBidAmount("0"); setInlineBidError(null); }} disabled={isProcessingOffer || addBidMutationInternal.isPending || currentUserHasBid}>Bid FREE</Button>
                 </div>
                 <Input
                     id="inlineBidAmount"
@@ -528,7 +540,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                     value={currentUserHasBid ? String(currentUserBid?.bidAmount ?? "") : inlineBidAmount}
                     onChange={handleInlineBidChange}
                     className={cn("h-9 text-sm bg-background flex-grow", inlineBidError && !currentUserHasBid && "border-destructive ring-destructive focus-visible:ring-destructive")}
-                    disabled={isProcessingOffer || addBidMutation.isPending || currentUserHasBid}
+                    disabled={isProcessingOffer || addBidMutationInternal.isPending || currentUserHasBid}
                     min="0"
                     max={post.maxBudget}
                     step="any"
@@ -540,10 +552,10 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                         variant="default"
                         size="sm"
                         onClick={handleOfferHelpAndBid}
-                        disabled={isProcessingOffer || addBidMutation.isPending || !!inlineBidError || (inlineBidAmount.trim() === "" && !currentUserHasBid) || !user || (currentUserHasBid && !currentUserBid)}
+                        disabled={isProcessingOffer || addBidMutationInternal.isPending || !!inlineBidError || (inlineBidAmount.trim() === "" && !currentUserHasBid) || !user || (currentUserHasBid && !currentUserBid)}
                         className="bg-green-600 hover:bg-green-700 text-white h-9 px-3 whitespace-nowrap"
                     >
-                        {isProcessingOffer || addBidMutation.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <HandHelping className="mr-1.5 h-4 w-4" />}
+                        {isProcessingOffer || addBidMutationInternal.isPending ? <Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> : <HandHelping className="mr-1.5 h-4 w-4" />}
                         {currentUserHasBid ? "Message Post Owner" : "Offer Help & Submit Bid"}
                     </Button>
                     </TooltipTrigger>
