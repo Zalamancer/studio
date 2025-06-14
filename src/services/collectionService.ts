@@ -51,8 +51,8 @@ export const createCollection = async (
     ownerId,
     postIds: initialPostId ? [initialPostId] : [],
     sharedWithUserIds: [],
-    createdAt: serverTimestamp() as Timestamp, // serverTimestamp() returns FieldValue, but rule expects Timestamp for direct write, this is a common pattern
-    updatedAt: serverTimestamp() as Timestamp, // For initial creation, rules might check this.
+    createdAt: serverTimestamp() as Timestamp,
+    updatedAt: serverTimestamp() as Timestamp,
   };
 
   console.log('%c[collectionService] createCollection: Data to be written to Firestore:', "color: #007bff;", newCollectionData);
@@ -80,32 +80,30 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
   const clientAuthUid = auth.currentUser?.uid;
   console.log(`%c[collectionService] getUserCollections: Fetching for userId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
-  try {
-    const qOwned = query(
-      collectionsCollectionRef,
-      where('ownerId', '==', userId),
-      orderBy('createdAt', 'desc'),
-      limit(100)
-    );
+  const qOwned = query(
+    collectionsCollectionRef,
+    where('ownerId', '==', userId),
+    orderBy('createdAt', 'desc'),
+    limit(100)
+  );
 
-    const qShared = query(
-      collectionsCollectionRef,
-      where('sharedWithUserIds', 'array-contains', userId),
-      orderBy('createdAt', 'desc'),
-      limit(100)
-    );
+  const qShared = query(
+    collectionsCollectionRef,
+    where('sharedWithUserIds', 'array-contains', userId),
+    orderBy('createdAt', 'desc'),
+    limit(100)
+  );
 
-    console.log(`%c[collectionService] getUserCollections: Preparing to execute two queries:
+  console.log(`%c[collectionService] getUserCollections: Preparing to execute two queries:
     1. Owned: where('ownerId', '==', '${userId}'), orderBy('createdAt', 'desc')
     2. Shared: where('sharedWithUserIds', 'array-contains', '${userId}'), orderBy('createdAt', 'desc')`, "color: dodgerblue;");
 
-
+  try {
     const [ownedSnapshot, sharedSnapshot] = await Promise.all([
       getDocs(qOwned),
       getDocs(qShared),
     ]);
     console.log(`%c[collectionService] getUserCollections: Queries executed. Owned count: ${ownedSnapshot.docs.length}, Shared count: ${sharedSnapshot.docs.length}`, "color: dodgerblue;");
-
 
     const collectionsMap = new Map<string, ClientCollection>();
 
@@ -138,27 +136,34 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
     processSnapshot(ownedSnapshot, false);
     processSnapshot(sharedSnapshot, true);
 
-
     const combinedCollections = Array.from(collectionsMap.values()).sort((a, b) => b.createdAt - a.createdAt);
     console.log(`%c[collectionService] getUserCollections: Fetched ${combinedCollections.length} total collections for ${userId}.`, "color: green;");
     return combinedCollections;
   } catch (error: any) {
-    console.error(`[collectionService] Error fetching collections for ${userId}:`, "color: red;", error);
+    console.error(`%c[collectionService] Error fetching collections for ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
-      console.error(`%c[collectionService] PERMISSION DENIED ERROR in getUserCollections for user '${userId}'. This almost certainly means your Firestore security rules for '/collections/{collectionId}' are not correctly allowing one or both of the 'list' queries being made.`, "color: red; font-weight:bold;");
-      console.error("  The queries being attempted are:");
-      console.error(`  1. For collections owned by the user: \`query(collections, where('ownerId', '==', '${userId}'), orderBy('createdAt', 'desc'))\``);
-      console.error(`  2. For collections shared with the user: \`query(collections, where('sharedWithUserIds', 'array-contains', '${userId}'), orderBy('createdAt', 'desc'))\``);
-      console.error("  ------------------------------------------------------------------------------------");
-      console.error("  COMMON ISSUES IN `allow list` RULES FOR `/collections/{collectionId}`:");
-      console.error("  - For Query 1 (owned): Ensure your rule permits listing if `request.query.filters[0].field == 'ownerId' && request.query.filters[0].op == '==' && request.query.filters[0].value == request.auth.uid` (or a more robust check if filter order varies).");
-      console.error("  - For Query 2 (shared): Ensure your rule permits listing if `request.query.filters[0].field == 'sharedWithUserIds' && request.query.filters[0].op == 'array-contains' && request.query.filters[0].value == request.auth.uid` (or a more robust check).");
-      console.error("  - CRITICAL: DO NOT use `resource.data` (e.g., `resource.data.sharedWithUserIds.hasAny(...)`) within an `allow list` rule condition when checking an `array-contains` query. `list` rules authorize the query operation based on `request.query` and `request.auth`, not by inspecting individual potential documents with `resource.data`.");
-      console.error("  - The `array-contains` filter in the query itself is what specifies the document criteria. The rule validates if *that type of query* is allowed.");
-      console.error("  ------------------------------------------------------------------------------------");
-      console.error(`  RECOMMENDATION: Use the Firebase Console's Rules Playground. Simulate as an authenticated user (UID: '${userId}'). Test EACH of the above queries against your '/collections/{collectionId}' path. The playground will show you exactly which condition in your 'allow list' rule is failing.`);
+      console.error(`%c[collectionService] PERMISSION DENIED ERROR in getUserCollections for user '${userId}'. This almost certainly means your Firestore security rules for '/collections/{collectionId}' are not correctly allowing one or both of the queries being made.
+    The queries being attempted are:
+    1. For collections owned by the user: \`query(collections, where('ownerId', '==', '${userId}'), orderBy('createdAt', 'desc'))\`
+    2. For collections shared with the user: \`query(collections, where('sharedWithUserIds', 'array-contains', '${userId}'), orderBy('createdAt', 'desc'))\`
+    ------------------------------------------------------------------------------------
+    COMMON ISSUES IN \`allow list\` RULES FOR '/collections/{collectionId}':
+    - For Query 1 (owned): Ensure your rule permits listing if \`request.query.filters[0].field == 'ownerId' && request.query.filters[0].op == '==' && request.query.filters[0].value == request.auth.uid\` (or a more robust check if filter order varies).
+    - For Query 2 (shared): Ensure your rule permits listing if \`request.query.filters[0].field == 'sharedWithUserIds' && request.query.filters[0].op == 'array-contains' && request.query.filters[0].value == request.auth.uid\` (or a more robust check).
+    - CRITICAL: DO NOT use \`resource.data\` (e.g., \`resource.data.sharedWithUserIds.hasAny(...)\`) within an \`allow list\` rule condition when checking an \`array-contains\` query. \`list\` rules authorize the query operation based on \`request.query\` and \`request.auth\`, not by inspecting individual potential documents with \`resource.data\`.
+    - The \`array-contains\` filter in the query itself is what specifies the document criteria. The rule validates if *that type of query* is allowed.
+    ------------------------------------------------------------------------------------
+    RECOMMENDATION: Use the Firebase Console's Rules Playground.
+    1. Path: '/collections' (or '/collections/{collectionId}' if simulating with a specific doc path for 'get' checks related to rules like isCollectionOwner).
+    2. Authenticated: YES, UID: '${userId}'.
+    3. Operation: 'list' (for list queries) or 'get' (for read rule testing on specific documents).
+    4. For 'list' simulations:
+       - Query 1 (Owned): Under "Build query", add a 'where' clause: field='ownerId', op='==', value='${userId}'. Add an 'orderBy' clause: field='createdAt', direction='descending'.
+       - Query 2 (Shared): Under "Build query", add a 'where' clause: field='sharedWithUserIds', op='array-contains', value='${userId}'. Add an 'orderBy' clause: field='createdAt', direction='descending'.
+    6. Run the simulation. The playground will show you exactly which part of your \`allow list\` rule is failing or if the entire rule evaluates to false.
+    7. VERIFY YOUR DEPLOYED RULES. Ensure the rules in the Firebase console match what you think they are.`, "color: red; font-weight:bold; background-color: yellow; padding: 5px;");
       console.error("  Also, ensure any necessary Firestore indexes (e.g., `ownerId` asc/desc + `createdAt` desc, AND `sharedWithUserIds` array-contains + `createdAt` desc) exist for these queries. Missing indexes usually result in 'FAILED_PRECONDITION', but complex rule interactions can sometimes manifest as 'PERMISSION_DENIED'.");
-      throw new Error('Permission denied fetching collections. Check Firestore security rules and console logs for detailed query info. Use the Rules Playground.');
+      throw new Error('Permission denied fetching collections. Check Firestore security rules and console logs. Use the Rules Playground.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
       console.error("  Firestore query for collections requires an index. Create relevant composite indexes in the Firebase console (e.g., for ownerId/createdAt and sharedWithUserIds/createdAt queries).");
@@ -506,3 +511,4 @@ export const unshareCollectionFromUser = async (
   }
 };
 
+    
