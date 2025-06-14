@@ -26,7 +26,7 @@ const SettingsSidebar = React.memo(() => {
 
   const handlePrefetchPreferences = useCallback(() => {
     if (user?.uid) {
-      console.log(`[SettingsSidebar] Prefetching userPreferences for user: ${user.uid}`);
+      // console.log(`[SettingsSidebar] Prefetching userPreferences for user: ${user.uid}`); // Removed this line
       queryClient.prefetchQuery({
         queryKey: ['userPreferences', user.uid],
         queryFn: () => getUserPreferences(user.uid),
