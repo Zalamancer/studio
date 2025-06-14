@@ -430,9 +430,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
                     </div>
                     
-                    {/* Description Block */}
-                    <div className="flex flex-col flex-grow min-h-0"> 
-                      <Label htmlFor="plan-description" className="text-sm mb-1">Description</Label>
+                    <div className="flex flex-col flex-grow min-h-0 space-y-1"> 
+                      <Label htmlFor="plan-description" className="text-sm">Description</Label>
                       <Textarea
                         id="plan-description"
                         value={description}
@@ -440,13 +439,12 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         disabled={!isOwnerForUIDisplay || isSavingSettings}
                         placeholder="A brief overview of this plan's purpose."
                         className={cn(
-                            "text-sm flex-grow min-h-0 overflow-y-auto", // Ensure no resize-y
+                            "text-sm flex-grow min-h-0 overflow-y-auto resize-none", // Added resize-none
                             "border-4 border-fuchsia-500 bg-yellow-100 dark:bg-yellow-900" // DEBUG STYLES
                         )}
                       />
                     </div>
                     
-                    {/* Static Info and Visibility/Editability Block */}
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {isOwnerForUIDisplay ? (
@@ -484,7 +482,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                             </>
                             )}
                         </div>
-                        {/* Static Info Block */}
                         <div className="space-y-1 border-t pt-4 text-xs text-muted-foreground">
                             <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
                             <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
@@ -494,7 +491,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                     </div>
                   </div>
 
-                  {/* Right Column for Permissions */}
                   {isOwnerForUIDisplay && (
                     <div className="md:w-1/2 space-y-4 flex flex-col"> 
                       {visibility !== 'public' && renderPermissionSection(
@@ -541,5 +537,3 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
-
-    
