@@ -1,4 +1,3 @@
-
 // src/app/plan/[planId]/page.tsx
 "use client";
 
@@ -274,8 +273,8 @@ export default function PlanDetailPage() {
         diffTargetActive={!!diffTarget}
       />
 
-      <div className="container mx-auto px-4 max-w-screen-2xl flex flex-1 items-center justify-center overflow-auto relative">
-        <ScrollArea className="flex flex-1 w-full h-full">
+      <div className="container mx-auto px-4 max-w-screen-2xl flex-1 overflow-auto relative">
+        <ScrollArea className="w-full h-full">
           <div
             ref={canvasRef}
             style={{ width: '1920px', minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'visible' }}
@@ -578,6 +577,7 @@ export default function PlanDetailPage() {
 }
     
     
+
 
 
 
