@@ -147,30 +147,24 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
     1. For collections owned by the user: \`query(collections, where('ownerId', '==', '${userId}'), orderBy('createdAt', 'desc'))\`
     2. For collections shared with the user: \`query(collections, where('sharedWithUserIds', 'array-contains', '${userId}'), orderBy('createdAt', 'desc'))\`
     ------------------------------------------------------------------------------------
-    COMMON ISSUES IN \`allow list\` RULES FOR '/collections/{collectionId}':
-    - For Query 1 (owned): Ensure your rule permits listing if \`request.query.filters[0].field == 'ownerId' && request.query.filters[0].op == '==' && request.query.filters[0].value == request.auth.uid\` (or a more robust check if filter order varies).
-    - For Query 2 (shared): Ensure your rule permits listing if \`request.query.filters[0].field == 'sharedWithUserIds' && request.query.filters[0].op == 'array-contains' && request.query.filters[0].value == request.auth.uid\` (or a more robust check).
-    - CRITICAL: DO NOT use \`resource.data\` (e.g., \`resource.data.sharedWithUserIds.hasAny(...)\`) within an \`allow list\` rule condition when checking an \`array-contains\` query. \`list\` rules authorize the query operation based on \`request.query\` and \`request.auth\`, not by inspecting individual potential documents with \`resource.data\`.
-    - The \`array-contains\` filter in the query itself is what specifies the document criteria. The rule validates if *that type of query* is allowed.
-    ------------------------------------------------------------------------------------
-    RECOMMENDATION: Use the Firebase Console's Rules Playground.
-    1. Path: '/collections'. Authenticated: YES, UID: '${userId}'. Operation: 'list'.
-    2. For Query 1 (Owned):
-       - \`where\` clause: field='ownerId', op='==', value='${userId}'
-       - \`orderBy\` clause: field='createdAt', direction='descending'
-       - In Playground, inspect \`request.query.filters\`. Is its size > 1 due to orderBy?
-    3. For Query 2 (Shared):
-       - \`where\` clause: field='sharedWithUserIds', op='array-contains', value='${userId}'
-       - \`orderBy\` clause: field='createdAt', direction='descending'
-       - In Playground, inspect \`request.query.filters\`. Is its size > 1 due to orderBy?
-       - SUB-TEST for Query 2: Try it *without* the \`orderBy('createdAt', 'desc')\` clause. If this simpler query passes your rule, the combination of \`array-contains\` and \`orderBy\` on a different field is likely the core issue, possibly requiring rule adjustments or reconsidering if this specific ordering is strictly necessary for the "shared" list if it proves unsecurable with your current rule structure.
-    4. Indexing & Complex Queries:
-       - Your indexes: 1. collections: ownerId (asc), createdAt (desc) and 2. collections: sharedWithUserIds (asc), createdAt (desc).
-       - Query 1 (owned) should be fine with index 1.
-       - Query 2 (shared) with \`orderBy('createdAt', 'desc')\` can be problematic. Firestore has limitations combining \`array-contains\` with \`orderBy\` on a different field. If the SUB-TEST in step 3 (Query 2 without orderBy) passes, this is a strong indicator.
-    5. VERIFY YOUR DEPLOYED RULES. Ensure the rules in the Firebase console match what you think they are.
-    6. Run the simulation in the Playground. It will show you exactly which part of your \`allow list\` rule is failing or if the entire rule evaluates to false for each specific query.`, "color: red; font-weight:bold; background-color: #FFFFE0; padding: 5px;"); // Light yellow background
-      throw new Error('Permission denied fetching collections. Check Firestore security rules and console logs. Use the Rules Playground.');
+    DEBUGGING STEPS (since direct 'list' query simulation in Playground might be unavailable):
+    1. VERIFY DEPLOYED RULES: Ensure the rules in the Firebase console are the ones you intend to be active.
+    2. TEST 'allow read' on INDIVIDUAL DOCUMENTS:
+       - In Playground: Simulation type 'get', Path: '/collections/EXISTING_OWNED_COLLECTION_ID', Auth UID: '${userId}'. Does it pass your 'allow read' rule (isCollectionOwner())?
+       - In Playground: Simulation type 'get', Path: '/collections/EXISTING_SHARED_COLLECTION_ID', Auth UID: '${userId}'. Does it pass your 'allow read' rule (isSharedWithUser())?
+       - If 'read' fails, there's a more fundamental issue with your helper functions or rule logic.
+    3. ISOLATE THE 'orderBy' CLAUSE:
+       - Temporarily modify 'collectionService.ts' to remove \`orderBy('createdAt', 'desc')\` from BOTH queries in \`getUserCollections\`.
+       - If the queries then succeed, your \`allow list\` rule's condition (e.g., \`request.query.filters.size() == 1\`) is likely incompatible with how Firestore's rules engine counts filters when \`orderBy\` is present.
+       - If this is the case, you may need to make your rule's filter check more flexible (e.g., \`request.query.filters.size() >= 1\`) AND ensure the specific \`ownerId\` or \`sharedWithUserIds\` conditions are met by inspecting all filters, or remove client-side ordering and sort on the client (less ideal for pagination).
+    4. COMPLEXITY OF 'array-contains' WITH 'orderBy':
+       - As noted before, \`array-contains\` with \`orderBy\` on a *different* field can be problematic. If Query 2 (shared) fails even after trying the 'orderBy' isolation test, this combination might be the core issue if Firestore cannot efficiently secure it.
+    5. INDEXES: Ensure these indexes exist:
+       - \`collections\`: \`ownerId\` (asc/desc), \`createdAt\` (desc)
+       - \`collections\`: \`sharedWithUserIds\` (array-contains), \`createdAt\` (desc)
+       (Missing indexes typically cause 'FAILED_PRECONDITION', but can interact with complex rules).
+    Use the Firebase Console's Rules Playground for the 'get' tests, and careful client-side query modification for the 'orderBy' test.`, "color: red; font-weight:bold; background-color: #FFFFE0; padding: 5px;");
+      throw new Error('Permission denied fetching collections. Check Firestore security rules and console logs. Test read rules and query structure carefully.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
       console.error("  Firestore query for collections requires an index. Create relevant composite indexes in the Firebase console (e.g., for ownerId/createdAt and sharedWithUserIds/createdAt queries).");
@@ -517,4 +511,5 @@ export const unshareCollectionFromUser = async (
     throw new Error(error.message || "Could not unshare collection.");
   }
 };
+
 
