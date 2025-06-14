@@ -19,7 +19,7 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion, User } from 'lucide-react';
+import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion, User, Globe } from 'lucide-react'; // Added Globe icon
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import type { PlanVisibility, PlanEditability } from '@/types/plan';
 
@@ -32,7 +32,7 @@ const planFormSchema = z.object({
     required_error: "Please select a visibility option.",
     invalid_type_error: "Invalid visibility option selected.",
   }),
-  editability: z.enum(['owner_only', 'collaborators'], {
+  editability: z.enum(['owner_only', 'collaborators', 'everyone'], { // Added 'everyone'
     required_error: "Please select an editability option.",
     invalid_type_error: "Invalid editability option selected.",
   }),
@@ -232,10 +232,13 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                   <SelectItem value="collaborators">
                      <div className="flex items-center gap-2"><Users className="h-4 w-4" /> People who you invite (Collaborators)</div>
                   </SelectItem>
+                  <SelectItem value="everyone">
+                     <div className="flex items-center gap-2"><Globe className="h-4 w-4" /> All Authenticated Users</div>
+                  </SelectItem>
                 </SelectContent>
               </Select>
               <FormDescription>
-                Determine editing permissions. If 'People who you invite', you will be the initial editor.
+                Determine editing permissions. If 'Collaborators', you can invite specific users to edit. 'All Authenticated Users' allows any logged-in user with view access to edit.
               </FormDescription>
               <FormMessage />
             </FormItem>

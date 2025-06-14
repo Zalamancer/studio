@@ -59,7 +59,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     finalVisibility = 'private';
   }
 
-  const validEditabilities: PlanEditability[] = ['owner_only', 'collaborators'];
+  const validEditabilities: PlanEditability[] = ['owner_only', 'collaborators', 'everyone']; // Added 'everyone'
   let finalEditability: PlanEditability = planData.editability;
   if (!validEditabilities.includes(finalEditability)) {
     finalEditability = 'owner_only';
@@ -67,17 +67,25 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
 
   let viewUserIds: string[] = [];
   if (finalVisibility === 'public') {
-    viewUserIds = [];
-  } else {
-    viewUserIds = [planData.ownerId];
+    viewUserIds = []; // Public: no specific list, everyone can view
+  } else { // 'private' or 'unlisted'
+    viewUserIds = [planData.ownerId]; // Owner can always view
   }
 
   let editUserIds: string[] = [];
   if (finalEditability === 'owner_only') {
-    editUserIds = [planData.ownerId];
+    editUserIds = [planData.ownerId]; // Only owner
   } else if (finalEditability === 'collaborators') {
-    editUserIds = [planData.ownerId];
+    editUserIds = [planData.ownerId]; // Initially, only owner is an editor
+  } else if (finalEditability === 'everyone') {
+    editUserIds = []; // No specific list, implies all authenticated users (if they can view)
   }
+
+  // Ensure editors are always viewers (if not public visibility)
+  if (finalVisibility !== 'public') {
+    viewUserIds = Array.from(new Set([...viewUserIds, ...editUserIds]));
+  }
+
 
   const dataToSave: Omit<Plan, 'id'> & { createdAt: FieldValue, updatedAt: FieldValue } = {
     name: planData.name,
@@ -165,37 +173,39 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
     if (updates.subSector !== undefined) dataToUpdate.subSector = updates.subSector;
     if (updates.industry !== undefined) dataToUpdate.industry = updates.industry;
     if (updates.naicsCode !== undefined) dataToUpdate.naicsCode = updates.naicsCode;
-    if (updates.visibility !== undefined) dataToUpdate.visibility = updates.visibility;
-    if (updates.editability !== undefined) dataToUpdate.editability = updates.editability;
-    if (updates.viewUserIds !== undefined) dataToUpdate.viewUserIds = Array.from(new Set([currentUserId, ...(updates.viewUserIds || [])])); // Ensure owner is always a viewer
-    if (updates.editUserIds !== undefined) dataToUpdate.editUserIds = Array.from(new Set([currentUserId, ...(updates.editUserIds || [])])); // Ensure owner is always an editor
-
-    // If visibility or editability changed, derive the correct viewUserIds and editUserIds
+    
     const finalVisibility = updates.visibility || currentPlanData.visibility || 'private';
     const finalEditability = updates.editability || currentPlanData.editability || 'owner_only';
+    
+    dataToUpdate.visibility = finalVisibility;
+    dataToUpdate.editability = finalEditability;
 
-    if (updates.visibility !== undefined || updates.editability !== undefined || updates.viewUserIds !== undefined || updates.editUserIds !== undefined) {
-        let newViewUserIds = updates.viewUserIds || currentPlanData.viewUserIds || [];
-        let newEditUserIds = updates.editUserIds || currentPlanData.editUserIds || [];
+    let newViewUserIds = updates.viewUserIds !== undefined ? updates.viewUserIds : currentPlanData.viewUserIds || [];
+    let newEditUserIds = updates.editUserIds !== undefined ? updates.editUserIds : currentPlanData.editUserIds || [];
 
-        if (finalVisibility === 'public') {
-            newViewUserIds = []; // Public means no specific list needed
-        } else { // private or unlisted
-            newViewUserIds = Array.from(new Set([currentUserId, ...newViewUserIds]));
-        }
-
-        if (finalEditability === 'owner_only') {
-            newEditUserIds = [currentUserId];
-        } else { // collaborators
-            newEditUserIds = Array.from(new Set([currentUserId, ...newEditUserIds]));
-        }
-        // Editors must also be viewers
-        newViewUserIds = Array.from(new Set([...newViewUserIds, ...newEditUserIds]));
-
-
-        dataToUpdate.viewUserIds = newViewUserIds;
-        dataToUpdate.editUserIds = newEditUserIds;
+    // Adjust viewUserIds based on visibility
+    if (finalVisibility === 'public') {
+        newViewUserIds = []; // No specific list needed for public
+    } else { // private or unlisted
+        newViewUserIds = Array.from(new Set([currentUserId, ...newViewUserIds])); // Owner always a viewer
     }
+
+    // Adjust editUserIds based on editability
+    if (finalEditability === 'owner_only') {
+        newEditUserIds = [currentUserId]; // Only owner
+    } else if (finalEditability === 'collaborators') {
+        newEditUserIds = Array.from(new Set([currentUserId, ...newEditUserIds])); // Owner + specified collaborators
+    } else if (finalEditability === 'everyone') {
+        newEditUserIds = []; // No specific list, implies all authenticated users with view access
+    }
+    
+    // Ensure editors are always viewers (if not public visibility)
+    if (finalVisibility !== 'public') {
+        newViewUserIds = Array.from(new Set([...newViewUserIds, ...newEditUserIds]));
+    }
+
+    dataToUpdate.viewUserIds = newViewUserIds;
+    dataToUpdate.editUserIds = newEditUserIds;
 
 
     // If roadmap is part of updates (from canvas save), increment version and save roadmap
@@ -349,4 +359,3 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     throw new Error(error.message || "Could not restore plan.");
   }
 };
-

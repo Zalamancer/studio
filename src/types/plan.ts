@@ -32,7 +32,7 @@ export interface RoadmapStep {
 }
 
 export type PlanVisibility = 'private' | 'unlisted' | 'public';
-export type PlanEditability = 'owner_only' | 'collaborators';
+export type PlanEditability = 'owner_only' | 'collaborators' | 'everyone'; // Added 'everyone'
 
 export interface Plan {
   id: string;

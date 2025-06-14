@@ -1,3 +1,4 @@
+
 // src/components/plan/PlanInfoDialog.tsx
 "use client";
 
@@ -37,6 +38,7 @@ import {
   PlusCircle,
   X,
   Save,
+  Globe, // Added Globe icon
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -363,6 +365,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             case 'public': displayValue = 'Public (Discoverable)'; break;
             case 'owner_only': displayValue = 'Owner Only'; break;
             case 'collaborators': displayValue = 'Collaborators'; break;
+            case 'everyone': displayValue = 'All Authenticated Users'; break; // Handle 'everyone'
             default: displayValue = value.charAt(0).toUpperCase() + value.slice(1);
         }
     }
@@ -469,6 +472,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                                   <SelectContent>
                                   <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
                                   <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
+                                  <SelectItem value="everyone"><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
                                   </SelectContent>
                               </Select>
                               </div>
@@ -525,7 +529,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       editSuggestionsPopoverRef
                     )}
                     {/* Add a flexible spacer if both permission sections are hidden */}
-                    {(visibility === 'public' && editability === 'owner_only') && <div className="flex-grow"></div>}
+                    {(visibility === 'public' && (editability === 'owner_only' || editability === 'everyone')) && <div className="flex-grow"></div>}
                   </div>
                 )}
               </div>
@@ -536,4 +540,3 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
-
