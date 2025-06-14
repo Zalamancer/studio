@@ -20,7 +20,7 @@ import { generateAnonymousName } from '@/lib/pseudonymUtils';
 const postsCollectionRef = collection(db, 'posts');
 
 export const addBidToPost = async (bidData: NewBidData): Promise<string> => {
-  console.log("[bidService] addBidToPost: Called with data:", bidData);
+  // console.log("[bidService] addBidToPost: Called with data:", bidData);
   if (!bidData.postId || !bidData.bidderId || bidData.bidAmount === undefined) {
     console.error("[bidService] addBidToPost: Missing required fields.");
     throw new Error("Post ID, bidder ID, and bid amount are required.");
@@ -44,7 +44,7 @@ export const addBidToPost = async (bidData: NewBidData): Promise<string> => {
       timestamp: serverTimestamp(),
     };
     const docRef = await addDoc(bidsSubcollectionRef, fullBidData);
-    console.log(`[bidService] Bid added to post ${bidData.postId} by ${bidData.bidderId} with ID: ${docRef.id}`);
+    // console.log(`[bidService] Bid added to post ${bidData.postId} by ${bidData.bidderId} with ID: ${docRef.id}`);
     return docRef.id;
   } catch (error: any) {
     console.error(`[bidService] Error adding bid to post ${bidData.postId}:`, error);
@@ -57,10 +57,10 @@ export const addBidToPost = async (bidData: NewBidData): Promise<string> => {
 
 export const getBidsForPost = async (postId: string): Promise<ClientBid[]> => {
   if (!postId) {
-    console.warn("[bidService] getBidsForPost called with invalid postId.");
+    // console.warn("[bidService] getBidsForPost called with invalid postId.");
     return [];
   }
-  console.log(`[bidService] Fetching bids for post: ${postId}`);
+  // console.log(`[bidService] Fetching bids for post: ${postId}`);
   const postDocRef = doc(postsCollectionRef, postId);
   const bidsSubcollectionRef = collection(postDocRef, 'bids');
   try {
@@ -74,7 +74,7 @@ export const getBidsForPost = async (postId: string): Promise<ClientBid[]> => {
       const data = docSnap.data();
       // Ensure bidderId is a valid string; otherwise, skip this bid
       if (!data.bidderId || typeof data.bidderId !== 'string') {
-        console.warn(`[bidService] Bid document ${docSnap.id} for post ${postId} is missing or has invalid bidderId. Skipping. Data:`, data);
+        // console.warn(`[bidService] Bid document ${docSnap.id} for post ${postId} is missing or has invalid bidderId. Skipping. Data:`, data);
         return null;
       }
       const bidderProfile = await fetchUserProfileBasic(data.bidderId);
@@ -91,7 +91,7 @@ export const getBidsForPost = async (postId: string): Promise<ClientBid[]> => {
     });
 
     const resolvedBids = (await Promise.all(bidsPromises)).filter(bid => bid !== null) as ClientBid[];
-    console.log(`[bidService] Fetched ${resolvedBids.length} valid bids for post ${postId}`);
+    // console.log(`[bidService] Fetched ${resolvedBids.length} valid bids for post ${postId}`);
     return resolvedBids;
   } catch (error: any) {
     console.error(`[bidService] Error fetching bids for post ${postId}:`, error);
@@ -104,3 +104,4 @@ export const getBidsForPost = async (postId: string): Promise<ClientBid[]> => {
     throw new Error(`Failed to fetch bids: ${error.message}`);
   }
 };
+
