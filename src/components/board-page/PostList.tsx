@@ -224,16 +224,14 @@ export const PostList: React.FC<PostListProps> = ({
             <DialogTrigger asChild>
               <Button
                 size="sm"
-                className={cn(
-                  "text-xs flex-grow h-9",
-                  "bg-amber-400 text-amber-900 border border-amber-500 hover:bg-amber-500 hover:text-amber-900 focus-visible:ring-amber-400"
-                )}
+                variant="default"
+                className={cn("text-xs flex-grow h-9")}
                 type="button"
               >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
                 Filters
                 {activeFilterCount > 0 && (
-                  <span className="ml-1.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                  <span className="ml-1.5 h-4 w-4 rounded-full bg-background/20 text-primary-foreground text-[10px] flex items-center justify-center">
                     {activeFilterCount}
                   </span>
                 )}
@@ -257,15 +255,13 @@ export const PostList: React.FC<PostListProps> = ({
             <PopoverTrigger asChild>
               <Button
                 size="sm"
-                className={cn(
-                  "text-xs h-9",
-                  "bg-amber-400 text-amber-900 border border-amber-500 hover:bg-amber-500 hover:text-amber-900 focus-visible:ring-amber-400"
-                )}
+                variant="default"
+                className={cn("text-xs h-9")}
               >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
                 Filters
                 {activeFilterCount > 0 && (
-                  <span className="ml-1.5 h-4 w-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center">
+                  <span className="ml-1.5 h-4 w-4 rounded-full bg-background/20 text-primary-foreground text-[10px] flex items-center justify-center">
                     {activeFilterCount}
                   </span>
                 )}
