@@ -424,28 +424,27 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
               <div className="p-6 h-full flex flex-col flex-grow">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6 flex-grow">
                   {/* Left Column */}
-                  <div className="md:w-1/2 space-y-6 flex flex-col">
-                    <div>
+                  <div className="md:w-1/2 flex flex-col">
+                    <div className="mb-6 flex-shrink-0"> {/* Name Input Block */}
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
                     </div>
                     
-                    <div className="flex flex-col flex-grow min-h-0 space-y-1"> 
-                      <Label htmlFor="plan-description" className="text-sm">Description</Label>
+                    {/* Description Block - This is the TARGET FOR FLEX-GROW */}
+                    <div className="space-y-1 flex flex-col flex-grow min-h-0 mb-6">
+                      <Label htmlFor="plan-description" className="text-sm flex-shrink-0">Description</Label>
                       <Textarea
                         id="plan-description"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         disabled={!isOwnerForUIDisplay || isSavingSettings}
                         placeholder="A brief overview of this plan's purpose."
-                        className={cn(
-                            "text-sm flex-grow min-h-0 overflow-y-auto resize-none", // Added resize-none
-                            "border-4 border-fuchsia-500 bg-yellow-100 dark:bg-yellow-900" // DEBUG STYLES
-                        )}
+                        className="text-sm flex-grow min-h-0 overflow-y-auto resize-none"
                       />
                     </div>
                     
-                    <div className="space-y-4">
+                    {/* Visibility, Editability, Static Info Block */}
+                    <div className="space-y-4 mt-auto flex-shrink-0"> {/* Use mt-auto to push to bottom if space allows, or remove if natural flow preferred */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {isOwnerForUIDisplay ? (
                             <>
