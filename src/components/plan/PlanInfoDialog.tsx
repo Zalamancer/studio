@@ -37,7 +37,7 @@ import {
   Search,
   PlusCircle,
   X, 
-  Save // Added Save icon
+  Save
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -354,16 +354,50 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       </div>
     </div>
   );
+  
+  const renderStaticSetting = (label: string, value: string | undefined, icon?: React.ElementType) => {
+    const IconComponent = icon;
+    let displayValue = 'Not set';
+    if (value) {
+        switch (value) {
+            case 'private': displayValue = 'Private (Owner only)'; break;
+            case 'unlisted': displayValue = 'Unlisted (With link)'; break;
+            case 'public': displayValue = 'Public (Discoverable)'; break;
+            case 'owner_only': displayValue = 'Owner Only'; break;
+            case 'collaborators': displayValue = 'Collaborators'; break;
+            default: displayValue = value.charAt(0).toUpperCase() + value.slice(1);
+        }
+    }
+
+    return (
+      <div className="space-y-1">
+        <Label className="text-sm flex items-center gap-1">
+          {IconComponent && <IconComponent className="h-4 w-4 text-muted-foreground" />}
+          {label}
+        </Label>
+        <p className="text-sm text-foreground bg-muted/30 px-3 py-2 rounded-md h-9 flex items-center">
+          {displayValue}
+        </p>
+      </div>
+    );
+  };
+
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] max-w-3xl max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
-        <DialogHeader className="pt-6 px-6 pb-4 border-b">
-          <div className="flex justify-between items-center">
-            <DialogTitle className="flex items-center gap-2 truncate">
-              <FileText className="h-5 w-5 text-primary flex-shrink-0" />
-              <span className="truncate">{name || initialPlanData?.name || 'Plan Details'}</span>
-            </DialogTitle>
+        <DialogHeader className="pt-6 px-6 pb-4 border-b flex flex-row justify-between items-center">
+            <div className="flex items-center gap-2 min-w-0">
+                <FileText className="h-5 w-5 text-primary flex-shrink-0" />
+                <div className="flex flex-col min-w-0">
+                    <DialogTitle className="truncate text-lg">
+                        {name || initialPlanData?.name || 'Plan Details'}
+                    </DialogTitle>
+                    <DialogPrimitiveDescription className="text-xs text-muted-foreground mt-0.5 truncate">
+                        Owned by {ownerProfile?.displayName || generateAnonymousName(initialPlanData?.ownerId || '')}, created {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PP') : '...'}
+                    </DialogPrimitiveDescription>
+                </div>
+            </div>
             <div className="flex items-center gap-2 flex-shrink-0">
               {isOwnerForUIDisplay && ( 
                 <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm">
@@ -378,11 +412,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 </Button>
               </DialogPrimitive.Close>
             </div>
-          </div>
-          <DialogPrimitiveDescription className="text-sm text-muted-foreground mt-1">
-            View and manage plan details for: {name || initialPlanData?.name || 'the current plan'}.
-            Owned by {ownerProfile?.displayName || generateAnonymousName(initialPlanData?.ownerId || '')}, created on {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PPp') : '...'}.
-          </DialogPrimitiveDescription>
         </DialogHeader>
         
         {!initialPlanData && isOpen ? (
@@ -395,7 +424,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             <ScrollArea className="flex-grow min-h-0">
               <div className="p-6">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
-                  {/* Left Column */}
+                  {/* --- LEFT COLUMN (All Details) --- */}
                   <div className="md:w-1/2 space-y-6 flex flex-col">
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
@@ -406,9 +435,10 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
                     </div>
                     
-                    {isOwnerForUIDisplay && (
-                      <>
-                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {/* Visibility and Editability Section */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {isOwnerForUIDisplay ? ( // Editable Selects for Owner
+                        <>
                           <div>
                             <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
                             <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
@@ -434,19 +464,25 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                               </SelectContent>
                             </Select>
                           </div>
-                        </div>
-                      </>
-                    )}
+                        </>
+                      ) : ( // Static display for Non-Owners
+                        <>
+                          {renderStaticSetting("Visibility", initialPlanData.visibility, ShieldQuestion)}
+                          {renderStaticSetting("Editability", initialPlanData.editability, Users)}
+                        </>
+                      )}
+                    </div>
 
+                    {/* Static Info: Owner, Created, Updated, Version - always in left column */}
                     <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t mt-auto flex-grow">
-                      <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId)}</p>
+                      <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
                       <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
                       <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
                       <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
                     </div>
                   </div>
 
-                  {/* Right Column */}
+                  {/* --- RIGHT COLUMN (Permissions Management, conditional on owner & settings) --- */}
                   {isOwnerForUIDisplay && (
                     <div className="md:w-1/2 space-y-4 flex flex-col"> 
                       {visibility !== 'public' && renderPermissionSection(
@@ -486,12 +522,13 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 </div>
               </div>
             </ScrollArea>
-            <DialogFooter className="p-4 border-t bg-background sticky bottom-0">
-              {/* Footer is now intentionally empty as actions moved to header or removed */}
-            </DialogFooter>
+             {/* Footer is now intentionally empty as per previous changes */}
+             <DialogFooter className="p-4 border-t bg-background sticky bottom-0">
+             </DialogFooter>
           </>
         ) : null}
       </DialogContent>
     </Dialog>
   );
 };
+
