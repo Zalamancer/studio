@@ -141,11 +141,15 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
   } catch (error: any) {
     console.error(`[collectionService] Error fetching collections for ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
-      console.error("  Ensure Firestore rules allow `list` on `/collections` where `ownerId == request.auth.uid` OR `request.auth.uid in resource.data.sharedWithUserIds`.");
-      throw new Error('Permission denied fetching collections. Check Firestore rules.');
+      console.error("  [Firestore Rule Hint] Ensure your Firestore rules for the 'collections' collection allow 'read' access if the following conditions are met:");
+      console.error("  1. For owned collections (when querying where ownerId == yourId): `allow read: if request.auth.uid == resource.data.ownerId;`");
+      console.error("  2. For collections shared with you (when querying where yourId in sharedWithUserIds): `allow read: if request.auth.uid in resource.data.sharedWithUserIds;`");
+      console.error("  A combined rule for reading might look like: `match /collections/{collectionId} { allow read: if request.auth != null && (request.auth.uid == resource.data.ownerId || request.auth.uid in resource.data.sharedWithUserIds); }`");
+      console.error("  Also ensure that any indexes required by your queries (e.g., on 'ownerId' and 'createdAt', or 'sharedWithUserIds' and 'createdAt') exist.");
+      throw new Error('Permission denied fetching collections. Please check your Firestore security rules and required indexes.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      console.error("  Firestore query for collections requires an index. Create relevant composite indexes in the Firebase console.");
+      console.error("  Firestore query for collections requires an index. Create relevant composite indexes in the Firebase console (e.g., for ownerId/createdAt and sharedWithUserIds/createdAt queries).");
       throw new Error("Firestore query requires an index for collections. Please create it.");
     }
     throw new Error(error.message || "Could not fetch collections.");
