@@ -1,4 +1,3 @@
-
 // src/components/plan/PlanInfoDialog.tsx
 "use client";
 
@@ -9,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription as DialogPrimitiveDescription,
-  DialogFooter,
+  // DialogFooter, // Removed import
 } from '@/components/ui/dialog';
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from '@/components/ui/button';
@@ -38,7 +37,7 @@ import {
   Search,
   PlusCircle,
   X,
-  Save,
+  Save, // Keep Save icon if used, remove if not
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -425,7 +424,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             <ScrollArea className="flex-grow min-h-0">
               <div className="p-6">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
-                  {/* --- LEFT COLUMN (All Details) --- */}
                   <div className="md:w-1/2 space-y-6"> 
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
@@ -436,8 +434,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
                     </div>
                     
-                    {/* Visibility/Editability and Static Info now direct children of space-y-6 */}
-                    <div className="space-y-4"> {/* Visibility & Editability Group */}
+                    <div className="space-y-4"> 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         {isOwnerForUIDisplay ? (
                           <>
@@ -476,8 +473,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       </div>
                     </div>
 
-                    {/* Static Info Block */}
-                    <div className="text-xs text-muted-foreground space-y-1 border-t pt-4 border-2 border-red-500 p-1">
+                    <div className="text-xs text-muted-foreground space-y-1 border-t pt-4 border-2 border-red-500 p-1"> {/* DEBUG BORDER */}
                       <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
                       <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
                       <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
@@ -485,7 +481,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                     </div>
                   </div>
 
-                  {/* --- RIGHT COLUMN (Permissions Management, conditional on owner & settings) --- */}
                   {isOwnerForUIDisplay && (
                     <div className="md:w-1/2 space-y-4 flex flex-col"> 
                       {visibility !== 'public' && renderPermissionSection(
@@ -525,9 +520,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                 </div>
               </div>
             </ScrollArea>
-            <DialogFooter className="p-4 border-t bg-background sticky bottom-0 h-16"> 
-              {/* Footer is kept for consistent height, but actions are in header */}
-            </DialogFooter>
+            {/* Footer is intentionally left empty or can be removed if not needed for spacing */}
           </>
         ) : null}
       </DialogContent>
