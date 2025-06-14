@@ -17,7 +17,7 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import * as DialogPrimitive from "@radix-ui/react-dialog"; // Keep for PlanInfoDialog's explicit close if needed
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"; 
 import { Input } from "@/components/ui/input"; 
-import { Label } from "@/components/ui/label"; 
+import { Label } from '@/components/ui/label'; 
 import { FormLabel } from "@/components/ui/form"; 
 import { Textarea } from "@/components/ui/textarea"; 
 import { useForm } from 'react-hook-form'; 
@@ -92,7 +92,10 @@ export default function PlanDetailPage() {
     originalEditingChildItemData, setOriginalEditingChildItemData, 
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
-    onAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
+    handleAddUserToViewers, // Added
+    handleRemoveUserFromViewers, // Added
+    handleAddUserToEditors, // Added
+    handleRemoveUserFromEditors, // Added
     forceRender,
     handleInitiateAddNode,
     handleEditCanvasNode,
@@ -575,6 +578,7 @@ export default function PlanDetailPage() {
 }
     
     
+
 
 
 
