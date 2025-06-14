@@ -109,7 +109,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     const docRef = await addDoc(plansCollectionRef, dataToSave);
     return docRef.id;
   } catch (error: any) {
-    console.error(`[planService] createPlan - Firestore addDoc ERROR. Data attempted:`, JSON.parse(JSON.stringify(dataToSave, (key, value) => (value as any)?._methodName?.includes('serverTimestamp') ? 'FieldValue.serverTimestamp()' : value, 2)));
+    console.error(`[planService] createPlan - Firestore addDoc ERROR: ${error.message}. Data attempted (excluding FieldValues):`, { ...dataToSave, createdAt: 'FieldValue.serverTimestamp()', updatedAt: 'FieldValue.serverTimestamp()' });
     throw new Error(error.message || "Could not create plan.");
   }
 };
@@ -161,9 +161,33 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
     const currentPlanSnap = await getDoc(planDocRef);
     if (!currentPlanSnap.exists()) throw new Error(`Plan with ID ${planId} not found.`);
     const currentPlanData = currentPlanSnap.data() as Plan;
-    if (currentPlanData.ownerId !== currentUserId) {
-      throw new Error("Permission denied: Only the plan owner can change settings.");
+    
+    // Check if the current user has permission to edit based on 'editability'
+    let canEdit = false;
+    if (currentPlanData.ownerId === currentUserId) {
+        canEdit = true; // Owner can always edit settings and roadmap
+    } else if (currentPlanData.editability === 'collaborators' && (currentPlanData.editUserIds || []).includes(currentUserId)) {
+        canEdit = true; // Collaborator can edit if 'collaborators' is set
+    } else if (currentPlanData.editability === 'everyone') {
+        // Check if 'everyone' also implies view access (e.g., if plan is public or unlisted or user is in viewUserIds)
+        if (currentPlanData.visibility === 'public' || currentPlanData.visibility === 'unlisted') {
+             canEdit = true;
+        } else if (currentPlanData.visibility === 'private' && (currentPlanData.viewUserIds || []).includes(currentUserId) ) {
+             canEdit = true;
+        }
     }
+
+    // Only allow roadmap updates if user is owner or a designated editor (collaborator or 'everyone' with view access)
+    if (updates.roadmap && !canEdit) {
+        throw new Error("Permission denied: You do not have permission to update the roadmap for this plan.");
+    }
+    
+    // Only allow settings updates (name, desc, visibility, etc.) if user is the owner
+    const settingsFieldsBeingUpdated = Object.keys(updates).some(key => key !== 'roadmap' && key !== 'updatedAt' && key !== 'version');
+    if (settingsFieldsBeingUpdated && currentPlanData.ownerId !== currentUserId) {
+         throw new Error("Permission denied: Only the plan owner can change settings like name, description, or permissions.");
+    }
+
 
     const dataToUpdate: { [key: string]: any } = { updatedAt: serverTimestamp() };
 
@@ -212,7 +236,7 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
     if (updates.roadmap) {
         const currentVersionNumber = currentPlanData.version || 1;
         const versionsCollectionRef = collection(db, PLANS_COLLECTION, planId, 'versions');
-        const newVersionDocRef = doc(versionsCollectionRef);
+        const newVersionDocRef = doc(versionsCollectionRef); // Auto-generate ID
         const versionData: PlanVersionData = {
           planId: planId,
           roadmap: (currentPlanData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
@@ -229,7 +253,7 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
     // Firestore security rules need to allow updates to name, description, sector, subSector, industry, naicsCode,
     // visibility, editability, viewUserIds, editUserIds, updatedAt, and potentially roadmap and version.
     await updateDoc(planDocRef, dataToUpdate);
-    console.log(`[planService] Plan details/settings updated for plan ${planId} by owner ${currentUserId}`);
+    console.log(`[planService] Plan details/settings updated for plan ${planId} by user ${currentUserId}`);
   } catch (error: any) {
     console.error(`[planService] Error updating plan settings for plan ${planId}:`, error);
     throw new Error(error.message || "Could not update plan settings.");
@@ -359,3 +383,4 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     throw new Error(error.message || "Could not restore plan.");
   }
 };
+
