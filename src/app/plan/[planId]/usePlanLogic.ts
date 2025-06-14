@@ -1,4 +1,3 @@
-
 // src/app/plan/[planId]/usePlanLogic.ts
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -7,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getPlanById, updatePlanDetails, getPlanVersions, restorePlanToVersion } from '@/services/planService';
-import type { ClientPlan, RoadmapStep, ChildDataItem, PeerConnection, UpdatePlanData, ClientPlanVersion, PlanVisibility, PlanEditability } from '@/types/plan';
+import type { ClientPlan, RoadmapStep, ChildDataItem, PeerConnection, UpdatePlanData, ClientPlanVersion, PlanVersionData, PlanVisibility, PlanEditability } from '@/types/plan';
 import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
 import { v4 as uuidv4 } from 'uuid';
@@ -56,7 +55,7 @@ export const usePlanLogic = () => {
   const [editableRoadmap, setEditableRoadmap] = useState<RoadmapStep[]>([]);
   const [editingTarget, setEditingTarget] = useState<{ type: 'node', data: RoadmapStep } | { type: 'childItem', data: ChildDataItem, parentNode: RoadmapStep } | null>(null);
   const [isStepDetailSheetOpen, setIsStepDetailSheetOpen] = useState(false);
-  const initialPanelDataRef = useRef<{ title: string; description: string } | null>(null); // Stores form data when panel opens
+  const initialPanelDataRef = useRef<{ title: string; description: string } | null>(null);
   const [nodeToDelete, setNodeToDelete] = useState<RoadmapStep | null>(null);
   const [isPointerDown, setIsPointerDown] = useState(false);
   const nodeDragInfoRef = useRef<{ nodeId: string; offsetX: number; offsetY: number; isDotDrag: boolean; dotType?: 'N' | 'E' | 'S' } | null>(null);
@@ -71,7 +70,7 @@ export const usePlanLogic = () => {
   const [initiatingDotTypeForDialog, setInitiatingDotTypeForDialog] = useState<'N' | 'E' | 'S' | null>(null);
   const childItemManagementContextRef = useRef<{ operation: 'createGrandchild'; targetChildToBecomeParentId: string; currentParentOfTargetChildId: string; } | { operation: 'createChild'; targetParentNodeId: string; } | { operation: 'edit'; itemToEditId: string; parentNodeId: string; } | null>(null);
   const [isEditChildItemDialogOpen, setIsEditChildItemDialogOpen] = useState(false);
-  const [isChildItemDialogSubmitting, setIsChildItemDialogSubmitting] = useState(false);
+  const [isChildItemDialogSubmitting, setIsChildItemDialogSubmitting] = useState(false); // Added this state
   const [dynamicChildDialogTitle, setDynamicChildDialogTitle] = useState("Manage Item");
   const [defaultChildDialogTitle, setDefaultChildDialogTitle] = useState("");
   const [defaultChildDialogDescription, setDefaultChildDialogDescription] = useState("");
@@ -247,7 +246,7 @@ export const usePlanLogic = () => {
     setDefaultChildDialogTitle("");
     setDefaultChildDialogDescription("");
     setOriginalEditingChildItemData(null);
-  }, [diffTarget, setEditingTarget, setIsStepDetailSheetOpen]);
+  }, [diffTarget, setEditingTarget, setIsStepDetailSheetOpen, setOriginalEditingChildItemData]);
 
   const handleChildItemCanvasNodeFocus = useCallback((childItemId: string, parentCanvasNodeId: string) => {
     if (diffTarget) return;
@@ -439,7 +438,7 @@ export const usePlanLogic = () => {
           console.log("[Submit] Create Grandchild: spawnResult:", { spawnedNodeId: spawnResult.spawnedNodeId, updatedRoadmapLength: spawnResult.updatedRoadmap?.length });
 
           if (spawnResult.spawnedNodeId && spawnResult.updatedRoadmap) {
-            newRoadmapCandidate = spawnResult.updatedRoadmap; // Use the roadmap returned by spawn
+            newRoadmapCandidate = spawnResult.updatedRoadmap;
             console.log("[Submit] Create Grandchild: Roadmap updated from spawn. Spawned Node ID:", spawnResult.spawnedNodeId);
             const spawnedNodeAsParentIndex = newRoadmapCandidate.findIndex((node: RoadmapStep) => node.id === spawnResult.spawnedNodeId);
             console.log("[Submit] Create Grandchild: Index of spawned node in newRoadmapCandidate:", spawnedNodeAsParentIndex, "Searching for ID:", spawnResult.spawnedNodeId);
@@ -520,7 +519,7 @@ export const usePlanLogic = () => {
       } finally {
         setIsChildItemDialogSubmitting(false);
       }
-  }, [canEditPlan, diffTarget, toast, handleSpawnChildDataItemAsCanvasNode, editableRoadmap, setEditableRoadmap]);
+  }, [canEditPlan, diffTarget, toast, handleSpawnChildDataItemAsCanvasNode, editableRoadmap]);
 
 
   const handleEditChildItemText = useCallback((childItem: ChildDataItem, parentNodeIdOfChildItem: string) => {
@@ -793,8 +792,6 @@ export const usePlanLogic = () => {
       forceRender();
   }, [isPointerDown, getPointerCoords, editableRoadmap, toast, handleInitiateAddNode, handleEditCanvasNode, diffTarget, forceRender]);
   
-  // Function to be called from page.tsx when panel is closing.
-  // This replaces the form's direct submit button.
   const onNodeDetailPanelSubmit = useCallback((data: { title: string; description?: string }) => {
     if (!editingTarget) return;
 
@@ -803,7 +800,6 @@ export const usePlanLogic = () => {
       handleNodeDetailUpdate(updatedNode);
       toast({ title: "Step details updated", description: `"${data.title}" was updated.` });
     } else if (editingTarget.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) {
-      // This case is for when a child item (that has been spawned as a node) is edited via the panel
       const updatedNodeRepresentation = { 
         id: editingTarget.data.canvasNodeIdForThisItem,
         title: data.title, 
@@ -813,12 +809,10 @@ export const usePlanLogic = () => {
         childrenData: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.childrenData || [],
         peerConnections: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.peerConnections || [],
       };
-      handleNodeDetailUpdate(updatedNodeRepresentation as RoadmapStep); // Update the canvas node
-      handleChildItemDetailUpdateInPanel({ ...editingTarget.data, title: data.title, description: data.description || null }, editingTarget.parentNode.id); // Update the child item in parent's list
+      handleNodeDetailUpdate(updatedNodeRepresentation as RoadmapStep); 
+      handleChildItemDetailUpdateInPanel({ ...editingTarget.data, title: data.title, description: data.description || null }, editingTarget.parentNode.id); 
       toast({ title: "Item details updated", description: `"${data.title}" (spawned as node) was updated.` });
     } else if (editingTarget.type === 'childItem') {
-        // This case handles editing a child item that has *not* been spawned as a node.
-        // The form data (title, description) applies to the childItem directly.
         handleChildItemDetailUpdateInPanel({ ...editingTarget.data, title: data.title, description: data.description || null }, editingTarget.parentNode.id);
         toast({ title: "Child item details updated", description: `"${data.title}" was updated.`});
     }
@@ -829,8 +823,8 @@ export const usePlanLogic = () => {
     planData, isLoadingPlan, planError, ownerProfile, isLoadingOwnerProfile,
     editableRoadmap, setEditableRoadmap,
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
-    initialPanelDataRef, // Expose this ref
-    onNodeDetailPanelSubmit, // Expose this for page.tsx to call
+    initialPanelDataRef,
+    onNodeDetailPanelSubmit,
     handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel,
     nodeToDelete, setNodeToDelete, confirmDeleteNode,
     handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
@@ -855,7 +849,8 @@ export const usePlanLogic = () => {
     handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
     forceRender,
     handleInitiateAddNode,
-    setIsChildItemDialogSubmitting, 
+    setIsChildItemDialogSubmitting,
+    handleEditCanvasNode, // Ensure this is returned
   };
 };
     
