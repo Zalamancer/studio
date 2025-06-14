@@ -223,9 +223,7 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
               })}
             </ul>
           )}
-          {(!Array.isArray(step.childrenData) || step.childrenData.length === 0) && (
-            <p className="italic text-muted-foreground text-center py-2 text-[11px]">No child items. Click '+' in header to add.</p>
-          )}
+          {/* REMOVED: Placeholder text for no child items */}
       </div>
     </div>
   );
@@ -233,4 +231,3 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
 RoadmapStepCard.displayName = "RoadmapStepCard";
 
 export default RoadmapStepCard;
-
