@@ -357,7 +357,11 @@ export default function PlanDetailPage() {
         }}
       />
       <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen}>
-        <SheetContent className="sm:max-w-[600px] w-[90vw] p-0 flex flex-col" side="left">
+        <SheetContent 
+          className="sm:max-w-[600px] w-[90vw] p-0 flex flex-col" 
+          side="left"
+          disableAnimation={true}
+        >
            <SheetHeader className="p-4 border-b">
              <SheetTitle>Plan Version History</SheetTitle>
              <SheetDescription>Review past versions of this plan. You can view changes or restore a previous version.</SheetDescription>
@@ -578,5 +582,6 @@ export default function PlanDetailPage() {
 }
     
     
+
 
 
