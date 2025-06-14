@@ -1,4 +1,3 @@
-
 // src/app/plan/[planId]/page.tsx
 "use client";
 
@@ -70,8 +69,8 @@ export default function PlanDetailPage() {
     planData, isLoadingPlan, planError, ownerProfile, isLoadingOwnerProfile,
     editableRoadmap, 
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
-    initialPanelDataRef, // Get this from the hook
-    onNodeDetailPanelSubmit, // Get this from the hook
+    initialPanelDataRef,
+    onNodeDetailPanelSubmit,
     handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel, // These are still needed if onNodeDetailPanelSubmit calls them
     nodeToDelete, setNodeToDelete, confirmDeleteNode,
     handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
@@ -94,6 +93,7 @@ export default function PlanDetailPage() {
     handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
     forceRender,
     handleInitiateAddNode,
+    handleEditCanvasNode, // Added missing destructure
   } = usePlanLogic();
 
   const router = useRouter();
@@ -107,8 +107,9 @@ export default function PlanDetailPage() {
     defaultValues: { title: '', description: '' },
   });
   
+  // Toast for child item updates in panel
   const { toast } = useToast();
-
+  
 
   useEffect(() => {
     console.log(`[PlanDetailPage] Editing target changed. Type: ${editingTarget?.type}, Data ID: ${editingTarget?.type === 'node' ? editingTarget.data.id : (editingTarget?.type === 'childItem' ? editingTarget.data.id : 'N/A')}`);
@@ -441,9 +442,7 @@ export default function PlanDetailPage() {
                 if (currentValues.title !== initialPanelDataRef.current.title || (currentValues.description || '') !== (initialPanelDataRef.current.description || '')) {
                    if (canEditPlan && !diffTarget) {
                        try {
-                           // Programmatically submit the form which calls onNodeDetailPanelSubmit
                            await nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)();
-                           // Toast for save is handled within onNodeDetailPanelSubmit
                        } catch (submitError) {
                            console.error("Error submitting node details on panel close:", submitError);
                            toast({ variant: "destructive", title: "Save Error", description: "Could not auto-save step details." });
@@ -472,7 +471,6 @@ export default function PlanDetailPage() {
                        <Layers className="h-5 w-5 text-primary"/>
                        {editingTarget.type === 'node' || editingTarget.data.canvasNodeIdForThisItem ? "Edit Step Details" : "Edit Item Details"}
                    </SheetTitle>
-                   {/* Only show delete button for actual canvas nodes */}
                    {(editingTarget.type === 'node' || editingTarget.data.canvasNodeIdForThisItem) && (
                      <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => {
                         if (editingTarget.type === 'node') setNodeToDelete(editingTarget.data);
@@ -492,7 +490,7 @@ export default function PlanDetailPage() {
                 <div className="p-4 space-y-4">
                    <Form {...nodeDetailForm}>
                      <form 
-                        onSubmit={nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)} // Form still needs an onSubmit for direct invocation
+                        onSubmit={nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)}
                         className="space-y-4"
                      >
                        <FormField control={nodeDetailForm.control} name="title" render={({ field }) => (
@@ -509,7 +507,6 @@ export default function PlanDetailPage() {
                            <FormMessage />
                          </FormItem>
                        )} />
-                       {/* "Update Details" button removed */}
                      </form>
                    </Form>
 
@@ -561,3 +558,6 @@ export default function PlanDetailPage() {
     </div>
   );
 }
+
+    
+    
