@@ -30,6 +30,7 @@ export async function aiConnectionMatcher(input: AIConnectionMatcherInput): Prom
 
 const prompt = ai.definePrompt({
   name: 'aiConnectionMatcherPrompt',
+  model: 'googleai/gemini-1.5-flash-latest', // Added model parameter
   input: {
     schema: z.object({
       postContent: z.string().describe('The content of the post.'),

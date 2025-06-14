@@ -41,6 +41,7 @@ export async function suggestProfileConnections(input: ProfileConnectionInput): 
 // Define the prompt for Genkit
 const prompt = ai.definePrompt({
   name: 'profileConnectionSuggesterPrompt',
+  model: 'googleai/gemini-1.5-flash-latest', // Added model parameter
   input: { schema: ProfileConnectionInputSchema },
   output: { schema: ProfileConnectionOutputSchema },
   prompt: `You are an AI assistant helping users find valuable B2B connections on a collaboration platform.

@@ -30,6 +30,7 @@ export async function connectionSuggestions(input: ConnectionSuggestionsInput): 
 
 const prompt = ai.definePrompt({
   name: 'connectionSuggestionsPrompt',
+  model: 'googleai/gemini-1.5-flash-latest', // Added model parameter
   input: {
     schema: z.object({
       postContent: z.string().describe('The content of the post.'),
