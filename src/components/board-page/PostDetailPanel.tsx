@@ -155,7 +155,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     if (post?.id) {
         fetchAISuggestions();
     }
-  // Removed aiSuggestions, isLoadingAISuggestions, aiSuggestionsError from dependency array to avoid loop if they are set inside
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [post, currentUser]);
 
@@ -174,7 +173,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     enabled: !!post && !!currentUser && showNewCommentSuggestions,
     staleTime: 1000 * 60 * 5,
   });
-
+  
   const newCommentMentionProfilesMap = useMemo(() => {
     const map = new Map<string, UserProfileBasic>();
     if (generalSuggestibleUsers) {
@@ -430,10 +429,13 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
         <PostDetailContentBody post={post} />
 
         {/* AI Connection Suggestions Section */}
-        {currentUser && post && currentUser.uid !== post.userId && (
+        {currentUser && post && currentUser.uid !== post.userId && 
+          aiSuggestions && aiSuggestions.suggestedConnections && aiSuggestions.suggestedConnections.length > 0 &&
+          aiSuggestions.suggestedConnections[0] !== "No specific types of collaborators suggested by AI at this time." &&
+        (
             <div className="mt-6 border-t pt-4 px-4">
               <h4 className="text-md font-semibold mb-3 flex items-center gap-2 text-foreground">
-                <Sparkles className="h-5 w-5 text-purple-500" /> AI Connection Suggestions
+                <Sparkles className="h-5 w-5 text-purple-500" /> Suggested Connections
               </h4>
               {isLoadingAISuggestions && (
                 <div className="flex items-center justify-center py-4">
@@ -450,7 +452,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
               {aiSuggestions && !isLoadingAISuggestions && !aiSuggestionsError && (
                 <div className="space-y-3 text-sm p-3 bg-muted/30 rounded-md">
                   <div>
-                    <p className="font-medium text-foreground mb-2">Suggested Profiles for Collaboration:</p>
+                    <p className="font-medium text-foreground mb-2">Types of Collaborators or Expertise:</p>
                     {aiSuggestions.suggestedConnections.length > 0 ? (
                       <div className="flex flex-wrap gap-2">
                         {aiSuggestions.suggestedConnections.map((suggestion, index) => (
@@ -461,7 +463,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                         ))}
                       </div>
                     ) : (
-                      <p className="text-xs text-muted-foreground italic">No specific profiles suggested by AI at this time.</p>
+                      <p className="text-xs text-muted-foreground italic">No specific suggestions available.</p>
                     )}
                   </div>
                   <div className="pt-2">
