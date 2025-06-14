@@ -1,4 +1,3 @@
-
 // Tip: If this component becomes too large or complex,
 // consider further splitting its internal sections (like Bidding, Comments, etc.)
 // into their own dedicated components within this 'board-page' sub-directory.
@@ -18,15 +17,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Loader2, Send, DollarSign, HandHelping, User, X, Trash2 } from 'lucide-react';
+import { Loader2, Send, DollarSign, HandHelping, User, X, Trash2, Sparkles, AlertTriangle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_COMPONENT } from '@/lib/utils';
 import { extractMentionedUids } from '@/lib/mentionUtils';
 import { addCommentToPost, getCommentsForPost } from '@/services/commentService';
 import type { NewCommentData, ClientComment } from '@/types/comment';
-import { fetchUserProfileBasic, getSuggestibleUsers, getConnectionStatus } from '@/services/connectionService';
-import type { UserProfileBasic, ConnectionStatus } from '@/types/connection';
+import { fetchUserProfileBasic, getSuggestibleUsers, getConnectionStatus, fetchFullUserProfile } from '@/services/connectionService';
+import type { UserProfileBasic, ConnectionStatus, UserProfileData } from '@/types/connection';
 import { addBidToPost, getBidsForPost } from '@/services/bidService';
 import type { ClientBid, NewBidData } from '@/types/bid';
 import { findOrCreateConversation } from '@/services/messagingService';
@@ -38,6 +37,9 @@ import { PostDetailContentBody } from './PostDetailContentBody';
 // PostDetailBidding was integrated
 import { PostDetailComments } from './PostDetailComments';
 // PostDetailActions was integrated into Header and Footer
+
+import { aiConnectionMatcher, type AIConnectionMatcherInput, type AIConnectionMatcherOutput } from '@/ai/flows/ai-connection-matcher';
+
 
 interface PostDetailPanelProps {
   post: Post;
@@ -73,6 +75,11 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const [inlineBidError, setInlineBidError] = useState<string | null>(null);
   const [isProcessingOffer, setIsProcessingOffer] = useState(false);
 
+  // State for AI Connection Suggestions
+  const [aiSuggestions, setAiSuggestions] = useState<AIConnectionMatcherOutput | null>(null);
+  const [isLoadingAISuggestions, setIsLoadingAISuggestions] = useState<boolean>(false);
+  const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(null);
+
 
   // --- Data Fetching ---
   const { data: comments = [], isLoading: isLoadingComments } = useQuery<ClientComment[]>({
@@ -93,6 +100,48 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     enabled: !!user && !!post?.userId && user.uid !== post.userId && !!post.userId && IS_UID_REGEX_COMPONENT.test(post.userId),
   });
 
+  // --- AI Connection Suggestions Logic ---
+  useEffect(() => {
+    const fetchAISuggestions = async () => {
+      if (currentUser && post && currentUser.uid !== post.userId && !aiSuggestions && !isLoadingAISuggestions && !aiSuggestionsError) {
+        setIsLoadingAISuggestions(true);
+        setAiSuggestionsError(null);
+        try {
+          const currentUserProfile = await fetchFullUserProfile(currentUser.uid);
+          if (!currentUserProfile) {
+            throw new Error("Could not fetch current user's profile for AI suggestions.");
+          }
+
+          const aiInput: AIConnectionMatcherInput = {
+            postContent: `${post.question} ${post.descriptionDetails || ''} ${post.descriptionTried || ''} ${post.descriptionOutcome || ''}`.trim(),
+            userProfile: `Viewing user's industry: ${currentUserProfile.industry || currentUserProfile.industryName || 'Not specified'}. Profile: ${currentUserProfile.description || 'No description provided.'}`,
+            industry: currentUserProfile.industry || currentUserProfile.industryName || 'General',
+            tags: post.tags || [],
+          };
+          
+          console.log("[PostDetailPanel] AIConnectionMatcher Input:", aiInput);
+          const suggestionsOutput = await aiConnectionMatcher(aiInput);
+          console.log("[PostDetailPanel] AIConnectionMatcher Output:", suggestionsOutput);
+          setAiSuggestions(suggestionsOutput);
+
+        } catch (error: any) {
+          console.error("[PostDetailPanel] Error fetching AI suggestions:", error);
+          setAiSuggestionsError(error.message || "Failed to load AI suggestions.");
+        } finally {
+          setIsLoadingAISuggestions(false);
+        }
+      } else if (currentUser && post && currentUser.uid === post.userId) {
+        // Clear suggestions if user is viewing their own post
+        setAiSuggestions(null);
+        setIsLoadingAISuggestions(false);
+        setAiSuggestionsError(null);
+      }
+    };
+
+    fetchAISuggestions();
+  }, [post, currentUser, aiSuggestions, isLoadingAISuggestions, aiSuggestionsError]);
+
+
   // --- @Mention Suggestions for New Comment Input ---
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -102,9 +151,9 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   }, [newCommentMentionQuery]);
 
   const { data: generalSuggestibleUsers = [], isLoading: isLoadingGeneralSuggestions } = useQuery<UserProfileBasic[]>({
-    queryKey: ['generalSuggestibleUsersForPanel', post?.id, user?.uid, debouncedNewCommentMentionQuery],
+    queryKey: ['generalSuggestibleUsersForPanel', post?.id, currentUser?.uid, debouncedNewCommentMentionQuery],
     queryFn: () => getSuggestibleUsers(debouncedNewCommentMentionQuery, debouncedNewCommentMentionQuery ? 10 : 25),
-    enabled: !!post && !!user && showNewCommentSuggestions,
+    enabled: !!post && !!currentUser && showNewCommentSuggestions,
     staleTime: 1000 * 60 * 5,
   });
   
@@ -112,13 +161,52 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     const map = new Map<string, UserProfileBasic>();
     if (generalSuggestibleUsers) {
       generalSuggestibleUsers.forEach(profile => {
-        if (profile.userId !== currentUser?.uid) {
+        if (profile.userId !== currentUser?.uid) { // Exclude self from suggestions
            map.set(profile.userId, profile);
         }
       });
     }
     return map;
   }, [generalSuggestibleUsers, currentUser?.uid]);
+
+
+  const addCommentMutation = useMutation({
+    mutationFn: (commentDataWithPostId: NewCommentData & { postId: string }) => {
+      const { postId: pId, ...restData } = commentDataWithPostId;
+      return addCommentToPost(pId, restData);
+    },
+    onSuccess: () => {
+      setNewComment('');
+      setNewCommentMentionQuery('');
+      setShowNewCommentSuggestions(false);
+      toast({ title: "Comment Added" });
+      if (post) {
+        queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
+        queryClient.invalidateQueries({ queryKey: ['posts'] }); // To update commentCount on PostCard
+      }
+    },
+    onError: (error: Error) => {
+      toast({ variant: "destructive", title: "Comment Failed", description: `Could not add comment: ${error.message}.` });
+    },
+    onSettled: () => setIsSubmittingComment(false),
+  });
+
+  const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user || !post || !newComment.trim() || addCommentMutation.isPending) return;
+    setIsSubmittingComment(true);
+    const finalMentionedUids = extractMentionedUids(newComment.trim(), generalSuggestibleUsers || [], user.uid);
+    const commentData: NewCommentData & { postId: string } = {
+      postId: post.id,
+      userId: user.uid,
+      text: newComment.trim(),
+      mentionName: generateAnonymousName(user.uid),
+      mentionedUserIds: finalMentionedUids,
+      likeCount: 0,
+      likedBy: [],
+    };
+    addCommentMutation.mutate(commentData);
+  }, [user, post, newComment, addCommentMutation, generalSuggestibleUsers, queryClient, toast]);
 
   const evaluateNewCommentMentionState = useCallback((text: string, cursorPosition: number) => {
     let activeQuery = null;
@@ -192,13 +280,9 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     if (!showNewCommentSuggestions) return [];
     if (isLoadingGeneralSuggestions) return [{ userId: 'loading-main-comment', mentionName: 'loading-main-comment', displayName: 'Loading users...' } as UserProfileBasic];
     
-    let source = generalSuggestibleUsers || []; // Use fetched users
-    // Server-side filtering on mentionName happens in getSuggestibleUsers if debouncedNewCommentMentionQuery is present
-    // Client-side filtering is only needed if no prefix was sent to server OR for further refinement
+    let source = generalSuggestibleUsers || []; 
 
     if (debouncedNewCommentMentionQuery.trim() !== "" && source.length > 0) {
-        // If a query prefix was sent to server, server results are already filtered.
-        // If no prefix was sent, or for additional client-side refinement:
         const queryLower = debouncedNewCommentMentionQuery.toLowerCase();
         source = source.filter(p => 
             p.mentionName.toLowerCase().includes(queryLower) ||
@@ -212,44 +296,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     return source.slice(0, 10);
   }, [showNewCommentSuggestions, isLoadingGeneralSuggestions, generalSuggestibleUsers, debouncedNewCommentMentionQuery]);
 
-
-  const addCommentMutation = useMutation({
-    mutationFn: (commentDataWithPostId: NewCommentData & { postId: string }) => {
-      const { postId: pId, ...restData } = commentDataWithPostId;
-      return addCommentToPost(pId, restData);
-    },
-    onSuccess: () => {
-      setNewComment('');
-      setNewCommentMentionQuery('');
-      setShowNewCommentSuggestions(false);
-      toast({ title: "Comment Added" });
-      if (post) {
-        queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
-        queryClient.invalidateQueries({ queryKey: ['posts'] });
-      }
-    },
-    onError: (error: Error) => {
-      toast({ variant: "destructive", title: "Comment Failed", description: `Could not add comment: ${error.message}.` });
-    },
-    onSettled: () => setIsSubmittingComment(false),
-  });
-
-  const handleCommentSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!user || !post || !newComment.trim() || addCommentMutation.isPending) return;
-    setIsSubmittingComment(true);
-    const finalMentionedUids = extractMentionedUids(newComment.trim(), generalSuggestibleUsers || [], user.uid);
-    const commentData: NewCommentData & { postId: string } = {
-      postId: post.id,
-      userId: user.uid,
-      text: newComment.trim(),
-      mentionName: generateAnonymousName(user.uid),
-      mentionedUserIds: finalMentionedUids,
-      likeCount: 0,
-      likedBy: [],
-    };
-    addCommentMutation.mutate(commentData);
-  }, [user, post, newComment, addCommentMutation, generalSuggestibleUsers, queryClient, toast]);
 
   // --- Bidding Logic ---
   const addBidMutation = useMutation({
@@ -351,8 +397,6 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   if (!post) {
     return <div className="flex items-center justify-center h-full"><Loader2 className="h-8 w-8 animate-spin" /></div>;
   }
-  const halfPrice = post.maxBudget ? Math.floor(post.maxBudget / 2) : 0;
-
 
   return (
     <Card className="flex flex-col flex-1 overflow-hidden bg-card border-border rounded-lg shadow-xl md:sticky md:top-20 md:h-[calc(100vh-6.5rem)] md:max-h-[calc(100vh-6.5rem)]">
@@ -367,6 +411,47 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       <ScrollArea className="flex-grow bg-background">
         <PostDetailContentBody post={post} />
         
+        {/* AI Connection Suggestions Section */}
+        {currentUser && post && currentUser.uid !== post.userId && (
+            <div className="mt-6 border-t pt-4 px-4">
+              <h4 className="text-md font-semibold mb-3 flex items-center gap-2 text-foreground">
+                <Sparkles className="h-5 w-5 text-purple-500" /> AI Connection Suggestions
+              </h4>
+              {isLoadingAISuggestions && (
+                <div className="flex items-center justify-center py-4">
+                  <Loader2 className="h-6 w-6 animate-spin text-purple-500" />
+                  <p className="ml-2 text-sm text-muted-foreground">Generating suggestions...</p>
+                </div>
+              )}
+              {aiSuggestionsError && !isLoadingAISuggestions && (
+                <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-md text-destructive text-sm flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  {aiSuggestionsError}
+                </div>
+              )}
+              {aiSuggestions && !isLoadingAISuggestions && !aiSuggestionsError && (
+                <div className="space-y-3 text-sm p-3 bg-muted/30 rounded-md">
+                  <div>
+                    <p className="font-medium text-foreground mb-1">Suggested Profiles:</p>
+                    {aiSuggestions.suggestedConnections.length > 0 ? (
+                      <ul className="list-disc list-inside pl-4 space-y-0.5 text-muted-foreground">
+                        {aiSuggestions.suggestedConnections.map((suggestion, index) => (
+                          <li key={index}>{suggestion}</li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-muted-foreground italic">No specific profiles suggested at this time.</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground mb-1">Reasoning:</p>
+                    <p className="text-muted-foreground whitespace-pre-wrap">{aiSuggestions.reasoning}</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
         {/* Bidding Section Display (not the form) */}
         {post.requestType === 'help_request' && post.maxBudget != null && (
             <div className="mt-6 border-t pt-4 px-4">
@@ -547,3 +632,4 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 });
 
 PostDetailPanel.displayName = "PostDetailPanel";
+
