@@ -423,22 +423,22 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             <ScrollArea className="flex-grow min-h-0">
               <div className="p-6">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
-                  {/* Left Column for Details */}
-                  <div className="md:w-1/2 space-y-6">
+                  {/* Left Column */}
+                  <div className="md:w-1/2 space-y-6 flex flex-col">
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
                     </div>
-                    <div>
-                      <Label htmlFor="plan-description" className="text-sm">Description</Label>
+                    
+                    <div className="flex flex-col flex-grow">
+                      <Label htmlFor="plan-description" className="text-sm mb-1">Description</Label>
                       <Textarea
                         id="plan-description"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
                         disabled={!isOwnerForUIDisplay || isSavingSettings}
-                        rows={3}
                         placeholder="A brief overview of this plan's purpose."
-                        className="text-sm resize-y max-h-60" 
+                        className="text-sm resize-y flex-grow"
                       />
                     </div>
                     
