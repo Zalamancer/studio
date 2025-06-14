@@ -1,4 +1,3 @@
-
 // src/components/plan/RoadmapStepCard.tsx
 "use client";
 
@@ -82,6 +81,22 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
     diffHighlight === 'added' ? 'bg-green-600 text-white' : diffHighlight === 'persisted' ? 'bg-gray-500 text-gray-100' : 'bg-primary text-primary-foreground'
   );
 
+  const handleMouseDownOrTouchStart = (event: React.MouseEvent<HTMLDivElement> | React.TouchEvent<HTMLDivElement>) => {
+    if (diffHighlight) return;
+    // If the event target is one of the interactive elements (dots, add button), let their specific handlers manage it.
+    // Their handlers should call e.stopPropagation() to prevent this one from firing.
+    if (
+      (event.target as HTMLElement).closest('[data-dot-type]') ||
+      (event.target as HTMLElement).closest('[data-child-item-dot-id]') ||
+      (event.target as HTMLElement).closest('[data-action-button="add-child"]')
+    ) {
+      return;
+    }
+    // Otherwise, this interaction is on the card body/header for dragging or initiating a click-to-open.
+    onNodeInteractionStart(step.id, event);
+  };
+
+
   return (
     <div
       ref={cardRef}
@@ -95,36 +110,17 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
         pointerEvents: diffHighlight ? 'none' : 'auto', 
         zIndex: diffHighlight ? 30 : (isSelected ? 20 : (isActuallyDraggingThisNode ? 30 : 10)),
       }}
-      onMouseDown={(e) => {
-        if (diffHighlight) return;
-        if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]') || (e.target as HTMLElement).closest('[data-action-button="add-child"]')) return;
-        // Check if the click is on the header area BUT NOT on an interactive element within it (like dots)
-        if (!((e.target as HTMLElement).closest('[data-header-clickable]') && (e.target as HTMLElement).closest('[data-dot-type]'))) {
-          onNodeInteractionStart(step.id, e);
-        }
-      }}
-      onTouchStart={(e) => {
-        if (diffHighlight) return;
-        if ((e.target as HTMLElement).closest('[data-dot-type]') || (e.target as HTMLElement).closest('[data-child-item-dot-id]') || (e.target as HTMLElement).closest('[data-action-button="add-child"]')) return;
-         if (!((e.target as HTMLElement).closest('[data-header-clickable]') && (e.target as HTMLElement).closest('[data-dot-type]'))) {
-          onNodeInteractionStart(step.id, e);
-        }
-      }}
+      onMouseDown={handleMouseDownOrTouchStart}
+      onTouchStart={handleMouseDownOrTouchStart}
       data-node-id={step.id}
     >
       <div
         data-header-clickable 
         className={headerClasses}
-        onClick={(e) => {
-          if (diffHighlight) return;
-          if (
-            !(e.target as HTMLElement).closest('[data-dot-type]') &&
-            !(e.target as HTMLElement).closest('[data-action-button="add-child"]')
-          ) {
-            e.stopPropagation(); 
-            onEditStep(step);
-          }
-        }}
+        // REMOVED onClick handler that called onEditStep from here.
+        // The decision to call onEditStep (which opens the panel) is now solely
+        // made by the handleGlobalPointerUp logic in usePlanLogic.ts,
+        // which correctly distinguishes between a click and a drag.
       >
         <h3 className="text-sm font-semibold truncate flex-grow" title={step.title}>{step.title}</h3>
         
@@ -138,12 +134,12 @@ const RoadmapStepCard: React.FC<RoadmapStepCardProps> = React.memo(({
                diffHighlight === 'persisted' ? 'text-gray-100 hover:bg-gray-600/80' :
                'text-primary-foreground hover:bg-primary-foreground/10'
             )}
-            onClick={(e) => {
-              e.stopPropagation();
+            onClick={(e) => { // onClick remains for specific actions within header
+              e.stopPropagation(); // Prevent card drag/click
               onAddChildItemToNode(step.id);
             }}
-            onMouseDown={(e) => e.stopPropagation()}
-            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()} // Prevent card drag/click
+            onTouchStart={(e) => e.stopPropagation()} // Prevent card drag/click
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
             <span className="sr-only">Add child item</span>
