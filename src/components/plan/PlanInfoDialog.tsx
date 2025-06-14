@@ -1,3 +1,4 @@
+
 // src/components/plan/PlanInfoDialog.tsx
 "use client";
 
@@ -424,13 +425,13 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
               <div className="p-6">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
                   {/* Left Column */}
-                  <div className="md:w-1/2 space-y-6 flex flex-col">
+                  <div className="md:w-1/2 space-y-6 flex flex-col"> {/* Added flex flex-col to allow description to grow */}
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
                     </div>
                     
-                    <div className="flex flex-col flex-grow">
+                    <div className="flex flex-col flex-grow min-h-0"> {/* Parent of Label + Textarea */}
                       <Label htmlFor="plan-description" className="text-sm mb-1">Description</Label>
                       <Textarea
                         id="plan-description"
@@ -438,11 +439,14 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         onChange={(e) => setDescription(e.target.value)}
                         disabled={!isOwnerForUIDisplay || isSavingSettings}
                         placeholder="A brief overview of this plan's purpose."
-                        className="text-sm flex-grow" 
+                        className={cn(
+                            "text-sm flex-grow min-h-0 overflow-y-auto", // Key classes for expansion and scroll
+                            "bg-lime-200 dark:bg-lime-800" // Debug background
+                        )}
                       />
                     </div>
                     
-                    <div className="space-y-4"> 
+                    <div className="space-y-4"> {/* Wrapper for Vis/Edit/Static to control their collective spacing */}
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {isOwnerForUIDisplay ? (
                             <>
@@ -490,7 +494,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
 
                   {/* Right Column for Permissions */}
                   {isOwnerForUIDisplay && (
-                    <div className="md:w-1/2 space-y-4 flex flex-col">
+                    <div className="md:w-1/2 space-y-4 flex flex-col"> {/* Ensure this is also flex-col */}
                       {visibility !== 'public' && renderPermissionSection(
                         "Manage View Access (Private/Unlisted)",
                         currentViewUserIds,
@@ -523,6 +527,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         editSearchInputRef,
                         editSuggestionsPopoverRef
                       )}
+                      {/* This empty div acts as a spacer to push permission sections up if only one is visible */}
+                      {(visibility === 'public' || editability === 'owner_only') && <div className="flex-grow"></div>}
                     </div>
                   )}
                 </div>
@@ -534,3 +540,4 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
+
