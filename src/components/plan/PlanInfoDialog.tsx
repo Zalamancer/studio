@@ -400,7 +400,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             <div className="flex items-center gap-2 flex-shrink-0">
               {isOwnerForUIDisplay && ( 
                 <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm">
-                  {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                   Save Settings
                 </Button>
               )}
@@ -431,53 +431,60 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                     </div>
                     <div>
                       <Label htmlFor="plan-description" className="text-sm">Description</Label>
-                      <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
+                      <Textarea
+                        id="plan-description"
+                        value={description}
+                        onChange={(e) => setDescription(e.target.value)}
+                        disabled={!isOwnerForUIDisplay || isSavingSettings}
+                        rows={3}
+                        placeholder="A brief overview of this plan's purpose."
+                        className="text-sm resize-y max-h-60" 
+                      />
                     </div>
                     
-                    <div className="space-y-4">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                        {isOwnerForUIDisplay ? (
-                          <>
-                            <div>
-                              <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
-                              <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
-                                <SelectTrigger id="plan-visibility" className="text-sm h-9">
-                                  <SelectValue placeholder="Select visibility" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
-                                  <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
-                                  <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                            <div>
-                              <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
-                              <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
-                                <SelectTrigger id="plan-editability" className="text-sm h-9">
-                                  <SelectValue placeholder="Select editability" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
-                                  <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                                </SelectContent>
-                              </Select>
-                            </div>
-                          </>
-                        ) : ( 
-                          <>
-                            {renderStaticSetting("Visibility", initialPlanData.visibility, ShieldQuestion)}
-                            {renderStaticSetting("Editability", initialPlanData.editability, Users)}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                    {/* Static Info Block - Removed debug border */}
-                    <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
-                      <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
-                      <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
-                      <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
-                      <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
+                    <div className="space-y-4"> 
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                            {isOwnerForUIDisplay ? (
+                            <>
+                                <div>
+                                <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
+                                <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
+                                    <SelectTrigger id="plan-visibility" className="text-sm h-9">
+                                    <SelectValue placeholder="Select visibility" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                    <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
+                                    <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
+                                    <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                </div>
+                                <div>
+                                <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
+                                <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
+                                    <SelectTrigger id="plan-editability" className="text-sm h-9">
+                                    <SelectValue placeholder="Select editability" />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                    <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
+                                    <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
+                                    </SelectContent>
+                                </Select>
+                                </div>
+                            </>
+                            ) : ( 
+                            <>
+                                {renderStaticSetting("Visibility", initialPlanData.visibility, ShieldQuestion)}
+                                {renderStaticSetting("Editability", initialPlanData.editability, Users)}
+                            </>
+                            )}
+                        </div>
+                        <div className="text-xs text-muted-foreground space-y-1 border-t pt-4">
+                            <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
+                            <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
+                            <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
+                            <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
+                        </div>
                     </div>
                   </div>
 
