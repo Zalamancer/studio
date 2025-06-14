@@ -128,7 +128,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
   const { data: fetchedNotifications = [], isLoading: isLoadingNotifications, error: notificationsError } = useQuery<ClientNotification[]>({
     queryKey: ['notifications', userId],
     queryFn: () => {
-        console.log(`[NotificationDropdown] useQuery: Fetching notifications for userId: ${userId}`);
+        // console.log(`[NotificationDropdown] useQuery: Fetching notifications for userId: ${userId}`);
         return getNotificationsForUser(userId, 20);
     },
     enabled: !!userId,
@@ -156,7 +156,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
     if (!userPreferences || isLoadingNotifications || isLoadingPreferences) {
       return fetchedNotifications;
     }
-    console.log("[NotificationDropdown] Filtering notifications based on preferences:", userPreferences);
+    // console.log("[NotificationDropdown] Filtering notifications based on preferences:", userPreferences);
     return fetchedNotifications.filter(notification => {
       switch (notification.type) {
         case 'new_message':
@@ -181,7 +181,7 @@ export const NotificationDropdown: React.FC<NotificationDropdownProps> = ({ user
       // The timeout from previous attempt can remain here, it shouldn't hurt.
       setTimeout(() => {
         queryClient.invalidateQueries({ queryKey: ['notifications', userId] });
-        console.log(`[NotificationDropdown] Marked notification ${variables} as read and invalidated query.`);
+        // console.log(`[NotificationDropdown] Marked notification ${variables} as read and invalidated query.`);
       }, 100); 
     },
     onError: (error: Error, variables) => {
