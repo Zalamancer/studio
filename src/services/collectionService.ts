@@ -147,29 +147,29 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
     1. For collections owned by the user: \`query(collections, where('ownerId', '==', '${userId}'), orderBy('createdAt', 'desc'))\`
     2. For collections shared with the user: \`query(collections, where('sharedWithUserIds', 'array-contains', '${userId}'), orderBy('createdAt', 'desc'))\`
     ------------------------------------------------------------------------------------
-    DEBUGGING STEPS:
+    COMMON ISSUES IN \`allow list\` RULES FOR '/collections/{collectionId}':
+    - For Query 1 (owned): Ensure your rule permits listing if \`request.query.filters[0].field == 'ownerId' && request.query.filters[0].op == '==' && request.query.filters[0].value == request.auth.uid\` (or a more robust check if filter order varies).
+    - For Query 2 (shared): Ensure your rule permits listing if \`request.query.filters[0].field == 'sharedWithUserIds' && request.query.filters[0].op == 'array-contains' && request.query.filters[0].value == request.auth.uid\` (or a more robust check).
+    - CRITICAL: DO NOT use \`resource.data\` (e.g., \`resource.data.sharedWithUserIds.hasAny(...)\`) within an \`allow list\` rule condition when checking an \`array-contains\` query. \`list\` rules authorize the query operation based on \`request.query\` and \`request.auth\`, not by inspecting individual potential documents with \`resource.data\`.
+    - The \`array-contains\` filter in the query itself is what specifies the document criteria. The rule validates if *that type of query* is allowed.
+    ------------------------------------------------------------------------------------
+    RECOMMENDATION: Use the Firebase Console's Rules Playground.
     1. Path: '/collections'. Authenticated: YES, UID: '${userId}'. Operation: 'list'.
     2. For Query 1 (Owned):
        - \`where\` clause: field='ownerId', op='==', value='${userId}'
        - \`orderBy\` clause: field='createdAt', direction='descending'
-       - In Playground, inspect \`request.query.filters\`. Is its size > 1 due to orderBy? Your rule might be too strict if it expects \`request.query.filters.size() == 1\`.
+       - In Playground, inspect \`request.query.filters\`. Is its size > 1 due to orderBy?
     3. For Query 2 (Shared):
        - \`where\` clause: field='sharedWithUserIds', op='array-contains', value='${userId}'
        - \`orderBy\` clause: field='createdAt', direction='descending'
-       - In Playground, inspect \`request.query.filters\`. Is its size > 1?
+       - In Playground, inspect \`request.query.filters\`. Is its size > 1 due to orderBy?
        - SUB-TEST for Query 2: Try it *without* the \`orderBy('createdAt', 'desc')\` clause. If this simpler query passes your rule, the combination of \`array-contains\` and \`orderBy\` on a different field is likely the core issue, possibly requiring rule adjustments or reconsidering if this specific ordering is strictly necessary for the "shared" list if it proves unsecurable with your current rule structure.
-    4. COMMON RULE ISSUES:
-       - For Query 1 (owned): Ensure your rule permits listing if \`request.query.filters[0].field == 'ownerId' && request.query.filters[0].op == '==' && request.query.filters[0].value == request.auth.uid\` (or a more robust check if filter order/count varies due to \`orderBy\`).
-       - For Query 2 (shared): Ensure your rule permits listing if \`request.query.filters[0].field == 'sharedWithUserIds' && request.query.filters[0].op == 'array-contains' && request.query.filters[0].value == request.auth.uid\` (or a more robust check).
-       - CRITICAL: DO NOT use \`resource.data\` (e.g., \`resource.data.sharedWithUserIds.hasAny(...)\`) within an \`allow list\` rule condition when checking an \`array-contains\` query. \`list\` rules authorize the query operation based on \`request.query\` and \`request.auth\`, not by inspecting individual potential documents with \`resource.data\`.
-       - The \`array-contains\` filter in the query itself is what specifies the document criteria. The rule validates if *that type of query* is allowed.
-    5. Indexing & Complex Queries:
+    4. Indexing & Complex Queries:
        - Your indexes: 1. collections: ownerId (asc), createdAt (desc) and 2. collections: sharedWithUserIds (asc), createdAt (desc).
        - Query 1 (owned) should be fine with index 1.
-       - Query 2 (shared) with \`orderBy('createdAt', 'desc')\` might be problematic. Firestore has limitations combining \`array-contains\` with \`orderBy\` on a different field. If the Playground sub-test (Query 2 without \`orderBy\`) passes, this is a strong indicator.
-    6. Run the simulation. The playground will show you exactly which part of your \`allow list\` rule is failing or if the entire rule evaluates to false.
-    7. VERIFY YOUR DEPLOYED RULES. Ensure the rules in the Firebase console match what you think they are.`, "color: red; font-weight:bold; background-color: yellow; padding: 5px;");
-      console.error("  Also, ensure any necessary Firestore indexes (e.g., `ownerId` asc/desc + `createdAt` desc, AND `sharedWithUserIds` array-contains + `createdAt` desc) exist for these queries. Missing indexes usually result in 'FAILED_PRECONDITION', but complex rule interactions can sometimes manifest as 'PERMISSION_DENIED'.");
+       - Query 2 (shared) with \`orderBy('createdAt', 'desc')\` can be problematic. Firestore has limitations combining \`array-contains\` with \`orderBy\` on a different field. If the SUB-TEST in step 3 (Query 2 without orderBy) passes, this is a strong indicator.
+    5. VERIFY YOUR DEPLOYED RULES. Ensure the rules in the Firebase console match what you think they are.
+    6. Run the simulation in the Playground. It will show you exactly which part of your \`allow list\` rule is failing or if the entire rule evaluates to false for each specific query.`, "color: red; font-weight:bold; background-color: #FFFFE0; padding: 5px;"); // Light yellow background
       throw new Error('Permission denied fetching collections. Check Firestore security rules and console logs. Use the Rules Playground.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
@@ -517,3 +517,4 @@ export const unshareCollectionFromUser = async (
     throw new Error(error.message || "Could not unshare collection.");
   }
 };
+
