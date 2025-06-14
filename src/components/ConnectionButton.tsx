@@ -55,34 +55,26 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
 
   const currentAuthUserId = user?.uid;
 
-  console.log(`%c[ConnectionButton] Render/Init - Props received: initialTargetUserId='${initialTargetUserId}', initialTargetUserName='${initialTargetUserName}'`, "color: purple; font-weight: bold;");
-
   useEffect(() => {
     if (!initialTargetUserId) {
-      console.warn("[ConnectionButton] useEffect for initialTargetUserId validation: initialTargetUserId is undefined or empty. Setting isValidTarget to false.");
       setIsValidTarget(false);
-      setStatus('not_connected'); 
+      setStatus('not_connected');
       setIsLoading(false);
       return;
     }
     if (!IS_UID_REGEX.test(initialTargetUserId)) {
-      console.warn(`%c[ConnectionButton] WARNING: initialTargetUserId '${initialTargetUserId}' prop does NOT look like a Firebase UID. This component requires a UID for targetUserId. Connection features will be disabled for this target. Please check the parent component passing this prop.`, "color: orange; font-size: 12px;");
       setIsValidTarget(false);
-      setStatus('not_connected'); 
+      setStatus('not_connected');
       setIsLoading(false);
       return;
     }
-    console.log(`[ConnectionButton] useEffect for initialTargetUserId validation: initialTargetUserId '${initialTargetUserId}' is valid. Setting isValidTarget to true.`);
     setIsValidTarget(true);
   }, [initialTargetUserId]);
 
   useEffect(() => {
     let isMounted = true;
     const fetchStatus = async () => {
-      console.log(`%c[ConnectionButton] fetchStatus Effect - currentAuthUserId='${currentAuthUserId}', initialTargetUserId (validated)='${initialTargetUserId}', isValidTarget=${isValidTarget}`, "color: blue;");
-
       if (!currentAuthUserId || !isValidTarget || !initialTargetUserId) {
-        console.log(`[ConnectionButton] fetchStatus: Skipping due to missing authUser, invalid target, or missing initialTargetUserId. currentAuthUserId=${currentAuthUserId}, isValidTarget=${isValidTarget}, initialTargetUserId=${initialTargetUserId}`);
         setStatus('not_connected');
         setIsLoading(false);
         return;
@@ -101,17 +93,16 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
           if (onStatusChange && fetchedStatus) onStatusChange(fetchedStatus);
         }
       } catch (error) {
-        console.error("[ConnectionButton] Error fetching connection status:", error);
+        // console.error("[ConnectionButton] Error fetching connection status:", error); // Removed
         if (isMounted) setStatus('not_connected');
       } finally {
         if (isMounted) setIsLoading(false);
       }
     };
 
-    if (isValidTarget) { 
+    if (isValidTarget) {
       fetchStatus();
-    } else if (initialTargetUserId) { 
-        console.log("[ConnectionButton] fetchStatus: Skipping because isValidTarget is false, though initialTargetUserId was provided.");
+    } else if (initialTargetUserId) {
         setIsLoading(false);
         if (status !== 'not_connected') setStatus('not_connected');
     } else {
@@ -120,7 +111,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
     }
 
     return () => { isMounted = false; };
-  }, [currentAuthUserId, initialTargetUserId, isValidTarget, onStatusChange, status]); 
+  }, [currentAuthUserId, initialTargetUserId, isValidTarget, onStatusChange, status]);
 
   const getConnectionDocIdForAction = (): string | null => {
     if (!currentAuthUserId || !initialTargetUserId || !isValidTarget) return null;
@@ -143,8 +134,6 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
         return;
     }
 
-    console.log(`%c[ConnectionButton] handleAction: User='${currentAuthUserId}', Target='${initialTargetUserId}', ActionMessage='${successMessage}'`, "color: darkgreen;");
-
     setIsActing(true);
     try {
       await actionFn(currentAuthUserId, initialTargetUserId, connectionId);
@@ -152,7 +141,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
       if (onStatusChange) onStatusChange(successStatus);
       toast({ title: "Success", description: successMessage });
     } catch (error: any) {
-      console.error(`[ConnectionButton] Error during action (${errorMessage}):`, error);
+      // console.error(`[ConnectionButton] Error during action (${errorMessage}):`, error); // Removed
       toast({ variant: "destructive", title: "Action Failed", description: error.message || errorMessage });
       if (currentAuthUserId && initialTargetUserId && isValidTarget) {
         const freshStatus = await getConnectionStatus(currentAuthUserId, initialTargetUserId);
@@ -205,11 +194,11 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
   );
 
 
-  if (!initialTargetUserId && !isLoading) { 
-    return null; 
+  if (!initialTargetUserId && !isLoading) {
+    return null;
   }
 
-  if (!isValidTarget && !isLoading) { 
+  if (!isValidTarget && !isLoading) {
       return <Button size={size} variant="outline" disabled className={cn("flex items-center", className)}> Invalid Target ID </Button>;
   }
 
@@ -296,6 +285,3 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
     </Button>
   );
 };
-
-
-    
