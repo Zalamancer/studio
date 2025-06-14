@@ -1,3 +1,4 @@
+
 // do not change or update any rule that is not relavant to your prompt
 // do not remove rules that is used by other tasks
 // only add rules that you need.
@@ -44,65 +45,6 @@ service cloud.firestore {
       }
     }
 
-    match /collections/{collectionId} {
-      // Helper functions for collections
-      function isCollectionOwner() {
-        return request.auth.uid == resource.data.ownerId;
-      }
-      function isSharedWithUser() {
-        // Ensure sharedWithUserIds exists and is a list before checking
-        return resource.data.sharedWithUserIds is list && request.auth.uid in resource.data.sharedWithUserIds;
-      }
-      function hasValidCollectionFields() {
-        return request.resource.data.keys().hasAll(['name', 'ownerId', 'postIds', 'sharedWithUserIds', 'createdAt', 'updatedAt']) &&
-               request.resource.data.name is string &&
-               request.resource.data.name.size() > 0 &&
-               request.resource.data.ownerId is string &&
-               request.resource.data.postIds is list &&
-               request.resource.data.sharedWithUserIds is list;
-      }
-
-      // More robust list rule
-      allow list: if isAuthUser() &&
-                  (
-                    // Allow querying for collections owned by the user
-                    (request.query.resource == /databases/$(database)/documents/collections &&
-                     request.query.filters.size() == 1 && // Expecting one 'where' clause for this simple query
-                     request.query.filters[0].field == 'ownerId' &&
-                     request.query.filters[0].op == '==' &&
-                     request.query.filters[0].value == request.auth.uid)
-                    ||
-                    // Allow querying for collections shared with the user
-                    (request.query.resource == /databases/$(database)/documents/collections &&
-                     request.query.filters.size() == 1 && // Expecting one 'where' clause
-                     request.query.filters[0].field == 'sharedWithUserIds' &&
-                     request.query.filters[0].op == 'array-contains' &&
-                     request.query.filters[0].value == request.auth.uid)
-                  );
-
-      allow read: if isAuthUser() && (isCollectionOwner() || isSharedWithUser());
-
-      allow create: if isAuthUser() &&
-                   request.resource.data.ownerId == request.auth.uid &&
-                   hasValidCollectionFields() &&
-                   request.resource.data.createdAt == request.time &&
-                   request.resource.data.updatedAt == request.time;
-
-      allow update: if isAuthUser() &&
-                   isCollectionOwner() && // Only owner can update
-                   request.resource.data.ownerId == resource.data.ownerId &&
-                   request.resource.data.createdAt == resource.data.createdAt &&
-                   request.resource.data.updatedAt == request.time &&
-                   (
-                     // Allow updating these specific fields by owner
-                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'postIds', 'sharedWithUserIds', 'updatedAt']) ||
-                     // Or allow changing visibility/editability settings
-                     request.resource.data.diff(resource.data).affectedKeys().hasOnly(['visibility', 'editability', 'viewUserIds', 'editUserIds', 'updatedAt'])
-                   );
-
-      allow delete: if isAuthUser() && isCollectionOwner();
-    }
-    
     // Posts, their comments, and bids
     match /posts/{postId} {
       allow read: if true; // Anyone can read posts
@@ -214,7 +156,7 @@ service cloud.firestore {
         return resource.data.participants.hasAny([request.auth.uid]);
       }
       function wasAuthUserParticipant() {
-        return resource.data.formerParticipants != null && 
+        return resource.data.formerParticipants != null &&
                resource.data.formerParticipants[request.auth.uid] != null;
       }
       function isGroupOwner(authUid, convData) {
@@ -243,7 +185,7 @@ service cloud.firestore {
           request.resource.data.participants.size() >= 2 && // At least 2 participants
           request.resource.data.ownerId == request.auth.uid && // Creator must be owner
           request.resource.data.adminIds.hasAny([request.auth.uid]) && // Creator must be admin
-          request.resource.data.groupName is string && 
+          request.resource.data.groupName is string &&
           request.resource.data.groupName.size() > 0 && // Group name required
           request.resource.data.createdAt == request.time &&
           request.resource.data.lastMessageTimestamp == request.time
@@ -340,7 +282,7 @@ service cloud.firestore {
       match /messages/{messageId} {
         allow read: if isAuthUser() && (
           get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]) ||
-          (get(/databases/$(database)/documents/conversations/$(conversationId)).data.type == 'group' && 
+          (get(/databases/$(database)/documents/conversations/$(conversationId)).data.type == 'group' &&
            get(/databases/$(database)/documents/conversations/$(conversationId)).data.formerParticipants != null &&
            get(/databases/$(database)/documents/conversations/$(conversationId)).data.formerParticipants[request.auth.uid] != null)
         );
@@ -423,8 +365,8 @@ service cloud.firestore {
                             resource.data.reviewerId == request.auth.uid &&
                             (request.method == 'delete' || request.resource.data.updatedAt == request.time);
     }
-            
-            
+
+
     match /plans/{planId} {
       // ... your create, list, get rules ...
             allow create: if request.auth != null &&
@@ -461,11 +403,11 @@ service cloud.firestore {
                  (request.query.filters[0].value.hasAny(['public', 'unlisted'])) &&
                  (request.query.limit == null || request.query.limit <= 20)
                 ) || request.auth != null;
-          
+
 			allow get: if resource.data.visibility in ['public', 'unlisted'] ||
               (request.auth != null && request.auth.uid == resource.data.ownerId) ||
               (request.auth != null && resource.data.viewUserIds.hasAny([request.auth.uid]));
-  
+
 
       function isOwner() {
         return request.auth.uid == resource.data.ownerId;
@@ -525,7 +467,7 @@ service cloud.firestore {
                          // SCENARIO 2: An authorized editor (owner or collaborator) is updating the roadmap
                          (isPlanEditor() && isValidRoadmapUpdate(request.resource.data, resource.data))
                        );
-                       
+
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
 
       match /versions/{versionId} {
@@ -548,4 +490,3 @@ service cloud.firestore {
     }
   }
 }
-

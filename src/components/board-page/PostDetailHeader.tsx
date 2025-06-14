@@ -2,7 +2,7 @@
 // src/components/board-page/PostDetailHeader.tsx
 "use client";
 
-import React, { useState, useMemo } from 'react'; // Added useMemo
+import React, { useState } from 'react'; // Removed useMemo as isPostSaved is removed
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -29,10 +29,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { ConnectionStatus } from '@/types/connection';
-import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
-import { useQuery } from '@tanstack/react-query'; // Added
-import { getUserCollections } from '@/services/collectionService'; // Added
-import type { ClientCollection } from '@/types/collection'; // Added
+// SaveToCollectionDialog and related imports (useQuery, getUserCollections, ClientCollection) are removed
 
 interface PostDetailHeaderProps {
   post: Post;
@@ -54,21 +51,7 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
   const router = useRouter();
   const { toast } = useToast();
   const [isStartingChat, setIsStartingChat] = React.useState(false);
-  const [isSaveToCollectionOpen, setIsSaveToCollectionOpen] = useState(false);
-
-  const { data: userCollections = [], isLoading: isLoadingCollections } = useQuery<ClientCollection[]>({
-    queryKey: ['userCollections', currentUser?.uid, 'forPostDetailHeader'], // Unique key part for this specific use
-    queryFn: () => currentUser ? getUserCollections(currentUser.uid) : Promise.resolve([]),
-    enabled: !!currentUser && !!post?.id, // Fetch only if user and post are available
-    staleTime: 1000 * 60 * 5, // 5 minutes
-  });
-
-  const isPostSaved = useMemo(() => {
-    if (isLoadingCollections || !post?.id || userCollections.length === 0) {
-      return false;
-    }
-    return userCollections.some(collection => collection.postIds?.includes(post.id));
-  }, [userCollections, post?.id, isLoadingCollections]);
+  // Removed isSaveToCollectionOpen, userCollections query, and isPostSaved logic
 
   const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
@@ -178,19 +161,7 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {currentUser && post.id && (
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setIsSaveToCollectionOpen(true)}
-                title={isPostSaved ? "Manage Collections" : "Save to Collection"}
-                className={cn("h-7 w-7 p-1", isPostSaved && "text-primary")}
-                disabled={isLoadingCollections}
-              >
-                <Bookmark className={cn("h-4 w-4", isPostSaved && "fill-current")} />
-                <span className="sr-only">{isPostSaved ? "Manage Collections" : "Save to Collection"}</span>
-              </Button>
-            )}
+            {/* Removed Save to Collection Button and Dialog Trigger */}
             <Button
               variant="ghost"
               size="icon"
@@ -206,14 +177,7 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
           </div>
         </div>
       </CardHeader>
-      {currentUser && post.id && (
-        <SaveToCollectionDialog
-            isOpen={isSaveToCollectionOpen}
-            onOpenChange={setIsSaveToCollectionOpen}
-            postId={post.id}
-            postTitle={post.question}
-        />
-      )}
+      {/* Removed SaveToCollectionDialog instance */}
     </>
   );
 });

@@ -1,3 +1,4 @@
+
 # AnonyCollab Project Progress
 
 ## DONE
@@ -12,7 +13,6 @@
 *   Commenting System with Replies & Likes (Main & Sub-comments)
 *   User Connection System (Request, Accept, Reject, Remove)
 *   Notification System (Firebase Functions for backend, Dropdown UI)
-*   User Collections for Posts (Create, Add/Remove Posts, View)
 *   Collaboration Plan Creation (Basic structure definition)
 *   Interactive Roadmap Visualization (`/plan/[planId]`):
     *   Canvas with draggable nodes (Roadmap Steps).
@@ -35,6 +35,9 @@
     *   Bot user/post/comment creation and scheduled activity.
     *   Auto-reply for messages to bots.
     *   Auto-accepting bot connection requests.
+
+## REMOVED FEATURES
+*   User Collections for Posts (Create, Add/Remove Posts, View) - Removed due to Firestore rule complexities.
 
 ## WORKING
 *   Refining UI/UX across the application (ongoing).

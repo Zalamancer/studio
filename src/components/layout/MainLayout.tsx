@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, FolderOpen, Brain } from "lucide-react"; // Added FolderOpen, Brain
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,7 +43,7 @@ import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile } from "@/hooks/use-mobile"; // Corrected import path
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
@@ -542,7 +542,6 @@ export default function MainLayout({
     { title: "Home", href: "/", icon: Home },
     { title: "Discover", href: "/discover", icon: Compass },
     { title: "Messages", href: "/messages", icon: MessageSquare },
-    { title: "Collections", href: "/collections", icon: FolderOpen },
   ];
 
   const rootLayoutClasses = cn(
@@ -716,3 +715,4 @@ export default function MainLayout({
     </div>
   );
 }
+
