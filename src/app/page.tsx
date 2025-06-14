@@ -220,10 +220,28 @@ const BoardPageContent = () => {
               {renderPostDetailPanel()}
             </div>
           ) : (
-            <div className="hidden md:flex md:flex-1 md:min-w-0 md:border-l md:border-border md:pl-4 flex-col items-center justify-center p-8 bg-card/50 text-muted-foreground md:sticky md:top-20 md:max-h-[calc(100vh-6.5rem)]">
-              <MessageSquare className="h-16 w-16 mb-4 opacity-30" />
-              <p className="text-lg">Select a post to view details</p>
-              <p className="text-sm mt-1">Details will appear here once you click on a post from the list.</p>
+            <div className="hidden md:flex md:flex-1 md:min-w-0 md:pl-4 md:border-l md:border-border flex-col">
+                <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
+                  <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
+                    <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 p-1 text-muted-foreground/50 cursor-default" disabled>
+                      <X className="h-5 w-5" />
+                    </Button>
+                  </div>
+                  <ScrollArea className="flex-grow bg-background">
+                    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                      <MessageSquare className="h-16 w-16 mb-4 text-muted-foreground opacity-30" />
+                      <p className="text-lg font-medium text-muted-foreground">Select a post to view details</p>
+                      <p className="text-sm mt-1 text-muted-foreground">Details will appear here once you click on a post from the list.</p>
+                    </div>
+                  </ScrollArea>
+                  <div className="p-3 border-t flex-shrink-0">
+                    <div className="flex items-center gap-2 w-full">
+                      <div className="flex-grow h-9 bg-muted rounded-md opacity-50"></div>
+                      <div className="h-9 w-9 bg-muted rounded-md opacity-50"></div>
+                    </div>
+                  </div>
+                </Card>
             </div>
           )
         )}
