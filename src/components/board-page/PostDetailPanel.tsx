@@ -106,17 +106,13 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   useEffect(() => {
     const fetchAISuggestions = async () => {
       if (currentUser && post && currentUser.uid !== post.userId && !aiSuggestions && !isLoadingAISuggestions && !aiSuggestionsError) {
-        console.log("[PostDetailPanel] Attempting to fetch AI suggestions.");
         setIsLoadingAISuggestions(true);
         setAiSuggestionsError(null);
         try {
           const currentUserProfile = await fetchFullUserProfile(currentUser.uid);
           if (!currentUserProfile) {
-            console.error("[PostDetailPanel] Current user's profile data not found for AI suggestions.");
             throw new Error("Could not fetch your profile data for AI suggestions.");
           }
-          console.log("[PostDetailPanel] Current user profile for AI input:", JSON.stringify(currentUserProfile, null, 2));
-
 
           const aiInput: AIConnectionMatcherInput = {
             postContent: `${post.question} ${post.descriptionDetails || ''} ${post.descriptionTried || ''} ${post.descriptionOutcome || ''}`.trim(),
@@ -124,31 +120,25 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
             industry: currentUserProfile.industryName || currentUserProfile.industry || 'General',
             tags: post.tags || [],
           };
-          console.log("[PostDetailPanel] Preparing to call AIConnectionMatcher with input:", JSON.stringify(aiInput, null, 2));
 
           const suggestionsOutput = await aiConnectionMatcher(aiInput);
-          console.log("[PostDetailPanel] AIConnectionMatcher raw output:", JSON.stringify(suggestionsOutput, null, 2));
 
           if (suggestionsOutput && suggestionsOutput.suggestedConnections && suggestionsOutput.suggestedConnections.length > 0) {
             setAiSuggestions(suggestionsOutput);
-            console.log("[PostDetailPanel] AI suggestions set to state:", suggestionsOutput);
           } else {
             setAiSuggestions({ suggestedConnections: [], reasoning: "No specific connections suggested by AI at this time." });
-            console.log("[PostDetailPanel] AI returned no suggestions or an empty/null output.");
           }
 
         } catch (error: any) {
-          console.error("[PostDetailPanel] Detailed error fetching AI suggestions:", error.message, error.stack, error);
+          console.error("[PostDetailPanel] Error fetching AI suggestions:", error.message);
           setAiSuggestionsError(error.message || "Failed to load AI suggestions.");
         } finally {
           setIsLoadingAISuggestions(false);
-          console.log("[PostDetailPanel] Finished AI suggestion fetch attempt.");
         }
       } else if (currentUser && post && currentUser.uid === post.userId) {
         setAiSuggestions(null);
         setIsLoadingAISuggestions(false);
         setAiSuggestionsError(null);
-        console.log("[PostDetailPanel] AI suggestions cleared for own post.");
       }
     };
 
@@ -156,7 +146,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
         fetchAISuggestions();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [post, currentUser]);
+  }, [post, currentUser]); // Removed aiSuggestions, isLoadingAISuggestions, aiSuggestionsError from deps to avoid re-triggering on their change
 
 
   // --- @Mention Suggestions for New Comment Input ---
@@ -223,7 +213,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       likedBy: [],
     };
     addCommentMutation.mutate(commentData);
-  }, [user, post, newComment, addCommentMutation, generalSuggestibleUsers, queryClient, toast]);
+  }, [user, post, newComment, addCommentMutation.isPending, generalSuggestibleUsers, queryClient, toast]);
 
   const evaluateNewCommentMentionState = useCallback((text: string, cursorPosition: number) => {
     let activeQuery = null;
@@ -292,11 +282,11 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, [showNewCommentSuggestions]);
-
+  
   const filteredNewCommentSuggestions = useMemo(() => {
     if (!showNewCommentSuggestions) return [];
     if (isLoadingGeneralSuggestions) return [{ userId: 'loading-main-comment', mentionName: 'loading-main-comment', displayName: 'Loading users...' } as UserProfileBasic];
-
+    
     let source = generalSuggestibleUsers || [];
 
     if (debouncedNewCommentMentionQuery.trim() !== "" && source.length > 0) {
