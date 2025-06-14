@@ -88,20 +88,17 @@ const ProfileSettingsPage = () => {
 
   useEffect(() => {
     if (authLoading) {
-      console.log("[ProfileSettingsPage] useEffect: Auth is loading, waiting...");
       return;
     }
 
     const fetchProfile = async () => {
-      if (!user) { // Should not happen if authLoading is false and no user, handled by parent conditional render
+      if (!user) { 
         setIsFetchingProfile(false);
         return;
       }
       setIsFetchingProfile(true);
-      console.log("[ProfileSettingsPage] fetchProfile: Fetching profile for user:", user.uid);
       try {
         const fullProfileData = await fetchFullUserProfile(user.uid);
-        console.log("[ProfileSettingsPage] fetchProfile: Raw fullProfileData from service:", fullProfileData);
 
         if (fullProfileData) {
           setDescription(fullProfileData.description || '');
@@ -133,9 +130,7 @@ const ProfileSettingsPage = () => {
           const avatarToDisplay = fullProfileData.avatarUrl || null;
           setPreviewUrl(avatarToDisplay);
           setCurrentDbAvatarUrl(avatarToDisplay);
-          console.log("[ProfileSettingsPage] Full profile data loaded and state set.");
         } else {
-          console.warn("[ProfileSettingsPage] No full profile document found, setting defaults.");
           setFetchedMentionName(generateAnonymousName(user.uid));
           setDescription(''); setDescriptionVisibility('everyone');
           setEstablished(''); setIncomeRange('Prefer not to say');
@@ -144,19 +139,16 @@ const ProfileSettingsPage = () => {
           setFetchedCompanyName('');
         }
       } catch (error) {
-        console.error("[ProfileSettingsPage] fetchProfile: Error fetching profile:", error);
         toast({ variant: "destructive", title: "Error Fetching Profile", description: "Could not load your profile data." });
         setFetchedMentionName(generateAnonymousName(user?.uid || ""));
       } finally {
         setIsFetchingProfile(false);
-        console.log("[ProfileSettingsPage] fetchProfile: Finished fetching profile attempt.");
       }
     };
     
     if (user && !isFetchingProfile) {
         fetchProfile();
     } else if (!user) {
-        console.log("[ProfileSettingsPage] useEffect: Auth loaded, no user. Clearing form.");
         setDescription(''); setDescriptionVisibility('everyone');
         setEstablished(''); setIncomeRange('Prefer not to say');
         setSelectedSectorCode(undefined); setSelectedSubSectorCode(undefined); setSelectedIndustryCode(undefined);
@@ -233,7 +225,6 @@ const ProfileSettingsPage = () => {
             reader.readAsDataURL(compressedFile);
             toast({ title: "Compression Successful", description: "The image has been compressed." });
         } catch (error) {
-            console.error("[ProfileSettingsPage] Image compression error:", error);
             toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress image." });
             setSelectedFile(null); setOriginalTooLargeFile(null); setPreviewUrl(currentDbAvatarUrl);
             if (fileInputRef.current) fileInputRef.current.value = '';
@@ -284,11 +275,8 @@ const ProfileSettingsPage = () => {
 
     try {
         if (selectedFile) {
-            console.log("[ProfileSettingsPage] handleSubmit: Uploading new avatar...");
             newAvatarUrlForFirestore = await uploadPostImage(selectedFile, user.uid);
-            console.log("[ProfileSettingsPage] handleSubmit: New avatar URL:", newAvatarUrlForFirestore);
         } else if (previewUrl === null && currentDbAvatarUrl !== null) {
-            console.log("[ProfileSettingsPage] handleSubmit: Avatar explicitly removed by user.");
             newAvatarUrlForFirestore = null;
         }
 
@@ -312,7 +300,6 @@ const ProfileSettingsPage = () => {
             profileDataToUpdate.avatarUrl = newAvatarUrlForFirestore;
         }
 
-        console.log("[ProfileSettingsPage] handleSubmit: Data to update in Firestore:", profileDataToUpdate);
         await updateUserProfileDetails(user.uid, profileDataToUpdate);
 
         if (newAvatarUrlForFirestore !== undefined) {
@@ -325,7 +312,6 @@ const ProfileSettingsPage = () => {
         toast({ title: "Profile Updated", description: "Your profile information has been saved." });
 
     } catch (error: any) {
-        console.error('[ProfileSettingsPage] Error updating profile:', error);
         toast({
             variant: "destructive",
             title: "Update Failed",
@@ -507,7 +493,7 @@ const ProfileSettingsPage = () => {
               className="text-sm"
             />
             {establishedError && <p className="text-xs text-destructive pt-1">{establishedError}</p>}
-            <p className="text-xs text-muted-foreground pt-1">Enter the 4-digit year. Must be between 1613 and {currentYear}. Always visible if set.</p>
+            <p className="text-xs text-muted-foreground pt-1">Enter the 4-digit year. Must be between 1613 and ${currentYear}. Always visible if set.</p>
           </div>
 
 
@@ -548,7 +534,7 @@ const ProfileSettingsPage = () => {
             <AlertDialogHeader>
               <AlertDialogTitle>Image Too Large</AlertDialogTitle>
               <AlertDialogDescription>
-                The selected image exceeds {MAX_FILE_SIZE_MB}MB ({(originalTooLargeFile?.size ? originalTooLargeFile.size / (1024 * 1024) : 0).toFixed(2)}MB).
+                The selected image exceeds ${MAX_FILE_SIZE_MB}MB (${(originalTooLargeFile?.size ? originalTooLargeFile.size / (1024 * 1024) : 0).toFixed(2)}MB).
                 Would you like to compress it to fit? Compression may slightly reduce quality.
               </AlertDialogDescription>
             </AlertDialogHeader>
@@ -565,4 +551,3 @@ const ProfileSettingsPage = () => {
 };
 
 export default ProfileSettingsPage;
-
