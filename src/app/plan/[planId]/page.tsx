@@ -6,16 +6,17 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, AlertTriangle, Info, Trash2, Edit3, PlusCircle, MessageCircle, Eye, Link as LinkIcon, CalendarDays, DollarSign, ListChecks, Layers, ExternalLinkIcon } from 'lucide-react'; // Added icons
+import { Loader2, AlertTriangle, Info, Trash2, Edit3, PlusCircle, MessageCircle, Eye, Link as LinkIcon, CalendarDays, DollarSign, ListChecks, Layers, ExternalLinkIcon, X } from 'lucide-react'; // Added X
 import { PlanInfoDialog } from '@/components/plan/PlanInfoDialog';
 import RoadmapStepCard from '@/components/plan/RoadmapStepCard';
 import { AddRoadmapStepDialog } from '@/components/plan/AddRoadmapStepDialog';
 import { EditChildItemDialog } from '@/components/plan/EditChildItemDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
-import { Card, CardContent } from '@/components/ui/card'; // Added CardContent
+import { Card, CardContent } from '@/components/ui/card'; 
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"; // For Node Detail form
-import { Input } from "@/components/ui/input"; // For Node Detail form
+import * as DialogPrimitive from "@radix-ui/react-dialog"; // Keep for PlanInfoDialog's explicit close if needed
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"; 
+import { Input } from "@/components/ui/input"; 
 import { Label } from "@/components/ui/label"; 
 import { FormLabel } from "@/components/ui/form"; 
 import { Textarea } from "@/components/ui/textarea"; 
@@ -113,7 +114,6 @@ export default function PlanDetailPage() {
   
 
   useEffect(() => {
-    console.log(`[PlanDetailPage] Editing target changed. Type: ${editingTarget?.type}, Data ID: ${editingTarget?.type === 'node' ? editingTarget.data.id : (editingTarget?.type === 'childItem' ? editingTarget.data.id : 'N/A')}`);
     if (editingTarget?.type === 'node') {
       nodeDetailForm.reset({
         title: editingTarget.data.title,
@@ -182,9 +182,6 @@ export default function PlanDetailPage() {
               const pathKey_child = `hierarchical-${parentStep.id}-child${index}-to-${childNode.id}`;
               const c1x = startX - controlOffset / 2; 
               const c1y = startY;
-              // Adjust c2x based on the new endX. If endX is to the right, handle should be to its right.
-              // Since the child node is spawned to the left, startX will typically be > endX.
-              // The curve should approach the right edge of the child node from its left.
               const c2x = endX - controlOffset / 2;   
               const c2y = endY;
               const pathD = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`;
@@ -259,10 +256,6 @@ export default function PlanDetailPage() {
     return { ...version, previousVersion };
   });
   
-  console.log(
-    `[PlanDetailPage] Rendering. isStepDetailSheetOpen: ${isStepDetailSheetOpen}, editingTarget type: ${editingTarget?.type}, editingTarget ID: ${editingTarget?.type === 'node' ? editingTarget.data.id : (editingTarget?.type === 'childItem' ? editingTarget.data.id : 'N/A')}`
-  );
-
   return (
     <div className="flex flex-col flex-1 h-full">
       <PlanHeader
@@ -353,6 +346,10 @@ export default function PlanDetailPage() {
         defaultTitle={defaultChildDialogTitle}
         defaultDescription={defaultChildDialogDescription}
         originalItemData={originalEditingChildItemData}
+        onDeleteItem={(itemId, parentId) => {
+          handleDeleteChildItem(itemId, parentId);
+          setIsEditChildItemDialogOpen(false); 
+        }}
         onItemUpdated={(updatedItem) => {
            if (childItemManagementContextRef.current?.operation === 'edit' && childItemManagementContextRef.current.itemToEditId === updatedItem.id) {
                 handleChildItemDetailUpdateInPanel(updatedItem, childItemManagementContextRef.current.parentNodeId);
@@ -445,7 +442,6 @@ export default function PlanDetailPage() {
                    if (canEditPlan && !diffTarget) {
                        try {
                            await nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)();
-                           // Toast is now handled within onNodeDetailPanelSubmit in usePlanLogic
                        } catch (submitError) {
                            console.error("Error submitting node details on panel close:", submitError);
                            toast({ variant: "destructive", title: "Save Error", description: "Could not auto-save step details." });
@@ -464,37 +460,55 @@ export default function PlanDetailPage() {
             setIsStepDetailSheetOpen(true);
           }
         }}
-        disableAnimation={true}
+        disableAnimation={true} 
       >
-        <SheetContent className="w-[400px] sm:w-[540px] p-0 flex flex-col" side="right" disableAnimation={true}>
+        <SheetContent className="w-[400px] sm:w-[540px] p-0 flex flex-col" side="right" disableAnimation={true} showCloseButton={false}>
           {(editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) || (editingTarget?.type === 'childItem' && !editingTarget.data.canvasNodeIdForThisItem) ) && (
             <>
-              <SheetHeader className="p-4 border-b">
-                <div className="flex justify-between items-center">
-                   <SheetTitle className="flex items-center gap-2">
-                       <Layers className="h-5 w-5 text-primary"/>
+              <SheetHeader className="p-4 border-b flex flex-row justify-between items-center">
+                <div className="flex items-center gap-2">
+                   <Layers className="h-5 w-5 text-primary"/>
+                   <SheetTitle>
                        {editingTarget.type === 'node' || editingTarget.data.canvasNodeIdForThisItem ? "Edit Step Details" : "Edit Item Details"}
                    </SheetTitle>
-                   {(editingTarget.type === 'node' || editingTarget.data.canvasNodeIdForThisItem) && (
-                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => {
+                </div>
+                <div className="flex items-center gap-1">
+                   {(editingTarget.type === 'node' || (editingTarget.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem)) && (
+                     <Button
+                       variant="ghost"
+                       size="icon"
+                       className="h-7 w-7 text-destructive hover:text-destructive"
+                       onClick={() => {
                         if (editingTarget.type === 'node') setNodeToDelete(editingTarget.data);
                         else if (editingTarget.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) {
                              const node = editableRoadmap.find(n => n.id === editingTarget.data.canvasNodeIdForThisItem);
                              if (node) setNodeToDelete(node);
                         }
-                     }}>
+                       }}
+                       title="Delete Step"
+                       disabled={!canEditPlan || diffTarget}
+                     >
                          <Trash2 className="h-4 w-4"/>
                          <span className="sr-only">Delete Step</span>
                      </Button>
                    )}
+                   <Button
+                     variant="ghost"
+                     size="icon"
+                     className="h-7 w-7"
+                     title="Close Panel"
+                     onClick={() => setIsStepDetailSheetOpen(false)}
+                   >
+                     <X className="h-4 w-4" />
+                     <span className="sr-only">Close</span>
+                   </Button>
                 </div>
-                 <SheetDescription>Modify the title and description for this item.</SheetDescription>
               </SheetHeader>
               <ScrollArea className="flex-1">
                 <div className="p-4 space-y-4">
                    <Form {...nodeDetailForm}>
                      <form 
-                        onSubmit={nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)}
+                        onSubmit={nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)} // This submit is now primarily for auto-save
                         className="space-y-4"
                      >
                        <FormField control={nodeDetailForm.control} name="title" render={({ field }) => (
@@ -530,10 +544,10 @@ export default function PlanDetailPage() {
                                         <ExternalLinkIcon className="h-3 w-3 text-primary"/>
                                     </Link>
                                  )}
-                                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-blue-600 hover:text-blue-700" onClick={() => handleEditChildItemText(child, editingTarget.data.id)} title="Edit Text">
+                                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-blue-600 hover:text-blue-700" onClick={() => handleEditChildItemText(child, editingTarget.data.id)} title="Edit Text" disabled={!canEditPlan || diffTarget}>
                                    <Edit3 className="h-3 w-3"/>
                                  </Button>
-                                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-destructive hover:text-destructive" onClick={() => handleDeleteChildItem(child.id, editingTarget.data.id)} title="Delete Item">
+                                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-destructive hover:text-destructive" onClick={() => handleDeleteChildItem(child.id, editingTarget.data.id)} title="Delete Item" disabled={!canEditPlan || diffTarget}>
                                    <Trash2 className="h-3 w-3"/>
                                  </Button>
                                </div>
@@ -564,4 +578,5 @@ export default function PlanDetailPage() {
 }
     
     
+
 
