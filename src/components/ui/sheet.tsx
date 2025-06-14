@@ -22,7 +22,8 @@ const SheetOverlay = React.forwardRef<
 >(({ className, ...props }, ref) => (
   <SheetPrimitive.Overlay
     className={cn(
-      "fixed inset-0 z-50 bg-black/80  data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+      "fixed inset-0 z-50 bg-black/80",
+      "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
       className
     )}
     {...props}
@@ -43,9 +44,36 @@ const sheetVariants = cva(
         right:
           "inset-y-0 right-0 h-full w-3/4  border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
       },
+      disableAnimation: { // New variant for disabling animation
+        true: "", // No animation classes when true
+        false: "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-500", // Default animation classes
+      }
     },
+    compoundVariants: [ // Ensure slide animations only apply if disableAnimation is false
+      {
+        side: "top",
+        disableAnimation: false,
+        className: "data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
+      },
+      {
+        side: "bottom",
+        disableAnimation: false,
+        className: "data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
+      },
+      {
+        side: "left",
+        disableAnimation: false,
+        className: "data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left",
+      },
+      {
+        side: "right",
+        disableAnimation: false,
+        className: "data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right",
+      },
+    ],
     defaultVariants: {
       side: "right",
+      disableAnimation: false, // Default to animations enabled
     },
   }
 )
@@ -53,22 +81,23 @@ const sheetVariants = cva(
 interface SheetContentProps
   extends React.ComponentPropsWithoutRef<typeof SheetPrimitive.Content>,
     VariantProps<typeof sheetVariants> {
-  showCloseButton?: boolean; // Added prop
+  showCloseButton?: boolean;
+  disableAnimation?: boolean; // Added prop
 }
 
 const SheetContent = React.forwardRef<
   React.ElementRef<typeof SheetPrimitive.Content>,
   SheetContentProps
->(({ side = "right", className, children, showCloseButton = true, ...props }, ref) => ( // Added showCloseButton prop with default true
+>(({ side = "right", className, children, showCloseButton = true, disableAnimation = false, ...props }, ref) => (
   <SheetPortal>
     <SheetOverlay />
     <SheetPrimitive.Content
       ref={ref}
-      className={cn(sheetVariants({ side }), className)}
+      className={cn(sheetVariants({ side, disableAnimation }), className)}
       {...props}
     >
       {children}
-      {showCloseButton && ( // Conditionally render the close button
+      {showCloseButton && (
         <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">
           <X className="h-4 w-4" />
           <span className="sr-only">Close</span>

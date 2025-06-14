@@ -16,12 +16,12 @@ import { Card, CardContent } from '@/components/ui/card'; // Added CardContent
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"; // For Node Detail form
 import { Input } from "@/components/ui/input"; // For Node Detail form
-import { Label } from "@/components/ui/label"; // For Node Detail form, **ADDED THIS IMPORT**
-import { FormLabel } from "@/components/ui/form"; // Ensure FormLabel is imported if used, or use Label from ui/label
-import { Textarea } from "@/components/ui/textarea"; // For Node Detail form
-import { useForm } from 'react-hook-form'; // For Node Detail form
-import { zodResolver } from '@hookform/resolvers/zod'; // For Node Detail form
-import * as z from 'zod'; // For Node Detail form
+import { Label } from "@/components/ui/label"; 
+import { FormLabel } from "@/components/ui/form"; 
+import { Textarea } from "@/components/ui/textarea"; 
+import { useForm } from 'react-hook-form'; 
+import { zodResolver } from '@hookform/resolvers/zod'; 
+import * as z from 'zod'; 
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -57,7 +57,6 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
   return Math.max(NODE_BASE_MIN_HEIGHT, height);
 };
 
-// Schema for the Node Detail Form in the side panel
 const nodeDetailFormSchema = z.object({
   title: z.string().min(1, "Title is required").max(100, "Title cannot exceed 100 characters"),
   description: z.string().max(1000, "Description cannot exceed 1000 characters").optional(),
@@ -69,9 +68,11 @@ export default function PlanDetailPage() {
   const {
     user, authLoading, planId, isValidPlanId,
     planData, isLoadingPlan, planError, ownerProfile, isLoadingOwnerProfile,
-    editableRoadmap, setEditableRoadmap, // Include setEditableRoadmap for child item reordering
+    editableRoadmap, 
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
-    handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel,
+    initialPanelDataRef, // Get this from the hook
+    onNodeDetailPanelSubmit, // Get this from the hook
+    handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel, // These are still needed if onNodeDetailPanelSubmit calls them
     nodeToDelete, setNodeToDelete, confirmDeleteNode,
     handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
     handleGlobalMove, handleGlobalPointerUp, isPointerDown,
@@ -87,7 +88,7 @@ export default function PlanDetailPage() {
     handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
     planDataForDialog,
-    originalEditingChildItemData, setOriginalEditingChildItemData, // Used by EditChildItemDialog
+    originalEditingChildItemData, setOriginalEditingChildItemData, 
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
     handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
@@ -99,17 +100,14 @@ export default function PlanDetailPage() {
   const canvasRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
-  const controlOffset = 100; // For bezier curve calculation
+  const controlOffset = 100; 
 
-  // Form for editing node details in the side panel
   const nodeDetailForm = useForm<NodeDetailFormData>({
     resolver: zodResolver(nodeDetailFormSchema),
     defaultValues: { title: '', description: '' },
   });
   
-  // Toast for child item updates in panel
   const { toast } = useToast();
-  const initialPanelDataRef = useRef<{ title: string; description: string } | null>(null);
 
 
   useEffect(() => {
@@ -119,60 +117,23 @@ export default function PlanDetailPage() {
         title: editingTarget.data.title,
         description: editingTarget.data.description || '',
       });
-      initialPanelDataRef.current = {
-        title: editingTarget.data.title,
-        description: editingTarget.data.description || '',
-      };
+      // initialPanelDataRef is set inside usePlanLogic's handleEditCanvasNode / handleChildItemCanvasNodeFocus
     } else if (editingTarget?.type === 'childItem') {
       const childItemAsNode = editableRoadmap.find(node => node.id === editingTarget.data.canvasNodeIdForThisItem);
-      if (childItemAsNode) {
+      if (childItemAsNode) { // If child item is spawned as a node, panel edits that node
         nodeDetailForm.reset({
           title: childItemAsNode.title,
           description: childItemAsNode.description || '',
         });
-         initialPanelDataRef.current = {
-          title: childItemAsNode.title,
-          description: childItemAsNode.description || '',
-        };
-      } else {
-        nodeDetailForm.reset({ title: '', description: '' });
-        initialPanelDataRef.current = null;
+      } else { // If child item is NOT spawned, panel edits the child item's own title/desc
+        nodeDetailForm.reset({ 
+            title: editingTarget.data.title, 
+            description: editingTarget.data.description || '' 
+        });
       }
     }
   }, [editingTarget, nodeDetailForm, editableRoadmap]);
 
-  const onNodeDetailPanelSubmit = (data: NodeDetailFormData) => {
-    if (editingTarget?.type === 'node') {
-      const updatedNode = { ...editingTarget.data, title: data.title, description: data.description || null };
-      handleNodeDetailUpdate(updatedNode);
-      toast({ title: "Step Updated", description: `"${data.title}" has been updated. Remember to save plan.`});
-      initialPanelDataRef.current = data; 
-    } else if (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) {
-      const updatedNode = { 
-        id: editingTarget.data.canvasNodeIdForThisItem,
-        title: data.title, 
-        description: data.description || null,
-        x: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.x || 0,
-        y: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.y || 0,
-        childrenData: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.childrenData || [],
-        peerConnections: editableRoadmap.find(n=>n.id === editingTarget.data.canvasNodeIdForThisItem)?.peerConnections || [],
-      };
-      handleNodeDetailUpdate(updatedNode as RoadmapStep); 
-      handleChildItemDetailUpdateInPanel({ ...editingTarget.data, title: data.title, description: data.description || null }, editingTarget.parentNode.id);
-      toast({ title: "Item Updated", description: `"${data.title}" (spawned node) has been updated. Remember to save plan.`});
-      initialPanelDataRef.current = data;
-    }
-  };
-  
-  useEffect(() => {
-    if (!isStepDetailSheetOpen && initialPanelDataRef.current && editingTarget?.type === 'node') {
-        const currentValues = nodeDetailForm.getValues();
-        if (currentValues.title !== initialPanelDataRef.current.title || currentValues.description !== initialPanelDataRef.current.description) {
-            //
-        }
-        initialPanelDataRef.current = null; 
-    }
-  }, [isStepDetailSheetOpen, editingTarget, nodeDetailForm]);
 
   useEffect(() => {
     if (isPointerDown && canvasRef.current) {
@@ -341,7 +302,7 @@ export default function PlanDetailPage() {
                 allSteps={editableRoadmap}
                 onNodeInteractionStart={handleNodeInteractionStart}
                 isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
-                onEditStep={onChildItemTitleClick}
+                onEditStep={handleEditCanvasNode} 
                 onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
                 onChildItemTitleClick={onChildItemTitleClick}
                 onAddChildItemToNode={() => onAddChildItemToNode(step.id)}
@@ -471,15 +432,27 @@ export default function PlanDetailPage() {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Step Detail Sheet (Panel) */}
       <Sheet
-        open={isStepDetailSheetOpen && (editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && !!editingTarget.data.canvasNodeIdForThisItem))}
-        onOpenChange={(open) => {
+        open={isStepDetailSheetOpen && (editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && !!editingTarget.data.canvasNodeIdForThisItem) || (editingTarget?.type === 'childItem' && !editingTarget.data.canvasNodeIdForThisItem))}
+        onOpenChange={async (open) => {
           if (!open) {
-            if (initialPanelDataRef.current && (editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem))) {
+            if (initialPanelDataRef.current && editingTarget) {
                 const currentValues = nodeDetailForm.getValues();
-                if (currentValues.title !== initialPanelDataRef.current.title || currentValues.description !== initialPanelDataRef.current.description) {
-                   //
+                if (currentValues.title !== initialPanelDataRef.current.title || (currentValues.description || '') !== (initialPanelDataRef.current.description || '')) {
+                   if (canEditPlan && !diffTarget) {
+                       try {
+                           // Programmatically submit the form which calls onNodeDetailPanelSubmit
+                           await nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)();
+                           // Toast for save is handled within onNodeDetailPanelSubmit
+                       } catch (submitError) {
+                           console.error("Error submitting node details on panel close:", submitError);
+                           toast({ variant: "destructive", title: "Save Error", description: "Could not auto-save step details." });
+                       }
+                   } else if (!canEditPlan) {
+                       toast({ variant: "default", title: "Changes Not Saved", description: "You do not have permission to edit this plan." });
+                   } else if (diffTarget) {
+                       toast({ variant: "default", title: "Changes Not Saved", description: "Cannot edit while viewing a historical version."});
+                   }
                 }
             }
             setIsStepDetailSheetOpen(false);
@@ -490,26 +463,38 @@ export default function PlanDetailPage() {
           }
         }}
       >
-        <SheetContent className="w-[400px] sm:w-[540px] p-0 flex flex-col" side="right">
-          {(editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem)) && (
+        <SheetContent className="w-[400px] sm:w-[540px] p-0 flex flex-col" side="right" disableAnimation={true}>
+          {(editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) || (editingTarget?.type === 'childItem' && !editingTarget.data.canvasNodeIdForThisItem) ) && (
             <>
               <SheetHeader className="p-4 border-b">
                 <div className="flex justify-between items-center">
                    <SheetTitle className="flex items-center gap-2">
                        <Layers className="h-5 w-5 text-primary"/>
-                       Edit Step Details
+                       {editingTarget.type === 'node' || editingTarget.data.canvasNodeIdForThisItem ? "Edit Step Details" : "Edit Item Details"}
                    </SheetTitle>
-                   <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => editingTarget?.type === 'node' && setNodeToDelete(editingTarget.data)}>
-                       <Trash2 className="h-4 w-4"/>
-                       <span className="sr-only">Delete Step</span>
-                   </Button>
+                   {/* Only show delete button for actual canvas nodes */}
+                   {(editingTarget.type === 'node' || editingTarget.data.canvasNodeIdForThisItem) && (
+                     <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive" onClick={() => {
+                        if (editingTarget.type === 'node') setNodeToDelete(editingTarget.data);
+                        else if (editingTarget.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) {
+                             const node = editableRoadmap.find(n => n.id === editingTarget.data.canvasNodeIdForThisItem);
+                             if (node) setNodeToDelete(node);
+                        }
+                     }}>
+                         <Trash2 className="h-4 w-4"/>
+                         <span className="sr-only">Delete Step</span>
+                     </Button>
+                   )}
                 </div>
-                 <SheetDescription>Modify the title and description for this roadmap step.</SheetDescription>
+                 <SheetDescription>Modify the title and description for this item.</SheetDescription>
               </SheetHeader>
               <ScrollArea className="flex-1">
                 <div className="p-4 space-y-4">
                    <Form {...nodeDetailForm}>
-                     <form onSubmit={nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)} className="space-y-4">
+                     <form 
+                        onSubmit={nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)} // Form still needs an onSubmit for direct invocation
+                        className="space-y-4"
+                     >
                        <FormField control={nodeDetailForm.control} name="title" render={({ field }) => (
                          <FormItem>
                            <FormLabel>Title <span className="text-destructive">*</span></FormLabel>
@@ -524,16 +509,10 @@ export default function PlanDetailPage() {
                            <FormMessage />
                          </FormItem>
                        )} />
-                       {canEditPlan && !diffTarget && (
-                         <Button type="submit" size="sm" className="w-full" disabled={nodeDetailForm.formState.isSubmitting}>
-                           {nodeDetailForm.formState.isSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin"/>}
-                           Update Details
-                         </Button>
-                       )}
+                       {/* "Update Details" button removed */}
                      </form>
                    </Form>
 
-                   {/* Child Items List within Node Detail Panel */}
                    {editingTarget?.type === 'node' && editingTarget.data.childrenData && editingTarget.data.childrenData.length > 0 && (
                      <div className="pt-4 border-t">
                        <Label className="text-sm font-semibold flex items-center gap-1 mb-2"><ListChecks className="h-4 w-4 text-muted-foreground"/>Child Items</Label>
@@ -582,4 +561,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-
