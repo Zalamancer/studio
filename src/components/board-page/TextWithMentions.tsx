@@ -1,4 +1,5 @@
 
+// src/components/board-page/TextWithMentions.tsx
 "use client";
 
 import React, { useMemo } from 'react';
@@ -24,22 +25,22 @@ export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ t
     queryFn: async () => {
       const profiles = new Map<string, UserProfileBasic | null>();
       if (validMentionedUids.length === 0) {
-        console.log("%c[TextWithMentions] QueryFn: No validMentionedUids, returning empty map.", "color: teal;");
+        
         return profiles;
       }
-      console.log(`%c[TextWithMentions] QueryFn: Fetching profiles for UIDs:`, "color: teal;", validMentionedUids);
+      
       await Promise.all(
         validMentionedUids.map(async (userId) => {
           try {
             const profile = await fetchUserProfileBasic(userId);
             profiles.set(userId, profile);
           } catch (error) {
-            console.warn(`%c[TextWithMentions] QueryFn: Error fetching profile for UID ${userId}:`, "color: orange;", error);
+            // console.warn(`[TextWithMentions] QueryFn: Error fetching profile for UID ${userId}:`, error);
             profiles.set(userId, null); // Store null if fetch fails to avoid re-fetching constantly
           }
         })
       );
-      console.log(`%c[TextWithMentions] QueryFn: Finished fetching. mentionProfilesMap size: ${profiles.size}.`, "color: teal;", profiles);
+      
       return profiles;
     },
     enabled: validMentionedUids.length > 0,
@@ -51,7 +52,7 @@ export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ t
       return [<React.Fragment key="empty-text">{text || ''}</React.Fragment>];
     }
 
-    const mentionRegexGlobal = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,})/g;
+    const mentionRegexGlobal = /@([A-Z][a-z]+[A-Z][a-z]+[0-9]{3,}|[a-zA-Z0-9]{20,28})/g;
     const parts: (string | JSX.Element)[] = [];
     let lastIndex = 0;
 
@@ -120,3 +121,4 @@ export const TextWithMentions: React.FC<TextWithMentionsProps> = React.memo(({ t
   return <>{renderableParts.map((part, index) => <React.Fragment key={index}>{part}</React.Fragment>)}</>;
 });
 TextWithMentions.displayName = 'TextWithMentions';
+
