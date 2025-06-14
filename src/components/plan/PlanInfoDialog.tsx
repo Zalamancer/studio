@@ -38,7 +38,6 @@ import {
   Search,
   PlusCircle,
   X,
-  Save // Ensure Save icon is imported if used in the future
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -426,7 +425,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
               <div className="p-6">
                 <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6">
                   {/* --- LEFT COLUMN (All Details) --- */}
-                  <div className="md:w-1/2 space-y-6 flex flex-col">
+                  <div className="md:w-1/2 space-y-6"> {/* Removed flex flex-col here */}
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
@@ -436,7 +435,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       <Textarea id="plan-description" value={description} onChange={(e) => setDescription(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} rows={3} placeholder="A brief overview of this plan's purpose." className="text-sm"/>
                     </div>
                     
-                    {/* Grouping Visibility/Editability with Static Info */}
+                    {/* Grouping Visibility/Editability and Static Info */}
                     <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                           {isOwnerForUIDisplay ? (
@@ -476,7 +475,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         </div>
 
                         {/* Static Info Block with DEBUG BORDER */}
-                        <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t border-red-500 p-1"> {/* DEBUG: Added border-red-500 p-1 */}
+                        <div className="text-xs text-muted-foreground space-y-1 pt-4 border-t border-red-500 p-1">
                           <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
                           <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
                           <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
@@ -534,3 +533,4 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
+
