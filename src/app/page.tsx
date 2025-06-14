@@ -1,4 +1,5 @@
 
+// src/app/page.tsx
 "use client";
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
@@ -224,9 +225,7 @@ const BoardPageContent = () => {
                 <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
                   <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
                     <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 p-1 text-muted-foreground/50 cursor-default" disabled>
-                      <X className="h-5 w-5" />
-                    </Button>
+                    {/* "X" button silhouette removed */}
                   </div>
                   <ScrollArea className="flex-grow bg-background">
                     <div className="flex flex-col items-center justify-center h-full p-8 text-center">
@@ -236,10 +235,8 @@ const BoardPageContent = () => {
                     </div>
                   </ScrollArea>
                   <div className="p-3 border-t flex-shrink-0">
-                    <div className="flex items-center gap-2 w-full">
-                      <div className="flex-grow h-9 bg-muted rounded-md opacity-50"></div>
-                      <div className="h-9 w-9 bg-muted rounded-md opacity-50"></div>
-                    </div>
+                    {/* Comment input and send button silhouettes removed */}
+                    <div className="h-9"></div> {/* Placeholder for height if footer is kept for spacing */}
                   </div>
                 </Card>
             </div>
@@ -259,3 +256,4 @@ export default BoardPageContent;
 
 
     
+
