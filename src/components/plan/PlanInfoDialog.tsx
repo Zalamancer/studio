@@ -382,7 +382,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     );
   };
 
-
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent className="w-[95vw] max-w-6xl h-[90vh] max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
@@ -422,16 +421,17 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
         ) : initialPlanData ? (
           <>
             <ScrollArea className="flex-grow min-h-0">
-              <div className="p-6 h-full flex flex-col"> {/* Make p-6 div a flex column and take full height */}
-                <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6 flex-grow"> {/* This row/col layout also grows */}
+              <div className="p-6 h-full flex flex-col flex-grow">
+                <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6 flex-grow">
                   {/* Left Column */}
-                  <div className="md:w-1/2 space-y-6 flex flex-col"> {/* This is already flex-col */}
+                  <div className="md:w-1/2 space-y-6 flex flex-col">
                     <div>
                       <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
                       <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9"/>
                     </div>
                     
-                    <div className="flex flex-col flex-grow min-h-0"> {/* Description Block */}
+                    {/* Description Block */}
+                    <div className="flex flex-col flex-grow min-h-0"> 
                       <Label htmlFor="plan-description" className="text-sm mb-1">Description</Label>
                       <Textarea
                         id="plan-description"
@@ -440,12 +440,14 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                         disabled={!isOwnerForUIDisplay || isSavingSettings}
                         placeholder="A brief overview of this plan's purpose."
                         className={cn(
-                            "text-sm flex-grow min-h-0 overflow-y-auto" // Ensure no resize-y
+                            "text-sm flex-grow min-h-0 overflow-y-auto", // Ensure no resize-y
+                            "border-4 border-fuchsia-500 bg-yellow-100 dark:bg-yellow-900" // DEBUG STYLES
                         )}
                       />
                     </div>
                     
-                    <div className="space-y-4"> {/* Static Info and Visibility/Editability Block */}
+                    {/* Static Info and Visibility/Editability Block */}
+                    <div className="space-y-4">
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                             {isOwnerForUIDisplay ? (
                             <>
@@ -539,3 +541,5 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     </Dialog>
   );
 };
+
+    
