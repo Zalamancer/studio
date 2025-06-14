@@ -59,7 +59,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     finalVisibility = 'private';
   }
 
-  const validEditabilities: PlanEditability[] = ['owner_only', 'collaborators', 'everyone']; // Added 'everyone'
+  const validEditabilities: PlanEditability[] = ['owner_only', 'collaborators', 'everyone'];
   let finalEditability: PlanEditability = planData.editability;
   if (!validEditabilities.includes(finalEditability)) {
     finalEditability = 'owner_only';
@@ -67,21 +67,20 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
 
   let viewUserIds: string[] = [];
   if (finalVisibility === 'public') {
-    viewUserIds = []; // Public: no specific list, everyone can view
-  } else { // 'private' or 'unlisted'
-    viewUserIds = [planData.ownerId]; // Owner can always view
+    viewUserIds = [];
+  } else {
+    viewUserIds = [planData.ownerId];
   }
 
   let editUserIds: string[] = [];
   if (finalEditability === 'owner_only') {
-    editUserIds = [planData.ownerId]; // Only owner
+    editUserIds = [planData.ownerId];
   } else if (finalEditability === 'collaborators') {
-    editUserIds = [planData.ownerId]; // Initially, only owner is an editor
+    editUserIds = [planData.ownerId];
   } else if (finalEditability === 'everyone') {
-    editUserIds = []; // No specific list, implies all authenticated users (if they can view)
+    editUserIds = [];
   }
 
-  // Ensure editors are always viewers (if not public visibility)
   if (finalVisibility !== 'public') {
     viewUserIds = Array.from(new Set([...viewUserIds, ...editUserIds]));
   }
@@ -109,7 +108,7 @@ export const createPlan = async (planData: NewPlanData): Promise<string> => {
     const docRef = await addDoc(plansCollectionRef, dataToSave);
     return docRef.id;
   } catch (error: any) {
-    console.error(`[planService] createPlan - Firestore addDoc ERROR: ${error.message}. Data attempted (excluding FieldValues):`, { ...dataToSave, createdAt: 'FieldValue.serverTimestamp()', updatedAt: 'FieldValue.serverTimestamp()' });
+    console.error(`[planService] createPlan - Firestore addDoc ERROR: ${error.message}.`);
     throw new Error(error.message || "Could not create plan.");
   }
 };
