@@ -346,17 +346,13 @@ export default function PlanDetailPage() {
         defaultTitle={defaultChildDialogTitle}
         defaultDescription={defaultChildDialogDescription}
         originalItemData={originalEditingChildItemData}
-        onDeleteItem={(itemId, parentId) => {
-          handleDeleteChildItem(itemId, parentId);
-          setIsEditChildItemDialogOpen(false); 
-        }}
         onItemUpdated={(updatedItem) => {
            if (childItemManagementContextRef.current?.operation === 'edit' && childItemManagementContextRef.current.itemToEditId === updatedItem.id) {
                 handleChildItemDetailUpdateInPanel(updatedItem, childItemManagementContextRef.current.parentNodeId);
            }
         }}
       />
-      <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen}>
+      <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen} disableAnimation={true}>
         <SheetContent 
           className="sm:max-w-[600px] w-[90vw] p-0 flex flex-col" 
           side="left"
@@ -400,9 +396,6 @@ export default function PlanDetailPage() {
                 ))}
              </div>
            </ScrollArea>
-           <SheetFooter className="p-4 border-t">
-              <Button variant="outline" onClick={() => setIsVersionHistorySheetOpen(false)}>Close</Button>
-           </SheetFooter>
         </SheetContent>
       </Sheet>
        <AlertDialog open={!!nodeToDelete} onOpenChange={(open) => !open && setNodeToDelete(null)}>
@@ -582,6 +575,7 @@ export default function PlanDetailPage() {
 }
     
     
+
 
 
 
