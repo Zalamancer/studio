@@ -6,13 +6,13 @@
 // This file can then act as a bridge, importing and orchestrating these smaller components.
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react'; // Removed 'use'
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Building, CalendarDays, CheckCircle, Loader2, AlertTriangle, Star, MessageSquare, Edit3, Trash2, Briefcase, Info, AtSign, DollarSign, UserX } from 'lucide-react'; // Added UserX
+import { Building, CalendarDays, CheckCircle, Loader2, AlertTriangle, Star, MessageSquare, Edit3, Trash2, Briefcase, Info, AtSign, DollarSign, UserX, Sparkles, Lightbulb } from 'lucide-react'; // Added Sparkles, Lightbulb
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { ConnectionButton } from '@/components/ConnectionButton';
@@ -40,6 +40,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from "@/hooks/use-toast";
+import { suggestProfileConnections, type ProfileConnectionInput, type ProfileConnectionOutput } from '@/ai/flows/profile-connection-suggester'; // Import new AI flow
 
 const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string }> = ({ rating, totalStars = 5, size="h-5 w-5" }) => {
   const fullStars = Math.floor(rating);
@@ -56,7 +57,7 @@ const StarDisplay: React.FC<{ rating: number; totalStars?: number, size?: string
 };
 
 const BusinessProfilePage = () => {
-  const params = useParams(); // Direct usage
+  const params = useParams();
   const { user: currentUser, loading: authLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
@@ -68,6 +69,10 @@ const BusinessProfilePage = () => {
   const [hoverRating, setHoverRating] = useState(0);
   const [reviewComment, setReviewComment] = useState('');
   const [editingReview, setEditingReview] = useState<ClientReview | null>(null);
+
+  const [profileAiSuggestions, setProfileAiSuggestions] = useState<ProfileConnectionOutput | null>(null);
+  const [isLoadingProfileAiSuggestions, setIsLoadingProfileAiSuggestions] = useState<boolean>(false);
+  const [profileAiSuggestionsError, setProfileAiSuggestionsError] = useState<string | null>(null);
 
   const profileUserId = profileUserIdFromParams;
 
@@ -96,6 +101,46 @@ const BusinessProfilePage = () => {
     enabled: !!profileUserId && isProfileIdValidUid,
   });
 
+  // AI Connection Suggestions Logic
+  useEffect(() => {
+    const fetchProfileAISuggestions = async () => {
+      if (viewedUserProfileData && currentUser && viewedUserProfileData.uid !== currentUser.uid) {
+        setIsLoadingProfileAiSuggestions(true);
+        setProfileAiSuggestionsError(null);
+        try {
+          const profileSummary = [
+            viewedUserProfileData.description || "No description provided.",
+            viewedUserProfileData.tags ? `Tags: ${viewedUserProfileData.tags.join(', ')}` : "",
+          ].filter(Boolean).join(' ');
+
+          const aiInput: ProfileConnectionInput = {
+            targetUserId: viewedUserProfileData.uid,
+            targetUserProfileData: profileSummary,
+            targetUserIndustry: viewedUserProfileData.industryName || viewedUserProfileData.subSectorName || viewedUserProfileData.sectorName || "General Business",
+          };
+          console.log("[BusinessProfilePage] Calling suggestProfileConnections with input:", aiInput);
+          const suggestions = await suggestProfileConnections(aiInput);
+          setProfileAiSuggestions(suggestions);
+        } catch (error: any) {
+          console.error("[BusinessProfilePage] Error fetching profile AI suggestions:", error);
+          setProfileAiSuggestionsError(error.message || "Failed to load AI suggestions for this profile.");
+        } finally {
+          setIsLoadingProfileAiSuggestions(false);
+        }
+      } else {
+        // Not viewing another user's profile, or data not ready
+        setProfileAiSuggestions(null);
+        setProfileAiSuggestionsError(null);
+        setIsLoadingProfileAiSuggestions(false);
+      }
+    };
+
+    if (isOpen) { // Assuming isOpen refers to the profile page being actively viewed/modal
+      fetchProfileAISuggestions();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewedUserProfileData, currentUser]); // Removed isOpen from deps as it's not defined here. Triggered by viewedUserProfileData/currentUser
+
   const connectionStatusQueryEnabled = useMemo(() => {
     const enabled = !!currentUser?.uid && !!profileUserId && IS_VALID_FIREBASE_UID_REGEX.test(profileUserId) && currentUser.uid !== profileUserId;
     console.log(`%c[BusinessProfilePage] CONNECTION STATUS QUERY CHECK:
@@ -117,7 +162,7 @@ const BusinessProfilePage = () => {
          return 'not_connected';
        }
        if (!IS_VALID_FIREBASE_UID_REGEX.test(profileUserId)) {
-            console.error(`[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.`);
+            console.error("[BusinessProfilePage] queryFn for connectionStatus: CRITICAL FALLBACK - Attempting to call with invalid profileUserId format: '${profileUserId}'. Aborting fetch, returning 'not_connected'.");
             return 'not_connected';
         }
         console.log(`%c[BusinessProfilePage] Querying connection status between ${currentUser.uid} and ${profileUserId}`, "color: dodgerblue;");
@@ -490,6 +535,48 @@ const BusinessProfilePage = () => {
                </p>
             </div>
             
+            {/* AI Profile Connection Suggestions Section */}
+            {currentUser && viewedUserProfileData && viewedUserProfileData.uid !== currentUser.uid && (
+              <>
+                <hr className="border-border" />
+                <div>
+                  <h3 className="text-lg font-semibold text-foreground mb-3 flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-purple-500" />
+                    AI-Suggested Connections <span className="text-xs text-muted-foreground">(for this profile)</span>
+                  </h3>
+                  {isLoadingProfileAiSuggestions ? (
+                    <div className="flex items-center justify-center p-4">
+                      <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                      <p className="ml-2 text-sm text-muted-foreground">Generating suggestions...</p>
+                    </div>
+                  ) : profileAiSuggestionsError ? (
+                    <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-md text-destructive text-sm flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      {profileAiSuggestionsError}
+                    </div>
+                  ) : profileAiSuggestions && profileAiSuggestions.suggestedUserConnections.length > 0 ? (
+                    <Card className="bg-muted/30 p-4 space-y-4">
+                      <p className="text-sm text-muted-foreground italic mb-3">
+                        <Lightbulb className="inline h-4 w-4 mr-1.5 text-yellow-500" />
+                        {profileAiSuggestions.overallReasoning}
+                      </p>
+                      <div className="space-y-3">
+                        {profileAiSuggestions.suggestedUserConnections.map((suggestion, index) => (
+                          <div key={index} className="p-3 border bg-background rounded-md shadow-sm">
+                            <p className="font-medium text-sm text-foreground mb-1">{suggestion.suggestedProfileSummary}</p>
+                            <p className="text-xs text-muted-foreground">{suggestion.reasonForSuggestion}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </Card>
+                  ) : (
+                    <p className="text-sm text-muted-foreground text-center py-4">No specific connection types suggested by AI at this time.</p>
+                  )}
+                </div>
+              </>
+            )}
+
+
             {(viewedUserProfileData.sectorName || viewedUserProfileData.subSectorName || viewedUserProfileData.industryName) && (
                 <>
                     <hr className="border-border"/>
@@ -682,3 +769,4 @@ const BusinessProfilePage = () => {
 
 export default BusinessProfilePage;
 
+    
