@@ -7,11 +7,11 @@ const PREFERENCES_COLLECTION = 'userPreferences';
 
 export const getUserPreferences = async (userId: string): Promise<UserPreference | null> => {
   if (!userId) {
-    console.warn("[userPreferenceService] getUserPreferences: No userId provided.");
+    // console.warn("[userPreferenceService] getUserPreferences: No userId provided.");
     return null;
   }
-  const clientAuthUid = auth.currentUser?.uid;
-  console.log(`%c[userPreferenceService] getUserPreferences: Fetching for userId: '${userId}'. Current client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
+  // const clientAuthUid = auth.currentUser?.uid;
+  // console.log(`%c[userPreferenceService] getUserPreferences: Fetching for userId: '${userId}'. Current client auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
   const prefDocRef = doc(db, PREFERENCES_COLLECTION, userId);
   try {
@@ -24,7 +24,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
       if (Array.isArray(paymentMethodsRaw)) {
         parsedPaymentMethods = paymentMethodsRaw as SavedPaymentMethod[];
       } else if (paymentMethodsRaw) {
-        console.warn(`[userPreferenceService] paymentMethods for user ${userId} is not an array. Will default to empty array.`);
+        // console.warn(`[userPreferenceService] paymentMethods for user ${userId} is not an array. Will default to empty array.`);
       }
 
       const preferences: UserPreference = {
@@ -50,7 +50,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
       };
       return preferences;
     }
-    console.log(`%c[userPreferenceService] getUserPreferences: No preferences document found for ${userId}. Returning defaults.`, "color: orange;");
+    // console.log(`%c[userPreferenceService] getUserPreferences: No preferences document found for ${userId}. Returning defaults.`, "color: orange;");
     return {
         userId: userId,
         // favoriteSectorCodes removed
@@ -69,7 +69,7 @@ export const getUserPreferences = async (userId: string): Promise<UserPreference
         stripeSubscriptionWillCancelAtPeriodEnd: null,
     };
   } catch (error: any) {
-    console.error(`%c[userPreferenceService] getUserPreferences: Error fetching preferences for ${userId}:`, "color: red;", error);
+    // console.error(`%c[userPreferenceService] getUserPreferences: Error fetching preferences for ${userId}:`, "color: red;", error);
     return null;
   }
 };
@@ -130,7 +130,7 @@ export const updateUserPreferences = async (userId: string, dataToUpdate: Update
       await setDoc(prefDocRef, createPayload);
     }
   } catch (error: any) {
-    console.error(`%c[userPreferenceService] updateUserPreferences: Firestore error for user ${userId}:`, "color: red;", error);
+    // console.error(`%c[userPreferenceService] updateUserPreferences: Firestore error for user ${userId}:`, "color: red;", error);
     throw new Error(error.message || "Could not update user preferences.");
   }
 };
