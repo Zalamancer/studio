@@ -1,4 +1,3 @@
-
 # AnonyCollab Project Progress
 
 ## DONE
@@ -6,6 +5,7 @@
 *   reCAPTCHA Enterprise for Signup
 *   Homepage Dashboard with Post Masonry Layout & Filtering
 *   Post Detail View (Sliding Panel)
+    *   AI Connection Suggestions for posts (using `ai-connection-matcher.ts`)
 *   Basic Profile Viewing & Editing (Settings)
 *   Real-time Messaging (Direct & Group Chats, including UI refinements for mobile)
 *   Stripe Integration (Saving Payment Methods, Creating Subscriptions, Cancelling Subscriptions)
@@ -47,7 +47,7 @@
 
 ## NEXT
 *   **Full AI Integration**:
-    *   Implement `ai-connection-matcher.ts` and `connection-suggestions.ts` into the UI (e.g., suggesting collaborators on posts or in user profiles).
+    *   Implement `connection-suggestions.ts` into the UI (e.g., in user profiles - *clarification needed on exact use case as it's similar to current post suggestions*).
     *   Explore other AI-driven features (e.g., content summarization, trend analysis).
 *   **Enhanced Collaboration Plan Features**:
     *   More sophisticated node types or properties.

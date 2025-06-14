@@ -1,3 +1,4 @@
+
 // Tip: If this component becomes too large or complex,
 // consider further splitting its internal sections (like Bidding, Comments, etc.)
 // into their own dedicated components within this 'board-page' sub-directory.
@@ -31,6 +32,7 @@ import type { ClientBid, NewBidData } from '@/types/bid';
 import { findOrCreateConversation } from '@/services/messagingService';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
+import { Badge } from '@/components/ui/badge'; // Import Badge
 
 import { PostDetailHeader } from './PostDetailHeader';
 import { PostDetailContentBody } from './PostDetailContentBody';
@@ -138,8 +140,12 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       }
     };
 
-    fetchAISuggestions();
-  }, [post, currentUser, aiSuggestions, isLoadingAISuggestions, aiSuggestionsError]);
+    // Only fetch if the post is not null and the post has changed, or if currentUser becomes available
+    if (post?.id) {
+        fetchAISuggestions();
+    }
+  // Removed aiSuggestions, isLoadingAISuggestions, aiSuggestionsError from dependency array to avoid loop if they are set inside
+  }, [post, currentUser]); 
 
 
   // --- @Mention Suggestions for New Comment Input ---
@@ -432,20 +438,23 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
               {aiSuggestions && !isLoadingAISuggestions && !aiSuggestionsError && (
                 <div className="space-y-3 text-sm p-3 bg-muted/30 rounded-md">
                   <div>
-                    <p className="font-medium text-foreground mb-1">Suggested Profiles:</p>
+                    <p className="font-medium text-foreground mb-2">Suggested Profiles:</p>
                     {aiSuggestions.suggestedConnections.length > 0 ? (
-                      <ul className="list-disc list-inside pl-4 space-y-0.5 text-muted-foreground">
+                      <div className="flex flex-wrap gap-2">
                         {aiSuggestions.suggestedConnections.map((suggestion, index) => (
-                          <li key={index}>{suggestion}</li>
+                          <Badge key={index} variant="secondary" className="text-xs cursor-default">
+                            <User className="mr-1 h-3 w-3" />
+                            {suggestion}
+                          </Badge>
                         ))}
-                      </ul>
+                      </div>
                     ) : (
                       <p className="text-xs text-muted-foreground italic">No specific profiles suggested at this time.</p>
                     )}
                   </div>
-                  <div>
+                  <div className="pt-2">
                     <p className="font-medium text-foreground mb-1">Reasoning:</p>
-                    <p className="text-muted-foreground whitespace-pre-wrap">{aiSuggestions.reasoning}</p>
+                    <p className="text-muted-foreground whitespace-pre-wrap text-xs">{aiSuggestions.reasoning}</p>
                   </div>
                 </div>
               )}
@@ -632,4 +641,4 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 });
 
 PostDetailPanel.displayName = "PostDetailPanel";
-
+    

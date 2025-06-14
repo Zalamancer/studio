@@ -8,7 +8,7 @@ AnonyCollab is a B2B anonymous collaboration platform. It's built with Next.js (
 *   **User Authentication**: Firebase Auth (Email/Password, Google Sign-In), reCAPTCHA on signup.
 *   **Core Platform**:
     *   Homepage Dashboard: Masonry layout for posts, filtering by tags.
-    *   Post Detail View: Sliding side panel for post details, comments, bidding (for "help_request" type posts).
+    *   Post Detail View: Sliding side panel for post details, comments, bidding (for "help_request" type posts), AI connection suggestions.
     *   User Profiles: Display public business information, user's posts.
     *   Messaging: Real-time chat between connected users (direct and group chats).
 *   **Planning & Collaboration Tools**:
@@ -21,9 +21,10 @@ AnonyCollab is a B2B anonymous collaboration platform. It's built with Next.js (
 *   **Settings**: Profile management, notification preferences, payment method management, account settings.
 *   **Payment Integration**: Stripe for saving payment methods and managing subscriptions.
 *   **Backend/Cloud Functions**: Firebase Functions for automated tasks like bot user/post/comment creation, message replies, and auto-accepting bot connection requests.
-*   **AI (Genkit)**: Flows for AI connection matching and suggestions (e.g., `ai-connection-matcher.ts`, `connection-suggestions.ts`).
+*   **AI (Genkit)**: Flows for AI connection matching and suggestions (e.g., `ai-connection-matcher.ts` - implemented in post detail panel, `connection-suggestions.ts`).
 
 ## Recent Development Focus (Current Session)
+*   **AI Integration**: Implemented the `ai-connection-matcher.ts` flow into the Post Detail Panel to provide users with AI-driven suggestions for potential collaborators based on the post's content and the viewing user's profile. Enhanced the UI of these suggestions.
 *   **Feature Removal - Collections**: Due to persistent complexities with Firestore security rules for listing collections, the "Collections" feature (allowing users to save posts into personal collections) has been removed from the application. This involved deleting related UI components, services, types, and Firestore rules.
 *   **Previous Session Focus (Plan Detail Page)**:
     *   UI/UX Enhancements for `/plan/[planId]/page.tsx` (Info dialog, Add Child Item button, Delete Step button, removed coordinates/descriptions from canvas).
@@ -52,3 +53,4 @@ AnonyCollab is a B2B anonymous collaboration platform. It's built with Next.js (
 *   Use of HSL CSS variables in `globals.css` for theming.
 *   Lucide React for icons.
 *   ShadCN charts for data visualization.
+
