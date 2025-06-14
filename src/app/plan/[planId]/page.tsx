@@ -26,7 +26,7 @@ import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic';
-import type { RoadmapStep, ClientPlanVersion, ChildDataItem } from '@/types/plan';
+import type { RoadmapStep, ClientPlanVersion, ChildDataItem, PeerConnection } from '@/types/plan';
 import { PlanHeader } from './PlanHeader';
 import { useToast } from '@/hooks/use-toast';
 
@@ -94,7 +94,7 @@ export default function PlanDetailPage() {
     handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
     forceRender,
     handleInitiateAddNode,
-    handleEditCanvasNode, // Ensure this is destructured
+    handleEditCanvasNode,
     setIsChildItemDialogSubmitting, 
   } = usePlanLogic();
 
@@ -165,7 +165,6 @@ export default function PlanDetailPage() {
     }
   }, [editableRoadmap]);
 
-
   const drawConnectionLines = useCallback(() => {
     if (!editableRoadmap) return null;
     const lines: JSX.Element[] = [];
@@ -178,11 +177,14 @@ export default function PlanDetailPage() {
             if (childNode) {
               const startX = parentStep.x + 16; 
               const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2); 
-              const endX = childNode.x; 
+              const endX = childNode.x + NODE_BASE_WIDTH; // Connect to the RIGHT side of the child node
               const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2; 
               const pathKey_child = `hierarchical-${parentStep.id}-child${index}-to-${childNode.id}`;
               const c1x = startX - controlOffset / 2; 
               const c1y = startY;
+              // Adjust c2x based on the new endX. If endX is to the right, handle should be to its right.
+              // Since the child node is spawned to the left, startX will typically be > endX.
+              // The curve should approach the right edge of the child node from its left.
               const c2x = endX - controlOffset / 2;   
               const c2y = endY;
               const pathD = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`;
@@ -443,7 +445,7 @@ export default function PlanDetailPage() {
                    if (canEditPlan && !diffTarget) {
                        try {
                            await nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)();
-                           toast({ title: "Step details saved", description: `Changes to "${currentValues.title}" were saved.` });
+                           // Toast is now handled within onNodeDetailPanelSubmit in usePlanLogic
                        } catch (submitError) {
                            console.error("Error submitting node details on panel close:", submitError);
                            toast({ variant: "destructive", title: "Save Error", description: "Could not auto-save step details." });
@@ -562,3 +564,4 @@ export default function PlanDetailPage() {
 }
     
     
+
