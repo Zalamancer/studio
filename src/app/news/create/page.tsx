@@ -40,8 +40,8 @@ const newsCategories = [
   "Case Studies",
 ];
 
-const TOOLBAR_HEIGHT = 36; 
-const TOOLBAR_HORIZONTAL_OFFSET = 40; 
+const TOOLBAR_HEIGHT = 36;
+const TOOLBAR_HORIZONTAL_OFFSET = 40;
 
 const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
@@ -50,7 +50,7 @@ const CreateNewsArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [storyContent, setStoryContent] = useState("<p><br></p>"); 
+  const [storyContent, setStoryContent] = useState("<p><br></p>");
 
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
@@ -67,13 +67,13 @@ const CreateNewsArticlePage = () => {
   const toolbarWrapperRef = useRef<HTMLDivElement>(null);
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
-  const [selectionNonce, setSelectionNonce] = useState(0);
-  const [savedRange, setSavedRange] = useState<Range | null>(null); // To store selection before dialogs
+  const [selectionNonce, setSelectionNonce] = useState(0); // Changed from cursorPosition
+  const [savedRange, setSavedRange] = useState<Range | null>(null);
 
   const [showContextualUI, setShowContextualUI] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
   const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
-  
+
   const [isYouTubeDialogOpen, setIsYouTubeDialogOpen] = useState(false);
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
@@ -145,7 +145,7 @@ const CreateNewsArticlePage = () => {
     }
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
   }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
-  
+
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
     if (focusedField === 'title' && titleInputRef.current) {
@@ -191,9 +191,8 @@ const CreateNewsArticlePage = () => {
   }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
-    let shouldShowBaseUI = false;
-    const currentLineText = getCurrentLineText();
-    const lineIsEmpty = currentLineText === "" || currentLineText === "EDITOR_IS_EMPTY" || currentLineText === "NO_CURRENT_BLOCK_FOUND";
+    let shouldShowPlusButton = false;
+    let shouldShowExpandedToolbar = false;
 
     if (focusedField && (document.activeElement === titleInputRef.current || document.activeElement === contentEditableRef.current)) {
       const lineYOffsetClient = calculateCursorLineYOffset();
@@ -201,19 +200,27 @@ const CreateNewsArticlePage = () => {
         let referenceElementRect: DOMRect | undefined;
         if (focusedField === 'title' && titleWrapperRef.current) referenceElementRect = titleWrapperRef.current.getBoundingClientRect();
         else if (focusedField === 'content' && contentWrapperRef.current) referenceElementRect = contentWrapperRef.current.getBoundingClientRect();
-        
+
         if (referenceElementRect && formWrapperRef.current) {
           const formRect = formWrapperRef.current.getBoundingClientRect();
           const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
           const newTop = lineYOffsetClient - formRect.top - (TOOLBAR_HEIGHT / 2);
           setToolbarStyle({ top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' });
         }
-        if (lineIsEmpty || isToolbarExpanded) shouldShowBaseUI = true;
+
+        const currentLineText = getCurrentLineText();
+        const lineIsEmpty = currentLineText === "" || currentLineText === "EDITOR_IS_EMPTY" || currentLineText === "NO_CURRENT_BLOCK_FOUND";
+
+        if (lineIsEmpty && !isToolbarExpanded) {
+          shouldShowPlusButton = true;
+        }
+        if (isToolbarExpanded) {
+          shouldShowExpandedToolbar = true;
+        }
       }
     }
-    setShowContextualUI(shouldShowBaseUI);
-    if (!shouldShowBaseUI && isToolbarExpanded) setIsToolbarExpanded(false);
-  }, [focusedField, getCurrentLineText, isToolbarExpanded, calculateCursorLineYOffset, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef]);
+    setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
+  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
 
   useEffect(() => {
     calculateAndUpdateToolbarStyle();
@@ -244,17 +251,17 @@ const CreateNewsArticlePage = () => {
     queueMicrotask(() => {
       const activeEl = document.activeElement;
       let isFocusWithinToolbarOrInput = false;
-      if ((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || 
-          titleInputRef.current === activeEl || 
-          contentEditableRef.current === activeEl || 
-          isYouTubeDialogOpen || isEmbedDialogOpen) { // Include dialog states
+      if ((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) ||
+          titleInputRef.current === activeEl ||
+          contentEditableRef.current === activeEl ||
+          isYouTubeDialogOpen || isEmbedDialogOpen) {
         isFocusWithinToolbarOrInput = true;
       }
       if (!isFocusWithinToolbarOrInput) {
         setFocusedField(null);
-        setIsToolbarExpanded(false); 
+        setIsToolbarExpanded(false);
         setShowContextualUI(false);
-        setSavedRange(null); // Clear saved range on blur if dialogs aren't open
+        setSavedRange(null);
       }
     });
   }, [isYouTubeDialogOpen, isEmbedDialogOpen]);
@@ -264,6 +271,23 @@ const CreateNewsArticlePage = () => {
     const currentHTML = event.currentTarget.innerHTML;
     if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") {
       setStoryContent("<p><br></p>");
+      if (event.currentTarget.innerHTML !== "<p><br></p>") { // Avoid infinite loop if already set
+          event.currentTarget.innerHTML = "<p><br></p>";
+          // Try to set caret inside the <p>
+          const pTag = event.currentTarget.querySelector('p');
+          if(pTag) {
+            const range = document.createRange();
+            const sel = window.getSelection();
+            try {
+              range.setStart(pTag, 0); // Start of the paragraph
+              range.collapse(true);
+              sel?.removeAllRanges();
+              sel?.addRange(range);
+            } catch(e) {
+              // console.warn("Error setting caret on empty paragraph:", e);
+            }
+          }
+      }
     } else {
       setStoryContent(currentHTML);
     }
@@ -275,20 +299,125 @@ const CreateNewsArticlePage = () => {
     updateSelectionNonce();
   }, [publishAttempted, setStoryError, updateSelectionNonce]);
 
-
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const editorEl = contentEditableRef.current;
+    if (!editorEl) return;
+
+    const selection = window.getSelection();
+    if (!selection || selection.rangeCount === 0) return;
+
+    const range = selection.getRangeAt(0);
+    const currentBlock = getCurrentBlockElement(); 
+
     if (event.key === 'Enter') {
-      event.preventDefault(); 
-      document.execCommand('insertParagraph', false, undefined); 
+      event.preventDefault();
+      document.execCommand('insertParagraph', false, undefined);
       setTimeout(() => {
         if (contentEditableRef.current) {
           setStoryContent(contentEditableRef.current.innerHTML);
           updateSelectionNonce();
         }
       }, 0);
+      return;
     }
-  }, [updateSelectionNonce]);
 
+    if (event.key === 'Backspace') {
+      if (range.collapsed && currentBlock) {
+        const focusNode = selection.focusNode;
+        const focusOffset = selection.focusOffset;
+        let isAtStartOfBlock = false;
+
+        if (focusNode === currentBlock && focusOffset === 0) {
+          isAtStartOfBlock = true;
+        } else if (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0) {
+          let el: Node | ParentNode | null = focusNode;
+          let isFirstContentNode = true;
+          while (el && el !== currentBlock) {
+            if (el.previousSibling) { isFirstContentNode = false; break; }
+            el = el.parentNode;
+          }
+          if (isFirstContentNode) isAtStartOfBlock = true;
+        } else if (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR')) {
+           isAtStartOfBlock = true;
+        }
+
+
+        if (isAtStartOfBlock) {
+          const prevElement = currentBlock.previousElementSibling;
+          if (prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
+            event.preventDefault();
+            prevElement.remove();
+            setStoryContent(editorEl.innerHTML || "<p><br></p>"); // Ensure not empty
+            updateSelectionNonce();
+            // Ensure caret is placed correctly after deletion
+            setTimeout(() => {
+                if (editorEl.innerHTML.trim() === "") editorEl.innerHTML = "<p><br></p>";
+                const newRange = document.createRange();
+                const newSel = window.getSelection();
+                if (currentBlock && editorEl.contains(currentBlock)) {
+                    newRange.selectNodeContents(currentBlock); newRange.collapse(true);
+                } else if (editorEl.firstChild) {
+                    newRange.selectNodeContents(editorEl.firstChild); newRange.collapse(true);
+                } else {
+                    newRange.selectNodeContents(editorEl); newRange.collapse(true);
+                }
+                newSel?.removeAllRanges(); newSel?.addRange(newRange);
+                editorEl.focus();
+            },0);
+            return;
+          }
+        }
+      }
+    }
+
+    if (event.key === 'Delete') {
+      if (range.collapsed && currentBlock) {
+        const focusNode = selection.focusNode;
+        const focusOffset = selection.focusOffset;
+        let isAtEndOfBlock = false;
+
+        if (focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) {
+          isAtEndOfBlock = true;
+        } else if (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length) {
+           let el: Node | ParentNode | null = focusNode;
+          let isLastContentNode = true;
+          while (el && el !== currentBlock) {
+            if (el.nextSibling) { isLastContentNode = false; break; }
+            el = el.parentNode;
+          }
+          if (isLastContentNode) isAtEndOfBlock = true;
+        } else if (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR')) {
+            isAtEndOfBlock = true;
+        }
+
+        if (isAtEndOfBlock) {
+          const nextElement = currentBlock.nextElementSibling;
+          if (nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
+            event.preventDefault();
+            nextElement.remove();
+            setStoryContent(editorEl.innerHTML || "<p><br></p>");
+            updateSelectionNonce();
+            // Ensure caret remains in current block
+             setTimeout(() => {
+                if (editorEl.innerHTML.trim() === "") editorEl.innerHTML = "<p><br></p>";
+                const newRange = document.createRange();
+                const newSel = window.getSelection();
+                 if (currentBlock && editorEl.contains(currentBlock)) {
+                    newRange.selectNodeContents(currentBlock); newRange.collapse(false); // to the end of current block
+                } else if (editorEl.lastChild) {
+                    newRange.selectNodeContents(editorEl.lastChild); newRange.collapse(false);
+                } else {
+                    newRange.selectNodeContents(editorEl); newRange.collapse(false);
+                }
+                newSel?.removeAllRanges(); newSel?.addRange(newRange);
+                editorEl.focus();
+            },0);
+            return;
+          }
+        }
+      }
+    }
+  }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce]);
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -310,7 +439,7 @@ const CreateNewsArticlePage = () => {
       else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
       return;
     }
-    console.log("Publishing Article:", { title: title.trim(), category, storyContent });
+    // console.log("Publishing Article:", { title: title.trim(), category, storyContent });
     toast({ title: "Article Submitted (Placeholder)", description: `"${title.trim()}" would be published.` });
     setTitle(""); setCategory("");
     const initialEmptyContent = "<p><br></p>";
@@ -324,51 +453,53 @@ const CreateNewsArticlePage = () => {
       }
     }
     setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
-    setIsToolbarExpanded(false); 
-    setShowContextualUI(false); 
+    setIsToolbarExpanded(false);
+    setShowContextualUI(false);
     updateSelectionNonce();
   };
-  
+
   const insertHTMLAndFocus = useCallback((htmlToInsert: string) => {
     const editorEl = contentEditableRef.current;
     if (!editorEl) return;
-     // No need to check focusedField here, as we use savedRange or current focus
-    
-    editorEl.focus(); // Ensure editor has focus for selection manipulation
 
-    queueMicrotask(() => { // Use microtask to operate after focus/selection updates
+    editorEl.focus();
+
+    queueMicrotask(() => {
       const selection = window.getSelection();
       let range: Range;
 
       if (savedRange && editorEl.contains(savedRange.commonAncestorContainer)) {
         range = savedRange;
-        if (selection) { // Restore the selection to the saved range
+        if (selection) {
           selection.removeAllRanges();
           selection.addRange(range);
         }
       } else if (selection && selection.rangeCount > 0 && editorEl.contains(selection.getRangeAt(0).commonAncestorContainer)) {
-        range = selection.getRangeAt(0); // Use current selection if it's within the editor
+        range = selection.getRangeAt(0);
       } else {
-        // Fallback: selection is outside, or no selection create range at the end of editor
         range = document.createRange();
-        range.selectNodeContents(editorEl);
-        range.collapse(false); // to the end
+        if (editorEl.lastChild) {
+            range.setStartAfter(editorEl.lastChild);
+        } else {
+            range.selectNodeContents(editorEl);
+            range.collapse(false); // to the end
+        }
         if (selection) {
           selection.removeAllRanges();
           selection.addRange(range);
         }
       }
-      setSavedRange(null); // Clear saved range after use or if it was invalid
+      setSavedRange(null);
 
       const currentBlock = getCurrentBlockElement();
       if (currentBlock && editorEl.contains(currentBlock) &&
           (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;")) {
-        if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) {
-          const isEditorAndEmpty = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>)$/i);
-          if (!isEditorAndEmpty || (isEditorAndEmpty && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) {
-            range.selectNodeContents(currentBlock);
-          }
-        }
+         if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) {
+           const isEditorAndEmpty = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>)$/i);
+           if (!isEditorAndEmpty || (isEditorAndEmpty && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) {
+             range.selectNodeContents(currentBlock);
+           }
+         }
       }
 
       if (!range.collapsed) {
@@ -376,32 +507,44 @@ const CreateNewsArticlePage = () => {
       }
 
       const fragment = range.createContextualFragment(htmlToInsert);
-      // Find the last <p> in the fragment, this is where the caret should go.
-      // All our inserted HTML should end with <p><br></p>
-      let lastParagraphInFragment: Node | null = null;
-      if (fragment.lastChild && fragment.lastChild.nodeName === 'P') {
-        lastParagraphInFragment = fragment.lastChild;
-      } else {
-        // This is a fallback, should not happen if htmlToInsert is correct
-        const tempP = document.createElement('p');
-        tempP.innerHTML = '<br>';
-        fragment.appendChild(tempP);
-        lastParagraphInFragment = tempP;
+      let lastMeaningfulNodeInFragment: Node | null = null;
+      if (fragment.lastChild) {
+          if (fragment.lastChild.nodeName === 'P' && fragment.lastChild.textContent?.trim() === "" && (fragment.lastChild as HTMLElement).innerHTML.toLowerCase().includes('<br>')) {
+             lastMeaningfulNodeInFragment = fragment.lastChild; // This is the <p><br></p>
+          } else if (fragment.lastChild.nodeType === Node.ELEMENT_NODE && fragment.childNodes.length > 1 && fragment.childNodes[fragment.childNodes.length - 2]) {
+              // If the last child is not the P, maybe the P is the second to last (e.g. figure followed by P)
+              const secondToLast = fragment.childNodes[fragment.childNodes.length - 2];
+              if (secondToLast && secondToLast.nodeName === 'P' && secondToLast.textContent?.trim() === "" && (secondToLast as HTMLElement).innerHTML.toLowerCase().includes('<br>')) {
+                   lastMeaningfulNodeInFragment = secondToLast;
+              } else {
+                   // If the actual embed is the last thing, use that.
+                   lastMeaningfulNodeInFragment = fragment.childNodes[fragment.childNodes.length - (htmlToInsert.endsWith("<p><br></p>") ? 2 : 1)];
+              }
+          } else {
+             lastMeaningfulNodeInFragment = fragment.lastChild;
+          }
       }
-      
+
+
       range.insertNode(fragment);
 
-      if (lastParagraphInFragment && editorEl.contains(lastParagraphInFragment)) {
-        const pElement = lastParagraphInFragment as HTMLParagraphElement;
-        if (pElement.innerHTML.trim() === "") pElement.innerHTML = "<br>"; // Ensure caret visibility
-        range.setStart(pElement, 0);
-        range.collapse(true);
+      if (lastMeaningfulNodeInFragment && editorEl.contains(lastMeaningfulNodeInFragment)) {
+          if (lastMeaningfulNodeInFragment.nodeName === 'P' && (lastMeaningfulNodeInFragment as HTMLElement).innerHTML.trim() === "") {
+              (lastMeaningfulNodeInFragment as HTMLElement).innerHTML = "<br>"; // Ensure caret visibility
+              range.setStart(lastMeaningfulNodeInFragment, 0);
+          } else if (lastMeaningfulNodeInFragment.nextSibling && lastMeaningfulNodeInFragment.nextSibling.nodeName === 'P' && (lastMeaningfulNodeInFragment.nextSibling as HTMLElement).innerHTML.toLowerCase().includes('<br>')) {
+              // If the last node was the embed, and the next sibling is the P we added
+              range.setStart(lastMeaningfulNodeInFragment.nextSibling, 0);
+          } else {
+             // Fallback: if it's not the P, try to place caret after the inserted meaningful content
+             range.setStartAfter(lastMeaningfulNodeInFragment);
+          }
+          range.collapse(true);
       } else {
-         // Fallback if lastParagraphInFragment somehow isn't what we expect
          range.selectNodeContents(editorEl);
-         range.collapse(false); // To the end
+         range.collapse(false);
       }
-      
+
       if (selection) {
         selection.removeAllRanges();
         selection.addRange(range);
@@ -409,23 +552,24 @@ const CreateNewsArticlePage = () => {
 
       setStoryContent(editorEl.innerHTML);
       setIsToolbarExpanded(false);
-      
-      setTimeout(() => { // Another timeout to ensure DOM update before re-focus/nonce
+
+      setTimeout(() => {
         editorEl.focus();
         updateSelectionNonce();
       }, 0);
     });
-  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange]); // Removed focusedField
-  
+  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange]);
+
   const triggerInlineImageUpload = useCallback(() => {
-    const selection = window.getSelection(); // Save selection before dialog/input
+    const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
       setSavedRange(selection.getRangeAt(0).cloneRange());
     } else {
       const editorEl = contentEditableRef.current;
       if (editorEl) {
         const range = document.createRange();
-        range.selectNodeContents(editorEl);
+        if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild);
+        else range.selectNodeContents(editorEl);
         range.collapse(false);
         setSavedRange(range);
       } else {
@@ -446,11 +590,11 @@ const CreateNewsArticlePage = () => {
         );
       };
       reader.readAsDataURL(file);
-      if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; 
+      if (inlineImageInputRef.current) inlineImageInputRef.current.value = '';
     }
-    setSavedRange(null); // Clear saved range after processing
+    setSavedRange(null);
   }, [insertHTMLAndFocus]);
-  
+
   const handleInsertYouTubeVideo = useCallback(() => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
@@ -459,7 +603,8 @@ const CreateNewsArticlePage = () => {
       const editorEl = contentEditableRef.current;
       if (editorEl) {
         const range = document.createRange();
-        range.selectNodeContents(editorEl);
+        if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild);
+        else range.selectNodeContents(editorEl);
         range.collapse(false);
         setSavedRange(range);
       } else {
@@ -500,7 +645,8 @@ const CreateNewsArticlePage = () => {
       const editorEl = contentEditableRef.current;
       if (editorEl) {
         const range = document.createRange();
-        range.selectNodeContents(editorEl);
+        if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild);
+        else range.selectNodeContents(editorEl);
         range.collapse(false);
         setSavedRange(range);
       } else {
@@ -526,14 +672,15 @@ const CreateNewsArticlePage = () => {
   };
 
   const handleInsertCodeBlock = useCallback(() => {
-    const selection = window.getSelection(); // Capture selection before direct insertion
+    const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
       setSavedRange(selection.getRangeAt(0).cloneRange());
     } else {
       const editorEl = contentEditableRef.current;
       if (editorEl) {
         const range = document.createRange();
-        range.selectNodeContents(editorEl);
+        if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild);
+        else range.selectNodeContents(editorEl);
         range.collapse(false);
         setSavedRange(range);
       } else {
@@ -542,7 +689,7 @@ const CreateNewsArticlePage = () => {
     }
     insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`);
   }, [insertHTMLAndFocus]);
-  
+
   const handleInsertSeparator = useCallback(() => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
@@ -551,7 +698,8 @@ const CreateNewsArticlePage = () => {
       const editorEl = contentEditableRef.current;
       if (editorEl) {
         const range = document.createRange();
-        range.selectNodeContents(editorEl);
+        if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild);
+        else range.selectNodeContents(editorEl);
         range.collapse(false);
         setSavedRange(range);
       } else {
@@ -560,7 +708,7 @@ const CreateNewsArticlePage = () => {
     }
     insertHTMLAndFocus(`<hr class="my-8 border-border" /><p><br></p>`);
   }, [insertHTMLAndFocus]);
-  
+
   const handleToggleToolbar = () => {
     setIsToolbarExpanded(prev => {
       const newExpandedState = !prev;
@@ -571,7 +719,7 @@ const CreateNewsArticlePage = () => {
       return newExpandedState;
     });
   };
-  
+
   const actionButtonClass = "p-2 hover:bg-muted rounded-full focus:outline-none focus:ring-1 focus:ring-primary";
   const iconClass = "h-5 w-5 text-primary";
 
@@ -581,8 +729,8 @@ const CreateNewsArticlePage = () => {
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6">
-      <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5"> 
-        
+      <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
+
         {showContextualUI && (
           <div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button
@@ -609,9 +757,9 @@ const CreateNewsArticlePage = () => {
             )}
           </div>
         )}
-        
+
         <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
-           <div className="flex items-center gap-2 mr-auto"> 
+           <div className="flex items-center gap-2 mr-auto">
             <div className="space-y-1">
               <Select onValueChange={(value) => { setCategory(value); if (publishAttempted) { if (value) setCategoryError(""); else setCategoryError("Category is required."); }}} value={category}>
                 <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue placeholder="Category" /></SelectTrigger>
@@ -631,12 +779,12 @@ const CreateNewsArticlePage = () => {
             <Button type="button" onClick={handlePublish} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full"><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
           </div>
         </div>
-        
+
         <div ref={titleWrapperRef} className="relative mb-4">
           <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
-        
+
         <div ref={contentWrapperRef} className="relative">
           <div
             ref={contentEditableRef}
@@ -645,8 +793,8 @@ const CreateNewsArticlePage = () => {
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
-            onClick={updateSelectionNonce} 
-            onKeyUp={updateSelectionNonce}  
+            onClick={updateSelectionNonce}
+            onKeyUp={updateSelectionNonce}
             data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
             style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
@@ -657,7 +805,7 @@ const CreateNewsArticlePage = () => {
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
-        
+
         <style jsx global>{`
           div[contentEditable="true"][data-placeholder]:empty:before,
           div[contentEditable="true"][data-placeholder] > p:first-child:last-child:empty:before,
@@ -701,6 +849,5 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
-        
-      
-
+    
+    
