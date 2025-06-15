@@ -92,7 +92,7 @@ const CreateNewsArticlePage = () => {
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
   const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
-  const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute', zIndex: 50 });
+  const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute', zIndex: 50, transform: 'translateY(-50%)' });
 
   const formRef = useRef<HTMLFormElement>(null);
   const titleWrapperRef = useRef<HTMLDivElement>(null);
@@ -111,11 +111,26 @@ const CreateNewsArticlePage = () => {
 
   // Auto-adjust textarea height to fit content
   useEffect(() => {
-    if (contentTextareaRef.current) {
-      contentTextareaRef.current.style.height = 'auto'; 
-      contentTextareaRef.current.style.height = `${contentTextareaRef.current.scrollHeight}px`;
+    const textarea = contentTextareaRef.current;
+    if (textarea) {
+      // Critical: Reset height to 'auto' to accurately measure scrollHeight
+      textarea.style.height = 'auto';
+      const currentScrollHeight = textarea.scrollHeight;
+      textarea.style.height = `${currentScrollHeight}px`;
+      // console.log(`[HeightDebug] contentValue updated. scrollHeight: ${currentScrollHeight}px. Setting height to: ${currentScrollHeight}px`);
     }
   }, [contentValueFromForm]);
+
+  // Run once on mount to set initial height based on possible initial content
+  useEffect(() => {
+    const textarea = contentTextareaRef.current;
+    if (textarea) {
+      textarea.style.height = 'auto';
+      textarea.style.height = `${textarea.scrollHeight}px`;
+      // console.log(`[HeightDebug] Initial mount. scrollHeight: ${textarea.scrollHeight}px. Setting height to: ${textarea.scrollHeight}px`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
 
   const getCurrentLineText = useCallback((textarea: HTMLTextAreaElement, currentCursorPos: number): string => {
@@ -135,18 +150,20 @@ const CreateNewsArticlePage = () => {
 
     let lineHeight = parseFloat(lineHeightString);
     if (isNaN(lineHeight) || lineHeight <= 0) {
-      const fontSize = parseFloat(fontSizeString) || 16;
-      lineHeight = fontSize * 1.4;
+      const fontSize = parseFloat(fontSizeString) || 16; // Default font size if not found
+      lineHeight = fontSize * 1.4; // Common multiplier for line height
     }
     const paddingTop = parseFloat(paddingTopString) || 0;
 
+    // If the textarea is empty or cursor is at the very beginning
     if (textareaElement.value === '' || currentCursorPosition === 0) {
-      return paddingTop + lineHeight / 2;
+      return paddingTop + lineHeight / 2; // Center on the first line's vertical middle
     }
 
     const textUptoCursor = textareaElement.value.substring(0, currentCursorPosition);
-    const lineNumber = (textUptoCursor.match(/\n/g) || []).length;
+    const lineNumber = (textUptoCursor.match(/\n/g) || []).length; // 0-indexed line number
     const lineY = paddingTop + (lineNumber * lineHeight) + (lineHeight / 2);
+
     return Math.max(lineHeight / 2, Math.min(lineY, textareaElement.offsetHeight - lineHeight / 2));
   }, []);
 
@@ -168,7 +185,7 @@ const CreateNewsArticlePage = () => {
         if (titleIsEmpty) {
           titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
           newStyle.top = `${titleWrapperRect.top - formRect.top + titleWrapperRect.height / 2}px`;
-          newStyle.left = `${titleWrapperRect.left - formRect.left - 45}px`;
+          newStyle.left = `${titleWrapperRef.current.offsetLeft - 45}px`; // Position relative to form
           newStyle.display = 'flex';
         }
       } else if (focusedField === 'content' && contentWrapperRef.current && contentTextareaRef.current) {
@@ -178,13 +195,13 @@ const CreateNewsArticlePage = () => {
           contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
           const calculatedTopOffsetPx = calculateCursorLineYOffset(contentTextareaRef.current, cursorPosition);
           newStyle.top = `${contentWrapperRect.top - formRect.top + calculatedTopOffsetPx}px`;
-          newStyle.left = `${contentWrapperRect.left - formRect.left - 45}px`;
+          newStyle.left = `${contentWrapperRef.current.offsetLeft - 45}px`; // Position relative to form
           newStyle.display = 'flex';
         }
       }
       setToolbarStyle(newStyle);
     });
-  }, [focusedField, cursorPosition, titleValueFromForm, contentValueFromForm, getCurrentLineText, calculateCursorLineYOffset, isFormatMenuOpen]);
+  }, [focusedField, cursorPosition, titleValueFromForm, contentValueFromForm, getCurrentLineText, calculateCursorLineYOffset]);
 
 
   useEffect(() => {
@@ -193,7 +210,7 @@ const CreateNewsArticlePage = () => {
 
   const handleFocus = (field: 'title' | 'content') => {
     setFocusedField(field);
-    setIsFormatMenuOpen(false); // Close format menu on field focus change
+    setIsFormatMenuOpen(false); 
     if (field === 'title' && titleInputRef.current) {
       setCursorPosition(titleInputRef.current.selectionStart || 0);
     } else if (field === 'content' && contentTextareaRef.current) {
@@ -223,7 +240,7 @@ const CreateNewsArticlePage = () => {
     });
   };
 
-  const handleContentInteraction = () => { // For keyUp, mouseUp, click
+  const handleContentInteraction = () => { 
     if (focusedField === 'content' && contentTextareaRef.current) {
       setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     } else if (focusedField === 'title' && titleInputRef.current) {
@@ -293,7 +310,7 @@ const CreateNewsArticlePage = () => {
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
       <Form {...form}>
-        <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative"> {/* space-y-0 to remove default vertical spacing between direct children of form */}
+        <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative">
           <ToolbarComponent
               toolbarRef={toolbarRef}
               isFormatMenuOpen={isFormatMenuOpen}
@@ -311,20 +328,20 @@ const CreateNewsArticlePage = () => {
               <Button type="submit" disabled={isSubmitting} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">{isSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}Publish</Button>
             </div>
           </div>
-          <FormField control={form.control} name="category" render={() => <FormItem><FormMessage className="text-center text-sm mb-2 hidden sm:block" /></FormItem>} /> {/* For category error display on larger screens */}
+          <FormField control={form.control} name="category" render={() => <FormItem><FormMessage className="text-center text-sm mb-2 hidden sm:block" /></FormItem>} />
 
-          <div className="relative" ref={titleWrapperRef}> {/* Wrapper for Title */}
+          <div className="relative" ref={titleWrapperRef}>
             <FormField control={form.control} name="title" render={({ field }) => ( <FormItem className="mb-8"><FormControl><Input ref={titleInputRef} placeholder="Title" {...field} onChange={(e) => { field.onChange(e); handleContentInteraction(); }} onFocus={() => handleFocus('title')} onBlurCapture={() => handleBlur('title')} onKeyUp={handleContentInteraction} onMouseUp={handleContentInteraction} onClick={handleContentInteraction} disabled={isSubmitting} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"/></FormControl><FormMessage /></FormItem>)} />
           </div>
 
-          <div className="relative" ref={contentWrapperRef}> {/* Wrapper for Content */}
+          <div className="relative" ref={contentWrapperRef}>
             <FormField control={form.control} name="content" render={({ field }) => (
               <FormItem>
                 <FormControl>
                   <Textarea
                     ref={contentTextareaRef}
                     placeholder="Tell your story..."
-                    className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case overflow-y-hidden" // Removed min-h-[300px] and resize-y
+                    className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case overflow-y-hidden min-h-0"
                     style={{ fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif', fontSize: '20px', lineHeight: '28px', color: 'rgba(0, 0, 0, 0.84)' }}
                     {...field}
                     onChange={(e) => { field.onChange(e); handleContentInteraction(); }}
@@ -349,3 +366,5 @@ const CreateNewsArticlePage = () => {
 
 export default CreateNewsArticlePage;
     
+
+      
