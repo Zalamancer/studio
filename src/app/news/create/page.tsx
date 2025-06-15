@@ -54,12 +54,14 @@ const CreateNewsArticlePage = () => {
   const contentEditableRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const coverImageInputRef = useRef<HTMLInputElement>(null);
-  const toolbarWrapperRef = useRef<HTMLDivElement>(null); // Changed from toolbarRef
+  const toolbarWrapperRef = useRef<HTMLDivElement>(null);
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
-  const [showContextualUI, setShowContextualUI] = useState(false);
-  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
-  const [showPlusButton, setShowPlusButton] = useState(false);
+  const [showContextualUI, setShowContextualUI] = useState(false); // Controls the entire contextual UI wrapper
+  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false); // Controls if action items are visible
+  const [showPlusButton, setShowPlusButton] = useState(false); // Legacy, effectively replaced by !isToolbarExpanded && showContextualUI
+  const [showToolbar, setShowToolbar] = useState(false); // Legacy, effectively replaced by isToolbarExpanded && showContextualUI
+
   const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
 
   useEffect(() => {
@@ -87,7 +89,7 @@ const CreateNewsArticlePage = () => {
       if (node.nodeType === Node.ELEMENT_NODE) {
         const element = node as HTMLElement;
         const tagName = element.tagName.toLowerCase();
-        if (['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'figure'].includes(tagName)) {
+        if (['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'figure', 'hr'].includes(tagName)) {
           if (contentEl.contains(element)) return element;
         }
       }
@@ -135,7 +137,7 @@ const CreateNewsArticlePage = () => {
       newPosition = contentEditableRef.current.textContent?.length || 0;
     }
     setCursorPosition(newPosition);
-  }, [contentEditableRef, titleInputRef]); // Removed focusedField as it's implicitly handled by activeEl check
+  }, [contentEditableRef, titleInputRef]);
 
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
@@ -148,13 +150,10 @@ const CreateNewsArticlePage = () => {
       if (selection && selection.rangeCount > 0) {
         const range = selection.getRangeAt(0);
         const rects = range.getClientRects();
-        if (rects.length > 0) {
-          return rects[0].top + rects[0].height / 2;
-        }
+        if (rects.length > 0) return rects[0].top + rects[0].height / 2;
+        
         let container = range.startContainer;
-        if (container.nodeType === Node.TEXT_NODE && container.parentElement) {
-          container = container.parentElement;
-        }
+        if (container.nodeType === Node.TEXT_NODE && container.parentElement) container = container.parentElement;
         if (container.nodeType === Node.ELEMENT_NODE && contentEl.contains(container)) {
           const elementRect = (container as HTMLElement).getBoundingClientRect();
           if (elementRect.height > 0) {
@@ -179,84 +178,85 @@ const CreateNewsArticlePage = () => {
       const computedStyleMain = window.getComputedStyle(contentEl);
       const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0;
       let lineHeightMain = parseFloat(computedStyleMain.lineHeight);
-      if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4;
+      if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4; // Default for main div
       return mainDivRect.top + paddingTopMain + (lineHeightMain / 2);
     }
     return null;
   }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
-    requestAnimationFrame(() => {
-      const formEl = formWrapperRef.current;
-      const activeEl = document.activeElement;
-  
-      if (!formEl || !focusedField) {
+    const formEl = formWrapperRef.current;
+    const activeEl = document.activeElement;
+
+    if (!formEl || !focusedField ||
+        ((focusedField === 'title' && activeEl !== titleInputRef.current) ||
+         (focusedField === 'content' && activeEl !== contentEditableRef.current))
+    ) {
+      setShowContextualUI(false);
+      setIsToolbarExpanded(false); // Ensure this is reset too
+      return;
+    }
+
+    const formRect = formEl.getBoundingClientRect();
+    const lineYOffsetClient = calculateCursorLineYOffset();
+
+    if (lineYOffsetClient !== null) {
+      let referenceElementRect: DOMRect | undefined;
+      if (focusedField === 'title' && titleInputRef.current) {
+        referenceElementRect = titleInputRef.current.getBoundingClientRect();
+      } else if (focusedField === 'content' && contentEditableRef.current) {
+        referenceElementRect = contentEditableRef.current.getBoundingClientRect();
+      }
+
+      if (referenceElementRect) {
+        const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
+        const newTop = lineYOffsetClient - formRect.top - (TOOLBAR_HEIGHT / 2);
+        setToolbarStyle({ top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' });
+      }
+    } else { // Not enough info to position, hide UI
+      setShowContextualUI(false);
+      setIsToolbarExpanded(false);
+      return;
+    }
+
+    const currentLineText = getCurrentLineText();
+    const currentLineIsEmpty = currentLineText === "" || currentLineText === "NO_CURRENT_BLOCK";
+
+    const shouldShowBaseUI = lineYOffsetClient !== null;
+
+    if (shouldShowBaseUI) {
+      if (isToolbarExpanded) { // If user explicitly opened the full toolbar
+        setShowContextualUI(true); // Keep showing it
+      } else if (currentLineIsEmpty) { // If line is empty and full toolbar isn't forced open
+        setShowContextualUI(true); // Show the "+" button
+      } else { // Line not empty and toolbar not explicitly expanded
         setShowContextualUI(false);
-        setShowToolbar(false);
-        setShowPlusButton(false);
-        return;
+        setIsToolbarExpanded(false); // Ensure this is reset
       }
-  
-      if (
-        (focusedField === 'title' && activeEl !== titleInputRef.current) ||
-        (focusedField === 'content' && activeEl !== contentEditableRef.current)
-      ) {
-        setShowContextualUI(false);
-        setShowToolbar(false);
-        setShowPlusButton(false);
-        return;
-      }
-  
-      const formRect = formEl.getBoundingClientRect();
-      const lineYOffsetClient = calculateCursorLineYOffset();
-  
-      if (lineYOffsetClient !== null) {
-        let referenceElementRect: DOMRect | undefined;
-        if (focusedField === 'title' && titleInputRef.current) {
-          referenceElementRect = titleInputRef.current.getBoundingClientRect();
-        } else if (focusedField === 'content' && contentEditableRef.current) {
-          referenceElementRect = contentEditableRef.current.getBoundingClientRect();
-        }
-  
-        if (referenceElementRect) {
-          const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
-          const newTop = lineYOffsetClient - formRect.top - (TOOLBAR_HEIGHT / 2);
-          setToolbarStyle({ top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' });
-        }
-      }
-  
-      const currentLineIsEmptyOrTitleIsEmpty =
-        (focusedField === 'title' && title.trim() === "") ||
-        (focusedField === 'content' && getCurrentLineText() === "");
-  
-      const shouldShowPlus = focusedField && currentLineIsEmptyOrTitleIsEmpty && lineYOffsetClient !== null;
-      const shouldShowExpandedToolbar = focusedField && isToolbarExpanded && lineYOffsetClient !== null;
-  
-      if (shouldShowExpandedToolbar) {
-        setShowContextualUI(true);
-        setShowToolbar(true);
-        setShowPlusButton(false);
-      } else if (shouldShowPlus) {
-        setShowContextualUI(true);
-        setShowToolbar(false);
-        setShowPlusButton(true);
-      } else {
-        setShowContextualUI(false);
-        setShowToolbar(false);
-        setShowPlusButton(false);
-      }
-    });
+    } else { // Not focused or no Y offset
+      setShowContextualUI(false);
+      setIsToolbarExpanded(false); // Ensure this is reset
+    }
   }, [
     focusedField,
+    title, // Title text is used in getCurrentLineText
+    storyContent, // storyContent is used implicitly by getCurrentLineText through contentEditableRef
     calculateCursorLineYOffset,
-    title,
     getCurrentLineText,
-    isToolbarExpanded,
-  ]); // Removed refs and state setters from deps as they are stable or handled
+    isToolbarExpanded, // This state now directly influences visibility logic
+  ]);
 
   useEffect(() => {
     calculateAndUpdateToolbarStyle();
-  }, [focusedField, title, storyContent, cursorPosition, isToolbarExpanded, showToolbar, showPlusButton, calculateAndUpdateToolbarStyle]);
+  }, [
+    focusedField,
+    title,
+    storyContent,
+    cursorPosition,
+    isToolbarExpanded, // When this changes, re-evaluate
+    calculateAndUpdateToolbarStyle // This function itself
+  ]);
+
 
   useEffect(() => {
     const handleSelectionOrKey = () => {
@@ -291,7 +291,7 @@ const CreateNewsArticlePage = () => {
       }
       if (!isFocusWithinToolbarOrInput) {
         setFocusedField(null);
-        // calculateAndUpdateToolbarStyle will handle hiding the toolbar based on lost focus
+        // calculateAndUpdateToolbarStyle will hide the toolbar based on lost focus due to its own effect dependencies
       }
     });
   }, []);
@@ -362,53 +362,49 @@ const CreateNewsArticlePage = () => {
     }
     setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
     setCursorPosition(0);
-    setIsToolbarExpanded(false); // Ensure toolbar is collapsed on publish
+    setIsToolbarExpanded(false);
   };
   
   const insertHTMLAndFocus = useCallback((htmlToInsert: string) => {
     const targetFieldRef = focusedField === 'title' ? titleInputRef : contentEditableRef;
     if (!targetFieldRef.current || !contentEditableRef.current) return;
-    targetFieldRef.current.focus();
+    
+    targetFieldRef.current.focus(); // Ensure focus before execCommand
+    
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       const range = document.createRange();
       range.selectNodeContents(targetFieldRef.current); range.collapse(false);
       selection?.removeAllRanges(); selection?.addRange(range);
     }
+    
     let range = selection.getRangeAt(0);
     if (!targetFieldRef.current.contains(range.startContainer)) {
       range.selectNodeContents(targetFieldRef.current); range.collapse(false);
     }
+
     const currentBlock = targetFieldRef === contentEditableRef ? getCurrentBlockElement() : null;
     if (currentBlock && currentBlock.contains(range.startContainer) && currentBlock.textContent?.trim() === "" && (currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "" || currentBlock.innerHTML.toLowerCase() === "<p><br></p>" || currentBlock.innerHTML.toLowerCase() === "<p></p>") ) {
        range.selectNodeContents(currentBlock);
     } else if (!range.collapsed) {
        range.deleteContents();
     }
+
     document.execCommand('insertHTML', false, htmlToInsert);
+    
     if (targetFieldRef === contentEditableRef && contentEditableRef.current) {
-      setStoryContent(contentEditableRef.current.innerHTML);
-      contentEditableRef.current.focus();
-      const newRange = document.createRange();
-      const newSel = window.getSelection();
-      try {
-        const lastChild = contentEditableRef.current.lastChild;
-        if (lastChild) {
-            newRange.setStartAfter(lastChild); 
-            newRange.collapse(true);
-            newSel?.removeAllRanges();
-            newSel?.addRange(newRange);
-        } else {
-            newRange.selectNodeContents(contentEditableRef.current);
-            newRange.collapse(false);
-            newSel?.removeAllRanges();
-            newSel?.addRange(newRange);
-        }
-      } catch (e) { /* ignore cursor placement errors */ }
+      setStoryContent(contentEditableRef.current.innerHTML); // Update state FROM DOM
     }
-    updateCursorPosition();
-    setIsToolbarExpanded(false); // This will hide items and make "+" appear if conditions met
-  }, [focusedField, getCurrentBlockElement, updateCursorPosition, contentEditableRef, titleInputRef]);
+
+    // Re-focus logic (careful not to fight with selection)
+    setTimeout(() => {
+        if(targetFieldRef.current) targetFieldRef.current.focus();
+        updateCursorPosition(); // Update cursor position after DOM changes and focus
+        // Toolbar logic is reactive, so set isToolbarExpanded to false so the "plus" button re-appears if line is empty
+        setIsToolbarExpanded(false); 
+    }, 0);
+    
+  }, [focusedField, getCurrentBlockElement, updateCursorPosition, contentEditableRef, titleInputRef, setStoryContent, setIsToolbarExpanded]);
 
   const handleInsertImage = useCallback(() => insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center"><img src="${encodeURI(window.prompt("Enter image URL:") || 'https://placehold.co/600x400.png')}" alt="User inserted image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="placeholder graphic" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p><br></p>`), [insertHTMLAndFocus]);
   const handleInsertYouTubeVideo = useCallback(() => {
@@ -440,19 +436,13 @@ const CreateNewsArticlePage = () => {
 
   const handleToggleToolbar = () => {
     setIsToolbarExpanded(prev => !prev);
+    // If opening the toolbar, ensure focus is on the editor
     if (!isToolbarExpanded) {
         if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus();
         else if (focusedField === 'content' && contentEditableRef.current) contentEditableRef.current.focus();
     }
   };
   
-  const handleCloseToolbarExplicitly = () => {
-    setIsToolbarExpanded(false); // This will make the "+" appear if conditions are right
-    // calculateAndUpdateToolbarStyle will be triggered by the state change of isToolbarExpanded
-    // and will correctly show the "+" button if line is empty.
-  };
-
-
   const actionButtonClass = "p-2 hover:bg-muted rounded-full focus:outline-none focus:ring-1 focus:ring-primary";
   const iconClass = "h-5 w-5 text-primary";
 
@@ -482,9 +472,7 @@ const CreateNewsArticlePage = () => {
               <div
                 className="bg-card border p-0.5 rounded-full shadow-lg flex items-center space-x-0.5 ml-1 animate-in fade-in-50 slide-in-from-left-2 duration-200"
               >
-                <button onClick={handleCloseToolbarExplicitly} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Close toolbar items" title="Close toolbar items">
-                  <XIcon className={cn(iconClass, "text-destructive")} />
-                </button>
+                {/* Close X is part of the PlusIcon rotation */}
                 <button onClick={handleInsertImage} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert image" title="Insert image from URL">
                   <ImageIcon className={iconClass} />
                 </button>
@@ -593,7 +581,7 @@ const CreateNewsArticlePage = () => {
             role="textbox"
             aria-multiline="true"
             aria-label="News article content"
-            suppressContentEditableWarning={true} // To acknowledge direct DOM manipulation
+            suppressContentEditableWarning={true}
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
