@@ -18,6 +18,15 @@ import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from "@/hooks/use-is-mobile";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog'; // Import Dialog components
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -30,8 +39,8 @@ const newsCategories = [
   "Case Studies",
 ];
 
-const TOOLBAR_HEIGHT = 36; 
-const TOOLBAR_HORIZONTAL_OFFSET = 40; // Reduced offset for better alignment
+const TOOLBAR_HEIGHT = 36;
+const TOOLBAR_HORIZONTAL_OFFSET = 40;
 
 const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
@@ -40,7 +49,7 @@ const CreateNewsArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [storyContent, setStoryContent] = useState("<p><br></p>"); // Initial empty state for contentEditable
+  const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [selectionNonce, setSelectionNonce] = useState(0);
 
   const [publishAttempted, setPublishAttempted] = useState(false);
@@ -53,15 +62,19 @@ const CreateNewsArticlePage = () => {
   const titleWrapperRef = useRef<HTMLDivElement>(null);
   const contentEditableRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
-  const coverImageInputRef = useRef<HTMLInputElement>(null); // For header cover image
-  const inlineImageInputRef = useRef<HTMLInputElement>(null); // For toolbar image button
-  const toolbarRef = useRef<HTMLDivElement>(null); 
+  const coverImageInputRef = useRef<HTMLInputElement>(null);
+  const inlineImageInputRef = useRef<HTMLInputElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
   const [showContextualUI, setShowContextualUI] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
-
   const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
+
+  // State for YouTube URL Dialog
+  const [isYouTubeDialogOpen, setIsYouTubeDialogOpen] = useState(false);
+  const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
+
 
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML.trim() === "") {
@@ -165,26 +178,26 @@ const CreateNewsArticlePage = () => {
       const computedStyleMain = window.getComputedStyle(contentEl);
       const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0;
       let lineHeightMain = parseFloat(computedStyleMain.lineHeight);
-      if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4; // Default for editor content
+      if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4;
       return mainDivRect.top + paddingTopMain + (lineHeightMain / 2);
     }
     return null;
   }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
-    let shouldShowBaseUI = false;
     let newToolbarStyleObj: React.CSSProperties | null = null;
+    let shouldShowContextualUIFlag = false;
+    const currentLineText = getCurrentLineText();
+    const currentLineIsEmptyOrSpecial = currentLineText === "" || currentLineText === "NO_CURRENT_BLOCK" || currentLineText === "PRE_HAS_CONTENT" || currentLineText === "FIGURE_HAS_CONTENT" || currentLineText === "HR_HAS_CONTENT";
     
     if (focusedField && (document.activeElement === titleInputRef.current || document.activeElement === contentEditableRef.current)) {
       const lineYOffsetClient = calculateCursorLineYOffset();
       if (lineYOffsetClient !== null) {
-        shouldShowBaseUI = true;
+        shouldShowContextualUIFlag = true;
         let referenceElementRect: DOMRect | undefined;
-        if (focusedField === 'title' && titleWrapperRef.current) {
-          referenceElementRect = titleWrapperRef.current.getBoundingClientRect();
-        } else if (focusedField === 'content' && contentWrapperRef.current) {
-          referenceElementRect = contentWrapperRef.current.getBoundingClientRect();
-        }
+        if (focusedField === 'title' && titleWrapperRef.current) referenceElementRect = titleWrapperRef.current.getBoundingClientRect();
+        else if (focusedField === 'content' && contentWrapperRef.current) referenceElementRect = contentWrapperRef.current.getBoundingClientRect();
+        
         if (referenceElementRect && formWrapperRef.current) {
           const formRect = formWrapperRef.current.getBoundingClientRect();
           const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
@@ -194,30 +207,20 @@ const CreateNewsArticlePage = () => {
       }
     }
 
-    if (newToolbarStyleObj) {
-        setToolbarStyle(newToolbarStyleObj);
-    }
+    if (newToolbarStyleObj) setToolbarStyle(newToolbarStyleObj);
     
-    const currentLineText = getCurrentLineText();
-    const currentLineIsEmptyOrSpecial = currentLineText === "" || currentLineText === "NO_CURRENT_BLOCK" || currentLineText === "PRE_HAS_CONTENT" || currentLineText === "FIGURE_HAS_CONTENT" || currentLineText === "HR_HAS_CONTENT";
-    
-    if (shouldShowBaseUI) {
-        setShowContextualUI(true);
-        if (isToolbarExpanded) {
-            // Keep toolbar expanded, plus button hidden
-        } else if (currentLineIsEmptyOrSpecial) {
-            // Show plus button if line is empty or special, and toolbar not expanded
-        } else { // Line not empty/special, and toolbar not expanded
-            setShowContextualUI(false);
-        }
-    } else { // Not focused or no valid line
+    if (shouldShowContextualUIFlag) {
+      setShowContextualUI(true); // Always show the base "+" if eligible
+      if (!isToolbarExpanded && !currentLineIsEmptyOrSpecial) { // If toolbar is NOT expanded and line has text, hide everything
         setShowContextualUI(false);
-        setIsToolbarExpanded(false); // Collapse if focus lost or no valid line
+      }
+      // isToolbarExpanded is handled separately by its own toggle
+    } else {
+      setShowContextualUI(false);
+      setIsToolbarExpanded(false); // Collapse if focus lost or no valid line
     }
-  }, [
-      focusedField, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef,
-      isToolbarExpanded, calculateCursorLineYOffset, getCurrentLineText,
-    ]);
+
+  }, [focusedField, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded]);
 
   useEffect(() => {
     calculateAndUpdateToolbarStyle();
@@ -257,6 +260,7 @@ const CreateNewsArticlePage = () => {
       if (!isFocusWithinToolbarOrInput) {
         setFocusedField(null);
         setIsToolbarExpanded(false);
+        setShowContextualUI(false);
       }
     });
   }, []);
@@ -328,6 +332,7 @@ const CreateNewsArticlePage = () => {
     setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
     updateSelectionNonce();
     setIsToolbarExpanded(false);
+    setShowContextualUI(false);
   };
   
   const insertHTMLAndFocus = useCallback((htmlToInsert: string) => {
@@ -335,7 +340,6 @@ const CreateNewsArticlePage = () => {
     if (!editorEl || focusedField !== 'content') return;
     
     editorEl.focus();
-    
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       const range = document.createRange(); range.selectNodeContents(editorEl); range.collapse(false);
@@ -346,17 +350,16 @@ const CreateNewsArticlePage = () => {
     if (!editorEl.contains(range.startContainer)) { range.selectNodeContents(editorEl); range.collapse(false); }
 
     const currentBlock = getCurrentBlockElement();
-    if (currentBlock && currentBlock.contains(range.startContainer) && 
-        (currentBlock.textContent?.trim() === "") && 
-        (currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "" || currentBlock.innerHTML.toLowerCase() === "<p><br></p>" || currentBlock.innerHTML.toLowerCase() === "<p></p>")) {
+    if (currentBlock && currentBlock.contains(range.startContainer) && (currentBlock.textContent?.trim() === "") && (currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "" || currentBlock.innerHTML.toLowerCase() === "<p><br></p>" || currentBlock.innerHTML.toLowerCase() === "<p></p>")) {
       range.selectNodeContents(currentBlock);
     }
     
-    if (!range.collapsed) { range.deleteContents(); }
+    if (!range.collapsed) range.deleteContents();
     document.execCommand('insertHTML', false, htmlToInsert);
     
     setStoryContent(editorEl.innerHTML);
-    setIsToolbarExpanded(false);
+    setIsToolbarExpanded(false); // Close the expanded toolbar after action
+    // setShowContextualUI(false) will be handled by calculateAndUpdateToolbarStyle due to content change
     
     setTimeout(() => {
       editorEl.focus();
@@ -382,34 +385,50 @@ const CreateNewsArticlePage = () => {
       };
       reader.readAsDataURL(file);
       if (inlineImageInputRef.current) {
-        inlineImageInputRef.current.value = ''; // Reset file input
+        inlineImageInputRef.current.value = ''; 
       }
     }
   }, [insertHTMLAndFocus]);
   
+  // Modified to open the dialog
   const handleInsertYouTubeVideo = useCallback(() => {
-    const url = window.prompt("Enter YouTube video URL or ID:");
-    if (url) {
+    setIsYouTubeDialogOpen(true);
+    setYouTubeUrlInput(""); // Clear previous input
+    setIsToolbarExpanded(false); // Close the main toolbar when opening dialog
+  }, []);
+
+  // New handler for submitting YouTube URL from the dialog
+  const handleYouTubeDialogSubmit = () => {
+    if (youTubeUrlInput) {
       let videoId = '';
       try {
-        const urlObj = new URL(url);
+        const urlObj = new URL(youTubeUrlInput);
         if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.substring(1);
         else if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v')!;
-        else videoId = url;
-      } catch (e) { videoId = url; }
+        else videoId = youTubeUrlInput; // Assume it's an ID if not a standard URL
+      } catch (e) {
+        videoId = youTubeUrlInput; // Assume it's an ID if URL parsing fails
+      }
+
       if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) {
-        insertHTMLAndFocus(`<figure class="my-4 relative" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 0.25rem;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p><br></p>`);
+        insertHTMLAndFocus(
+          `<figure class="my-4 relative" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 0.25rem;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p><br></p>`
+        );
       } else {
         toast({ variant: 'destructive', title: 'Invalid YouTube URL/ID', description: 'Please enter a valid YouTube video URL or ID.' });
       }
     }
-  }, [insertHTMLAndFocus, toast]);
+    setIsYouTubeDialogOpen(false);
+  };
+
 
   const handleInsertEmbed = useCallback(() => {
     const embedCode = window.prompt("Paste embed code (e.g., Twitter, Vimeo). Ensure it's iframe-based or similar safe HTML.");
     if (embedCode) {
       const sanitizedCode = embedCode.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
       insertHTMLAndFocus(`<div class="my-4" data-embed-wrapper="true">${sanitizedCode}</div><p><br></p>`);
+    } else {
+      setIsToolbarExpanded(false);
     }
   }, [insertHTMLAndFocus]);
 
@@ -435,6 +454,7 @@ const CreateNewsArticlePage = () => {
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
 
   return (
+    <>
     <div className="container mx-auto py-8 px-4 md:px-6">
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
         
@@ -600,6 +620,37 @@ const CreateNewsArticlePage = () => {
         `}</style>
       </div>
     </div>
+
+    {/* YouTube URL Input Dialog */}
+    <Dialog open={isYouTubeDialogOpen} onOpenChange={setIsYouTubeDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Embed YouTube Video</DialogTitle>
+            <DialogDescription>
+              Paste the YouTube video URL or video ID below.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="youtube-url" className="text-right col-span-1">
+                URL/ID
+              </Label>
+              <Input
+                id="youtube-url"
+                value={youTubeUrlInput}
+                onChange={(e) => setYouTubeUrlInput(e.target.value)}
+                className="col-span-3"
+                placeholder="e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ or dQw4w9WgXcQ"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsYouTubeDialogOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={handleYouTubeDialogSubmit}>Embed Video</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
