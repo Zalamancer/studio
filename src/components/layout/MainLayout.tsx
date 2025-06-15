@@ -24,31 +24,32 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper, Edit2 } from "lucide-react"; // Added Edit2
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper, Edit2 } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
+// Removed imports related to CreatePostForm and its submission logic as it's moved to src/app/page.tsx
+// import type { CreatePostFormData, CreatePostFormProps } from '@/components/CreatePostForm';
+// import type { NewPostData } from '@/types/post';
+// import { addPostToFirestore } from '@/services/postService';
+// import { uploadPostImage } from '@/services/storageService';
+// import { Timestamp } from 'firebase/firestore';
+// import { createNotification } from '@/services/notificationService';
+// import { getReviewsForProfile } from '@/services/reviewService';
+
+// These exports remain as they are used by CreatePostForm, which will now be instantiated in src/app/page.tsx
 import type {
-  CreatePostFormData,
-  CreatePostFormProps
-} from '@/components/CreatePostForm';
-import type {
-  NewPostData,
   SectorWithSubSectors as SectorWithSubSectorsType,
   SubSector as SubSectorType,
   Industry as IndustryType
 } from '@/types/post';
-import { addPostToFirestore, getPostsByUserId } from '@/services/postService';
-import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { Timestamp } from 'firebase/firestore';
 import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
-import { createNotification } from '@/services/notificationService';
-import { getReviewsForProfile } from '@/services/reviewService';
 import { fetchFullUserProfile } from '@/services/connectionService';
+
 
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
@@ -340,13 +341,14 @@ export const findIndustryByName = (
     return null;
 };
 
-const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
-  import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-  {
-    loading: () => <div className="p-4 text-center"><p className="text-sm text-muted-foreground">Loading form...</p></div>,
-    ssr: false
-  }
-);
+// CreatePostForm dynamic import is moved to src/app/page.tsx
+// const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
+//   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
+//   {
+//     loading: () => <div className="p-4 text-center"><p className="text-sm text-muted-foreground">Loading form...</p></div>,
+//     ssr: false
+//   }
+// );
 
 const DynamicNotificationDropdown = dynamic(() =>
   import('@/components/notifications/NotificationDropdown').then((mod) => mod.NotificationDropdown),
@@ -376,13 +378,15 @@ export default function MainLayout({
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
 
-  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  // State and logic for Create Post Dialog moved to src/app/page.tsx
+  // const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
+  // const addPostMutation logic is removed from here.
 
   const handlePrefetchSettings = useCallback(() => {
     if (user?.uid) {
       queryClient.prefetchQuery({
         queryKey: ['fullUserProfile', user.uid],
-        queryFn: () => fetchFullUserProfile(user.uid),
+        fn: () => fetchFullUserProfile(user.uid),
         staleTime: 1000 * 60 * 5,
       });
     }
@@ -406,117 +410,14 @@ export default function MainLayout({
     }
   }, [isMobile]);
 
-  useEffect(() => {
-    if (!authLoading && !user && isCreatePostOpen) {
-      setIsCreatePostOpen(false);
-    }
-  }, [user, authLoading, isCreatePostOpen]);
+  // Logic related to Create Post Dialog and its state is removed.
+  // useEffect(() => {
+  //   if (!authLoading && !user && isCreatePostOpen) {
+  //     setIsCreatePostOpen(false);
+  //   }
+  // }, [user, authLoading, isCreatePostOpen]);
 
-  const addPostMutation = useMutation({
-    mutationFn: async (formData: CreatePostFormData) => {
-      if (!user) throw new Error("User not authenticated to create post.");
-
-      let currentRatingScore = 0;
-      try {
-        const reviews = await getReviewsForProfile(user.uid);
-        if (reviews && reviews.length > 0) {
-          const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
-          currentRatingScore = parseFloat((totalRating / reviews.length).toFixed(1));
-        }
-      } catch (ratingError: any) {
-        // console.error("[MainLayout] addPostMutation: Error fetching reviews for rating score:", ratingError.message);
-      }
-
-      let uploadedImageUrls: string[] = [];
-      if (formData.imageFiles && formData.imageFiles.length > 0 && user) {
-        const uploadPromises = formData.imageFiles.map(file =>
-          uploadPostImage(file, user.uid).catch(uploadError => {
-            toast({ variant: "destructive", title: `Image Upload Failed for ${file.name}`, description: (uploadError as Error).message || "Could not upload image." });
-            return null; // Return null for failed uploads
-          })
-        );
-        const results = await Promise.all(uploadPromises);
-        uploadedImageUrls = results.filter((url): url is string => url !== null);
-
-        if (uploadedImageUrls.length !== formData.imageFiles.length) {
-          // Partial success, or all failed
-          if (uploadedImageUrls.length === 0 && formData.imageFiles.length > 0) {
-            throw new Error("All image uploads failed. Post not created.");
-          }
-          toast({ variant: "warning", title: "Partial Image Upload", description: "Some images could not be uploaded. The post will be created with the successfully uploaded images."});
-        }
-      }
-
-      const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
-      const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
-      const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
-
-      const newPostData: NewPostData = {
-        userId: user.uid,
-        question: formData.question,
-        requestType: formData.requestType,
-
-        descriptionDetails: formData.descriptionDetails,
-        descriptionTried: formData.descriptionTried?.trim() ? formData.descriptionTried.trim() : null,
-        descriptionOutcome: formData.descriptionOutcome?.trim() ? formData.descriptionOutcome.trim() : null,
-
-        tags: formData.tags || [],
-        sector: mainSectorDetails?.name || formData.sector,
-        subSector: subSectorDetails?.name || null,
-        industry: industryDetails?.name || null,
-        naicsCode: formData.industry || formData.subSector || formData.sector,
-        ratingScore: currentRatingScore,
-        imageUrls: uploadedImageUrls,
-        mentionedUserIds: formData.mentionedUserIds || [],
-
-        maxBudget: formData.requestType === 'help_request' ? (formData.maxBudget === undefined ? null : formData.maxBudget) : null,
-        deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
-        commentCount: 0,
-      };
-      return addPostToFirestore(newPostData);
-    },
-    onSuccess: (newlyCreatedPostId, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      queryClient.invalidateQueries({ queryKey: ['userPosts'] });
-      queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
-      toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
-      setIsCreatePostOpen(false);
-
-      if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        const descriptionSource = variables.descriptionDetails;
-        variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) {
-            try {
-              await createNotification({
-                userId: mentionedUid,
-                type: 'mention',
-                senderId: user.uid,
-                postId: newlyCreatedPostId,
-                postQuestion: variables.question,
-                textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "",
-              });
-            } catch (notifyError) {
-              // console.error(`[MainLayout] Failed to create mention notification for post ${newlyCreatedPostId}:`, notifyError);
-            }
-          }
-        });
-      }
-    },
-    onError: (error: Error, variables) => {
-      toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.` });
-    },
-  });
-
-  const handleCreatePostSubmit = useCallback(
-    (formData: CreatePostFormData) => {
-      if (!user) {
-        toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
-        return;
-      }
-      addPostMutation.mutate(formData);
-    },
-    [user, toast, addPostMutation]
-  );
+  // handleCreatePostSubmit is removed from here.
 
   const handleLogout = async () => {
     try {
@@ -524,7 +425,6 @@ export default function MainLayout({
       toast({ title: "Logged Out", description: "You have been successfully logged out." });
       router.push('/login');
     } catch (error) {
-      // console.error("Logout Error:", error);
       toast({ variant: "destructive", title: "Logout Failed", description: "An error occurred. Please try again." });
     }
   };
@@ -593,40 +493,7 @@ export default function MainLayout({
                        <span className="sm:hidden">Plan</span>
                     </Link>
                   </Button>
-                  <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
-                      if (!open && addPostMutation.isSuccess) {
-                        // Reset logic is in CreatePostForm's useEffect
-                      }
-                      setIsCreatePostOpen(open);
-                    }}>
-                      <DialogTrigger asChild>
-                        <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
-                          <PlusCircle className="mr-2 h-4 w-4" />
-                          <span className="hidden sm:inline">Create Post</span>
-                          <span className="sm:hidden">Post</span>
-                        </Button>
-                      </DialogTrigger>
-                    <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
-                      <DialogHeader className="p-6 pb-4 border-b">
-                        <DialogTitle>Create New Post</DialogTitle>
-                        <DialogDescription>
-                          Share your idea, question, or request help from the community.
-                        </DialogDescription>
-                      </DialogHeader>
-                      <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
-                        {isCreatePostOpen && user && (
-                          <DynamicCreatePostForm
-                            onSubmit={handleCreatePostSubmit}
-                            availableTags={availableTags}
-                            detailedSectorsData={detailedSectorsData}
-                            isSubmitting={addPostMutation.isPending}
-                            currentUserId={user.uid}
-                            onDialogClose={() => setIsCreatePostOpen(false)}
-                          />
-                        )}
-                      </div>
-                    </DialogContent>
-                  </Dialog>
+                  {/* Create Post Dialog and Trigger are removed from here */}
                   <Button
                     variant="outline"
                     size="sm"

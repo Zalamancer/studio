@@ -26,6 +26,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle as AlertDialogPrimitiveTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle as CreatePostDialogTitle, // Renamed to avoid conflict
+  DialogDescription as CreatePostDialogDescription, // Renamed
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Label } from '@/components/ui/label';
@@ -33,7 +41,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useForm } from 'react-hook-form';
 import {
   Loader2, Trash2, MessageSquare, Sparkles, HandHelping, Briefcase, Link as LinkIcon,
-  X, DollarSign, CalendarDays, Star, User, FileText, Compass, Home, Network, CornerDownRight, Send, AtSign
+  X, DollarSign, CalendarDays, Star, User, FileText, Compass, Home, Network, CornerDownRight, Send, AtSign, PlusCircle
 } from "lucide-react";
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -46,10 +54,10 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sh
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { cn } from "@/lib/utils";
-import type { Post } from '@/types/post';
+import type { Post, NewPostData } from '@/types/post';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getPostsFromFirestore, deletePostFromFirestore } from '@/services/postService';
+import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Timestamp } from 'firebase/firestore';
 import { findOrCreateConversation } from '@/services/messagingService';
@@ -57,17 +65,29 @@ import { ConnectionButton } from '@/components/ConnectionButton';
 import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService';
 import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
 import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
+import { getReviewsForProfile } from '@/services/reviewService'; // Corrected import source
 import type { UserProfileBasic } from '@/types/connection';
 import { availableTags, detailedSectorsData } from '@/components/layout/MainLayout';
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
 import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_PAGE } from '@/lib/utils';
 import dynamic from 'next/dynamic';
 import { PostList } from '@/components/board-page/PostList';
+import type { CreatePostFormData, CreatePostFormProps } from '@/components/CreatePostForm';
+import { uploadPostImage } from '@/services/storageService';
+import { createNotification } from '@/services/notificationService';
 
 
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
   { loading: () => <div className="md:col-span-1 flex justify-center items-center p-8"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>, ssr: false }
+);
+
+const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
+  import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
+  {
+    loading: () => <div className="p-4 text-center"><p className="text-sm text-muted-foreground">Loading form...</p></div>,
+    ssr: false
+  }
 );
 
 const BoardPageContent = () => {
@@ -79,7 +99,7 @@ const BoardPageContent = () => {
   const isMobile = useIsMobile();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-
+  const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
 
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -102,6 +122,109 @@ const BoardPageContent = () => {
       toast({ variant: "destructive", title: "Deletion Failed", description: `Could not delete post: ${error.message}.` });
     },
   });
+
+  const addPostMutation = useMutation({
+    mutationFn: async (formData: CreatePostFormData) => {
+      if (!user) throw new Error("User not authenticated to create post.");
+
+      let currentRatingScore = 0;
+      try {
+        const reviews = await getReviewsForProfile(user.uid);
+        if (reviews && reviews.length > 0) {
+          const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+          currentRatingScore = parseFloat((totalRating / reviews.length).toFixed(1));
+        }
+      } catch (ratingError: any) {
+        // console.error("Error fetching reviews for rating score:", ratingError.message);
+      }
+
+      let uploadedImageUrls: string[] = [];
+      if (formData.imageFiles && formData.imageFiles.length > 0 && user) {
+        const uploadPromises = formData.imageFiles.map(file =>
+          uploadPostImage(file, user.uid).catch(uploadError => {
+            toast({ variant: "destructive", title: `Image Upload Failed for ${file.name}`, description: (uploadError as Error).message || "Could not upload image." });
+            return null;
+          })
+        );
+        const results = await Promise.all(uploadPromises);
+        uploadedImageUrls = results.filter((url): url is string => url !== null);
+
+        if (uploadedImageUrls.length !== formData.imageFiles.length) {
+          if (uploadedImageUrls.length === 0 && formData.imageFiles.length > 0) {
+            throw new Error("All image uploads failed. Post not created.");
+          }
+          toast({ variant: "warning", title: "Partial Image Upload", description: "Some images could not be uploaded. The post will be created with the successfully uploaded images."});
+        }
+      }
+      
+      const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
+      const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
+      const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
+
+      const newPostData: NewPostData = {
+        userId: user.uid,
+        question: formData.question,
+        requestType: formData.requestType,
+        descriptionDetails: formData.descriptionDetails,
+        descriptionTried: formData.descriptionTried?.trim() ? formData.descriptionTried.trim() : undefined,
+        descriptionOutcome: formData.descriptionOutcome?.trim() ? formData.descriptionOutcome.trim() : undefined,
+        tags: formData.tags || [],
+        sector: mainSectorDetails?.name || formData.sector,
+        subSector: subSectorDetails?.name || null,
+        industry: industryDetails?.name || null,
+        naicsCode: formData.industry || formData.subSector || formData.sector,
+        ratingScore: currentRatingScore,
+        imageUrls: uploadedImageUrls,
+        mentionedUserIds: formData.mentionedUserIds || [],
+        maxBudget: formData.requestType === 'help_request' ? (formData.maxBudget === undefined ? null : formData.maxBudget) : null,
+        deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
+        commentCount: 0,
+      };
+      return addPostToFirestore(newPostData);
+    },
+    onSuccess: (newlyCreatedPostId, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['posts'] });
+      queryClient.invalidateQueries({ queryKey: ['userPosts'] });
+      queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
+      toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
+      setIsCreatePostOpen(false); 
+
+      if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
+        const descriptionSource = variables.descriptionDetails;
+        variables.mentionedUserIds.forEach(async (mentionedUid) => {
+          if (mentionedUid !== user.uid) {
+            try {
+              await createNotification({
+                userId: mentionedUid,
+                type: 'mention',
+                senderId: user.uid,
+                postId: newlyCreatedPostId,
+                postQuestion: variables.question,
+                textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "",
+              });
+            } catch (notifyError) {
+              // console.error("Failed to create mention notification:", notifyError);
+            }
+          }
+        });
+      }
+    },
+    onError: (error: Error, variables) => {
+      toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.` });
+    },
+  });
+
+  const handleCreatePostSubmit = useCallback(
+    (formData: CreatePostFormData) => {
+      if (!user) {
+        toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
+        return;
+      }
+      addPostMutation.mutate(formData);
+    },
+    [user, toast, addPostMutation]
+  );
+
 
   const handleDeletePost = useCallback((postId: string | undefined) => {
     if (!postId) {
@@ -225,7 +348,41 @@ const BoardPageContent = () => {
                 <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
                   <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
                     <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
-                    {/* "X" button silhouette removed */}
+                    {user && (
+                        <Dialog open={isCreatePostOpen} onOpenChange={(open) => {
+                            if (!open && addPostMutation.isSuccess) {
+                                // Reset logic in CreatePostForm
+                            }
+                            setIsCreatePostOpen(open);
+                        }}>
+                            <DialogTrigger asChild>
+                                <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground">
+                                    <PlusCircle className="mr-2 h-4 w-4" />
+                                    Create Post
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl p-0">
+                                <CreatePostDialogHeader className="p-6 pb-4 border-b">
+                                    <CreatePostDialogTitle>Create New Post</CreatePostDialogTitle>
+                                    <CreatePostDialogDescription>
+                                        Share your idea, question, or request help from the community.
+                                    </CreatePostDialogDescription>
+                                </CreatePostDialogHeader>
+                                <div className="p-6 max-h-[calc(100vh-12rem)] overflow-y-auto">
+                                {isCreatePostOpen && user && (
+                                    <DynamicCreatePostForm
+                                        onSubmit={handleCreatePostSubmit}
+                                        availableTags={availableTags}
+                                        detailedSectorsData={detailedSectorsData}
+                                        isSubmitting={addPostMutation.isPending}
+                                        currentUserId={user.uid}
+                                        onDialogClose={() => setIsCreatePostOpen(false)}
+                                    />
+                                )}
+                                </div>
+                            </DialogContent>
+                        </Dialog>
+                    )}
                   </div>
                   <ScrollArea className="flex-grow bg-background">
                     <div className="flex flex-col items-center justify-center h-full p-8 text-center">
@@ -235,8 +392,7 @@ const BoardPageContent = () => {
                     </div>
                   </ScrollArea>
                   <div className="p-3 border-t flex-shrink-0">
-                    {/* Comment input and send button silhouettes removed */}
-                    <div className="h-9"></div> {/* Placeholder for height if footer is kept for spacing */}
+                    <div className="h-9"></div>
                   </div>
                 </Card>
             </div>
@@ -246,6 +402,10 @@ const BoardPageContent = () => {
     </div>
   );
 };
+
+const CreatePostDialogHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
+  <div className={cn("flex flex-col space-y-1.5 text-left", className)} {...props} />
+);
 
 export default BoardPageContent;
     
@@ -257,3 +417,7 @@ export default BoardPageContent;
 
     
 
+
+
+
+    
