@@ -17,12 +17,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormMessage } from '@/components/ui/form';
-import { Loader2, Save, Send, ImageUp } from 'lucide-react'; // Replaced BookOpen with ImageUp
+import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'; // Added FormLabel
+import { Loader2, Save, Send, ImageUp } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-// Link for "Back to News" is removed
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -156,13 +155,13 @@ const CreateNewsArticlePage = () => {
                   <FormLabel className="text-base">Category <span className="text-destructive">*</span></FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                     <FormControl>
-                      <SelectTrigger className="text-sm py-2 h-auto focus:ring-0 focus:ring-offset-0">
+                      <SelectTrigger className="text-base py-2 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0">
                         <SelectValue placeholder="Select a category" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {newsCategories.map((category) => (
-                        <SelectItem key={category} value={category} className="text-sm">
+                        <SelectItem key={category} value={category} className="text-base">
                           {category}
                         </SelectItem>
                       ))}
@@ -203,3 +202,4 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
+
