@@ -16,7 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Loader2, ArrowLeft, ImageUp, BookOpen, Save, Send } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
@@ -124,95 +123,96 @@ const CreateNewsArticlePage = () => {
         </Button>
       </div>
 
-      <Card className="max-w-3xl mx-auto shadow-xl border-border">
-        <CardHeader>
-          <CardTitle className="text-2xl md:text-3xl font-bold text-foreground flex items-center">
-            <BookOpen className="mr-3 h-7 w-7 text-primary" /> Write New Article
-          </CardTitle>
-          <CardDescription>
-            Share your insights, updates, or announcements with the AnonyCollab community.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-              <FormField
-                control={form.control}
-                name="title"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Article Title <span className="text-destructive">*</span></FormLabel>
+      <header className="max-w-3xl mx-auto text-center mb-10">
+        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center justify-center">
+          <BookOpen className="mr-3 h-7 w-7 text-primary" /> Write New Article
+        </h1>
+        <p className="text-muted-foreground mt-2">
+          Share your insights, updates, or announcements with the AnonyCollab community.
+        </p>
+      </header>
+
+      <div className="max-w-3xl mx-auto">
+        <Form {...form}>
+          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Article Title <span className="text-destructive">*</span></FormLabel>
+                  <FormControl>
+                    <Input placeholder="Enter a catchy and informative title" {...field} disabled={isSubmitting} />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="content"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Article Content <span className="text-destructive">*</span></FormLabel>
+                  <FormControl>
+                    <Textarea
+                      placeholder="Start writing your article here... Markdown is not yet supported."
+                      className="min-h-[300px] resize-y"
+                      {...field}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            <FormField
+              control={form.control}
+              name="category"
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Category <span className="text-destructive">*</span></FormLabel>
+                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                     <FormControl>
-                      <Input placeholder="Enter a catchy and informative title" {...field} disabled={isSubmitting} />
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a category" />
+                      </SelectTrigger>
                     </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
+                    <SelectContent>
+                      {newsCategories.map((category) => (
+                        <SelectItem key={category} value={category}>
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
 
-              <FormField
-                control={form.control}
-                name="content"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Article Content <span className="text-destructive">*</span></FormLabel>
-                    <FormControl>
-                      <Textarea
-                        placeholder="Start writing your article here... Markdown is not yet supported."
-                        className="min-h-[300px] resize-y"
-                        {...field}
-                        disabled={isSubmitting}
-                      />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
+            {/* Placeholder for Image Upload - Full functionality requires backend & storage */}
+            <div className="space-y-2">
+              <Label htmlFor="article-image">Cover Image (Optional)</Label>
+              <Input
+                id="article-image"
+                type="file"
+                accept="image/png, image/jpeg, image/gif, image/webp"
+                // onChange={handleImageChange}
+                disabled={isSubmitting}
+                className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
               />
-
-              <FormField
-                control={form.control}
-                name="category"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Category <span className="text-destructive">*</span></FormLabel>
-                    <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select a category" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {newsCategories.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              {/* Placeholder for Image Upload - Full functionality requires backend & storage */}
-              <div className="space-y-2">
-                <Label htmlFor="article-image">Cover Image (Optional)</Label>
-                <Input
-                  id="article-image"
-                  type="file"
-                  accept="image/png, image/jpeg, image/gif, image/webp"
-                  // onChange={handleImageChange}
-                  disabled={isSubmitting}
-                  className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
-                />
-                <FormDescription>Upload an image to accompany your article (max 2MB).</FormDescription>
-                {/* {imagePreview && (
-                  <div className="mt-2 border rounded-md p-2">
-                    <img src={imagePreview} alt="Preview" className="max-h-40 rounded-md object-contain" />
-                  </div>
-                )} */}
-              </div>
-            <CardFooter className="flex justify-end gap-3 p-0 pt-6">
+              <FormDescription>Upload an image to accompany your article (max 2MB).</FormDescription>
+              {/* {imagePreview && (
+                <div className="mt-2 border rounded-md p-2">
+                  <img src={imagePreview} alt="Preview" className="max-h-40 rounded-md object-contain" />
+                </div>
+              )} */}
+            </div>
+            
+            <div className="flex justify-end gap-3 pt-6">
                 <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting}>
                     <Save className="mr-2 h-4 w-4" /> Save Draft (Placeholder)
                 </Button>
@@ -220,11 +220,10 @@ const CreateNewsArticlePage = () => {
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                   Publish Article (Placeholder)
                 </Button>
-            </CardFooter>
-            </form>
-          </Form>
-        </CardContent>
-      </Card>
+            </div>
+          </form>
+        </Form>
+      </div>
     </div>
   );
 };
