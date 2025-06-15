@@ -2,9 +2,8 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from 'react';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
+// Removed useForm and zodResolver as react-hook-form is no longer used
+// Removed * as z
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -14,11 +13,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
+// Removed Form, FormControl, FormField, FormItem, FormMessage from ui/form
+import { Label } from '@/components/ui/label'; // Keep Label if used for title/category
 import { Loader2, Save, Send, ImageUp } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils'; // For conditional class names
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -31,92 +32,165 @@ const newsCategories = [
   "Case Studies",
 ];
 
-// Updated schema: removed content
-const articleSchema = z.object({
-  title: z.string().min(1, "Title cannot be empty.").max(150, "Title cannot exceed 150 characters."),
-  category: z.string().min(1, "Please select a category for the article."),
-});
-
-type ArticleFormData = z.infer<typeof articleSchema>;
+// No Zod schema or form data type needed as react-hook-form is removed
 
 const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Refs for title field (if toolbar interaction was desired for it, but toolbar is removed)
-  // const titleWrapperRef = useRef<HTMLDivElement>(null);
-  // const titleInputRef = useRef<HTMLInputElement>(null);
+  const [title, setTitle] = useState("");
+  const [category, setCategory] = useState("");
+  const [storyContent, setStoryContent] = useState(""); // For the contentEditable div
+  const [isSubmitting, setIsSubmitting] = useState(false); // For publish button state
 
-  const form = useForm<ArticleFormData>({
-    resolver: zodResolver(articleSchema),
-    // Updated defaultValues: removed content
-    defaultValues: { title: "", category: "" },
-  });
+  const contentEditableRef = useRef<HTMLDivElement>(null);
 
-  // titleValueFromForm can still be useful for other logic if needed
-  // const titleValueFromForm = form.watch('title');
+  // Placeholder for cover image input
+  const coverImageInputRef = useRef<HTMLInputElement>(null);
 
-  const onSubmit = async (data: ArticleFormData) => {
+  const handlePublish = async () => {
     if (!user) {
       toast({ variant: "destructive", title: "Not Authenticated" });
       return;
     }
+    if (!title.trim()) {
+      toast({ variant: "destructive", title: "Title Required", description: "Please enter a title for your article." });
+      return;
+    }
+    if (!category) {
+      toast({ variant: "destructive", title: "Category Required", description: "Please select a category." });
+      return;
+    }
+    if (!storyContent.trim()) { // Check content from the div
+      toast({ variant: "destructive", title: "Content Required", description: "Please write your story." });
+      return;
+    }
+
     setIsSubmitting(true);
-    console.log("Submitting Article Data (Title & Category only):", data);
+    console.log("Publishing Article Data:", {
+      title: title.trim(),
+      category,
+      storyContent: storyContent, // Or contentEditableRef.current?.innerHTML if you prefer direct DOM read
+    });
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));
-    toast({ title: "Article Submitted (Placeholder)", description: `"${data.title}" saved.` });
+    toast({ title: "Article Submitted (Placeholder)", description: `"${title.trim()}" published.` });
     setIsSubmitting(false);
-    // Updated form.reset: removed content
-    form.reset({ title: "", category: "" });
+    // Reset fields
+    setTitle("");
+    setCategory("");
+    setStoryContent("");
+    if (contentEditableRef.current) {
+      contentEditableRef.current.innerHTML = ""; // Clear the div
+    }
   };
+  
+  // Function to handle input from contentEditable div
+  const handleContentEditableInput = (event: React.FormEvent<HTMLDivElement>) => {
+    const newContent = event.currentTarget.innerHTML;
+    setStoryContent(newContent);
+  };
+
 
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
-      <Form {...form}>
-        {/* Removed formRef as toolbar positioning logic is gone */}
-        <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative">
-          {/* ToolbarComponent and its state/logic removed */}
-
-          {/* Header controls */}
-          <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
-            <div className="flex items-center gap-2 mr-auto">
-              {/* Category Select */}
-              <FormField control={form.control} name="category" render={({ field }) => ( <FormItem><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}><FormControl><SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue placeholder="Category" /></SelectTrigger></FormControl><SelectContent>{newsCategories.map((category) => ( <SelectItem key={category} value={category} className="text-sm">{category}</SelectItem>))}</SelectContent></Select><FormMessage className="sm:hidden text-xs" /></FormItem>)} />
-              {/* Cover Image Button (Placeholder) */}
-              <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('article-image-input-header')?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9"><ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Image</span></Button><Input id="article-image-input-header" type="file" accept="image/*" className="hidden" disabled={isSubmitting}/>
+      <div className="max-w-3xl mx-auto space-y-0 relative">
+        {/* Header controls */}
+        <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
+          <div className="flex items-center gap-2 mr-auto">
+            {/* Category Select */}
+            <div className="space-y-1">
+              <Select onValueChange={setCategory} value={category} disabled={isSubmitting}>
+                <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0">
+                  <SelectValue placeholder="Category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {newsCategories.map((cat) => (
+                    <SelectItem key={cat} value={cat} className="text-sm">{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {!category && <p className="text-xs text-destructive sm:hidden">Category is required.</p>}
             </div>
-            {/* Action Buttons */}
-            <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-xs py-1.5 h-9 rounded-full"><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
-              <Button type="submit" disabled={isSubmitting} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">{isSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}Publish</Button>
-            </div>
+            {/* Cover Image Button (Placeholder) */}
+            <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9">
+              <ImageUp className="mr-1.5 h-3.5 w-3.5" />
+              <span className="hidden sm:inline">Cover Image</span>
+              <span className="sm:hidden">Image</span>
+            </Button>
+            <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} disabled={isSubmitting} />
           </div>
-          {/* Category Form Message (Desktop) */}
-          <FormField control={form.control} name="category" render={() => <FormItem><FormMessage className="text-center text-sm mb-2 hidden sm:block" /></FormItem>} />
-
-          {/* Title Field */}
-          {/* Removed titleWrapperRef as toolbar logic is gone */}
-          <div className="relative">
-            <FormField control={form.control} name="title" render={({ field }) => ( <FormItem className="mb-8"><FormControl><Input 
-            // Removed titleInputRef and focus/blur/interaction handlers for toolbar
-            placeholder="Title" {...field} disabled={isSubmitting} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"/></FormControl><FormMessage /></FormItem>)} />
+          {/* Action Buttons */}
+          <div className="flex items-center gap-2">
+            <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", {title, category, storyContent})} disabled={isSubmitting} className="text-xs py-1.5 h-9 rounded-full">
+              <Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft
+            </Button>
+            <Button type="button" onClick={handlePublish} disabled={isSubmitting} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">
+              {isSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
+              Publish
+            </Button>
           </div>
+        </div>
+        {!category && <p className="text-center text-sm mb-2 text-destructive hidden sm:block">Please select a category.</p>}
 
-          {/* Content Field and its wrapper REMOVED */}
-          {/* 
-          <div className="relative" ref={contentWrapperRef}>
-            <FormField control={form.control} name="content" render={({ field }) => ( ... )} />
-          </div> 
-          */}
 
-        </form>
-      </Form>
+        {/* Title Field */}
+        <div className="relative mb-8">
+          <Input
+            placeholder="Title"
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            disabled={isSubmitting}
+            className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
+          />
+          {!title.trim() && <p className="text-xs text-destructive mt-1">Title is required.</p>}
+        </div>
+
+        {/* ContentEditable Div for Story */}
+        <div
+          ref={contentEditableRef}
+          contentEditable="true"
+          onInput={handleContentEditableInput}
+          data-placeholder="Tell your story..." // Placeholder via CSS
+          className={cn(
+            "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case min-h-[100px]", // min-h-[100px] to give some initial space
+            "focus:outline-none", // Remove default focus outline on contentEditable
+            // Apply styles from previous Textarea
+            "border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case"
+          )}
+          style={{
+            fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
+            fontSize: "20px",
+            lineHeight: "28px",
+            color: "rgba(0, 0, 0, 0.84)", // This is black, consider theme variable later if needed
+            // Height will be auto-adjusted by browser based on content due to no explicit height and overflow settings
+          }}
+          // Role and ARIA attributes for accessibility (basic example)
+          role="textbox"
+          aria-multiline="true"
+          aria-label="News article content"
+        />
+         {!storyContent.trim() && <p className="text-xs text-destructive mt-1">Story content is required.</p>}
+
+
+        {/* CSS for contentEditable placeholder */}
+        <style jsx global>{`
+          div[contentEditable="true"][data-placeholder]:empty:before {
+            content: attr(data-placeholder);
+            color: hsl(var(--muted-foreground) / 0.5);
+            pointer-events: none; /* Ensure placeholder doesn't interfere with clicks */
+            display: block; /* Ensures it takes up space */
+          }
+          .dark div[contentEditable="true"][data-placeholder]:empty:before {
+            color: hsl(var(--muted-foreground) / 0.5); /* Adjust placeholder color for dark mode if needed */
+          }
+        `}</style>
+
+      </div>
     </div>
   );
 };
