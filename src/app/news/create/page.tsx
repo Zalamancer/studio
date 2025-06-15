@@ -17,12 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, ArrowLeft, ImageUp, BookOpen, Save, Send } from 'lucide-react';
+import { Form, FormControl, FormDescription, FormField, FormItem, FormMessage } from '@/components/ui/form';
+import { Loader2, Save, Send, ImageUp } from 'lucide-react'; // Replaced BookOpen with ImageUp
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+// Link for "Back to News" is removed
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -36,10 +36,10 @@ const newsCategories = [
 ];
 
 const articleSchema = z.object({
-  title: z.string().min(5, "Title must be at least 5 characters long.").max(150, "Title cannot exceed 150 characters."),
-  content: z.string().min(50, "Article content must be at least 50 characters long."),
+  title: z.string().min(1, "Title cannot be empty.").max(150, "Title cannot exceed 150 characters."),
+  content: z.string().min(1, "Article content cannot be empty."),
   category: z.string().min(1, "Please select a category for the article."),
-  // imageFile: typeof window === 'undefined' ? z.any() : z.instanceof(File).optional(), // Optional file upload
+  // imageFile: typeof window === 'undefined' ? z.any() : z.instanceof(File).optional(),
 });
 
 type ArticleFormData = z.infer<typeof articleSchema>;
@@ -61,19 +61,6 @@ const CreateNewsArticlePage = () => {
     },
   });
 
-  // const handleImageChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-  //   const file = event.target.files?.[0];
-  //   if (file) {
-  //     form.setValue("imageFile", file);
-  //     const reader = new FileReader();
-  //     reader.onloadend = () => setImagePreview(reader.result as string);
-  //     reader.readAsDataURL(file);
-  //   } else {
-  //     form.setValue("imageFile", undefined);
-  //     setImagePreview(null);
-  //   }
-  // };
-
   const onSubmit = async (data: ArticleFormData) => {
     if (!user) {
       toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in." });
@@ -81,18 +68,13 @@ const CreateNewsArticlePage = () => {
     }
     setIsSubmitting(true);
     console.log("Submitting Article Data (Placeholder):", data);
-    // Placeholder for actual submission logic (e.g., to Firestore)
-    // In a real app, you would handle image upload separately here.
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     toast({
       title: "Article Submitted (Placeholder)",
       description: `"${data.title}" would be processed.`,
     });
-    // form.reset(); // Reset form after successful submission
-    // setImagePreview(null);
     setIsSubmitting(false);
-    // router.push('/news'); // Optionally redirect
   };
 
   if (authLoading) {
@@ -104,7 +86,6 @@ const CreateNewsArticlePage = () => {
   }
 
   if (!user) {
-    // router.push('/login'); // Redirect if not logged in
     return (
         <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center">
             <p className="text-lg font-semibold text-foreground">Please log in to create a news article.</p>
@@ -115,80 +96,73 @@ const CreateNewsArticlePage = () => {
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
-      <div className="mb-6">
-        <Button variant="outline" size="sm" asChild>
-          <Link href="/news">
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to News
-          </Link>
-        </Button>
-      </div>
+      <Form {...form}>
+        <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-8">
+          
+          <div className="flex justify-end gap-3 mb-6">
+              <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-sm py-2 px-4 h-9 rounded-full">
+                  <Save className="mr-2 h-4 w-4" /> Save Draft
+              </Button>
+              <Button type="submit" disabled={isSubmitting} className="text-sm py-2 px-4 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+                Publish
+              </Button>
+          </div>
 
-      <header className="max-w-3xl mx-auto text-center mb-10">
-        <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center justify-center">
-          <BookOpen className="mr-3 h-8 w-8 text-primary" /> Write New Article
-        </h1>
-        <p className="text-lg text-muted-foreground mt-2">
-          Share your insights, updates, or announcements with the AnonyCollab community.
-        </p>
-      </header>
+          <FormField
+            control={form.control}
+            name="title"
+            render={({ field }) => (
+              <FormItem className="mb-8">
+                {/* No FormLabel */}
+                <FormControl>
+                  <Input 
+                    placeholder="Title" 
+                    {...field} 
+                    disabled={isSubmitting} 
+                    className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-      <div className="max-w-3xl mx-auto">
-        <Form {...form}>
-          <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-            <FormField
-              control={form.control}
-              name="title"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-lg">Article Title <span className="text-destructive">*</span></FormLabel>
-                  <FormControl>
-                    <Input 
-                      placeholder="Enter a catchy and informative title" 
-                      {...field} 
-                      disabled={isSubmitting} 
-                      className="text-base py-3 focus-visible:ring-0 focus-visible:ring-offset-0" 
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
+          <FormField
+            control={form.control}
+            name="content"
+            render={({ field }) => (
+              <FormItem>
+                {/* No FormLabel */}
+                <FormControl>
+                  <Textarea
+                    placeholder="Tell your story..."
+                    className="text-xl border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 min-h-[300px] resize-y placeholder:text-muted-foreground/50 py-2"
+                    {...field}
+                    disabled={isSubmitting}
+                  />
+                </FormControl>
+                <FormMessage />
+              </FormItem>
+            )}
+          />
 
-            <FormField
-              control={form.control}
-              name="content"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-lg">Article Content <span className="text-destructive">*</span></FormLabel>
-                  <FormControl>
-                    <Textarea
-                      placeholder="Start writing your article here... Markdown is not yet supported."
-                      className="min-h-[300px] resize-y text-base py-3 focus-visible:ring-0 focus-visible:ring-offset-0"
-                      {...field}
-                      disabled={isSubmitting}
-                    />
-                  </FormControl>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
+          <div className="pt-8 space-y-6"> {/* Container for less prominent fields */}
             <FormField
               control={form.control}
               name="category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel className="text-lg">Category <span className="text-destructive">*</span></FormLabel>
+                  <FormLabel className="text-base">Category <span className="text-destructive">*</span></FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                     <FormControl>
-                      <SelectTrigger className="text-base py-3 h-auto focus:ring-0 focus:ring-offset-0">
+                      <SelectTrigger className="text-sm py-2 h-auto focus:ring-0 focus:ring-offset-0">
                         <SelectValue placeholder="Select a category" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {newsCategories.map((category) => (
-                        <SelectItem key={category} value={category} className="text-base">
+                        <SelectItem key={category} value={category} className="text-sm">
                           {category}
                         </SelectItem>
                       ))}
@@ -199,40 +173,33 @@ const CreateNewsArticlePage = () => {
               )}
             />
 
-            {/* Placeholder for Image Upload - Full functionality requires backend & storage */}
             <div className="space-y-2">
-              <Label htmlFor="article-image" className="text-lg">Cover Image (Optional)</Label>
-              <Input
-                id="article-image"
-                type="file"
-                accept="image/png, image/jpeg, image/gif, image/webp"
-                // onChange={handleImageChange}
-                disabled={isSubmitting}
-                className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 focus-visible:ring-0 focus-visible:ring-offset-0"
-              />
-              <FormDescription className="text-sm">Upload an image to accompany your article (max 2MB).</FormDescription>
-              {/* {imagePreview && (
-                <div className="mt-2 border rounded-md p-2">
-                  <img src={imagePreview} alt="Preview" className="max-h-40 rounded-md object-contain" />
-                </div>
-              )} */}
-            </div>
-            
-            <div className="flex justify-end gap-3 pt-6">
-                <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-base py-3 px-6">
-                    <Save className="mr-2 h-4 w-4" /> Save Draft (Placeholder)
+              <Label htmlFor="article-image" className="text-base">Cover Image (Optional)</Label>
+              <div className="flex items-center gap-3">
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('article-image-input')?.click()} disabled={isSubmitting}>
+                    <ImageUp className="mr-2 h-4 w-4" /> Upload Image
                 </Button>
-                <Button type="submit" disabled={isSubmitting} className="text-base py-3 px-6">
-                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
-                  Publish Article (Placeholder)
-                </Button>
+                <Input
+                    id="article-image-input"
+                    type="file"
+                    accept="image/png, image/jpeg, image/gif, image/webp"
+                    // onChange={handleImageChange} - keep this commented out if not implementing preview
+                    disabled={isSubmitting}
+                    className="hidden" // Visually hidden, triggered by button
+                />
+                {/* {imagePreview && (
+                  <div className="border rounded-md p-1 h-12 w-12 relative overflow-hidden">
+                    <img src={imagePreview} alt="Preview" className="object-cover h-full w-full" />
+                  </div>
+                )} */}
+              </div>
+              <FormDescription className="text-xs">Upload an image to accompany your article (max 2MB).</FormDescription>
             </div>
-          </form>
-        </Form>
-      </div>
+          </div>
+        </form>
+      </Form>
     </div>
   );
 };
 
 export default CreateNewsArticlePage;
-
