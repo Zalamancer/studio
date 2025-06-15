@@ -2,14 +2,13 @@
 // src/app/news/create/page.tsx
 "use client";
 
-import React, { useState } from 'react';
-import { useForm, Controller } from 'react-hook-form'; // Added Controller
+import React, { useState, useEffect, useRef } from 'react'; // Added useRef
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-// Label removed as it's not used directly for top-bar elements, FormLabel is used within FormField
 import {
   Select,
   SelectContent,
@@ -18,11 +17,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, Save, Send, ImageUp } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, PlusCircle, X, Image as ImageIcon, UploadCloud, PlayCircle, Code as CodeIcon, Braces, Minus } from 'lucide-react'; // Added new icons
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils'; // Added cn for conditional styling
+import { cn } from '@/lib/utils';
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -39,7 +38,7 @@ const articleSchema = z.object({
   title: z.string().min(1, "Title cannot be empty.").max(150, "Title cannot exceed 150 characters."),
   content: z.string().min(1, "Article content cannot be empty."),
   category: z.string().min(1, "Please select a category for the article."),
-  // imageFile: typeof window === 'undefined' ? z.any() : z.instanceof(File).optional(),
+  // imageFile: typeof window === 'undefined' ? z.any() : z.instanceof(File).optional(), // Image file handling for backend
 });
 
 type ArticleFormData = z.infer<typeof articleSchema>;
@@ -49,7 +48,12 @@ const CreateNewsArticlePage = () => {
   const { toast } = useToast();
   const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  // const [imagePreview, setImagePreview] = useState<string | null>(null);
+
+  const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
+  const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
+  const titleInputRef = useRef<HTMLInputElement>(null);
+  const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null); // Ref for the toolbar itself
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -57,9 +61,50 @@ const CreateNewsArticlePage = () => {
       title: "",
       content: "",
       category: "",
-      // imageFile: undefined,
     },
   });
+
+  const handleFocus = (field: 'title' | 'content') => {
+    const value = form.getValues(field);
+    if (value.trim() === '') {
+      setFocusedField(field);
+    } else {
+      setFocusedField(null); // Don't show + if field is not empty on focus
+      setIsFormatMenuOpen(false);
+    }
+  };
+
+  const handleBlur = (field: 'title' | 'content') => {
+    // Delay hiding to allow clicks on the toolbar
+    setTimeout(() => {
+      // Check if the new focused element is part of our toolbar
+      if (toolbarRef.current && toolbarRef.current.contains(document.activeElement)) {
+        return; // Don't hide if a toolbar button was clicked
+      }
+      if (!isFormatMenuOpen) {
+        setFocusedField(null);
+      }
+    }, 150);
+  };
+  
+  const handleInputChange = (field: 'title' | 'content', value: string) => {
+    if (value.trim() === '' && document.activeElement === (field === 'title' ? titleInputRef.current : contentTextareaRef.current) ) {
+      setFocusedField(field);
+    } else if (value.trim() !== '' && !isFormatMenuOpen) {
+      setFocusedField(null);
+    }
+  };
+
+
+  const handleFormatButtonClick = (action: string) => {
+    console.log(`${action} clicked for ${focusedField}`);
+    // Placeholder: In a real editor, this would insert markdown/HTML or update editor state
+    toast({ title: "Action (Placeholder)", description: `${action} for ${focusedField}`});
+    setIsFormatMenuOpen(false);
+    // Optionally, refocus the editor field:
+    // if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus();
+    // if (focusedField === 'content' && contentTextareaRef.current) contentTextareaRef.current.focus();
+  };
 
   const onSubmit = async (data: ArticleFormData) => {
     if (!user) {
@@ -75,6 +120,15 @@ const CreateNewsArticlePage = () => {
       description: `"${data.title}" would be processed.`,
     });
     setIsSubmitting(false);
+    form.reset();
+    setFocusedField(null);
+    setIsFormatMenuOpen(false);
+  };
+  
+  const getToolbarPositionClass = () => {
+    if (focusedField === 'title') return "top-2 left-[-50px] sm:left-[-55px]"; // Adjust as needed
+    if (focusedField === 'content') return "top-2 left-[-50px] sm:left-[-55px]"; // Adjust as needed
+    return "hidden"; // Should not happen if focusedField is null
   };
 
   if (authLoading) {
@@ -99,15 +153,14 @@ const CreateNewsArticlePage = () => {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-8">
           
-          <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
-            {/* Left side: Category and Image */}
-            <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center justify-between gap-x-3 gap-y-2 mb-6 flex-wrap">
+            <div className="flex items-center gap-2 flex-wrap">
               <Controller
                 name="category"
                 control={form.control}
                 render={({ field }) => (
                   <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                    <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[150px] sm:w-[180px] focus-visible:ring-0 focus-visible:ring-offset-0">
+                    <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0">
                       <SelectValue placeholder="Category" />
                     </SelectTrigger>
                     <SelectContent>
@@ -120,30 +173,16 @@ const CreateNewsArticlePage = () => {
                   </Select>
                 )}
               />
-               {/* FormMessage for category can be added here if needed, or rely on global form error summary */}
-               {form.formState.errors.category && !isSubmitting && (
-                 <p className="text-xs text-destructive mt-1 sm:hidden">{form.formState.errors.category.message}</p> // Show on mobile if needed
+               {form.formState.errors.category && (
+                 <p className="text-xs text-destructive mt-1 sm:hidden">{form.formState.errors.category.message}</p>
                )}
-
-
-              <div className="flex items-center gap-2">
-                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('article-image-input-header')?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9">
-                    <ImageUp className="mr-1.5 h-3.5 w-3.5" /> Upload Image
-                </Button>
-                <Input
-                    id="article-image-input-header"
-                    type="file"
-                    accept="image/png, image/jpeg, image/gif, image/webp"
-                    // onChange={handleImageChange} - keep this commented out if not implementing preview
-                    disabled={isSubmitting}
-                    className="hidden"
-                />
-                {/* Image preview logic can be added here if needed */}
-              </div>
+              <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('article-image-input-header')?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9">
+                  <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Image</span>
+              </Button>
+              <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" disabled={isSubmitting}/>
             </div>
 
-            {/* Right side: Save and Publish */}
-            <div className="flex items-center gap-2 ml-auto"> {/* ml-auto to push to the right */}
+            <div className="flex items-center gap-2 ml-auto">
               <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-xs py-1.5 h-9 rounded-full">
                   <Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft
               </Button>
@@ -153,50 +192,91 @@ const CreateNewsArticlePage = () => {
               </Button>
             </div>
           </div>
-          {/* Display category error prominently if form submitted and error exists and it's not being fixed in the header */}
           {form.formState.errors.category && form.formState.isSubmitted && (
-            <FormItem> 
-              <FormMessage className="text-center text-sm mb-2" /> 
-            </FormItem>
+            <FormItem><FormMessage className="text-center text-sm mb-2" /></FormItem>
           )}
 
-
-          <FormField
-            control={form.control}
-            name="title"
-            render={({ field }) => (
-              <FormItem className="mb-8">
-                <FormControl>
-                  <Input 
-                    placeholder="Title" 
-                    {...field} 
-                    disabled={isSubmitting} 
-                    className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
+          <div className="relative">
+            {(focusedField === 'title' && form.getValues('title').trim() === '' || (focusedField === 'title' && isFormatMenuOpen)) && (
+              <div ref={toolbarRef} className={cn("absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md z-10", getToolbarPositionClass())}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}>
+                  {isFormatMenuOpen ? <X className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
+                </Button>
+                {isFormatMenuOpen && (
+                  <>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Image')} title="Add Image"><ImageIcon className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Upload')} title="Upload from device"><UploadCloud className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Video')} title="Add Video"><PlayCircle className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Embed')} title="Embed"><CodeIcon className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Code Block')} title="Code Block"><Braces className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Separator')} title="Add Separator"><Minus className="h-4 w-4" /></Button>
+                  </>
+                )}
+              </div>
             )}
-          />
+            <FormField
+              control={form.control}
+              name="title"
+              render={({ field }) => (
+                <FormItem className="mb-8">
+                  <FormControl>
+                    <Input 
+                      ref={node => { field.ref(node); (titleInputRef as React.MutableRefObject<HTMLInputElement | null>).current = node; }}
+                      placeholder="Title" 
+                      {...field} 
+                      onChange={(e) => { field.onChange(e); handleInputChange('title', e.target.value); }}
+                      onFocus={() => handleFocus('title')}
+                      onBlur={() => handleBlur('title')}
+                      disabled={isSubmitting} 
+                      className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
 
-          <FormField
-            control={form.control}
-            name="content"
-            render={({ field }) => (
-              <FormItem>
-                <FormControl>
-                  <Textarea
-                    placeholder="Tell your story..."
-                    className="text-xl border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 min-h-[300px] resize-y placeholder:text-muted-foreground/50 py-2"
-                    {...field}
-                    disabled={isSubmitting}
-                  />
-                </FormControl>
-                <FormMessage />
-              </FormItem>
+          <div className="relative">
+            {(focusedField === 'content' && form.getValues('content').trim() === '' || (focusedField === 'content' && isFormatMenuOpen)) && (
+                 <div ref={toolbarRef} className={cn("absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md z-10", getToolbarPositionClass())}>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}>
+                  {isFormatMenuOpen ? <X className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
+                </Button>
+                {isFormatMenuOpen && (
+                  <>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Image')} title="Add Image"><ImageIcon className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Upload')} title="Upload from device"><UploadCloud className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Video')} title="Add Video"><PlayCircle className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Embed')} title="Embed"><CodeIcon className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Code Block')} title="Code Block"><Braces className="h-4 w-4" /></Button>
+                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Separator')} title="Add Separator"><Minus className="h-4 w-4" /></Button>
+                  </>
+                )}
+              </div>
             )}
-          />
-          {/* Category and Image sections are removed from here as they are moved to the top */}
+            <FormField
+              control={form.control}
+              name="content"
+              render={({ field }) => (
+                <FormItem>
+                  <FormControl>
+                    <Textarea
+                      ref={node => { field.ref(node); (contentTextareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = node; }}
+                      placeholder="Tell your story..."
+                      className="text-base border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 min-h-[300px] resize-y placeholder:text-muted-foreground/50 py-2"
+                      {...field}
+                      onChange={(e) => { field.onChange(e); handleInputChange('content', e.target.value); }}
+                      onFocus={() => handleFocus('content')}
+                      onBlur={() => handleBlur('content')}
+                      disabled={isSubmitting}
+                    />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
         </form>
       </Form>
     </div>
