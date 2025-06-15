@@ -67,7 +67,7 @@ const CreateNewsArticlePage = () => {
   const toolbarWrapperRef = useRef<HTMLDivElement>(null);
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
-  const [selectionNonce, setSelectionNonce] = useState(0); // Changed from cursorPosition
+  const [selectionNonce, setSelectionNonce] = useState(0);
   const [savedRange, setSavedRange] = useState<Range | null>(null);
 
   const [showContextualUI, setShowContextualUI] = useState(false);
@@ -271,21 +271,18 @@ const CreateNewsArticlePage = () => {
     const currentHTML = event.currentTarget.innerHTML;
     if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") {
       setStoryContent("<p><br></p>");
-      if (event.currentTarget.innerHTML !== "<p><br></p>") { // Avoid infinite loop if already set
+      if (event.currentTarget.innerHTML !== "<p><br></p>") { 
           event.currentTarget.innerHTML = "<p><br></p>";
-          // Try to set caret inside the <p>
           const pTag = event.currentTarget.querySelector('p');
           if(pTag) {
             const range = document.createRange();
             const sel = window.getSelection();
             try {
-              range.setStart(pTag, 0); // Start of the paragraph
+              range.setStart(pTag, 0); 
               range.collapse(true);
               sel?.removeAllRanges();
               sel?.addRange(range);
-            } catch(e) {
-              // console.warn("Error setting caret on empty paragraph:", e);
-            }
+            } catch(e) { }
           }
       }
     } else {
@@ -347,9 +344,8 @@ const CreateNewsArticlePage = () => {
           if (prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
             event.preventDefault();
             prevElement.remove();
-            setStoryContent(editorEl.innerHTML || "<p><br></p>"); // Ensure not empty
+            setStoryContent(editorEl.innerHTML || "<p><br></p>"); 
             updateSelectionNonce();
-            // Ensure caret is placed correctly after deletion
             setTimeout(() => {
                 if (editorEl.innerHTML.trim() === "") editorEl.innerHTML = "<p><br></p>";
                 const newRange = document.createRange();
@@ -397,13 +393,12 @@ const CreateNewsArticlePage = () => {
             nextElement.remove();
             setStoryContent(editorEl.innerHTML || "<p><br></p>");
             updateSelectionNonce();
-            // Ensure caret remains in current block
              setTimeout(() => {
                 if (editorEl.innerHTML.trim() === "") editorEl.innerHTML = "<p><br></p>";
                 const newRange = document.createRange();
                 const newSel = window.getSelection();
                  if (currentBlock && editorEl.contains(currentBlock)) {
-                    newRange.selectNodeContents(currentBlock); newRange.collapse(false); // to the end of current block
+                    newRange.selectNodeContents(currentBlock); newRange.collapse(false); 
                 } else if (editorEl.lastChild) {
                     newRange.selectNodeContents(editorEl.lastChild); newRange.collapse(false);
                 } else {
@@ -439,7 +434,6 @@ const CreateNewsArticlePage = () => {
       else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
       return;
     }
-    // console.log("Publishing Article:", { title: title.trim(), category, storyContent });
     toast({ title: "Article Submitted (Placeholder)", description: `"${title.trim()}" would be published.` });
     setTitle(""); setCategory("");
     const initialEmptyContent = "<p><br></p>";
@@ -462,84 +456,62 @@ const CreateNewsArticlePage = () => {
     const editorEl = contentEditableRef.current;
     if (!editorEl) return;
 
-    editorEl.focus();
-
     queueMicrotask(() => {
+      editorEl.focus(); 
       const selection = window.getSelection();
       let range: Range;
 
       if (savedRange && editorEl.contains(savedRange.commonAncestorContainer)) {
         range = savedRange;
-        if (selection) {
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
       } else if (selection && selection.rangeCount > 0 && editorEl.contains(selection.getRangeAt(0).commonAncestorContainer)) {
         range = selection.getRangeAt(0);
       } else {
         range = document.createRange();
         if (editorEl.lastChild) {
-            range.setStartAfter(editorEl.lastChild);
+          range.setStartAfter(editorEl.lastChild);
         } else {
-            range.selectNodeContents(editorEl);
-            range.collapse(false); // to the end
+          range.selectNodeContents(editorEl);
         }
-        if (selection) {
-          selection.removeAllRanges();
-          selection.addRange(range);
-        }
+        range.collapse(false); // to the end
       }
-      setSavedRange(null);
+      
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+      setSavedRange(null); // Clear saved range after use
 
       const currentBlock = getCurrentBlockElement();
       if (currentBlock && editorEl.contains(currentBlock) &&
-          (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;")) {
+          (currentBlock.textContent?.trim() === "" || 
+           currentBlock.innerHTML.toLowerCase() === "<br>" || 
+           currentBlock.innerHTML.toLowerCase() === "<p></p>" || 
+           currentBlock.innerHTML.toLowerCase() === "&nbsp;") &&
+           currentBlock.innerHTML.toLowerCase() !== "<p><br></p>") { 
          if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) {
-           const isEditorAndEmpty = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>)$/i);
-           if (!isEditorAndEmpty || (isEditorAndEmpty && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) {
+           const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && 
+                                        editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>)$/i);
+           if (!isEditorAndEmptyOrSinglePBR || (isEditorAndEmptyOrSinglePBR && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) {
              range.selectNodeContents(currentBlock);
            }
          }
       }
-
+      
       if (!range.collapsed) {
         range.deleteContents();
       }
 
       const fragment = range.createContextualFragment(htmlToInsert);
-      let lastMeaningfulNodeInFragment: Node | null = null;
-      if (fragment.lastChild) {
-          if (fragment.lastChild.nodeName === 'P' && fragment.lastChild.textContent?.trim() === "" && (fragment.lastChild as HTMLElement).innerHTML.toLowerCase().includes('<br>')) {
-             lastMeaningfulNodeInFragment = fragment.lastChild; // This is the <p><br></p>
-          } else if (fragment.lastChild.nodeType === Node.ELEMENT_NODE && fragment.childNodes.length > 1 && fragment.childNodes[fragment.childNodes.length - 2]) {
-              // If the last child is not the P, maybe the P is the second to last (e.g. figure followed by P)
-              const secondToLast = fragment.childNodes[fragment.childNodes.length - 2];
-              if (secondToLast && secondToLast.nodeName === 'P' && secondToLast.textContent?.trim() === "" && (secondToLast as HTMLElement).innerHTML.toLowerCase().includes('<br>')) {
-                   lastMeaningfulNodeInFragment = secondToLast;
-              } else {
-                   // If the actual embed is the last thing, use that.
-                   lastMeaningfulNodeInFragment = fragment.childNodes[fragment.childNodes.length - (htmlToInsert.endsWith("<p><br></p>") ? 2 : 1)];
-              }
-          } else {
-             lastMeaningfulNodeInFragment = fragment.lastChild;
-          }
-      }
-
-
+      const lastNodeOfFragment = fragment.lastChild;
       range.insertNode(fragment);
 
-      if (lastMeaningfulNodeInFragment && editorEl.contains(lastMeaningfulNodeInFragment)) {
-          if (lastMeaningfulNodeInFragment.nodeName === 'P' && (lastMeaningfulNodeInFragment as HTMLElement).innerHTML.trim() === "") {
-              (lastMeaningfulNodeInFragment as HTMLElement).innerHTML = "<br>"; // Ensure caret visibility
-              range.setStart(lastMeaningfulNodeInFragment, 0);
-          } else if (lastMeaningfulNodeInFragment.nextSibling && lastMeaningfulNodeInFragment.nextSibling.nodeName === 'P' && (lastMeaningfulNodeInFragment.nextSibling as HTMLElement).innerHTML.toLowerCase().includes('<br>')) {
-              // If the last node was the embed, and the next sibling is the P we added
-              range.setStart(lastMeaningfulNodeInFragment.nextSibling, 0);
-          } else {
-             // Fallback: if it's not the P, try to place caret after the inserted meaningful content
-             range.setStartAfter(lastMeaningfulNodeInFragment);
-          }
-          range.collapse(true);
+      if (lastNodeOfFragment && editorEl.contains(lastNodeOfFragment)) {
+        if (lastNodeOfFragment.nodeName === 'P' && (lastNodeOfFragment as HTMLElement).innerHTML.toLowerCase().includes('<br>')) {
+          range.setStart(lastNodeOfFragment, 0);
+        } else {
+          range.setStartAfter(lastNodeOfFragment);
+        }
+        range.collapse(true);
       } else {
          range.selectNodeContents(editorEl);
          range.collapse(false);
@@ -549,14 +521,15 @@ const CreateNewsArticlePage = () => {
         selection.removeAllRanges();
         selection.addRange(range);
       }
-
-      setStoryContent(editorEl.innerHTML);
+      
+      setStoryContent(editorEl.innerHTML || "<p><br></p>");
       setIsToolbarExpanded(false);
 
-      setTimeout(() => {
+      // Microtask for focus and selection update
+      queueMicrotask(() => {
         editorEl.focus();
-        updateSelectionNonce();
-      }, 0);
+        updateSelectionNonce(); 
+      });
     });
   }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange]);
 
@@ -627,7 +600,7 @@ const CreateNewsArticlePage = () => {
       } catch (e) { videoId = youTubeUrlInput; }
       if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) {
         insertHTMLAndFocus(
-          `<figure class="my-4 relative" contenteditable="false" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 0.25rem;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p><br></p>`
+          `<figure class="my-4 relative" contenteditable="false" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p><br></p>`
         );
       } else {
         toast({ variant: 'destructive', title: 'Invalid YouTube URL/ID', description: 'Please enter a valid YouTube video URL or ID.' });
@@ -662,7 +635,14 @@ const CreateNewsArticlePage = () => {
     if (embedCodeInput) {
       const sanitizedCode = embedCodeInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
       if (sanitizedCode.trim()) {
-        insertHTMLAndFocus(`<div class="my-4" data-embed-wrapper="true" contenteditable="false">${sanitizedCode}</div><p><br></p>`);
+        insertHTMLAndFocus(
+          `<div class="my-4 relative" data-embed-wrapper="true" contenteditable="false" style="padding-bottom: 100%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;">
+            <div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">
+              ${sanitizedCode}
+            </div>
+          </div>
+          <p><br></p>`
+        );
       } else {
         toast({ variant: 'destructive', title: 'Invalid Embed Code', description: 'Please provide valid embed code (e.g., an iframe).' });
       }
@@ -821,8 +801,17 @@ const CreateNewsArticlePage = () => {
             div[contentEditable="true"] pre { background-color: hsl(var(--muted)); color: hsl(var(--muted-foreground)); padding: 1rem; border-radius: 0.375rem; overflow-x: auto; font-family: monospace; font-size: 0.875rem; line-height: 1.25rem; white-space: pre-wrap; word-wrap: break-word; }
             div[contentEditable="true"] pre code { display: block; white-space: pre-wrap !important; word-wrap: break-word !important; outline: none; }
             div[contentEditable="true"] hr { border-color: hsl(var(--border)); margin-top: 2rem; margin-bottom: 2rem; }
-            div[contentEditable="true"] div[data-embed-wrapper] { margin: 1rem 0; position: relative; }
-            div[contentEditable="true"] div[data-embed-wrapper] > * { max-width: 100%; display: block; margin-left: auto; margin-right: auto; }
+            
+            div[contentEditable="true"] div[data-embed-wrapper="true"] { /* Outer wrapper for aspect ratio & spacing */
+              margin: 1rem 0;
+              /* position: relative; padding-bottom, height:0, etc. are set inline by JS */
+            }
+            div[contentEditable="true"] div[data-embed-wrapper="true"] > div > * { /* The actual embed content (e.g., iframe) */
+              width: 100%;
+              height: 100%;
+              border: 0; /* Good default for iframes */
+              display: block; /* Ensure it behaves as a block */
+            }
         `}</style>
       </div>
     </div>
