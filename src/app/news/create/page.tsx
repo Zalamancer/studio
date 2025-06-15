@@ -55,6 +55,7 @@ const CreateNewsArticlePage = () => {
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
   const [cursorPosition, setCursorPosition] = useState(0);
+  const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none' });
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -65,19 +66,17 @@ const CreateNewsArticlePage = () => {
     },
   });
 
-  const isCurrentLineEmpty = useCallback((text: string, currentCursorPosition: number): boolean => {
+  const isCurrentLineEmptyInTextarea = useCallback((text: string, currentCursorPos: number): boolean => {
     if (!text) return true;
-    // Find the start of the current line
     let lineStart = 0;
-    for (let i = currentCursorPosition - 1; i >= 0; i--) {
+    for (let i = currentCursorPos - 1; i >= 0; i--) {
       if (text[i] === '\n') {
         lineStart = i + 1;
         break;
       }
     }
-    // Find the end of the current line
     let lineEnd = text.length;
-    for (let i = currentCursorPosition; i < text.length; i++) {
+    for (let i = currentCursorPos; i < text.length; i++) {
       if (text[i] === '\n') {
         lineEnd = i;
         break;
@@ -87,45 +86,100 @@ const CreateNewsArticlePage = () => {
     return currentLineText.trim() === '';
   }, []);
 
+  const updateToolbarPosition = useCallback(() => {
+    let style: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 10 };
+    const titleIsEmpty = form.getValues('title').trim() === '';
+    const contentLineIsEmpty = isCurrentLineEmptyInTextarea(form.getValues('content'), cursorPosition);
+    const showPlusButton = (!isFormatMenuOpen && focusedField && (
+      (focusedField === 'title' && titleIsEmpty) ||
+      (focusedField === 'content' && contentLineIsEmpty)
+    ));
+    const showExpandedMenu = isFormatMenuOpen && focusedField;
+
+    if (showPlusButton || showExpandedMenu) {
+      style.display = 'flex';
+      if (focusedField === 'title' && titleInputRef.current) {
+        const inputRect = titleInputRef.current.getBoundingClientRect();
+        const formRect = titleInputRef.current.closest('form')?.getBoundingClientRect();
+        if (formRect) {
+            // Position left of the input, vertically centered
+            style.left = `${inputRect.left - formRect.left - 50}px`; // 50px to the left
+            style.top = `${inputRect.top - formRect.top + inputRect.height / 2}px`;
+            style.transform = 'translateY(-50%)';
+        }
+      } else if (focusedField === 'content' && contentTextareaRef.current) {
+        const textarea = contentTextareaRef.current;
+        const text = textarea.value;
+        const currentLineNumber = (text.substring(0, cursorPosition).match(/\n/g) || []).length;
+        
+        const computedStyle = window.getComputedStyle(textarea);
+        const lineHeight = parseFloat(computedStyle.lineHeight);
+        const paddingTop = parseFloat(computedStyle.paddingTop);
+        
+        const formRect = textarea.closest('form')?.getBoundingClientRect();
+
+        if (!isNaN(lineHeight) && !isNaN(paddingTop) && formRect) {
+          const topOffset = (currentLineNumber * lineHeight) + paddingTop;
+          style.top = `${textarea.offsetTop + topOffset}px`;
+          style.left = `${textarea.offsetLeft - 50}px`; // 50px to the left
+          style.transform = 'translateY(-50%)'; // Adjust vertical centering relative to line
+        } else { // Fallback if computed styles are not available
+            style.top = `${textarea.offsetTop + 2}px`; // Static fallback
+            style.left = `${textarea.offsetLeft - 50}px`;
+        }
+      }
+    }
+    setToolbarStyle(style);
+  }, [focusedField, isFormatMenuOpen, form, cursorPosition, isCurrentLineEmptyInTextarea]);
+
+
+  useEffect(() => {
+    updateToolbarPosition();
+  }, [focusedField, isFormatMenuOpen, cursorPosition, form.watch('title'), form.watch('content'), updateToolbarPosition]);
+
+
   const handleFocus = (field: 'title' | 'content') => {
     setFocusedField(field);
     if (field === 'content' && contentTextareaRef.current) {
-        setCursorPosition(contentTextareaRef.current.selectionStart || 0);
+      setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     }
+    // No need to call updateToolbarPosition here, useEffect will catch it
   };
 
   const handleBlur = (field: 'title' | 'content') => {
-    // Delay blur processing to allow toolbar interaction
     setTimeout(() => {
       if (toolbarRef.current && toolbarRef.current.contains(document.activeElement)) {
-        // If focus moved to the toolbar, keep the field conceptually "focused"
-        // for the toolbar logic.
         return;
       }
-      // If focus truly moved away from field and toolbar
-      if (!isFormatMenuOpen) {
+      if (!isFormatMenuOpen && focusedField === field) { // Check if the blur is for the currently focused field
          setFocusedField(null);
       }
-    }, 150); // Delay must be longer than toolbar button click handlers might take
+      // Do not set isFormatMenuOpen to false here, allow menu to stay open if a menu button was clicked
+    }, 100); // Delay to allow toolbar button clicks
   };
   
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     form.setValue('title', e.target.value, { shouldValidate: true, shouldDirty: true });
+    // updateToolbarPosition will be triggered by useEffect watching form.watch('title')
   };
   
   const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    form.setValue('content', e.target.value, { shouldValidate: true, shouldDirty: true });
+    const newText = e.target.value;
+    form.setValue('content', newText, { shouldValidate: true, shouldDirty: true });
     if (contentTextareaRef.current) {
         setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     }
+    // updateToolbarPosition will be triggered by useEffect watching form.watch('content') and cursorPosition
   };
 
   const handleContentKeyUpOrMouseUp = () => {
     if (contentTextareaRef.current) {
-        setCursorPosition(contentTextareaRef.current.selectionStart || 0);
+        const newCursorPos = contentTextareaRef.current.selectionStart || 0;
+        if (newCursorPos !== cursorPosition) { // Only update if cursor position actually changed
+            setCursorPosition(newCursorPos);
+        }
     }
   };
-
 
   const insertTextIntoContent = (textToInsert: string) => {
     if (contentTextareaRef.current) {
@@ -136,12 +190,13 @@ const CreateNewsArticlePage = () => {
       const newValue = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
       
       form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
-      setCursorPosition(start + textToInsert.length);
+      const newCursorPos = start + textToInsert.length;
+      setCursorPosition(newCursorPos); // Update cursor position state
 
       // Re-focus and set cursor position after state update
       requestAnimationFrame(() => {
         textarea.focus();
-        textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
+        textarea.setSelectionRange(newCursorPos, newCursorPos);
       });
     }
   };
@@ -198,7 +253,7 @@ const CreateNewsArticlePage = () => {
     } else {
       toast({ title: "No Field Focused", description: "Please focus on the content area to apply formatting." });
     }
-    setIsFormatMenuOpen(false);
+    setIsFormatMenuOpen(false); // Close menu after action
   };
 
   const onSubmit = async (data: ArticleFormData) => {
@@ -207,8 +262,7 @@ const CreateNewsArticlePage = () => {
       return;
     }
     setIsSubmitting(true);
-    console.log("Submitting Article Data (Placeholder):", data);
-    // Simulate API call
+    // console.log("Submitting Article Data (Placeholder):", data); // Removed for brevity
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     toast({
@@ -216,29 +270,18 @@ const CreateNewsArticlePage = () => {
       description: `"${data.title}" would be processed.`,
     });
     setIsSubmitting(false);
-    form.reset(); // Reset form after submission
+    form.reset(); 
     setFocusedField(null);
     setIsFormatMenuOpen(false);
     setCursorPosition(0);
   };
   
-  const shouldShowPlusButton = 
-    focusedField && 
-    !isFormatMenuOpen &&
-    (
-      (focusedField === 'title' && form.getValues('title').trim() === '') ||
-      (focusedField === 'content' && isCurrentLineEmpty(form.getValues('content'), cursorPosition))
-    );
+  const showPlusButtonTrigger = focusedField && !isFormatMenuOpen && (
+    (focusedField === 'title' && form.getValues('title').trim() === '') ||
+    (focusedField === 'content' && isCurrentLineEmptyInTextarea(form.getValues('content'), cursorPosition))
+  );
 
-  const shouldShowFormatMenu = focusedField && isFormatMenuOpen;
-
-  const getToolbarPositionClass = () => {
-    if (focusedField === 'title') return "top-1/2 -translate-y-1/2 left-[-50px] sm:left-[-55px]";
-    if (focusedField === 'content') return "top-2 left-2"; // Position inside the relative container of Textarea
-    return "hidden"; 
-  };
-  
-  const activeToolbarRef = focusedField === 'title' ? titleInputRef : contentTextareaRef;
+  const showExpandedFormatMenu = focusedField && isFormatMenuOpen;
 
 
   if (authLoading) {
@@ -261,11 +304,10 @@ const CreateNewsArticlePage = () => {
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative"> {/* Added relative here for toolbar */}
           
           <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
-            {/* Category and Image Upload moved to the right, next to publish buttons */}
-            <div className="flex items-center gap-2 mr-auto"> {/* mr-auto pushes this group to the left */}
+            <div className="flex items-center gap-2 mr-auto">
                 <Controller
                     name="category"
                     control={form.control}
@@ -294,7 +336,7 @@ const CreateNewsArticlePage = () => {
             </div>
 
 
-            <div className="flex items-center gap-2"> {/* This group naturally stays on the right */}
+            <div className="flex items-center gap-2"> 
               <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-xs py-1.5 h-9 rounded-full">
                   <Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft
               </Button>
@@ -308,28 +350,28 @@ const CreateNewsArticlePage = () => {
             <FormItem><FormMessage className="text-center text-sm mb-2" /></FormItem>
           )}
           
-          <div className="relative">
-            { (shouldShowPlusButton || shouldShowFormatMenu) && focusedField === 'title' && (
-              <div ref={toolbarRef} className={cn("absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md z-10", getToolbarPositionClass())}>
-                <Button 
-                    type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" 
-                    onClick={() => setIsFormatMenuOpen(prev => !prev)}
-                    onMouseDown={(e) => e.preventDefault()}
-                >
-                  {isFormatMenuOpen ? <X className="h-5 w-5" /> : <PlusCircle className="h-5 w-5" />}
-                </Button>
-                {shouldShowFormatMenu && (
-                  <>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Image')} title="Add Image"><ImageIcon className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Upload')} title="Upload from device"><UploadCloud className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Video')} title="Add Video"><PlayCircle className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Embed')} title="Embed"><CodeIcon className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Code Block')} title="Code Block"><Braces className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Separator')} title="Add Separator"><Minus className="h-4 w-4" /></Button>
-                  </>
-                )}
-              </div>
+          {/* Floating Toolbar - its content and visibility managed by state */}
+          <div ref={toolbarRef} style={toolbarStyle} className="flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md">
+             <Button 
+                type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" 
+                onClick={() => setIsFormatMenuOpen(prev => !prev)}
+                onMouseDown={(e) => e.preventDefault()} // Prevent blur on input/textarea
+             >
+              {isFormatMenuOpen ? <X className="h-5 w-5" /> : <PlusCircle className="h-5 w-5" />}
+            </Button>
+            {showExpandedFormatMenu && (
+              <>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Image')} title="Add Image" onMouseDown={(e) => e.preventDefault()}><ImageIcon className="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Upload')} title="Upload from device" onMouseDown={(e) => e.preventDefault()}><UploadCloud className="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Video')} title="Add Video" onMouseDown={(e) => e.preventDefault()}><PlayCircle className="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Embed')} title="Embed" onMouseDown={(e) => e.preventDefault()}><CodeIcon className="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Code Block')} title="Code Block" onMouseDown={(e) => e.preventDefault()}><Braces className="h-4 w-4" /></Button>
+                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Separator')} title="Add Separator" onMouseDown={(e) => e.preventDefault()}><Minus className="h-4 w-4" /></Button>
+              </>
             )}
+          </div>
+
+          <div className="relative"> {/* Container for Title Input */}
             <FormField
               control={form.control}
               name="title"
@@ -353,28 +395,7 @@ const CreateNewsArticlePage = () => {
             />
           </div>
 
-          <div className="relative">
-             { (shouldShowPlusButton || shouldShowFormatMenu) && focusedField === 'content' && (
-                 <div ref={toolbarRef} className={cn("absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md z-10", getToolbarPositionClass())}>
-                <Button 
-                    type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" 
-                    onClick={() => setIsFormatMenuOpen(prev => !prev)}
-                    onMouseDown={(e) => e.preventDefault()}
-                >
-                  {isFormatMenuOpen ? <X className="h-5 w-5" /> : <PlusCircle className="h-5 w-5" />}
-                </Button>
-                {shouldShowFormatMenu && (
-                  <>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Image')} title="Add Image"><ImageIcon className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Upload')} title="Upload from device"><UploadCloud className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Video')} title="Add Video"><PlayCircle className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Embed')} title="Embed"><CodeIcon className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Code Block')} title="Code Block"><Braces className="h-4 w-4" /></Button>
-                    <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Separator')} title="Add Separator"><Minus className="h-4 w-4" /></Button>
-                  </>
-                )}
-              </div>
-            )}
+          <div className="relative"> {/* Container for Content Textarea */}
             <FormField
               control={form.control}
               name="content"
