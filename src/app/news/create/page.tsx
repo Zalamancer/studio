@@ -109,10 +109,10 @@ const CreateNewsArticlePage = () => {
   const titleValueFromForm = form.watch('title');
   const contentValueFromForm = form.watch('content');
 
-  // Auto-adjust textarea height
+  // Auto-adjust textarea height to fit content
   useEffect(() => {
     if (contentTextareaRef.current) {
-      contentTextareaRef.current.style.height = 'auto'; // Reset height to allow scrollHeight to be accurate
+      contentTextareaRef.current.style.height = 'auto'; 
       contentTextareaRef.current.style.height = `${contentTextareaRef.current.scrollHeight}px`;
     }
   }, [contentValueFromForm]);
@@ -135,8 +135,8 @@ const CreateNewsArticlePage = () => {
 
     let lineHeight = parseFloat(lineHeightString);
     if (isNaN(lineHeight) || lineHeight <= 0) {
-      const fontSize = parseFloat(fontSizeString) || 16; // Default font size if parsing fails
-      lineHeight = fontSize * 1.4; // Approximate line height
+      const fontSize = parseFloat(fontSizeString) || 16;
+      lineHeight = fontSize * 1.4;
     }
     const paddingTop = parseFloat(paddingTopString) || 0;
 
@@ -152,50 +152,37 @@ const CreateNewsArticlePage = () => {
 
   const updateToolbarPosition = useCallback(() => {
     requestAnimationFrame(() => {
-        const newStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50, transform: 'translateY(-50%)' };
-        const currentFormRef = formRef.current;
-        let titleWrapperRect: DOMRect | undefined;
-        let contentWrapperRect: DOMRect | undefined;
+      const newStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50, transform: 'translateY(-50%)' };
+      const currentFormRef = formRef.current;
+      let titleWrapperRect: DOMRect | undefined;
+      let contentWrapperRect: DOMRect | undefined;
 
-        if (!currentFormRef) {
-            console.log("[ToolbarDebug] Form ref not ready, hiding toolbar.");
-            setToolbarStyle(newStyle);
-            return;
-        }
-        const formRect = currentFormRef.getBoundingClientRect();
-
-        if (focusedField === 'title' && titleWrapperRef.current && titleInputRef.current) {
-            const titleIsEmpty = titleValueFromForm.trim() === '';
-            if (titleIsEmpty) {
-                titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
-                newStyle.top = `${titleWrapperRect.top - formRect.top + titleWrapperRect.height / 2}px`;
-                newStyle.left = `${titleWrapperRect.left - formRect.left - 45}px`; // Approx toolbar width + gap
-                newStyle.display = 'flex';
-            }
-        } else if (focusedField === 'content' && contentWrapperRef.current && contentTextareaRef.current) {
-            const currentLine = getCurrentLineText(contentTextareaRef.current, cursorPosition);
-            const contentLineIsEmpty = currentLine.trim() === '';
-            if (contentLineIsEmpty) {
-                contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
-                const calculatedTopOffsetPx = calculateCursorLineYOffset(contentTextareaRef.current, cursorPosition);
-                newStyle.top = `${contentWrapperRect.top - formRect.top + calculatedTopOffsetPx}px`;
-                newStyle.left = `${contentWrapperRect.left - formRect.left - 45}px`; // Approx toolbar width + gap
-                newStyle.display = 'flex';
-            }
-        }
-        
-        // console.log('[ToolbarDebugFinalStyle]', {
-        //     ...newStyle,
-        //     focusedField,
-        //     isFormatMenuOpen,
-        //     cursorPosition,
-        //     formRectTop: formRect?.top,
-        //     titleWrapperRectTop: titleWrapperRect?.top,
-        //     contentWrapperRectTop: contentWrapperRect?.top,
-        //     calculatedTop: newStyle.top,
-        //     calculatedLeft: newStyle.left,
-        // });
+      if (!currentFormRef) {
         setToolbarStyle(newStyle);
+        return;
+      }
+      const formRect = currentFormRef.getBoundingClientRect();
+
+      if (focusedField === 'title' && titleWrapperRef.current && titleInputRef.current) {
+        const titleIsEmpty = titleValueFromForm.trim() === '';
+        if (titleIsEmpty) {
+          titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
+          newStyle.top = `${titleWrapperRect.top - formRect.top + titleWrapperRect.height / 2}px`;
+          newStyle.left = `${titleWrapperRect.left - formRect.left - 45}px`;
+          newStyle.display = 'flex';
+        }
+      } else if (focusedField === 'content' && contentWrapperRef.current && contentTextareaRef.current) {
+        const currentLine = getCurrentLineText(contentTextareaRef.current, cursorPosition);
+        const contentLineIsEmpty = currentLine.trim() === '';
+        if (contentLineIsEmpty) {
+          contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
+          const calculatedTopOffsetPx = calculateCursorLineYOffset(contentTextareaRef.current, cursorPosition);
+          newStyle.top = `${contentWrapperRect.top - formRect.top + calculatedTopOffsetPx}px`;
+          newStyle.left = `${contentWrapperRect.left - formRect.left - 45}px`;
+          newStyle.display = 'flex';
+        }
+      }
+      setToolbarStyle(newStyle);
     });
   }, [focusedField, cursorPosition, titleValueFromForm, contentValueFromForm, getCurrentLineText, calculateCursorLineYOffset, isFormatMenuOpen]);
 
@@ -205,9 +192,8 @@ const CreateNewsArticlePage = () => {
   }, [updateToolbarPosition]);
 
   const handleFocus = (field: 'title' | 'content') => {
-    // console.log('[FocusDebug] Field focused:', field);
     setFocusedField(field);
-    setIsFormatMenuOpen(false);
+    setIsFormatMenuOpen(false); // Close format menu on field focus change
     if (field === 'title' && titleInputRef.current) {
       setCursorPosition(titleInputRef.current.selectionStart || 0);
     } else if (field === 'content' && contentTextareaRef.current) {
@@ -221,7 +207,6 @@ const CreateNewsArticlePage = () => {
       const isFocusStillWithinToolbar = toolbarRef.current?.contains(activeElement as Node);
 
       if (isFocusStillWithinToolbar) {
-        // console.log(`[BlurDebug] Toolbar interaction detected for ${fieldToBlur}. Keeping focus.`);
         if (fieldToBlur === 'title' && titleInputRef.current) {
           titleInputRef.current.focus();
           setCursorPosition(titleInputRef.current.selectionStart || 0);
@@ -230,7 +215,6 @@ const CreateNewsArticlePage = () => {
           setCursorPosition(contentTextareaRef.current.selectionStart || 0);
         }
       } else {
-        // console.log(`[BlurDebug] Field blurred, and not a toolbar click: ${fieldToBlur}`);
         if (focusedField === fieldToBlur) {
           setFocusedField(null);
           setIsFormatMenuOpen(false);
@@ -239,7 +223,7 @@ const CreateNewsArticlePage = () => {
     });
   };
 
-  const handleContentInteraction = () => {
+  const handleContentInteraction = () => { // For keyUp, mouseUp, click
     if (focusedField === 'content' && contentTextareaRef.current) {
       setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     } else if (focusedField === 'title' && titleInputRef.current) {
@@ -282,7 +266,7 @@ const CreateNewsArticlePage = () => {
         default: toast({ title: "Action", description: `${action} clicked.` });
       }
       contentTextareaRef.current.focus();
-      handleContentInteraction(); // Update cursor position and potentially toolbar after insertion
+      handleContentInteraction(); 
     }
     setIsFormatMenuOpen(false);
   };
@@ -296,7 +280,7 @@ const CreateNewsArticlePage = () => {
   const onSubmit = async (data: ArticleFormData) => {
     if (!user) { toast({ variant: "destructive", title: "Not Authenticated" }); return; }
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate submission
     toast({ title: "Article Submitted (Placeholder)", description: `"${data.title}" saved.` });
     setIsSubmitting(false);
     form.reset();
@@ -309,7 +293,7 @@ const CreateNewsArticlePage = () => {
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
       <Form {...form}>
-        <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative">
+        <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative"> {/* space-y-0 to remove default vertical spacing between direct children of form */}
           <ToolbarComponent
               toolbarRef={toolbarRef}
               isFormatMenuOpen={isFormatMenuOpen}
@@ -327,20 +311,20 @@ const CreateNewsArticlePage = () => {
               <Button type="submit" disabled={isSubmitting} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">{isSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}Publish</Button>
             </div>
           </div>
-          <FormField control={form.control} name="category" render={() => <FormItem><FormMessage className="text-center text-sm mb-2 hidden sm:block" /></FormItem>} />
+          <FormField control={form.control} name="category" render={() => <FormItem><FormMessage className="text-center text-sm mb-2 hidden sm:block" /></FormItem>} /> {/* For category error display on larger screens */}
 
-          <div className="relative" ref={titleWrapperRef}>
+          <div className="relative" ref={titleWrapperRef}> {/* Wrapper for Title */}
             <FormField control={form.control} name="title" render={({ field }) => ( <FormItem className="mb-8"><FormControl><Input ref={titleInputRef} placeholder="Title" {...field} onChange={(e) => { field.onChange(e); handleContentInteraction(); }} onFocus={() => handleFocus('title')} onBlurCapture={() => handleBlur('title')} onKeyUp={handleContentInteraction} onMouseUp={handleContentInteraction} onClick={handleContentInteraction} disabled={isSubmitting} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"/></FormControl><FormMessage /></FormItem>)} />
           </div>
 
-          <div className="relative" ref={contentWrapperRef}>
+          <div className="relative" ref={contentWrapperRef}> {/* Wrapper for Content */}
             <FormField control={form.control} name="content" render={({ field }) => (
               <FormItem>
                 <FormControl>
                   <Textarea
                     ref={contentTextareaRef}
                     placeholder="Tell your story..."
-                    className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case overflow-y-hidden"
+                    className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case overflow-y-hidden" // Removed min-h-[300px] and resize-y
                     style={{ fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif', fontSize: '20px', lineHeight: '28px', color: 'rgba(0, 0, 0, 0.84)' }}
                     {...field}
                     onChange={(e) => { field.onChange(e); handleContentInteraction(); }}
@@ -350,7 +334,7 @@ const CreateNewsArticlePage = () => {
                     onMouseUp={handleContentInteraction}
                     onClick={handleContentInteraction}
                     disabled={isSubmitting}
-                    value={contentValueFromForm} // Ensure Textarea is controlled by form state
+                    value={contentValueFromForm}
                   />
                 </FormControl>
                 <FormMessage />
