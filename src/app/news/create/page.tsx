@@ -45,10 +45,8 @@ interface ToolbarComponentProps {
   isFormatMenuOpen: boolean;
   onPlusClick: () => void;
   onFormatAction: (action: string) => void;
-  // Removed style prop, will be handled by parent div
+  style: React.CSSProperties;
   toolbarRef: React.RefObject<HTMLDivElement>;
-  // Added topPosition prop for dynamic vertical alignment for content field
-  topPosition?: string;
 }
 
 const ToolbarComponent: React.FC<ToolbarComponentProps> = ({
@@ -56,36 +54,18 @@ const ToolbarComponent: React.FC<ToolbarComponentProps> = ({
   isFormatMenuOpen,
   onPlusClick,
   onFormatAction,
-  topPosition,
+  style,
 }) => {
   return (
     <div
       ref={toolbarRef}
-      style={{
-        position: 'absolute',
-        left: '-45px', // Fixed offset to the left of its parent
-        top: topPosition || '50%', // Use dynamic top or default to 50%
-        transform: 'translateY(-50%)', // Vertically center
-        zIndex: 50,
-        display: 'flex', // Always flex for now if rendered
-      }}
-      className={cn(
-        "flex items-center gap-x-0.5 bg-card p-0.5 rounded-full border border-border shadow-lg"
-      )}
+      style={style}
+      className={cn("flex items-center gap-x-0.5 bg-card p-0.5 rounded-full border border-border shadow-lg")}
       data-toolbar-button="true"
       onMouseDown={(e) => e.preventDefault()}
     >
       {!isFormatMenuOpen ? (
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 rounded-full"
-          onClick={onPlusClick}
-          title="Show formatting options"
-          data-toolbar-button="true"
-          onMouseDown={(e) => e.preventDefault()}
-        >
+        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={onPlusClick} title="Show formatting options" data-toolbar-button="true" onMouseDown={(e) => e.preventDefault()}>
           <PlusCircle className="h-5 w-5" />
         </Button>
       ) : (
@@ -103,7 +83,6 @@ const ToolbarComponent: React.FC<ToolbarComponentProps> = ({
   );
 };
 
-
 const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
@@ -113,8 +92,7 @@ const CreateNewsArticlePage = () => {
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
   const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
   const [cursorPosition, setCursorPosition] = useState(0);
-  const [contentToolbarTop, setContentToolbarTop] = useState('50%'); // For dynamic Y of content toolbar
-
+  const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none' });
 
   const formRef = useRef<HTMLFormElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
@@ -131,45 +109,92 @@ const CreateNewsArticlePage = () => {
   const titleValueFromForm = form.watch('title');
   const contentValueFromForm = form.watch('content');
 
-  const calculateCursorLineYOffset = useCallback((fieldElement: HTMLTextAreaElement, currentCursorPosition: number): string => {
-    if (!fieldElement) return '50%'; // Default to middle if no element
+  const getCurrentLineText = useCallback((textarea: HTMLTextAreaElement, currentCursorPos: number): string => {
+    const text = textarea.value;
+    if (!text) return "";
+
+    let lineStart = text.lastIndexOf('\n', currentCursorPos - 1) + 1;
+    let lineEnd = text.indexOf('\n', currentCursorPos);
+    if (lineEnd === -1) lineEnd = text.length;
+
+    return text.substring(lineStart, lineEnd);
+  }, []);
+
+  const calculateCursorLineYOffset = useCallback((fieldElement: HTMLTextAreaElement | HTMLInputElement, currentCursorPosition: number): string => {
+    if (!fieldElement) return '50%';
 
     const computedStyle = window.getComputedStyle(fieldElement);
     let lineHeight = parseFloat(computedStyle.lineHeight);
     if (isNaN(lineHeight) || lineHeight <= 0) {
-      const fontSize = parseFloat(computedStyle.fontSize) || 16;
-      lineHeight = fontSize * 1.4; // Default multiplier
+      const fontSize = parseFloat(computedStyle.fontSize) || 16; // Default font size if not found
+      lineHeight = fontSize * 1.4; // Common multiplier for line height
     }
     const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
 
     if (fieldElement.value === '' || currentCursorPosition === 0) {
-      return `${paddingTop + lineHeight / 2}px`; // Middle of the first line
+      return `${paddingTop + lineHeight / 2}px`;
     }
 
     const textUptoCursor = fieldElement.value.substring(0, currentCursorPosition);
     const lineNumber = (textUptoCursor.match(/\n/g) || []).length;
     const lineY = paddingTop + (lineNumber * lineHeight) + (lineHeight / 2);
 
-    // Ensure it's within bounds of the textarea itself
     const relativeY = Math.max(lineHeight / 2, Math.min(lineY, fieldElement.offsetHeight - lineHeight / 2));
     return `${relativeY}px`;
   }, []);
 
-  useEffect(() => {
-    if (focusedField === 'content' && contentTextareaRef.current) {
-      setContentToolbarTop(calculateCursorLineYOffset(contentTextareaRef.current, cursorPosition));
-    }
-    // No need to log here extensively as visibility is now direct
-  }, [focusedField, cursorPosition, contentValueFromForm, calculateCursorLineYOffset]);
+  const updateToolbarPosition = useCallback(() => {
+    requestAnimationFrame(() => {
+      const newStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50 };
+      const formEl = formRef.current;
+      const titleWrapperEl = titleWrapperRef.current;
+      const titleInputEl = titleInputRef.current;
+      const contentWrapperEl = contentWrapperRef.current;
+      const contentTextareaEl = contentTextareaRef.current;
 
+      let titleIsEmpty = false;
+      if (focusedField === 'title' && titleInputEl) {
+          titleIsEmpty = titleInputEl.value.trim() === '';
+      }
+
+      let contentLineIsEmpty = false;
+      if (focusedField === 'content' && contentTextareaEl) {
+          const currentLine = getCurrentLineText(contentTextareaEl, cursorPosition);
+          contentLineIsEmpty = currentLine.trim() === '';
+      }
+      
+      if (focusedField === 'title' && titleIsEmpty && titleWrapperEl && formEl) {
+        const wrapperRect = titleWrapperEl.getBoundingClientRect();
+        const formRect = formEl.getBoundingClientRect();
+        newStyle.top = `${wrapperRect.top - formRect.top + wrapperRect.height / 2}px`;
+        newStyle.left = `${wrapperRect.left - formRect.left - 50}px`; // e.g. 50px to the left
+        newStyle.transform = 'translateY(-50%)';
+        newStyle.display = 'flex';
+      } else if (focusedField === 'content' && contentLineIsEmpty && contentWrapperEl && contentTextareaEl && formEl) {
+        const wrapperRect = contentWrapperEl.getBoundingClientRect();
+        const formRect = formEl.getBoundingClientRect();
+        const calculatedTopOffsetPx = parseFloat(calculateCursorLineYOffset(contentTextareaEl, cursorPosition));
+        
+        newStyle.top = `${wrapperRect.top - formRect.top + calculatedTopOffsetPx}px`;
+        newStyle.left = `${wrapperRect.left - formRect.left - 50}px`; // e.g. 50px to the left
+        newStyle.transform = 'translateY(-50%)'; // Center toolbar vertically against cursor line
+        newStyle.display = 'flex';
+      }
+      setToolbarStyle(newStyle);
+    });
+  }, [focusedField, cursorPosition, titleValueFromForm, contentValueFromForm, getCurrentLineText, calculateCursorLineYOffset]);
+
+  useEffect(() => {
+    updateToolbarPosition();
+  }, [focusedField, isFormatMenuOpen, cursorPosition, titleValueFromForm, contentValueFromForm, updateToolbarPosition]);
 
   const handleFocus = (field: 'title' | 'content') => {
     console.log('[FocusDebug] Field focused:', field);
     setFocusedField(field);
+    setIsFormatMenuOpen(false); // Close format menu on field change
     if (field === 'content' && contentTextareaRef.current) {
       setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     }
-    setIsFormatMenuOpen(false);
   };
 
   const handleBlur = (fieldToBlur: 'title' | 'content') => {
@@ -183,7 +208,7 @@ const CreateNewsArticlePage = () => {
         else if (fieldToBlur === 'content' && contentTextareaRef.current) contentTextareaRef.current.focus();
       } else {
         console.log(`[BlurDebug] Field blurred, and not a toolbar click: ${fieldToBlur}`);
-        if (focusedField === fieldToBlur) {
+        if (focusedField === fieldToBlur) { // Only reset if the blurred field was indeed the focused one
           setFocusedField(null);
           setIsFormatMenuOpen(false);
         }
@@ -215,7 +240,7 @@ const CreateNewsArticlePage = () => {
   };
 
   const handleFormatButtonClick = (action: string) => {
-    if (focusedField === 'title') {
+    if (focusedField === 'title' && titleInputRef.current) {
       toast({ title: "Action Not Applicable", description: `Cannot apply "${action}" to title.`, variant: "default" });
       setIsFormatMenuOpen(false);
       titleInputRef.current?.focus();
@@ -232,9 +257,9 @@ const CreateNewsArticlePage = () => {
         default: toast({ title: "Action", description: `${action} clicked.` });
       }
       contentTextareaRef.current.focus();
-      handleContentInteraction();
+      handleContentInteraction(); // Update cursor position after insert
     }
-    setIsFormatMenuOpen(false);
+    setIsFormatMenuOpen(false); // Close menu after action
   };
 
   const handleToggleFormatMenu = () => {
@@ -246,7 +271,7 @@ const CreateNewsArticlePage = () => {
   const onSubmit = async (data: ArticleFormData) => {
     if (!user) { toast({ variant: "destructive", title: "Not Authenticated" }); return; }
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
     toast({ title: "Article Submitted (Placeholder)", description: `"${data.title}" saved.` });
     setIsSubmitting(false);
     form.reset();
@@ -254,12 +279,20 @@ const CreateNewsArticlePage = () => {
   };
 
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
-  if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
+  if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
       <Form {...form}>
         <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative">
+          {/* Toolbar is a single instance, positioned relative to the form */}
+          <ToolbarComponent
+              toolbarRef={toolbarRef}
+              isFormatMenuOpen={isFormatMenuOpen}
+              onPlusClick={handleToggleFormatMenu}
+              onFormatAction={handleFormatButtonClick}
+              style={toolbarStyle}
+          />
           <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
             <div className="flex items-center gap-2 mr-auto">
               <FormField control={form.control} name="category" render={({ field }) => ( <FormItem><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}><FormControl><SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue placeholder="Category" /></SelectTrigger></FormControl><SelectContent>{newsCategories.map((category) => ( <SelectItem key={category} value={category} className="text-sm">{category}</SelectItem>))}</SelectContent></Select><FormMessage className="sm:hidden text-xs" /></FormItem>)} />
@@ -273,28 +306,10 @@ const CreateNewsArticlePage = () => {
           <FormField control={form.control} name="category" render={() => <FormItem><FormMessage className="text-center text-sm mb-2 hidden sm:block" /></FormItem>} />
 
           <div className="relative" ref={titleWrapperRef}>
-            {focusedField === 'title' && (
-              <ToolbarComponent
-                toolbarRef={toolbarRef}
-                isFormatMenuOpen={isFormatMenuOpen}
-                onPlusClick={handleToggleFormatMenu}
-                onFormatAction={handleFormatButtonClick}
-                // topPosition will default to '50%' for title
-              />
-            )}
             <FormField control={form.control} name="title" render={({ field }) => ( <FormItem className="mb-8"><FormControl><Input ref={titleInputRef} placeholder="Title" {...field} onChange={(e) => { field.onChange(e); }} onFocus={() => handleFocus('title')} onBlurCapture={() => handleBlur('title')} disabled={isSubmitting} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"/></FormControl><FormMessage /></FormItem>)} />
           </div>
 
           <div className="relative" ref={contentWrapperRef}>
-            {focusedField === 'content' && (
-              <ToolbarComponent
-                toolbarRef={toolbarRef}
-                isFormatMenuOpen={isFormatMenuOpen}
-                onPlusClick={handleToggleFormatMenu}
-                onFormatAction={handleFormatButtonClick}
-                topPosition={contentToolbarTop}
-              />
-            )}
             <FormField control={form.control} name="content" render={({ field }) => (
               <FormItem>
                 <FormControl>
@@ -326,4 +341,3 @@ const CreateNewsArticlePage = () => {
 
 export default CreateNewsArticlePage;
 
-    
