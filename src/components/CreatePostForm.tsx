@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/form";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+// DialogFooter and DialogClose are kept for the form's internal structure, even if not in a modal
 import { DialogFooter, DialogClose } from "@/components/ui/dialog";
 import {
     Loader2, Upload, XCircle, ImageDown, FileText, HandHelping, DollarSign, CalendarDays,
@@ -110,7 +111,7 @@ export interface CreatePostFormProps {
   detailedSectorsData: SectorWithSubSectors[];
   isSubmitting: boolean;
   currentUserId: string | null;
-  onDialogClose?: () => void;
+  onDialogClose?: () => void; // This prop now means "onCancel" or "onFinish" for the inline form
 }
 
 export const CreatePostForm: React.FC<CreatePostFormProps> = ({
@@ -119,7 +120,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   detailedSectorsData,
   isSubmitting,
   currentUserId,
-  onDialogClose,
+  onDialogClose, // Renamed to onCancelCreate for clarity in use
 }) => {
   const form = useForm<z.infer<typeof postFormSchema>>({
     resolver: zodResolver(postFormSchema),
@@ -190,11 +191,15 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   }, [form]);
 
   useEffect(() => {
+    // This effect handles resetting the form if onDialogClose is called
+    // after a successful submission (which is handled in page.tsx now)
+    // OR if the form is part of a component that gets unmounted/remounted.
+    // For the inline case, onDialogClose will be directly called.
     if (form.formState.isSubmitSuccessful && onDialogClose) {
       const timer = setTimeout(() => {
         resetFormValues();
-        onDialogClose();
-      }, 100);
+        // onDialogClose(); // The parent component will call this to hide the form
+      }, 100); // A small delay might be good
       return () => clearTimeout(timer);
     }
   }, [form.formState.isSubmitSuccessful, onDialogClose, resetFormValues]);
@@ -816,8 +821,17 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
           </div>
         </div>
 
+        {/* This DialogFooter will now act as regular form buttons for the inline form */}
         <DialogFooter className="pt-8 md:col-span-2">
-            {onDialogClose && (<DialogClose asChild><Button type="button" variant="outline" onClick={resetFormValues} disabled={isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) || !currentUserId}>Cancel</Button></DialogClose>)}
+            {/* The `asChild` prop for DialogClose can be removed if it's not inside a Dialog,
+                but Button will still render. The important part is its onClick.
+                Or, we can just make it a regular Button.
+            */}
+            {onDialogClose && (
+              <Button type="button" variant="outline" onClick={() => { resetFormValues(); onDialogClose(); }} disabled={isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) || !currentUserId}>
+                Cancel
+              </Button>
+            )}
             <Button type="submit" disabled={!currentUserId || isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers)}>
                 {(isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) ) ? (<><Loader2 className="mr-2 h-4 w-4 animate-spin" /> {isCompressing ? "Processing..." : "Submitting..."}</>) : ('Submit Post')}
             </Button>
@@ -868,3 +882,4 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     </Form>
   );
 };
+
