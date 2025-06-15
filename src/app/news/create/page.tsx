@@ -59,10 +59,10 @@ const ToolbarComponent: React.FC<ToolbarComponentProps> = ({
   return (
     <div
       ref={toolbarRef}
-      style={style} // Apply dynamic style
+      style={style}
       className={cn("flex items-center gap-x-0.5 bg-card p-0.5 rounded-full border border-border shadow-lg")}
-      data-toolbar-button="true" // Keep for blur logic
-      onMouseDown={(e) => e.preventDefault()} // Prevent blur on toolbar itself
+      data-toolbar-button="true"
+      onMouseDown={(e) => e.preventDefault()}
     >
       {!isFormatMenuOpen ? (
         <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={onPlusClick} title="Show formatting options" onMouseDown={(e) => e.preventDefault()}>
@@ -109,6 +109,15 @@ const CreateNewsArticlePage = () => {
   const titleValueFromForm = form.watch('title');
   const contentValueFromForm = form.watch('content');
 
+  // Auto-adjust textarea height
+  useEffect(() => {
+    if (contentTextareaRef.current) {
+      contentTextareaRef.current.style.height = 'auto'; // Reset height to allow scrollHeight to be accurate
+      contentTextareaRef.current.style.height = `${contentTextareaRef.current.scrollHeight}px`;
+    }
+  }, [contentValueFromForm]);
+
+
   const getCurrentLineText = useCallback((textarea: HTMLTextAreaElement, currentCursorPos: number): string => {
     const text = textarea.value;
     if (!text) return "";
@@ -118,83 +127,82 @@ const CreateNewsArticlePage = () => {
     return text.substring(lineStart, lineEnd);
   }, []);
 
-  const calculateCursorLineYOffset = useCallback((fieldElement: HTMLTextAreaElement, currentCursorPosition: number): string => {
-    const computedStyle = window.getComputedStyle(fieldElement);
-    let lineHeight = parseFloat(computedStyle.lineHeight);
+  const calculateCursorLineYOffset = useCallback((textareaElement: HTMLTextAreaElement, currentCursorPosition: number): number => {
+    const computedStyle = window.getComputedStyle(textareaElement);
+    const lineHeightString = computedStyle.lineHeight;
+    const paddingTopString = computedStyle.paddingTop;
+    const fontSizeString = computedStyle.fontSize;
+
+    let lineHeight = parseFloat(lineHeightString);
     if (isNaN(lineHeight) || lineHeight <= 0) {
-      const fontSize = parseFloat(computedStyle.fontSize) || 16;
-      lineHeight = fontSize * 1.4;
+      const fontSize = parseFloat(fontSizeString) || 16; // Default font size if parsing fails
+      lineHeight = fontSize * 1.4; // Approximate line height
     }
-    const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
-    if (fieldElement.value === '' || currentCursorPosition === 0) {
-      return `${paddingTop + lineHeight / 2}px`;
+    const paddingTop = parseFloat(paddingTopString) || 0;
+
+    if (textareaElement.value === '' || currentCursorPosition === 0) {
+      return paddingTop + lineHeight / 2;
     }
-    const textUptoCursor = fieldElement.value.substring(0, currentCursorPosition);
+
+    const textUptoCursor = textareaElement.value.substring(0, currentCursorPosition);
     const lineNumber = (textUptoCursor.match(/\n/g) || []).length;
     const lineY = paddingTop + (lineNumber * lineHeight) + (lineHeight / 2);
-    const relativeY = Math.max(lineHeight / 2, Math.min(lineY, fieldElement.offsetHeight - lineHeight / 2));
-    return `${relativeY}px`;
+    return Math.max(lineHeight / 2, Math.min(lineY, textareaElement.offsetHeight - lineHeight / 2));
   }, []);
 
   const updateToolbarPosition = useCallback(() => {
     requestAnimationFrame(() => {
-      const newStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50 };
-      const formEl = formRef.current;
-      if (!formEl) {
-        setToolbarStyle(newStyle); // Ensure toolbar is hidden if form ref not ready
-        return;
-      }
-      const formRect = formEl.getBoundingClientRect();
+        const newStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50, transform: 'translateY(-50%)' };
+        const currentFormRef = formRef.current;
+        let titleWrapperRect: DOMRect | undefined;
+        let contentWrapperRect: DOMRect | undefined;
 
-      let titleWrapperRect: DOMRect | undefined;
-      let contentWrapperRect: DOMRect | undefined;
-
-      if (focusedField === 'title' && titleWrapperRef.current && titleInputRef.current) {
-        const titleIsEmpty = titleValueFromForm.trim() === '';
-        if (titleIsEmpty) {
-          titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
-          newStyle.top = `${titleWrapperRect.top - formRect.top + titleWrapperRect.height / 2}px`;
-          newStyle.left = `${titleWrapperRect.left - formRect.left - 50}px`;
-          newStyle.transform = 'translateY(-50%)';
-          newStyle.display = 'flex';
+        if (!currentFormRef) {
+            console.log("[ToolbarDebug] Form ref not ready, hiding toolbar.");
+            setToolbarStyle(newStyle);
+            return;
         }
-      } else if (focusedField === 'content' && contentWrapperRef.current && contentTextareaRef.current) {
-        const currentLine = getCurrentLineText(contentTextareaRef.current, cursorPosition);
-        const contentLineIsEmpty = currentLine.trim() === '';
-        if (contentLineIsEmpty) {
-          contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
-          const calculatedTopOffsetPx = parseFloat(calculateCursorLineYOffset(contentTextareaRef.current, cursorPosition));
-          newStyle.top = `${contentWrapperRect.top - formRect.top + calculatedTopOffsetPx}px`;
-          newStyle.left = `${contentWrapperRect.left - formRect.left - 50}px`;
-          newStyle.transform = 'translateY(-50%)';
-          newStyle.display = 'flex';
-        }
-      }
-      
-      // Debugging logs
-      // console.log('[ToolbarRefDebug] titleWrapperRef.current:', titleWrapperRef.current);
-      // console.log('[ToolbarRefDebug] contentWrapperRef.current:', contentWrapperRef.current);
-      // console.log('[ToolbarRefDebug] formRect:', formRect);
-      // console.log('[ToolbarRefDebug] focusedField:', focusedField);
-      // console.log('[ToolbarDebugFinalStyle]', {
-      //   ...newStyle,
-      //   focusedField,
-      //   isFormatMenuOpen,
-      //   cursorPosition,
-      //   formRectTop: formRect?.top,
-      //   titleWrapperRectTop: titleWrapperRect?.top,
-      //   contentWrapperRectTop: contentWrapperRect?.top,
-      //   calculatedTop: newStyle.top,
-      //   calculatedLeft: newStyle.left,
-      // });
+        const formRect = currentFormRef.getBoundingClientRect();
 
-      setToolbarStyle(newStyle);
+        if (focusedField === 'title' && titleWrapperRef.current && titleInputRef.current) {
+            const titleIsEmpty = titleValueFromForm.trim() === '';
+            if (titleIsEmpty) {
+                titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
+                newStyle.top = `${titleWrapperRect.top - formRect.top + titleWrapperRect.height / 2}px`;
+                newStyle.left = `${titleWrapperRect.left - formRect.left - 45}px`; // Approx toolbar width + gap
+                newStyle.display = 'flex';
+            }
+        } else if (focusedField === 'content' && contentWrapperRef.current && contentTextareaRef.current) {
+            const currentLine = getCurrentLineText(contentTextareaRef.current, cursorPosition);
+            const contentLineIsEmpty = currentLine.trim() === '';
+            if (contentLineIsEmpty) {
+                contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
+                const calculatedTopOffsetPx = calculateCursorLineYOffset(contentTextareaRef.current, cursorPosition);
+                newStyle.top = `${contentWrapperRect.top - formRect.top + calculatedTopOffsetPx}px`;
+                newStyle.left = `${contentWrapperRect.left - formRect.left - 45}px`; // Approx toolbar width + gap
+                newStyle.display = 'flex';
+            }
+        }
+        
+        // console.log('[ToolbarDebugFinalStyle]', {
+        //     ...newStyle,
+        //     focusedField,
+        //     isFormatMenuOpen,
+        //     cursorPosition,
+        //     formRectTop: formRect?.top,
+        //     titleWrapperRectTop: titleWrapperRect?.top,
+        //     contentWrapperRectTop: contentWrapperRect?.top,
+        //     calculatedTop: newStyle.top,
+        //     calculatedLeft: newStyle.left,
+        // });
+        setToolbarStyle(newStyle);
     });
   }, [focusedField, cursorPosition, titleValueFromForm, contentValueFromForm, getCurrentLineText, calculateCursorLineYOffset, isFormatMenuOpen]);
 
+
   useEffect(() => {
     updateToolbarPosition();
-  }, [updateToolbarPosition]); // updateToolbarPosition is memoized
+  }, [updateToolbarPosition]);
 
   const handleFocus = (field: 'title' | 'content') => {
     // console.log('[FocusDebug] Field focused:', field);
@@ -232,10 +240,9 @@ const CreateNewsArticlePage = () => {
   };
 
   const handleContentInteraction = () => {
-    if (contentTextareaRef.current) {
+    if (focusedField === 'content' && contentTextareaRef.current) {
       setCursorPosition(contentTextareaRef.current.selectionStart || 0);
-    }
-     if (titleInputRef.current && document.activeElement === titleInputRef.current) {
+    } else if (focusedField === 'title' && titleInputRef.current) {
       setCursorPosition(titleInputRef.current.selectionStart || 0);
     }
   };
@@ -275,7 +282,7 @@ const CreateNewsArticlePage = () => {
         default: toast({ title: "Action", description: `${action} clicked.` });
       }
       contentTextareaRef.current.focus();
-      handleContentInteraction();
+      handleContentInteraction(); // Update cursor position and potentially toolbar after insertion
     }
     setIsFormatMenuOpen(false);
   };
@@ -333,7 +340,7 @@ const CreateNewsArticlePage = () => {
                   <Textarea
                     ref={contentTextareaRef}
                     placeholder="Tell your story..."
-                    className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 min-h-[300px] resize-y placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case"
+                    className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case overflow-y-hidden"
                     style={{ fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif', fontSize: '20px', lineHeight: '28px', color: 'rgba(0, 0, 0, 0.84)' }}
                     {...field}
                     onChange={(e) => { field.onChange(e); handleContentInteraction(); }}
@@ -343,7 +350,7 @@ const CreateNewsArticlePage = () => {
                     onMouseUp={handleContentInteraction}
                     onClick={handleContentInteraction}
                     disabled={isSubmitting}
-                    value={contentValueFromForm}
+                    value={contentValueFromForm} // Ensure Textarea is controlled by form state
                   />
                 </FormControl>
                 <FormMessage />
@@ -357,4 +364,4 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
-
+    
