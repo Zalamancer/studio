@@ -1,4 +1,3 @@
-
 // src/components/board-page/PostList.tsx
 "use client";
 
@@ -18,6 +17,7 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
+  DialogTrigger, // Added DialogTrigger
 } from "@/components/ui/dialog";
 import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search } from "lucide-react"; // Import Search
 import { PostCard } from './PostCard';
