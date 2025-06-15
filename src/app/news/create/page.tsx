@@ -45,23 +45,36 @@ interface ToolbarComponentProps {
   isFormatMenuOpen: boolean;
   onPlusClick: () => void;
   onFormatAction: (action: string) => void;
-  style: React.CSSProperties;
+  // Removed style prop as it will be hardcoded for debugging visibility
+  focusedField: 'title' | 'content' | null; // Pass focusedField to determine basic position
 }
 
 const ToolbarComponent: React.FC<ToolbarComponentProps> = ({
   isFormatMenuOpen,
   onPlusClick,
   onFormatAction,
-  style,
+  focusedField,
 }) => {
+  // Hardcoded style for visual debugging: always visible when a field is focused,
+  // positioned simply to the left of its container.
+  const style: React.CSSProperties = {
+    position: 'absolute',
+    display: focusedField ? 'flex' : 'none', // Visible if a field is focused
+    top: '10px', // Simple top position
+    left: '-45px', // Simple left offset, outside the input box
+    transform: 'translateY(0)', // Remove vertical centering transform for now
+    zIndex: 50,
+    alignItems: 'center', // Keep this for internal alignment
+  };
+
   return (
     <div
       style={style}
       className={cn(
-        "flex items-center gap-x-0.5 bg-card p-0.5 rounded-full border border-border shadow-lg absolute"
+        "flex items-center gap-x-0.5 bg-card p-0.5 rounded-full border border-border shadow-lg"
       )}
       onMouseDown={(e) => e.preventDefault()}
-      data-toolbar-button="true" // Added attribute to identify toolbar elements
+      data-toolbar-button="true"
     >
       {!isFormatMenuOpen ? (
         <Button
@@ -98,15 +111,15 @@ const CreateNewsArticlePage = () => {
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
   const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState(0);
-  
-  const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none' });
-  const toolbarRef = useRef<HTMLDivElement>(null);
+  const [cursorPosition, setCursorPosition] = useState(0); // For content textarea
 
   const titleInputRef = useRef<HTMLInputElement>(null);
   const titleWrapperRef = useRef<HTMLDivElement>(null);
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
+
+  // Toolbar reference is no longer needed with the simplified ToolbarComponent
+  // const toolbarRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -120,89 +133,36 @@ const CreateNewsArticlePage = () => {
   const titleValueFromForm = form.watch('title');
   const contentValueFromForm = form.watch('content');
 
-  const updateToolbarPosition = useCallback(() => {
-    const newStyle: React.CSSProperties = {
-      position: 'absolute',
-      display: 'none', // Default to hidden
-      transform: 'translateY(-50%)', // For vertical centering of the toolbar itself
-      zIndex: 50,
-      left: '-50px', // Default left offset (outside the field)
-    };
-
-    let fieldWrapperRect: DOMRect | undefined;
-    let fieldElementRect: DOMRect | undefined;
-
-    if (focusedField === 'title' && titleWrapperRef.current && titleInputRef.current) {
-        fieldWrapperRect = titleWrapperRef.current.getBoundingClientRect();
-        fieldElementRect = titleInputRef.current.getBoundingClientRect();
-        newStyle.display = 'flex';
-        newStyle.top = `${fieldElementRect.height / 2}px`; // Center vertically to the input
-    } else if (focusedField === 'content' && contentWrapperRef.current && contentTextareaRef.current) {
-        fieldWrapperRect = contentWrapperRef.current.getBoundingClientRect();
-        fieldElementRect = contentTextareaRef.current.getBoundingClientRect();
-        newStyle.display = 'flex';
-
-        const textarea = contentTextareaRef.current;
-        const currentText = textarea.value;
-        const textUpToCursor = currentText.substring(0, cursorPosition);
-        const currentLineNumber = textUpToCursor.split('\n').length;
-        
-        let lineHeight = 28; // Default from your style
-        const computedStyle = window.getComputedStyle(textarea);
-        const parsedLineHeight = parseFloat(computedStyle.lineHeight);
-        if (!isNaN(parsedLineHeight) && parsedLineHeight > 0) {
-            lineHeight = parsedLineHeight;
-        }
-        const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
-        
-        newStyle.top = `${paddingTop + ((currentLineNumber - 1) * lineHeight) + (lineHeight / 2)}px`;
-
-    } else {
-        newStyle.display = 'none';
-    }
-    
-    console.log('[ToolbarDebug] updateToolbarPosition:', { 
-        focusedField, 
-        isFormatMenuOpen, 
-        cursorPosition, 
-        titleVal: titleValueFromForm.substring(0,10), 
-        contentVal: contentValueFromForm.substring(0,10),
-        calculatedTop: newStyle.top,
-        calculatedLeft: newStyle.left,
-        display: newStyle.display,
-        titleWrapperRect,
-        contentWrapperRect: fieldWrapperRect // if content was focused
-    });
-    setToolbarStyle(newStyle);
-  }, [focusedField, cursorPosition, isFormatMenuOpen, titleValueFromForm, contentValueFromForm]); // Added form values as dependencies
-
-
-  useEffect(() => {
-    updateToolbarPosition();
-  }, [updateToolbarPosition]); // updateToolbarPosition is memoized, its dependencies trigger it
-
+  // No more dynamic toolbarStyle state or updateToolbarPosition function for this debugging step.
+  // Visibility is handled directly in ToolbarComponent based on focusedField.
 
   const handleFocus = (field: 'title' | 'content') => {
+    console.log('[FocusDebug] Field focused:', field);
     setFocusedField(field);
     if (field === 'content' && contentTextareaRef.current) {
       setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     }
-    setIsFormatMenuOpen(false); // Reset format menu on new field focus
+    setIsFormatMenuOpen(false);
   };
 
   const handleBlur = (fieldToBlur: 'title' | 'content') => {
     setTimeout(() => {
+      // Check if the new activeElement is part of any toolbar button
+      // This requires toolbar buttons to have a common identifier, e.g., data-toolbar-button="true"
       const activeElementIsToolbarButton = document.activeElement?.closest('[data-toolbar-button="true"]');
       if (!activeElementIsToolbarButton) {
-        if (focusedField === fieldToBlur) { // Ensure we are blurring the currently focused field
+        if (focusedField === fieldToBlur) {
+            console.log('[BlurDebug] Field blurred, and not a toolbar click:', fieldToBlur);
             setFocusedField(null);
             setIsFormatMenuOpen(false);
         }
+      } else {
+         console.log('[BlurDebug] Blur event on field, but focus moved to toolbar. Field:', fieldToBlur);
       }
-    }, 0); // Delay slightly to allow click on toolbar
+    }, 0);
   };
 
-  const handleContentInteraction = () => { // For KeyUp and MouseUp on content textarea
+  const handleContentInteraction = () => {
     if (contentTextareaRef.current) {
       setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     }
@@ -245,12 +205,11 @@ const CreateNewsArticlePage = () => {
       }
       contentTextareaRef.current.focus();
     }
-    setIsFormatMenuOpen(false); // Close menu after action
+    setIsFormatMenuOpen(false);
   };
   
   const handleToggleFormatMenu = () => {
       setIsFormatMenuOpen(prev => !prev);
-      // Re-focus the appropriate field to ensure toolbar stays visible if it was already open
       if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus();
       else if (focusedField === 'content' && contentTextareaRef.current) contentTextareaRef.current.focus();
   };
@@ -287,26 +246,22 @@ const CreateNewsArticlePage = () => {
           <FormField control={form.control} name="category" render={() => <FormItem><FormMessage className="text-center text-sm mb-2 hidden sm:block" /></FormItem>} />
           
           <div className="relative" ref={titleWrapperRef}>
-            {focusedField === 'title' && (
-              <ToolbarComponent
-                style={toolbarStyle}
+             <ToolbarComponent
                 isFormatMenuOpen={isFormatMenuOpen}
                 onPlusClick={handleToggleFormatMenu}
                 onFormatAction={handleFormatButtonClick}
-              />
-            )}
+                focusedField={focusedField === 'title' ? 'title' : null}
+             />
             <FormField control={form.control} name="title" render={({ field }) => ( <FormItem className="mb-8"><FormControl><Input ref={titleInputRef} placeholder="Title" {...field} value={titleValueFromForm} onChange={(e) => form.setValue('title', e.target.value)} onFocus={() => handleFocus('title')} onBlur={() => handleBlur('title')} disabled={isSubmitting} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"/></FormControl><FormMessage /></FormItem>)} />
           </div>
 
           <div className="relative" ref={contentWrapperRef}>
-             {focusedField === 'content' && (
-              <ToolbarComponent
-                style={toolbarStyle}
+             <ToolbarComponent
                 isFormatMenuOpen={isFormatMenuOpen}
                 onPlusClick={handleToggleFormatMenu}
                 onFormatAction={handleFormatButtonClick}
-              />
-            )}
+                focusedField={focusedField === 'content' ? 'content' : null}
+             />
             <FormField control={form.control} name="content" render={({ field }) => (
               <FormItem>
                 <FormControl>
@@ -315,7 +270,7 @@ const CreateNewsArticlePage = () => {
                     placeholder="Tell your story..."
                     className={cn(
                       "border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 min-h-[300px] resize-y placeholder:text-muted-foreground/50 py-2",
-                      "font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case" 
+                      "font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case"
                     )}
                     style={{
                       fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif',
@@ -324,16 +279,16 @@ const CreateNewsArticlePage = () => {
                       color: 'rgba(0, 0, 0, 0.84)',
                     }}
                     {...field}
-                    value={contentValueFromForm} 
+                    value={contentValueFromForm}
                     onChange={(e) => {
                         form.setValue('content', e.target.value);
-                        handleContentInteraction(); 
+                        handleContentInteraction();
                     }}
                     onFocus={() => handleFocus('content')}
                     onBlur={() => handleBlur('content')}
-                    onKeyUp={handleContentInteraction} 
-                    onMouseUp={handleContentInteraction} 
-                    onClick={handleContentInteraction} // Also update cursor on click
+                    onKeyUp={handleContentInteraction}
+                    onMouseUp={handleContentInteraction}
+                    onClick={handleContentInteraction}
                     disabled={isSubmitting}
                   />
                 </FormControl>
@@ -348,5 +303,4 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
-
         
