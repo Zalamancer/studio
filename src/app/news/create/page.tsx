@@ -68,6 +68,7 @@ const CreateNewsArticlePage = () => {
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
   const [selectionNonce, setSelectionNonce] = useState(0);
+  const [savedRange, setSavedRange] = useState<Range | null>(null); // To store selection before dialogs
 
   const [showContextualUI, setShowContextualUI] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
@@ -84,16 +85,21 @@ const CreateNewsArticlePage = () => {
     }
   }, []);
 
+  const updateSelectionNonce = useCallback(() => {
+    setSelectionNonce(n => n + 1);
+  }, []);
+
   const getCurrentBlockElement = useCallback((): HTMLElement | null => {
-    const selection = window.getSelection();
     const contentEl = contentEditableRef.current;
     if (!contentEl) return null;
 
+    const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
       if (document.activeElement === contentEl && contentEl.lastChild && contentEl.lastChild.nodeType === Node.ELEMENT_NODE) {
         return contentEl.lastChild as HTMLElement;
       }
-      return contentEl; 
+      const firstChildBlockFallback = contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr');
+      return firstChildBlockFallback ? firstChildBlockFallback as HTMLElement : contentEl;
     }
 
     let node = selection.focusNode;
@@ -115,8 +121,8 @@ const CreateNewsArticlePage = () => {
       }
       node = node.parentNode;
     }
-    const firstChildBlock = contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr');
-    return firstChildBlock ? firstChildBlock as HTMLElement : contentEl;
+    const firstChildBlockFinal = contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr');
+    return firstChildBlockFinal ? firstChildBlockFinal as HTMLElement : contentEl;
   }, [contentEditableRef]);
 
 
@@ -140,10 +146,6 @@ const CreateNewsArticlePage = () => {
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
   }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
   
-  const updateSelectionNonce = useCallback(() => {
-    setSelectionNonce(n => n + 1);
-  }, []);
-
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
     if (focusedField === 'title' && titleInputRef.current) {
@@ -188,7 +190,6 @@ const CreateNewsArticlePage = () => {
     return null;
   }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
 
-
   const calculateAndUpdateToolbarStyle = useCallback(() => {
     let shouldShowBaseUI = false;
     const currentLineText = getCurrentLineText();
@@ -213,7 +214,6 @@ const CreateNewsArticlePage = () => {
     setShowContextualUI(shouldShowBaseUI);
     if (!shouldShowBaseUI && isToolbarExpanded) setIsToolbarExpanded(false);
   }, [focusedField, getCurrentLineText, isToolbarExpanded, calculateCursorLineYOffset, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef]);
-
 
   useEffect(() => {
     calculateAndUpdateToolbarStyle();
@@ -244,13 +244,17 @@ const CreateNewsArticlePage = () => {
     queueMicrotask(() => {
       const activeEl = document.activeElement;
       let isFocusWithinToolbarOrInput = false;
-      if ((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen) {
+      if ((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || 
+          titleInputRef.current === activeEl || 
+          contentEditableRef.current === activeEl || 
+          isYouTubeDialogOpen || isEmbedDialogOpen) { // Include dialog states
         isFocusWithinToolbarOrInput = true;
       }
       if (!isFocusWithinToolbarOrInput) {
         setFocusedField(null);
         setIsToolbarExpanded(false); 
         setShowContextualUI(false);
+        setSavedRange(null); // Clear saved range on blur if dialogs aren't open
       }
     });
   }, [isYouTubeDialogOpen, isEmbedDialogOpen]);
@@ -327,74 +331,107 @@ const CreateNewsArticlePage = () => {
   
   const insertHTMLAndFocus = useCallback((htmlToInsert: string) => {
     const editorEl = contentEditableRef.current;
-    if (!editorEl || focusedField !== 'content') return;
+    if (!editorEl) return;
+     // No need to check focusedField here, as we use savedRange or current focus
+    
+    editorEl.focus(); // Ensure editor has focus for selection manipulation
 
-    if (document.activeElement !== editorEl) editorEl.focus();
+    queueMicrotask(() => { // Use microtask to operate after focus/selection updates
+      const selection = window.getSelection();
+      let range: Range;
 
-    const selection = window.getSelection();
-    let range: Range;
-
-    if (selection && selection.rangeCount > 0 && editorEl.contains(selection.anchorNode)) {
-      range = selection.getRangeAt(0);
-    } else {
-      range = document.createRange();
-      if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild);
-      else range.selectNodeContents(editorEl);
-      range.collapse(true);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
-    }
-
-    const currentBlock = getCurrentBlockElement(); 
-    if (currentBlock && editorEl.contains(currentBlock) &&
-        (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>")) {
-        if (range.collapsed && currentBlock.contains(range.startContainer)) {
-             range.selectNodeContents(currentBlock); 
+      if (savedRange && editorEl.contains(savedRange.commonAncestorContainer)) {
+        range = savedRange;
+        if (selection) { // Restore the selection to the saved range
+          selection.removeAllRanges();
+          selection.addRange(range);
         }
-    }
-    
-    if (!range.collapsed) range.deleteContents();
-    
-    const fragment = range.createContextualFragment(htmlToInsert);
-    const nodeToPlaceCaretIn = fragment.lastChild; 
-    
-    range.insertNode(fragment);
+      } else if (selection && selection.rangeCount > 0 && editorEl.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+        range = selection.getRangeAt(0); // Use current selection if it's within the editor
+      } else {
+        // Fallback: selection is outside, or no selection create range at the end of editor
+        range = document.createRange();
+        range.selectNodeContents(editorEl);
+        range.collapse(false); // to the end
+        if (selection) {
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+      }
+      setSavedRange(null); // Clear saved range after use or if it was invalid
 
-    if (nodeToPlaceCaretIn && nodeToPlaceCaretIn.nodeName === "P" && editorEl.contains(nodeToPlaceCaretIn)) {
-        range.setStart(nodeToPlaceCaretIn, 0); 
+      const currentBlock = getCurrentBlockElement();
+      if (currentBlock && editorEl.contains(currentBlock) &&
+          (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;")) {
+        if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) {
+          const isEditorAndEmpty = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>)$/i);
+          if (!isEditorAndEmpty || (isEditorAndEmpty && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) {
+            range.selectNodeContents(currentBlock);
+          }
+        }
+      }
+
+      if (!range.collapsed) {
+        range.deleteContents();
+      }
+
+      const fragment = range.createContextualFragment(htmlToInsert);
+      // Find the last <p> in the fragment, this is where the caret should go.
+      // All our inserted HTML should end with <p><br></p>
+      let lastParagraphInFragment: Node | null = null;
+      if (fragment.lastChild && fragment.lastChild.nodeName === 'P') {
+        lastParagraphInFragment = fragment.lastChild;
+      } else {
+        // This is a fallback, should not happen if htmlToInsert is correct
+        const tempP = document.createElement('p');
+        tempP.innerHTML = '<br>';
+        fragment.appendChild(tempP);
+        lastParagraphInFragment = tempP;
+      }
+      
+      range.insertNode(fragment);
+
+      if (lastParagraphInFragment && editorEl.contains(lastParagraphInFragment)) {
+        const pElement = lastParagraphInFragment as HTMLParagraphElement;
+        if (pElement.innerHTML.trim() === "") pElement.innerHTML = "<br>"; // Ensure caret visibility
+        range.setStart(pElement, 0);
         range.collapse(true);
-    } else {
-        const currentRangeEndNode = range.endContainer;
-        const currentRangeEndOffset = range.endOffset;
-        let nextNode = currentRangeEndNode.childNodes[currentRangeEndOffset];
-        if (!nextNode || nextNode.nodeName !== 'P') {
-            const newP = document.createElement('p');
-            newP.innerHTML = '<br>';
-            if (currentRangeEndNode.nodeType === Node.TEXT_NODE) {
-                currentRangeEndNode.parentNode?.insertBefore(newP, currentRangeEndNode.nextSibling);
-            } else {
-                 currentRangeEndNode.insertBefore(newP, nextNode);
-            }
-            range.setStart(newP, 0);
-            range.collapse(true);
-        }
-    }
-    
-    if (selection) {
-      selection.removeAllRanges();
-      selection.addRange(range);
-    }
-    
-    setStoryContent(editorEl.innerHTML);
-    setIsToolbarExpanded(false); 
-    
-    setTimeout(() => {
-      editorEl.focus(); 
-      updateSelectionNonce(); 
-    }, 0);
-  }, [focusedField, getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded]);
+      } else {
+         // Fallback if lastParagraphInFragment somehow isn't what we expect
+         range.selectNodeContents(editorEl);
+         range.collapse(false); // To the end
+      }
+      
+      if (selection) {
+        selection.removeAllRanges();
+        selection.addRange(range);
+      }
+
+      setStoryContent(editorEl.innerHTML);
+      setIsToolbarExpanded(false);
+      
+      setTimeout(() => { // Another timeout to ensure DOM update before re-focus/nonce
+        editorEl.focus();
+        updateSelectionNonce();
+      }, 0);
+    });
+  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange]); // Removed focusedField
   
   const triggerInlineImageUpload = useCallback(() => {
+    const selection = window.getSelection(); // Save selection before dialog/input
+    if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      setSavedRange(selection.getRangeAt(0).cloneRange());
+    } else {
+      const editorEl = contentEditableRef.current;
+      if (editorEl) {
+        const range = document.createRange();
+        range.selectNodeContents(editorEl);
+        range.collapse(false);
+        setSavedRange(range);
+      } else {
+        setSavedRange(null);
+      }
+    }
     if (inlineImageInputRef.current) inlineImageInputRef.current.click();
   }, []);
 
@@ -411,9 +448,24 @@ const CreateNewsArticlePage = () => {
       reader.readAsDataURL(file);
       if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; 
     }
+    setSavedRange(null); // Clear saved range after processing
   }, [insertHTMLAndFocus]);
   
   const handleInsertYouTubeVideo = useCallback(() => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      setSavedRange(selection.getRangeAt(0).cloneRange());
+    } else {
+      const editorEl = contentEditableRef.current;
+      if (editorEl) {
+        const range = document.createRange();
+        range.selectNodeContents(editorEl);
+        range.collapse(false);
+        setSavedRange(range);
+      } else {
+        setSavedRange(null);
+      }
+    }
     setIsYouTubeDialogOpen(true);
     setYouTubeUrlInput("");
     setIsToolbarExpanded(false);
@@ -437,9 +489,24 @@ const CreateNewsArticlePage = () => {
       }
     }
     setIsYouTubeDialogOpen(false);
+    setSavedRange(null);
   };
 
   const handleOpenEmbedDialog = useCallback(() => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      setSavedRange(selection.getRangeAt(0).cloneRange());
+    } else {
+      const editorEl = contentEditableRef.current;
+      if (editorEl) {
+        const range = document.createRange();
+        range.selectNodeContents(editorEl);
+        range.collapse(false);
+        setSavedRange(range);
+      } else {
+        setSavedRange(null);
+      }
+    }
     setIsEmbedDialogOpen(true);
     setEmbedCodeInput("");
     setIsToolbarExpanded(false);
@@ -455,11 +522,44 @@ const CreateNewsArticlePage = () => {
       }
     }
     setIsEmbedDialogOpen(false);
+    setSavedRange(null);
   };
 
-  const handleInsertCodeBlock = useCallback(() => insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`), [insertHTMLAndFocus]);
+  const handleInsertCodeBlock = useCallback(() => {
+    const selection = window.getSelection(); // Capture selection before direct insertion
+    if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      setSavedRange(selection.getRangeAt(0).cloneRange());
+    } else {
+      const editorEl = contentEditableRef.current;
+      if (editorEl) {
+        const range = document.createRange();
+        range.selectNodeContents(editorEl);
+        range.collapse(false);
+        setSavedRange(range);
+      } else {
+        setSavedRange(null);
+      }
+    }
+    insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`);
+  }, [insertHTMLAndFocus]);
   
-  const handleInsertSeparator = useCallback(() => insertHTMLAndFocus(`<hr class="my-8 border-border" /><p><br></p>`), [insertHTMLAndFocus]);
+  const handleInsertSeparator = useCallback(() => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) {
+      setSavedRange(selection.getRangeAt(0).cloneRange());
+    } else {
+      const editorEl = contentEditableRef.current;
+      if (editorEl) {
+        const range = document.createRange();
+        range.selectNodeContents(editorEl);
+        range.collapse(false);
+        setSavedRange(range);
+      } else {
+        setSavedRange(null);
+      }
+    }
+    insertHTMLAndFocus(`<hr class="my-8 border-border" /><p><br></p>`);
+  }, [insertHTMLAndFocus]);
   
   const handleToggleToolbar = () => {
     setIsToolbarExpanded(prev => {
@@ -579,21 +679,21 @@ const CreateNewsArticlePage = () => {
       </div>
     </div>
 
-    <Dialog open={isYouTubeDialogOpen} onOpenChange={setIsYouTubeDialogOpen}>
+    <Dialog open={isYouTubeDialogOpen} onOpenChange={(open) => { setIsYouTubeDialogOpen(open); if (!open) setSavedRange(null); }}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader><DialogTitle>Embed YouTube Video</DialogTitle><DialogDescription>Paste the YouTube video URL or video ID below.</DialogDescription></DialogHeader>
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="youtube-url" className="text-right col-span-1">URL/ID</Label><Input id="youtube-url" value={youTubeUrlInput} onChange={(e) => setYouTubeUrlInput(e.target.value)} className="col-span-3" placeholder="e.g., https://www.youtube.com/watch?v=VIDEO_ID" /></div>
           </div>
-          <DialogFooter><Button type="button" variant="outline" onClick={() => setIsYouTubeDialogOpen(false)}>Cancel</Button><Button type="button" onClick={handleYouTubeDialogSubmit}>Embed Video</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => {setIsYouTubeDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleYouTubeDialogSubmit}>Embed Video</Button></DialogFooter>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isEmbedDialogOpen} onOpenChange={setIsEmbedDialogOpen}>
+      <Dialog open={isEmbedDialogOpen} onOpenChange={(open) => { setIsEmbedDialogOpen(open); if (!open) setSavedRange(null); }}>
         <DialogContent className="sm:max-w-lg">
           <DialogHeader><DialogTitle>Embed External Content</DialogTitle><DialogDescription>Paste your embed code (e.g., from Twitter, Vimeo, etc.). Ensure it&apos;s safe, typically iframe-based.</DialogDescription></DialogHeader>
           <div className="py-4"><Label htmlFor="embed-code" className="sr-only">Embed Code</Label><Textarea id="embed-code" value={embedCodeInput} onChange={(e) => setEmbedCodeInput(e.target.value)} className="min-h-[150px] font-mono text-xs" placeholder="<iframe src='...'></iframe>" /></div>
-          <DialogFooter><Button type="button" variant="outline" onClick={() => setIsEmbedDialogOpen(false)}>Cancel</Button><Button type="button" onClick={handleEmbedDialogSubmit}>Embed Content</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => {setIsEmbedDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleEmbedDialogSubmit}>Embed Content</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </>
@@ -603,3 +703,4 @@ const CreateNewsArticlePage = () => {
 export default CreateNewsArticlePage;
         
       
+
