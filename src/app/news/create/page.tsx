@@ -44,7 +44,7 @@ const InlineToolbar: React.FC<InlineToolbarProps> = ({ style }) => {
       className="bg-card border p-1 rounded-md shadow-lg flex items-center space-x-1"
     >
       <button
-        onMouseDown={(e) => e.preventDefault()}
+        onMouseDown={(e) => e.preventDefault()} // Prevent focus loss from contentEditable
         className="p-1.5 hover:bg-muted rounded focus:outline-none focus:ring-1 focus:ring-primary"
         aria-label="Add element"
         title="Add element"
@@ -59,11 +59,11 @@ const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
-  const isMobileHook = useIsMobile();
+  const isMobileHook = useIsMobile(); // Renamed to avoid conflict if isMobile var is used
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [storyContent, setStoryContent] = useState(""); 
+  const [storyContent, setStoryContent] = useState("<p><br></p>"); // Start with an empty paragraph
 
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
@@ -72,113 +72,46 @@ const CreateNewsArticlePage = () => {
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const titleWrapperRef = useRef<HTMLDivElement>(null);
   const contentEditableRef = useRef<HTMLDivElement>(null);
-  const contentEditableWrapperRef = useRef<HTMLDivElement>(null);
-  const coverImageInputRef = useRef<HTMLInputElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const coverImageInputRef = useRef<HTMLInputElement>(null); // Added for cover image
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
-  const [cursorPosition, setCursorPosition] = useState(0);
   const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute', zIndex: 50 });
 
-  const getCursorPosition = useCallback((element: HTMLElement | null): number => {
-    if (!element) return 0;
+  // Get current block element (like <p> or <div>) containing the selection
+  const getCurrentBlockElement = (): HTMLElement | null => {
     const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      if (element.contains(range.startContainer)) {
-        const preCaretRange = range.cloneRange();
-        preCaretRange.selectNodeContents(element);
-        preCaretRange.setEnd(range.startContainer, range.startOffset);
-        return preCaretRange.toString().length;
+    if (!selection || selection.rangeCount === 0 || !contentEditableRef.current) {
+      return null;
+    }
+    let node = selection.focusNode;
+    while (node && node !== contentEditableRef.current) {
+      if (node.nodeType === Node.ELEMENT_NODE) {
+        const element = node as HTMLElement;
+        const displayStyle = window.getComputedStyle(element).display;
+        if (displayStyle === 'block' || element.tagName === 'P' || element.tagName === 'DIV') {
+          // Ensure it's a direct child or a common block element used for paragraphs
+          if (contentEditableRef.current.contains(element)) {
+            return element;
+          }
+        }
       }
+      node = node.parentNode;
     }
-    return element.textContent?.length || 0;
-  }, []);
-
-  const updateCursorPosition = useCallback(() => {
-    const newPos = getCursorPosition(contentEditableRef.current);
-    setCursorPosition(newPos);
-  }, [getCursorPosition, contentEditableRef]);
-
-  const getCurrentLineText = useCallback((): string => {
-    const element = contentEditableRef.current;
-    if (!element) return "error_no_ref"; 
-
-    const text = element.textContent || "";
-    if (text === "") return ""; 
-
-    const currentCursorPos = Math.min(Math.max(0, cursorPosition), text.length);
-
-    let lineStart = 0;
-    if (currentCursorPos > 0) {
-        lineStart = text.lastIndexOf('\n', currentCursorPos - 1) + 1;
+    // If no block found, but contentEditable is focused and empty, consider contentEditable itself
+    if (contentEditableRef.current && contentEditableRef.current.textContent?.trim() === "" && document.activeElement === contentEditableRef.current) {
+      return contentEditableRef.current;
     }
-
-    let lineEnd = text.indexOf('\n', currentCursorPos);
-    if (lineEnd === -1) {
-        lineEnd = text.length;
-    }
-    
-    if (lineStart > lineEnd && currentCursorPos === lineStart) {
-         return ""; // Cursor is at the start of a new empty line formed by Enter at end of content
-    }
-    if (lineStart > lineEnd) { 
-        return ""; 
-    }
-
-    const lineSubstring = text.substring(lineStart, lineEnd);
-    return lineSubstring.trim() === "" ? "" : lineSubstring;
-  }, [contentEditableRef, cursorPosition]);
-
-  const calculateCursorLineYOffset = useCallback((element: HTMLElement, charOffset: number): number | null => {
-    const elementStyle = window.getComputedStyle(element);
-    const paddingTop = parseFloat(elementStyle.paddingTop) || 0;
-    const defaultLineHeight = parseFloat(elementStyle.lineHeight) || (parseFloat(elementStyle.fontSize || "20px") * 1.4) || 28;
-
-    if (element.textContent?.trim() === "" || element.innerHTML.toLowerCase().trim() === "<br>" || element.innerHTML.trim() === "") {
-        return paddingTop + (defaultLineHeight / 2);
-    }
-
-    const selection = window.getSelection();
-    if (!selection || selection.rangeCount === 0) {
-        if (element.textContent?.trim() === "") return paddingTop + (defaultLineHeight / 2);
-        return null;
-    }
-
-    const range = selection.getRangeAt(0);
-    if (!element.contains(range.commonAncestorContainer) && !(element === range.commonAncestorContainer && range.startOffset === 0 && element.childNodes.length === 0)) {
-       if (element.textContent?.trim() === "" && document.activeElement === element) {
-         // This is fine, proceed
-       } else {
-         return null; 
-       }
-    }
-    
-    const clientRects = range.getClientRects();
-    if (clientRects.length > 0) {
-      return clientRects[0].top - element.getBoundingClientRect().top + (clientRects[0].height / 2);
-    } else {
-      const textContent = element.textContent || "";
-      const boundedCharOffset = Math.min(charOffset, textContent.length);
-      const textBeforeCursor = textContent.substring(0, boundedCharOffset);
-      const numNewlinesBefore = (textBeforeCursor.match(/\n/g) || []).length;
-      return paddingTop + (numNewlinesBefore * defaultLineHeight) + (defaultLineHeight / 2);
-    }
-  }, []);
-
+    return null;
+  };
+  
   const calculateAndUpdateToolbarStyle = useCallback(() => {
     requestAnimationFrame(() => {
       const formEl = formWrapperRef.current;
-      const titleWrapperEl = titleWrapperRef.current;
-      const contentWrapperEl = contentEditableWrapperRef.current;
-      const contentEditableEl = contentEditableRef.current;
-
-      let showToolbar = false;
-      let top = 0;
-      let left = 0;
-      let newToolbarStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50 };
+      const titleEl = titleInputRef.current;
+      const contentEl = contentEditableRef.current;
+      const newToolbarStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50 };
 
       if (!formEl) {
         setToolbarStyle(newToolbarStyle);
@@ -186,106 +119,101 @@ const CreateNewsArticlePage = () => {
       }
       const formRect = formEl.getBoundingClientRect();
 
-      if (focusedField === 'title' && titleWrapperEl) {
+      if (focusedField === 'title' && titleEl) {
         if (title.trim() === '') {
-          showToolbar = true;
-          const titleRect = titleWrapperEl.getBoundingClientRect();
-          top = titleRect.top - formRect.top + (titleRect.height / 2) - (TOOLBAR_HEIGHT / 2);
-          left = titleRect.left - formRect.left - TOOLBAR_WIDTH_WITH_OFFSET;
+          const titleRect = titleEl.getBoundingClientRect();
+          newToolbarStyle.top = `${Math.max(0, titleRect.top - formRect.top + (titleRect.height / 2) - (TOOLBAR_HEIGHT / 2))}px`;
+          newToolbarStyle.left = `${Math.max(0, titleRect.left - formRect.left - TOOLBAR_WIDTH_WITH_OFFSET)}px`;
+          newToolbarStyle.display = 'flex';
         }
-      } else if (focusedField === 'content' && contentWrapperEl && contentEditableEl) {
-        const currentLineIsEmptyForToolbar = getCurrentLineText() === "";
-        // console.log(`[ToolbarDebug] Content Focused. currentLineIsEmptyForToolbar: ${currentLineIsEmptyForToolbar}, cursorPos: ${cursorPosition}, textContent: "${contentEditableEl.textContent?.substring(0,50)}..."`);
-        
-        if (currentLineIsEmptyForToolbar) {
-          const lineYOffset = calculateCursorLineYOffset(contentEditableEl, cursorPosition);
-          // console.log(`[ToolbarDebug] Content Line Empty. lineYOffset: ${lineYOffset}`);
-          if (lineYOffset !== null) {
-            showToolbar = true;
-            const contentWrapperRect = contentWrapperEl.getBoundingClientRect();
-            top = (contentWrapperRect.top - formRect.top) + lineYOffset - (TOOLBAR_HEIGHT / 2);
-            left = contentWrapperRect.left - formRect.left - TOOLBAR_WIDTH_WITH_OFFSET;
-            // console.log(`[ToolbarDebug] SHOWING TOOLBAR for content. Top: ${top}, Left: ${left}`);
+      } else if (focusedField === 'content' && contentEl) {
+        const currentBlock = getCurrentBlockElement();
+        if (currentBlock && currentBlock.textContent?.trim() === "") {
+           // If it's the contentEditable div itself and it's empty
+          if (currentBlock === contentEl && (contentEl.innerHTML.toLowerCase() === "<p><br></p>" || contentEl.innerHTML.trim() === "" || contentEl.textContent?.trim() === "")) {
+            const contentRect = contentEl.getBoundingClientRect();
+            const paddingTop = parseFloat(window.getComputedStyle(contentEl).paddingTop) || 0;
+            const firstLineApproxY = paddingTop + 14; // Approx half of a line-height
+            newToolbarStyle.top = `${Math.max(0, (contentRect.top - formRect.top) + firstLineApproxY - (TOOLBAR_HEIGHT / 2))}px`;
+          } else if (currentBlock !== contentEl) { // An actual child <p> or <div>
+            const blockRect = currentBlock.getBoundingClientRect();
+            newToolbarStyle.top = `${Math.max(0, (blockRect.top - formRect.top) + (blockRect.height / 2) - (TOOLBAR_HEIGHT / 2))}px`;
           } else {
-            // console.log(`[ToolbarDebug] lineYOffset is NULL, hiding toolbar for content.`);
-            showToolbar = false; 
+            // Fallback if currentBlock is contentEl but not matching the empty condition above, don't show.
+            setToolbarStyle(newToolbarStyle); // ensures display: none
+            return;
           }
-        } else {
-            // console.log(`[ToolbarDebug] Content Line NOT Empty according to getCurrentLineText(), hiding toolbar.`);
-            showToolbar = false;
+          const contentRectForLeft = contentEl.getBoundingClientRect(); // For consistent left positioning
+          newToolbarStyle.left = `${Math.max(0, contentRectForLeft.left - formRect.left - TOOLBAR_WIDTH_WITH_OFFSET)}px`;
+          newToolbarStyle.display = 'flex';
         }
-      } else {
-          // console.log(`[ToolbarDebug] Toolbar hidden. focusedField: ${focusedField}`);
-          showToolbar = false;
-      }
-
-      if (showToolbar) {
-        newToolbarStyle.display = 'flex';
-        newToolbarStyle.top = `${Math.max(0, top)}px`; 
-        newToolbarStyle.left = `${Math.max(0, left)}px`;
       }
       setToolbarStyle(newToolbarStyle);
     });
-  }, [focusedField, title, storyContent, cursorPosition, getCurrentLineText, calculateCursorLineYOffset]);
+  }, [focusedField, title, storyContent]); // Removed getCurrentBlockElement from deps as it's now internal
 
   useEffect(() => {
     calculateAndUpdateToolbarStyle();
-  }, [focusedField, title, storyContent, cursorPosition, calculateAndUpdateToolbarStyle]);
-
-  useEffect(() => {
-    const handleSelectionChange = () => {
-      if (focusedField === 'content' && document.activeElement === contentEditableRef.current) {
-        updateCursorPosition();
-      }
-    };
-    document.addEventListener('selectionchange', handleSelectionChange);
-    return () => document.removeEventListener('selectionchange', handleSelectionChange);
-  }, [focusedField, updateCursorPosition]);
+  }, [focusedField, title, storyContent, calculateAndUpdateToolbarStyle]); // Recalculate when relevant states change
 
   const handleFocus = useCallback((field: 'title' | 'content') => {
     setFocusedField(field);
-    if (field === 'content') {
-      setTimeout(updateCursorPosition, 0);
-    }
-  }, [updateCursorPosition]);
+  }, []);
 
   const handleBlur = useCallback(() => {
     queueMicrotask(() => {
-      if (
-        toolbarRef.current && toolbarRef.current.contains(document.activeElement) ||
-        (contentEditableRef.current && contentEditableRef.current === document.activeElement) ||
-        (titleInputRef.current && titleInputRef.current === document.activeElement)
-      ) {
-        return;
-      }
+      if (toolbarRef.current && toolbarRef.current.contains(document.activeElement)) return;
+      if (titleInputRef.current && titleInputRef.current === document.activeElement) return;
+      if (contentEditableRef.current && contentEditableRef.current === document.activeElement) return;
       setFocusedField(null);
     });
-  }, [toolbarRef, contentEditableRef, titleInputRef]);
+  }, []);
+
+  const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
+    const currentHTML = event.currentTarget.innerHTML;
+    setStoryContent(currentHTML);
+    if (publishAttempted) {
+      if (event.currentTarget.textContent?.trim() || /<img|<figure|<video/i.test(currentHTML)) {
+        setStoryError("");
+      } else {
+        setStoryError("Story content is required.");
+      }
+    }
+  }, [publishAttempted]);
+
+  // Sync storyContent state back to contentEditable div's innerHTML when it changes
+  useEffect(() => {
+    if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
+      contentEditableRef.current.innerHTML = storyContent;
+    }
+  }, [storyContent]);
+
+
+  const handleContentKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      // Attempt to insert a paragraph. Browsers might insert <p> or <div>.
+      // This is a basic attempt; robust editors use more complex logic.
+      document.execCommand('insertParagraph', false, null); 
+      
+      // After command, ensure focus is correctly set and state is updated
+      if (contentEditableRef.current) {
+        // A slight delay might be needed for the DOM to update after execCommand
+        setTimeout(() => {
+          handleContentEditableInput({ currentTarget: contentEditableRef.current } as any);
+          calculateAndUpdateToolbarStyle(); // Recalculate toolbar position
+        }, 0);
+      }
+    }
+  };
 
   const validateFields = useCallback(() => {
     let isValid = true;
-    if (!title.trim()) {
-      setTitleError("Title is required.");
-      isValid = false;
-    } else {
-      setTitleError("");
-    }
-    if (!category) {
-      setCategoryError("Category is required.");
-      isValid = false;
-    } else {
-      setCategoryError("");
-    }
-    
-    const currentStoryText = contentEditableRef.current?.textContent?.trim() || "";
-    const hasMeaningfulContent = currentStoryText !== '' || /<img|<div|<p/.test(storyContent);
-
-    if (!hasMeaningfulContent) {
-      setStoryError("Story content is required.");
-      isValid = false;
-    } else {
-      setStoryError("");
-    }
+    if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); }
+    if (!category) { setCategoryError("Category is required."); isValid = false; } else { setCategoryError(""); }
+    if (!contentEditableRef.current?.textContent?.trim() && !/<img|<figure|<video/i.test(storyContent)) {
+      setStoryError("Story content is required."); isValid = false;
+    } else { setStoryError(""); }
     return isValid;
   }, [title, category, storyContent]);
 
@@ -294,42 +222,55 @@ const CreateNewsArticlePage = () => {
     if (!validateFields()) {
       if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
       else if (!category) { /* Error shown */ }
-      else if (contentEditableRef.current && storyError && (contentEditableRef.current.textContent || "").trim() === '') contentEditableRef.current.focus();
+      else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
       return;
     }
     console.log("Publishing Article:", { title: title.trim(), category, storyContent });
     toast({ title: "Article Submitted (Placeholder)", description: `"${title.trim()}" published.` });
-    setTitle(""); setCategory(""); setStoryContent("");
-    if (contentEditableRef.current) contentEditableRef.current.innerHTML = "";
+    
+    setTitle(""); setCategory("");
+    setStoryContent("<p><br></p>"); // Reset to initial empty paragraph structure
+    if (contentEditableRef.current) contentEditableRef.current.innerHTML = "<p><br></p>"; // Also manually set div
+
     setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
   };
 
-  const handleContentEditableInput = useCallback((event: React.FormEvent<HTMLDivElement>) => {
-    const currentHTML = event.currentTarget.innerHTML;
-    setStoryContent(currentHTML);
-    updateCursorPosition();
-
-    if (publishAttempted) {
-      const currentText = event.currentTarget.textContent?.trim() || "";
-      const hasMeaningfulContent = currentText !== '' || /<img|<div|<p/.test(currentHTML);
-      if (hasMeaningfulContent) {
-        setStoryError("");
-      } else {
-        setStoryError("Story content is required.");
-      }
-    }
-  }, [publishAttempted, updateCursorPosition, setStoryContent, setStoryError]);
-
   useEffect(() => {
     const div = contentEditableRef.current;
-    if (div) {
-      if (div.innerHTML !== storyContent) {
-        div.innerHTML = storyContent;
-      }
-      // Auto-height for contentEditable div is implicitly handled by browser as long as it's not constrained by CSS.
-      // Ensure it does not have fixed height or `overflow: hidden/scroll` that would prevent natural expansion.
+    if (div && div.innerHTML !== storyContent) {
+        // Ensure focus and cursor position are preserved if possible, though this can be tricky
+        const selection = window.getSelection();
+        const range = selection && selection.rangeCount > 0 ? selection.getRangeAt(0) : null;
+        let originalStartOffset = range?.startOffset;
+        let originalStartContainer = range?.startContainer;
+
+        div.innerHTML = storyContent; // This is the line causing the cursor jump if not handled
+
+        // Attempt to restore selection
+        if (range && originalStartContainer && originalStartOffset !== undefined && div.contains(originalStartContainer)) {
+            try {
+                const newRange = document.createRange();
+                newRange.setStart(originalStartContainer, Math.min(originalStartOffset, originalStartContainer.textContent?.length || 0));
+                newRange.collapse(true);
+                selection?.removeAllRanges();
+                selection?.addRange(newRange);
+            } catch (e) {
+                // console.warn("Could not restore selection after content update", e);
+            }
+        } else if (div.firstChild) { // Fallback: place cursor at end of content
+            try {
+                const newRange = document.createRange();
+                newRange.selectNodeContents(div);
+                newRange.collapse(false); // false for end
+                selection?.removeAllRanges();
+                selection?.addRange(newRange);
+            } catch (e) {
+                 // console.warn("Could not set selection to end after content update", e);
+            }
+        }
     }
   }, [storyContent]);
+
 
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
@@ -342,7 +283,7 @@ const CreateNewsArticlePage = () => {
         </div>
         
         <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
-          <div className="flex items-center gap-2 mr-auto">
+           <div className="flex items-center gap-2 mr-auto">
             <div className="space-y-1">
               <Select
                 onValueChange={(value) => {
@@ -382,7 +323,7 @@ const CreateNewsArticlePage = () => {
           </div>
         </div>
 
-        <div ref={titleWrapperRef} className="relative mb-4">
+        <div className="relative mb-4"> {/* titleWrapperRef was removed, positioning via titleInputRef directly */}
           <Input
             ref={titleInputRef}
             placeholder="Title"
@@ -402,47 +343,45 @@ const CreateNewsArticlePage = () => {
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         
-        <div ref={contentEditableWrapperRef} className="relative">
+        <div className="relative"> {/* contentWrapperRef was removed */}
           <div
             ref={contentEditableRef}
             contentEditable={true}
             onInput={handleContentEditableInput}
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
-            onKeyUp={updateCursorPosition}
-            onClick={updateCursorPosition}
+            onKeyDown={handleContentKeyDown} // Added for Enter key handling
+            onClick={calculateAndUpdateToolbarStyle} // Added to help reposition toolbar on click
+            onKeyUp={calculateAndUpdateToolbarStyle} // Added to help reposition toolbar after typing/deleting
             data-placeholder="Tell your story..."
             className={cn(
-              "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case min-h-0",
-              // Removed overflow-y-hidden. ContentEditable divs generally handle their own overflow or expand naturally.
-              "focus:outline-none",
+              "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
+              "focus:outline-none min-h-[150px]" // Ensure min-height
             )}
             style={{
               fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
               fontSize: "20px",
               lineHeight: "28px",
               color: "hsl(var(--foreground))",
-              minHeight: "100px", // Provide a sensible minimum height for empty state
             }}
             role="textbox"
             aria-multiline="true"
             aria-label="News article content"
+            dangerouslySetInnerHTML={{ __html: storyContent }} // Manage content via state
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
         
         <style jsx global>{`
-          div[contentEditable="true"][data-placeholder]:empty:before {
+          div[contentEditable="true"][data-placeholder]:empty:before,
+          div[contentEditable="true"][data-placeholder]:where(:not(:has(*:not(br)))):before {
             content: attr(data-placeholder);
             color: hsl(var(--muted-foreground) / 0.5);
-            pointer-events: none;
-            display: block;
-            position: absolute;
-            top: 0.5rem; 
-            left: 0;
-          }
-          div[contentEditable="true"][data-placeholder]:not(:empty):before {
-            display: none;
+            pointer-events: none; /* Important */
+            display: block; /* Ensures it takes up space if the div is empty */
+            position: absolute; /* To position it over the contentEditable area */
+            top: 0.5rem; /* Adjust as needed based on py-2 */
+            left: 0; /* Adjust as needed based on px-0 */
           }
         `}</style>
       </div>
@@ -451,3 +390,4 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
+
