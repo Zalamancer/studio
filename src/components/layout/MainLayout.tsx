@@ -1,4 +1,3 @@
-
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -8,15 +7,6 @@ import { usePathname, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogTrigger,
-  DialogClose,
-} from "@/components/ui/dialog";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -24,26 +14,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper, Edit2 } from "lucide-react";
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper, Edit2 } from "lucide-react"; // Added Edit2
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
-// Removed imports related to CreatePostForm and its submission logic as it's moved to src/app/page.tsx
-// import type { CreatePostFormData, CreatePostFormProps } from '@/components/CreatePostForm';
-// import type { NewPostData } from '@/types/post';
-// import { addPostToFirestore } from '@/services/postService';
-// import { uploadPostImage } from '@/services/storageService';
-// import { Timestamp } from 'firebase/firestore';
-// import { createNotification } from '@/services/notificationService';
-// import { getReviewsForProfile } from '@/services/reviewService';
-
-// These exports remain as they are used by CreatePostForm, which will now be instantiated in src/app/page.tsx
 import type {
   SectorWithSubSectors as SectorWithSubSectorsType,
   SubSector as SubSectorType,
   Industry as IndustryType
 } from '@/types/post';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
@@ -341,14 +321,6 @@ export const findIndustryByName = (
     return null;
 };
 
-// CreatePostForm dynamic import is moved to src/app/page.tsx
-// const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
-//   import('@/components/CreatePostForm').then((mod) => mod.CreatePostForm),
-//   {
-//     loading: () => <div className="p-4 text-center"><p className="text-sm text-muted-foreground">Loading form...</p></div>,
-//     ssr: false
-//   }
-// );
 
 const DynamicNotificationDropdown = dynamic(() =>
   import('@/components/notifications/NotificationDropdown').then((mod) => mod.NotificationDropdown),
@@ -378,9 +350,6 @@ export default function MainLayout({
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
 
-  // State and logic for Create Post Dialog moved to src/app/page.tsx
-  // const [isCreatePostOpen, setIsCreatePostOpen] = useState(false);
-  // const addPostMutation logic is removed from here.
 
   const handlePrefetchSettings = useCallback(() => {
     if (user?.uid) {
@@ -410,14 +379,6 @@ export default function MainLayout({
     }
   }, [isMobile]);
 
-  // Logic related to Create Post Dialog and its state is removed.
-  // useEffect(() => {
-  //   if (!authLoading && !user && isCreatePostOpen) {
-  //     setIsCreatePostOpen(false);
-  //   }
-  // }, [user, authLoading, isCreatePostOpen]);
-
-  // handleCreatePostSubmit is removed from here.
 
   const handleLogout = async () => {
     try {
@@ -493,13 +454,12 @@ export default function MainLayout({
                        <span className="sm:hidden">Plan</span>
                     </Link>
                   </Button>
-                  {/* Create Post Dialog and Trigger are removed from here */}
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => alert("Create News functionality will be implemented here. For now, you can navigate to /news.")}
+                    onClick={() => router.push('/news/create')}
                   >
-                    <Newspaper className="mr-2 h-4 w-4" />
+                    <Edit2 className="mr-2 h-4 w-4" /> {/* Changed icon to Edit2 for consistency */}
                     <span className="hidden sm:inline">Create News</span>
                     <span className="sm:hidden">News</span>
                   </Button>
