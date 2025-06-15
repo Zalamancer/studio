@@ -2,7 +2,7 @@
 // src/app/news/create/page.tsx
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
-import { Loader2, Save, Send, ImageUp, PlusCircle, X, Image as ImageIcon, UploadCloud, PlayCircle, Code as CodeIcon, Braces, Minus } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, PlusCircle, X, Image as ImageIcon, UploadCloud, PlayCircle, Code as CodeIcon, Braces, Minus, Edit2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -38,7 +38,7 @@ const articleSchema = z.object({
   title: z.string().min(1, "Title cannot be empty.").max(150, "Title cannot exceed 150 characters."),
   content: z.string().min(1, "Article content cannot be empty."),
   category: z.string().min(1, "Please select a category for the article."),
-  // imageFile: typeof window === 'undefined' ? z.any() : z.instanceof(File).optional(),
+  // imageFile: typeof window === 'undefined' ? z.any() : z.instanceof(File).optional(), // Placeholder
 });
 
 type ArticleFormData = z.infer<typeof articleSchema>;
@@ -54,6 +54,7 @@ const CreateNewsArticlePage = () => {
   const titleInputRef = useRef<HTMLInputElement>(null);
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
   const toolbarRef = useRef<HTMLDivElement>(null);
+  const [cursorPosition, setCursorPosition] = useState(0);
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -64,51 +65,70 @@ const CreateNewsArticlePage = () => {
     },
   });
 
+  const isCurrentLineEmpty = useCallback((text: string, currentCursorPosition: number): boolean => {
+    if (!text) return true;
+    const textUpToCursor = text.substring(0, currentCursorPosition);
+    const lastNewlineBeforeCursor = textUpToCursor.lastIndexOf('\n');
+    const currentLineStart = lastNewlineBeforeCursor + 1;
+
+    let currentLineEnd = text.indexOf('\n', currentCursorPosition);
+    if (currentLineEnd === -1) {
+      currentLineEnd = text.length;
+    }
+    const currentLineText = text.substring(currentLineStart, currentLineEnd);
+    return currentLineText.trim() === '';
+  }, []);
+
   const handleFocus = (field: 'title' | 'content') => {
-    const value = form.getValues(field);
-    if (value.trim() === '') {
-      setFocusedField(field);
-    } else {
-      setFocusedField(null);
-      setIsFormatMenuOpen(false);
+    setFocusedField(field);
+    if (field === 'content' && contentTextareaRef.current) {
+        setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     }
   };
 
   const handleBlur = (field: 'title' | 'content') => {
     setTimeout(() => {
       if (toolbarRef.current && toolbarRef.current.contains(document.activeElement)) {
-        return;
+        return; // Don't blur if focus moved to the toolbar
       }
-      if (!isFormatMenuOpen) {
+      if (!isFormatMenuOpen) { // Only hide if menu isn't open
         setFocusedField(null);
       }
-    }, 150);
+    }, 150); // Delay to allow click on toolbar
   };
   
-  const handleInputChange = (field: 'title' | 'content', value: string) => {
-    if (value.trim() === '' && document.activeElement === (field === 'title' ? titleInputRef.current : contentTextareaRef.current) ) {
-      setFocusedField(field);
-    } else if (value.trim() !== '' && !isFormatMenuOpen) {
-      setFocusedField(null);
+  const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    form.setValue('title', e.target.value, { shouldValidate: true, shouldDirty: true });
+  };
+  
+  const handleContentChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    form.setValue('content', e.target.value, { shouldValidate: true, shouldDirty: true });
+    if (contentTextareaRef.current) {
+        setCursorPosition(contentTextareaRef.current.selectionStart || 0);
     }
   };
+
+  const handleContentKeyUpOrMouseUp = () => {
+    if (contentTextareaRef.current) {
+        setCursorPosition(contentTextareaRef.current.selectionStart || 0);
+    }
+  };
+
 
   const insertTextIntoContent = (textToInsert: string) => {
     if (contentTextareaRef.current) {
       const textarea = contentTextareaRef.current;
       const start = textarea.selectionStart;
       const end = textarea.selectionEnd;
-      const currentValue = textarea.value;
+      const currentValue = form.getValues('content');
       const newValue = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
       
       form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
+      setCursorPosition(start + textToInsert.length);
 
-      // Attempt to set cursor position after insertion
-      // This might need a useEffect if React's render cycle interferes
       requestAnimationFrame(() => {
-        textarea.selectionStart = start + textToInsert.length;
-        textarea.selectionEnd = start + textToInsert.length;
         textarea.focus();
+        textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
       });
     }
   };
@@ -147,11 +167,11 @@ const CreateNewsArticlePage = () => {
           const textarea = contentTextareaRef.current;
           const start = textarea.selectionStart;
           const end = textarea.selectionEnd;
-          const selectedText = textarea.value.substring(start, end);
+          const selectedText = form.getValues('content').substring(start, end);
           if (selectedText) {
             insertTextIntoContent("```\n" + selectedText + "\n```");
           } else {
-            insertTextIntoContent("```\nYour code here\n```");
+            insertTextIntoContent("\n```\nYour code here\n```\n");
           }
           break;
         }
@@ -175,6 +195,7 @@ const CreateNewsArticlePage = () => {
     }
     setIsSubmitting(true);
     console.log("Submitting Article Data (Placeholder):", data);
+    // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 1500));
 
     toast({
@@ -182,15 +203,26 @@ const CreateNewsArticlePage = () => {
       description: `"${data.title}" would be processed.`,
     });
     setIsSubmitting(false);
-    form.reset();
+    form.reset(); // Reset form after submission
     setFocusedField(null);
     setIsFormatMenuOpen(false);
+    setCursorPosition(0);
   };
   
+  const shouldShowPlusButton = 
+    focusedField && 
+    !isFormatMenuOpen &&
+    (
+      (focusedField === 'title' && form.getValues('title').trim() === '') ||
+      (focusedField === 'content' && isCurrentLineEmpty(form.getValues('content'), cursorPosition))
+    );
+
+  const shouldShowFormatMenu = focusedField && isFormatMenuOpen;
+
   const getToolbarPositionClass = () => {
-    if (focusedField === 'title') return "top-2 left-[-50px] sm:left-[-55px]";
-    if (focusedField === 'content') return "top-2 left-[-50px] sm:left-[-55px]";
-    return "hidden"; 
+    if (focusedField === 'title') return "top-1/2 -translate-y-1/2 left-[-50px] sm:left-[-55px]"; // Left of title input
+    if (focusedField === 'content') return "top-2 left-[-50px] sm:left-[-55px]"; // Top-left of content textarea's container
+    return "hidden"; // Should not happen if logic is correct
   };
 
   if (authLoading) {
@@ -257,14 +289,18 @@ const CreateNewsArticlePage = () => {
           {form.formState.errors.category && form.formState.isSubmitted && (
             <FormItem><FormMessage className="text-center text-sm mb-2" /></FormItem>
           )}
-
+          
           <div className="relative">
-            {((focusedField === 'title' && form.getValues('title').trim() === '') || (focusedField === 'title' && isFormatMenuOpen)) && (
+            { (shouldShowPlusButton || shouldShowFormatMenu) && focusedField === 'title' && (
               <div ref={toolbarRef} className={cn("absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md z-10", getToolbarPositionClass())}>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}>
+                <Button 
+                    type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" 
+                    onClick={() => setIsFormatMenuOpen(prev => !prev)}
+                    onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+                >
                   {isFormatMenuOpen ? <X className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
                 </Button>
-                {isFormatMenuOpen && (
+                {shouldShowFormatMenu && (
                   <>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Image')} title="Add Image"><ImageIcon className="h-4 w-4" /></Button>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Upload')} title="Upload from device"><UploadCloud className="h-4 w-4" /></Button>
@@ -286,7 +322,7 @@ const CreateNewsArticlePage = () => {
                       ref={node => { field.ref(node); (titleInputRef as React.MutableRefObject<HTMLInputElement | null>).current = node; }}
                       placeholder="Title" 
                       {...field} 
-                      onChange={(e) => { field.onChange(e); handleInputChange('title', e.target.value); }}
+                      onChange={handleTitleChange}
                       onFocus={() => handleFocus('title')}
                       onBlur={() => handleBlur('title')}
                       disabled={isSubmitting} 
@@ -300,12 +336,16 @@ const CreateNewsArticlePage = () => {
           </div>
 
           <div className="relative">
-            {((focusedField === 'content' && form.getValues('content').trim() === '') || (focusedField === 'content' && isFormatMenuOpen)) && (
+             { (shouldShowPlusButton || shouldShowFormatMenu) && focusedField === 'content' && (
                  <div ref={toolbarRef} className={cn("absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md z-10", getToolbarPositionClass())}>
-                <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}>
+                <Button 
+                    type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" 
+                    onClick={() => setIsFormatMenuOpen(prev => !prev)}
+                    onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+                >
                   {isFormatMenuOpen ? <X className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
                 </Button>
-                {isFormatMenuOpen && (
+                {shouldShowFormatMenu && (
                   <>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Image')} title="Add Image"><ImageIcon className="h-4 w-4" /></Button>
                     <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => handleFormatButtonClick('Upload')} title="Upload from device"><UploadCloud className="h-4 w-4" /></Button>
@@ -328,9 +368,11 @@ const CreateNewsArticlePage = () => {
                       placeholder="Tell your story..."
                       className="text-base border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 min-h-[300px] resize-y placeholder:text-muted-foreground/50 py-2"
                       {...field}
-                      onChange={(e) => { field.onChange(e); handleInputChange('content', e.target.value); }}
+                      onChange={handleContentChange}
                       onFocus={() => handleFocus('content')}
                       onBlur={() => handleBlur('content')}
+                      onKeyUp={handleContentKeyUpOrMouseUp}
+                      onMouseUp={handleContentKeyUpOrMouseUp}
                       disabled={isSubmitting}
                     />
                   </FormControl>
@@ -347,3 +389,4 @@ const CreateNewsArticlePage = () => {
 
 export default CreateNewsArticlePage;
 
+        
