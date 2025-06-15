@@ -1,3 +1,4 @@
+
 // src/app/news/create/page.tsx
 "use client";
 
@@ -124,10 +125,10 @@ const CreateNewsArticlePage = () => {
       </div>
 
       <header className="max-w-3xl mx-auto text-center mb-10">
-        <h1 className="text-2xl md:text-3xl font-bold text-foreground flex items-center justify-center">
-          <BookOpen className="mr-3 h-7 w-7 text-primary" /> Write New Article
+        <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center justify-center">
+          <BookOpen className="mr-3 h-8 w-8 text-primary" /> Write New Article
         </h1>
-        <p className="text-muted-foreground mt-2">
+        <p className="text-lg text-muted-foreground mt-2">
           Share your insights, updates, or announcements with the AnonyCollab community.
         </p>
       </header>
@@ -140,9 +141,14 @@ const CreateNewsArticlePage = () => {
               name="title"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Article Title <span className="text-destructive">*</span></FormLabel>
+                  <FormLabel className="text-lg">Article Title <span className="text-destructive">*</span></FormLabel>
                   <FormControl>
-                    <Input placeholder="Enter a catchy and informative title" {...field} disabled={isSubmitting} />
+                    <Input 
+                      placeholder="Enter a catchy and informative title" 
+                      {...field} 
+                      disabled={isSubmitting} 
+                      className="text-base py-3 focus-visible:ring-0 focus-visible:ring-offset-0" 
+                    />
                   </FormControl>
                   <FormMessage />
                 </FormItem>
@@ -154,11 +160,11 @@ const CreateNewsArticlePage = () => {
               name="content"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Article Content <span className="text-destructive">*</span></FormLabel>
+                  <FormLabel className="text-lg">Article Content <span className="text-destructive">*</span></FormLabel>
                   <FormControl>
                     <Textarea
                       placeholder="Start writing your article here... Markdown is not yet supported."
-                      className="min-h-[300px] resize-y"
+                      className="min-h-[300px] resize-y text-base py-3 focus-visible:ring-0 focus-visible:ring-offset-0"
                       {...field}
                       disabled={isSubmitting}
                     />
@@ -173,16 +179,16 @@ const CreateNewsArticlePage = () => {
               name="category"
               render={({ field }) => (
                 <FormItem>
-                  <FormLabel>Category <span className="text-destructive">*</span></FormLabel>
+                  <FormLabel className="text-lg">Category <span className="text-destructive">*</span></FormLabel>
                   <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
                     <FormControl>
-                      <SelectTrigger>
+                      <SelectTrigger className="text-base py-3 h-auto focus:ring-0 focus:ring-offset-0">
                         <SelectValue placeholder="Select a category" />
                       </SelectTrigger>
                     </FormControl>
                     <SelectContent>
                       {newsCategories.map((category) => (
-                        <SelectItem key={category} value={category}>
+                        <SelectItem key={category} value={category} className="text-base">
                           {category}
                         </SelectItem>
                       ))}
@@ -195,16 +201,16 @@ const CreateNewsArticlePage = () => {
 
             {/* Placeholder for Image Upload - Full functionality requires backend & storage */}
             <div className="space-y-2">
-              <Label htmlFor="article-image">Cover Image (Optional)</Label>
+              <Label htmlFor="article-image" className="text-lg">Cover Image (Optional)</Label>
               <Input
                 id="article-image"
                 type="file"
                 accept="image/png, image/jpeg, image/gif, image/webp"
                 // onChange={handleImageChange}
                 disabled={isSubmitting}
-                className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20"
+                className="text-sm file:mr-3 file:py-1.5 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-primary/10 file:text-primary hover:file:bg-primary/20 focus-visible:ring-0 focus-visible:ring-offset-0"
               />
-              <FormDescription>Upload an image to accompany your article (max 2MB).</FormDescription>
+              <FormDescription className="text-sm">Upload an image to accompany your article (max 2MB).</FormDescription>
               {/* {imagePreview && (
                 <div className="mt-2 border rounded-md p-2">
                   <img src={imagePreview} alt="Preview" className="max-h-40 rounded-md object-contain" />
@@ -213,10 +219,10 @@ const CreateNewsArticlePage = () => {
             </div>
             
             <div className="flex justify-end gap-3 pt-6">
-                <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting}>
+                <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-base py-3 px-6">
                     <Save className="mr-2 h-4 w-4" /> Save Draft (Placeholder)
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" disabled={isSubmitting} className="text-base py-3 px-6">
                   {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
                   Publish Article (Placeholder)
                 </Button>
@@ -229,3 +235,4 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
+
