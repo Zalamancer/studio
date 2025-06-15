@@ -41,30 +41,20 @@ const articleSchema = z.object({
 
 type ArticleFormData = z.infer<typeof articleSchema>;
 
-// Toolbar Component for visual debugging
-const ToolbarComponentVisualDebug: React.FC<{
+// Toolbar Component for visual debugging (simplified positioning)
+const ToolbarComponent: React.FC<{
   focusedField: 'title' | 'content' | null;
   isFormatMenuOpen: boolean;
   onPlusClick: () => void;
   onFormatAction: (action: string) => void;
   toolbarRef: React.RefObject<HTMLDivElement>;
 }> = ({ focusedField, isFormatMenuOpen, onPlusClick, onFormatAction, toolbarRef }) => {
-  if (!focusedField) {
-    console.log('[ToolbarDebug] Not rendering: focusedField is null.');
-    return null;
-  }
-
-  let toolbarPositionClass = '';
-  if (focusedField === 'title') {
-    toolbarPositionClass = 'top-1/2 -translate-y-1/2 left-[-45px]'; // Position left of title
-  } else if (focusedField === 'content') {
-    toolbarPositionClass = 'top-2 left-[-45px]'; // Position top-left of content area
-  }
   
-  const style: React.CSSProperties = {
+  // Simplified style for debugging visibility
+  const toolbarDynamicStyle: React.CSSProperties = {
     position: 'absolute',
     zIndex: 50,
-    display: 'flex',
+    display: 'flex', // Always flex if rendered
     alignItems: 'center',
     gap: '2px',
     backgroundColor: 'hsl(var(--background))',
@@ -74,39 +64,34 @@ const ToolbarComponentVisualDebug: React.FC<{
     boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
   };
 
-  const showPlusButtonTrigger = focusedField !== null && !isFormatMenuOpen;
-  const showExpandedFormatMenu = focusedField !== null && isFormatMenuOpen;
-  
-  console.log('[ToolbarDebug] Rendering Toolbar. FocusedField:', focusedField, 'isFormatMenuOpen:', isFormatMenuOpen, "Applied Style:", style, "Position Class:", toolbarPositionClass);
-  console.log('[ToolbarDebug] showPlusButtonTrigger:', showPlusButtonTrigger, 'showExpandedFormatMenu:', showExpandedFormatMenu);
-
-
-  if (!showPlusButtonTrigger && !showExpandedFormatMenu) {
-      console.log('[ToolbarDebug] Toolbar is hidden based on showPlusButtonTrigger and showExpandedFormatMenu states.');
-      return null;
+  if (focusedField === 'title') {
+    toolbarDynamicStyle.top = '50%';
+    toolbarDynamicStyle.left = '-50px'; // Position left of title
+    toolbarDynamicStyle.transform = 'translateY(-50%)';
+  } else if (focusedField === 'content') {
+    toolbarDynamicStyle.top = '8px'; // Approx 1rem, near top of textarea
+    toolbarDynamicStyle.left = '-50px'; // Position left of content area
+  } else {
+    // This case should ideally not be reached if ToolbarComponent is only rendered when focusedField is not null
+    return null; 
   }
-
+  
+  // console.log('[ToolbarDebug] ToolbarComponent rendering. FocusedField:', focusedField, 'isFormatMenuOpen:', isFormatMenuOpen, "Applied Style:", toolbarDynamicStyle);
 
   return (
-    <div
-      ref={toolbarRef}
-      className={cn('absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md', toolbarPositionClass)}
-      style={{zIndex: 50}} // Keep zIndex high
-    >
-      {showPlusButtonTrigger && (
-         <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            className="h-7 w-7 rounded-full"
-            onClick={onPlusClick}
-            onMouseDown={(e) => e.preventDefault()}
-          >
-            <PlusCircle className="h-5 w-5" />
-          </Button>
-      )}
-      
-      {showExpandedFormatMenu && (
+    <div ref={toolbarRef} style={toolbarDynamicStyle}>
+      {!isFormatMenuOpen ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 rounded-full"
+          onClick={onPlusClick}
+          onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+        >
+          <PlusCircle className="h-5 w-5" />
+        </Button>
+      ) : (
         <>
           <Button
             type="button"
@@ -114,7 +99,7 @@ const ToolbarComponentVisualDebug: React.FC<{
             size="icon"
             className="h-7 w-7 rounded-full"
             onClick={onPlusClick} // This will toggle isFormatMenuOpen to false
-            onMouseDown={(e) => e.preventDefault()}
+            onMouseDown={(e) => e.preventDefault()} // Prevent input blur
           >
             <X className="h-5 w-5" />
           </Button>
@@ -142,7 +127,7 @@ const CreateNewsArticlePage = () => {
   
   const titleInputRef = useRef<HTMLInputElement>(null);
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null);
+  const toolbarRef = useRef<HTMLDivElement>(null); // Single ref for the toolbar component
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -153,29 +138,34 @@ const CreateNewsArticlePage = () => {
     },
   });
   
+  // Watch form values to react to their changes for toolbar visibility
   const titleValueFromForm = form.watch('title');
   const contentValueFromForm = form.watch('content');
 
   const handleFocus = (field: 'title' | 'content') => {
-    console.log('[FocusDebug] Field focused:', field);
+    // console.log('[FocusDebug] Field focused:', field);
     setFocusedField(field);
+    // No need to call updateToolbarPosition explicitly here if useEffect handles it
   };
   
   const handleBlur = (fieldToBlur: 'title' | 'content') => {
+    // Delay blur processing to allow clicks on toolbar buttons
     setTimeout(() => {
       const activeElementIsToolbarButton = toolbarRef.current?.contains(document.activeElement);
       if (activeElementIsToolbarButton) {
-        console.log('[BlurDebug] Blur prevented: Focus moved to toolbar for field:', fieldToBlur);
+        // console.log('[BlurDebug] Blur prevented: Focus moved to toolbar for field:', fieldToBlur);
+        // Re-focus the field to keep the toolbar context
         if (fieldToBlur === 'title' && titleInputRef.current) titleInputRef.current.focus();
         else if (fieldToBlur === 'content' && contentTextareaRef.current) contentTextareaRef.current.focus();
         return; 
       }
+      // If focus didn't move to the toolbar, then truly blur the field
       if (focusedField === fieldToBlur) { 
-        console.log('[BlurDebug] Field blurred:', fieldToBlur, 'New active element:', document.activeElement);
+        // console.log('[BlurDebug] Field blurred:', fieldToBlur, 'New active element:', document.activeElement);
         setFocusedField(null);
         setIsFormatMenuOpen(false);
       }
-    }, 100);
+    }, 100); // Small delay
   };
   
   const insertTextIntoContent = (textToInsert: string) => {
@@ -183,10 +173,12 @@ const CreateNewsArticlePage = () => {
       const textarea = contentTextareaRef.current;
       const start = textarea.selectionStart ?? textarea.value.length;
       const end = textarea.selectionEnd ?? textarea.value.length;
-      const currentValue = form.getValues('content');
+      const currentValue = form.getValues('content'); // Get current value from form
       const newValue = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
-      form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
+      form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true }); // Update form state
+      
       const newCursorPos = start + textToInsert.length;
+      // Ensure DOM is updated before trying to set selection range
       requestAnimationFrame(() => { 
         textarea.focus();
         textarea.setSelectionRange(newCursorPos, newCursorPos);
@@ -195,11 +187,11 @@ const CreateNewsArticlePage = () => {
   };
 
   const handleFormatButtonClick = (action: string) => {
-    console.log('[FormatButtonClick] Action:', action, 'FocusedField:', focusedField);
+    // console.log('[FormatButtonClick] Action:', action, 'FocusedField:', focusedField);
     if (focusedField === 'title') {
       toast({ title: "Action Not Applicable", description: `Cannot apply "${action}" to the title field.`, variant: "default" });
-      setIsFormatMenuOpen(false);
-      titleInputRef.current?.focus();
+      setIsFormatMenuOpen(false); // Close menu
+      titleInputRef.current?.focus(); // Re-focus title
       return;
     }
     if (focusedField === 'content' && contentTextareaRef.current) {
@@ -212,25 +204,31 @@ const CreateNewsArticlePage = () => {
         case 'Separator': insertTextIntoContent("\n---\n"); break;
         default: toast({ title: "Action (Placeholder)", description: `${action} clicked for ${focusedField}` });
       }
-      contentTextareaRef.current.focus(); 
-    } else if (focusedField !== 'title') {
+      contentTextareaRef.current.focus(); // Re-focus content after action
+    } else if (focusedField !== 'title') { // If no field is focused (should not happen if menu is open)
       toast({ title: "No Field Focused", description: "Please focus on the content area to apply formatting." });
     }
-    setIsFormatMenuOpen(false);
+    setIsFormatMenuOpen(false); // Close menu after action
   };
   
   const handleToggleFormatMenu = () => {
-      console.log('[ToggleFormatMenu] Current isFormatMenuOpen:', isFormatMenuOpen);
+      // console.log('[ToggleFormatMenu] Current isFormatMenuOpen:', isFormatMenuOpen);
       setIsFormatMenuOpen(prev => !prev);
+      // Ensure the originating field remains focused
       if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus();
       else if (focusedField === 'content' && contentTextareaRef.current) contentTextareaRef.current.focus();
   };
 
   const onSubmit = async (data: ArticleFormData) => {
     if (!user) { toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in." }); return; }
-    setIsSubmitting(true); console.log("Submitting Article Data (Placeholder):", data); await new Promise(resolve => setTimeout(resolve, 1500));
+    setIsSubmitting(true); 
+    // console.log("Submitting Article Data (Placeholder):", data); 
+    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate API call
     toast({ title: "Article Submitted (Placeholder)", description: `"${data.title}" would be processed.` });
-    setIsSubmitting(false); form.reset(); setFocusedField(null); setIsFormatMenuOpen(false);
+    setIsSubmitting(false); 
+    form.reset(); 
+    setFocusedField(null); 
+    setIsFormatMenuOpen(false);
   };
 
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
@@ -240,6 +238,7 @@ const CreateNewsArticlePage = () => {
     <div className="container mx-auto py-8 px-4 md:px-6">
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0">
+          {/* Top Controls: Category, Cover Image, Save, Publish */}
           <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
             <div className="flex items-center gap-2 mr-auto">
                 <FormField control={form.control} name="category" render={({ field }) => ( <FormItem><Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}><FormControl><SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue placeholder="Category" /></SelectTrigger></FormControl><SelectContent>{newsCategories.map((category) => ( <SelectItem key={category} value={category} className="text-sm">{category}</SelectItem>))}</SelectContent></Select><FormMessage className="sm:hidden text-xs" /></FormItem>)} />
@@ -252,32 +251,52 @@ const CreateNewsArticlePage = () => {
           </div>
           <FormField control={form.control} name="category" render={() => <FormItem><FormMessage className="text-center text-sm mb-2 hidden sm:block" /></FormItem>} />
           
+          {/* Title Field and its Toolbar */}
           <div className="relative">
-            <ToolbarComponentVisualDebug focusedField={focusedField} isFormatMenuOpen={isFormatMenuOpen} onPlusClick={handleToggleFormatMenu} onFormatAction={handleFormatButtonClick} toolbarRef={toolbarRef} />
-            <FormField control={form.control} name="title" render={({ field }) => ( <FormItem className="mb-8"><FormControl><Input ref={node => { field.ref(node); (titleInputRef as React.MutableRefObject<HTMLInputElement | null>).current = node; }} placeholder="Title" {...field} value={titleValueFromForm} onChange={(e) => form.setValue('title', e.target.value)} onFocus={() => handleFocus('title')} onBlur={() => handleBlur('title')} disabled={isSubmitting} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"/></FormControl><FormMessage /></FormItem>)} />
+            {focusedField === 'title' && (
+              <ToolbarComponent
+                focusedField={focusedField}
+                isFormatMenuOpen={isFormatMenuOpen}
+                onPlusClick={handleToggleFormatMenu}
+                onFormatAction={handleFormatButtonClick}
+                toolbarRef={toolbarRef} // Pass the single ref
+              />
+            )}
+            <FormField control={form.control} name="title" render={({ field }) => ( <FormItem className="mb-8"><FormControl><Input ref={node => { field.ref(node); if(node) (titleInputRef as React.MutableRefObject<HTMLInputElement | null>).current = node; }} placeholder="Title" {...field} value={titleValueFromForm} onChange={(e) => form.setValue('title', e.target.value)} onFocus={() => handleFocus('title')} onBlur={() => handleBlur('title')} disabled={isSubmitting} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"/></FormControl><FormMessage /></FormItem>)} />
           </div>
 
+          {/* Content Field and its Toolbar */}
           <div className="relative">
-            <ToolbarComponentVisualDebug focusedField={focusedField} isFormatMenuOpen={isFormatMenuOpen} onPlusClick={handleToggleFormatMenu} onFormatAction={handleFormatButtonClick} toolbarRef={toolbarRef} />
+             {focusedField === 'content' && (
+              <ToolbarComponent
+                focusedField={focusedField}
+                isFormatMenuOpen={isFormatMenuOpen}
+                onPlusClick={handleToggleFormatMenu}
+                onFormatAction={handleFormatButtonClick}
+                toolbarRef={toolbarRef} // Pass the single ref
+              />
+            )}
             <FormField control={form.control} name="content" render={({ field }) => (
               <FormItem>
                 <FormControl>
                   <Textarea
-                    ref={node => { field.ref(node); (contentTextareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = node; }}
+                    ref={node => { field.ref(node); if(node) (contentTextareaRef as React.MutableRefObject<HTMLTextAreaElement | null>).current = node; }}
                     placeholder="Tell your story..."
                     className={cn(
-                      "text-xl border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 min-h-[300px] resize-y placeholder:text-muted-foreground/50 py-2",
-                      // Tailwind classes for direct style application
-                      "text-[20px] leading-[28px] font-normal text-start no-underline tracking-normal break-words normal-case"
+                      "border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 min-h-[300px] resize-y placeholder:text-muted-foreground/50 py-2",
+                      // Applied styles from user request
+                      "font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case"
                     )}
                     style={{
+                      fontSize: '20px',
+                      lineHeight: '28px',
                       fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif',
-                      color: 'rgba(0, 0, 0, 0.84)',
-                      // wordSpacing and whiteSpace are default, textTransform none is covered by normal-case
+                      color: 'rgba(0, 0, 0, 0.84)', // This might not be theme-aware for dark mode
+                      wordSpacing: '0px', // Usually default, explicitly set
                     }}
                     {...field}
-                    value={contentValueFromForm}
-                    onChange={(e) => form.setValue('content', e.target.value)}
+                    value={contentValueFromForm} // Use watched value
+                    onChange={(e) => form.setValue('content', e.target.value)} // Update form directly
                     onFocus={() => handleFocus('content')}
                     onBlur={() => handleBlur('content')}
                     disabled={isSubmitting}
@@ -295,3 +314,5 @@ const CreateNewsArticlePage = () => {
 
 export default CreateNewsArticlePage;
 
+
+    
