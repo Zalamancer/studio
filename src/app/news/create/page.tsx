@@ -2,7 +2,7 @@
 // src/app/news/create/page.tsx
 "use client";
 
-import React, { useState, useEffect, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -16,8 +16,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
-import { Loader2, Save, Send, ImageUp, PlusCircle, X, Image as ImageIcon, UploadCloud, PlayCircle, Code as CodeIcon, Braces, Minus } from 'lucide-react'; // Added new icons
+import { Form, FormControl, FormField, FormItem, FormMessage, FormLabel } from '@/components/ui/form';
+import { Loader2, Save, Send, ImageUp, PlusCircle, X, Image as ImageIcon, UploadCloud, PlayCircle, Code as CodeIcon, Braces, Minus } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -38,7 +38,7 @@ const articleSchema = z.object({
   title: z.string().min(1, "Title cannot be empty.").max(150, "Title cannot exceed 150 characters."),
   content: z.string().min(1, "Article content cannot be empty."),
   category: z.string().min(1, "Please select a category for the article."),
-  // imageFile: typeof window === 'undefined' ? z.any() : z.instanceof(File).optional(), // Image file handling for backend
+  // imageFile: typeof window === 'undefined' ? z.any() : z.instanceof(File).optional(),
 });
 
 type ArticleFormData = z.infer<typeof articleSchema>;
@@ -53,7 +53,7 @@ const CreateNewsArticlePage = () => {
   const [isFormatMenuOpen, setIsFormatMenuOpen] = useState(false);
   const titleInputRef = useRef<HTMLInputElement>(null);
   const contentTextareaRef = useRef<HTMLTextAreaElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null); // Ref for the toolbar itself
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
@@ -69,17 +69,15 @@ const CreateNewsArticlePage = () => {
     if (value.trim() === '') {
       setFocusedField(field);
     } else {
-      setFocusedField(null); // Don't show + if field is not empty on focus
+      setFocusedField(null);
       setIsFormatMenuOpen(false);
     }
   };
 
   const handleBlur = (field: 'title' | 'content') => {
-    // Delay hiding to allow clicks on the toolbar
     setTimeout(() => {
-      // Check if the new focused element is part of our toolbar
       if (toolbarRef.current && toolbarRef.current.contains(document.activeElement)) {
-        return; // Don't hide if a toolbar button was clicked
+        return;
       }
       if (!isFormatMenuOpen) {
         setFocusedField(null);
@@ -95,15 +93,79 @@ const CreateNewsArticlePage = () => {
     }
   };
 
+  const insertTextIntoContent = (textToInsert: string) => {
+    if (contentTextareaRef.current) {
+      const textarea = contentTextareaRef.current;
+      const start = textarea.selectionStart;
+      const end = textarea.selectionEnd;
+      const currentValue = textarea.value;
+      const newValue = currentValue.substring(0, start) + textToInsert + currentValue.substring(end);
+      
+      form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
+
+      // Attempt to set cursor position after insertion
+      // This might need a useEffect if React's render cycle interferes
+      requestAnimationFrame(() => {
+        textarea.selectionStart = start + textToInsert.length;
+        textarea.selectionEnd = start + textToInsert.length;
+        textarea.focus();
+      });
+    }
+  };
 
   const handleFormatButtonClick = (action: string) => {
-    console.log(`${action} clicked for ${focusedField}`);
-    // Placeholder: In a real editor, this would insert markdown/HTML or update editor state
-    toast({ title: "Action (Placeholder)", description: `${action} for ${focusedField}`});
+    if (focusedField === 'title') {
+      toast({ title: "Action Not Applicable", description: `Cannot apply "${action}" to the title field.`, variant: "default" });
+      setIsFormatMenuOpen(false);
+      titleInputRef.current?.focus();
+      return;
+    }
+
+    if (focusedField === 'content' && contentTextareaRef.current) {
+      switch (action) {
+        case 'Image': {
+          const url = window.prompt("Enter image URL:");
+          if (url) insertTextIntoContent(`\n![Image Alt Text](${url})\n`);
+          break;
+        }
+        case 'Upload': {
+          toast({ title: "Placeholder Action", description: "Actual file upload requires further implementation. Inserting placeholder." });
+          insertTextIntoContent(`\n![Uploaded Image Placeholder](path/to/image.jpg)\n`);
+          break;
+        }
+        case 'Video': {
+          const url = window.prompt("Enter video URL (e.g., YouTube, Vimeo):");
+          if (url) insertTextIntoContent(`\n[Watch Video: ${url}](${url})\n`);
+          break;
+        }
+        case 'Embed': {
+          const embedCode = window.prompt("Paste embed code (e.g., iframe):");
+          if (embedCode) insertTextIntoContent(`\n${embedCode}\n`);
+          break;
+        }
+        case 'Code Block': {
+          const textarea = contentTextareaRef.current;
+          const start = textarea.selectionStart;
+          const end = textarea.selectionEnd;
+          const selectedText = textarea.value.substring(start, end);
+          if (selectedText) {
+            insertTextIntoContent("```\n" + selectedText + "\n```");
+          } else {
+            insertTextIntoContent("```\nYour code here\n```");
+          }
+          break;
+        }
+        case 'Separator':
+          insertTextIntoContent("\n---\n");
+          break;
+        default:
+          toast({ title: "Action (Placeholder)", description: `${action} clicked for ${focusedField}` });
+      }
+      contentTextareaRef.current.focus();
+    } else {
+      toast({ title: "No Field Focused", description: "Please focus on the content area to apply formatting." });
+    }
     setIsFormatMenuOpen(false);
-    // Optionally, refocus the editor field:
-    // if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus();
-    // if (focusedField === 'content' && contentTextareaRef.current) contentTextareaRef.current.focus();
   };
 
   const onSubmit = async (data: ArticleFormData) => {
@@ -126,9 +188,9 @@ const CreateNewsArticlePage = () => {
   };
   
   const getToolbarPositionClass = () => {
-    if (focusedField === 'title') return "top-2 left-[-50px] sm:left-[-55px]"; // Adjust as needed
-    if (focusedField === 'content') return "top-2 left-[-50px] sm:left-[-55px]"; // Adjust as needed
-    return "hidden"; // Should not happen if focusedField is null
+    if (focusedField === 'title') return "top-2 left-[-50px] sm:left-[-55px]";
+    if (focusedField === 'content') return "top-2 left-[-50px] sm:left-[-55px]";
+    return "hidden"; 
   };
 
   if (authLoading) {
@@ -151,7 +213,7 @@ const CreateNewsArticlePage = () => {
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
       <Form {...form}>
-        <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-8">
+        <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0">
           
           <div className="flex items-center justify-between gap-x-3 gap-y-2 mb-6 flex-wrap">
             <div className="flex items-center gap-2 flex-wrap">
@@ -197,7 +259,7 @@ const CreateNewsArticlePage = () => {
           )}
 
           <div className="relative">
-            {(focusedField === 'title' && form.getValues('title').trim() === '' || (focusedField === 'title' && isFormatMenuOpen)) && (
+            {((focusedField === 'title' && form.getValues('title').trim() === '') || (focusedField === 'title' && isFormatMenuOpen)) && (
               <div ref={toolbarRef} className={cn("absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md z-10", getToolbarPositionClass())}>
                 <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}>
                   {isFormatMenuOpen ? <X className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
@@ -238,7 +300,7 @@ const CreateNewsArticlePage = () => {
           </div>
 
           <div className="relative">
-            {(focusedField === 'content' && form.getValues('content').trim() === '' || (focusedField === 'content' && isFormatMenuOpen)) && (
+            {((focusedField === 'content' && form.getValues('content').trim() === '') || (focusedField === 'content' && isFormatMenuOpen)) && (
                  <div ref={toolbarRef} className={cn("absolute flex items-center gap-0.5 bg-background p-0.5 rounded-full border shadow-md z-10", getToolbarPositionClass())}>
                 <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={() => setIsFormatMenuOpen(!isFormatMenuOpen)}>
                   {isFormatMenuOpen ? <X className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
