@@ -1,3 +1,4 @@
+
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -23,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper } from "lucide-react"; // Added Newspaper
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper, Edit2 } from "lucide-react"; // Added Edit2
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -42,7 +43,7 @@ import { uploadPostImage } from '@/services/storageService';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { Timestamp } from 'firebase/firestore';
-import { useIsMobile } from "@/hooks/use-mobile"; // Corrected import path
+import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { createNotification } from '@/services/notificationService';
@@ -531,7 +532,7 @@ export default function MainLayout({
   const navItems = [
     { title: "Home", href: "/", icon: Home },
     { title: "Discover", href: "/discover", icon: Compass },
-    { title: "News", href: "/news", icon: Newspaper }, // Added News link
+    { title: "News", href: "/news", icon: Newspaper },
     { title: "Messages", href: "/messages", icon: MessageSquare },
   ];
 
@@ -626,6 +627,15 @@ export default function MainLayout({
                       </div>
                     </DialogContent>
                   </Dialog>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => alert("Create News functionality will be implemented here. For now, you can navigate to /news.")}
+                  >
+                    <Newspaper className="mr-2 h-4 w-4" />
+                    <span className="hidden sm:inline">Create News</span>
+                    <span className="sm:hidden">News</span>
+                  </Button>
 
                   {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
                   <DropdownMenu>
