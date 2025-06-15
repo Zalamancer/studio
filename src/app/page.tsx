@@ -21,11 +21,12 @@ import {
   AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
-  AlertDialogDescription,
+  AlertDialogDescription as AlertDialogPrimitiveDescription, // Aliased to avoid conflict if DialogDescription is also imported
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle as AlertDialogPrimitiveTitle,
 } from "@/components/ui/alert-dialog";
+import { DialogDescription } from "@/components/ui/dialog"; // Added DialogDescription import
 // Dialog components for Create Post are removed from here as it's now inline
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -451,3 +452,4 @@ export default BoardPageContent;
 
 
     
+
