@@ -227,6 +227,7 @@ export const usePlanLogic = () => {
     if (!user || !planData) return false;
     if (planData.ownerId === user.uid) return true;
     if (planData.editability === 'collaborators' && (planData.editUserIds || []).includes(user.uid)) return true;
+    if (planData.editability === 'everyone') return true; // Any authenticated user can edit
     return false;
   }, [user, planData]);
 
@@ -891,4 +892,5 @@ export const usePlanLogic = () => {
 
 
     
+
 
