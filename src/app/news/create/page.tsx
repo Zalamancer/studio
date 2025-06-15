@@ -26,7 +26,8 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-} from '@/components/ui/dialog'; // Import Dialog components
+} from '@/components/ui/dialog';
+import { Textarea } from '@/components/ui/textarea'; // Added Textarea for embed dialog
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -64,16 +65,20 @@ const CreateNewsArticlePage = () => {
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const coverImageInputRef = useRef<HTMLInputElement>(null);
   const inlineImageInputRef = useRef<HTMLInputElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null);
+  const toolbarWrapperRef = useRef<HTMLDivElement>(null); // Changed from toolbarRef to avoid conflict
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
-  const [showContextualUI, setShowContextualUI] = useState(false);
-  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
+  
+  const [showContextualUI, setShowContextualUI] = useState(false); // General visibility for "+" or toolbar
+  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false); // Controls if action items next to "+" are shown
+
   const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
 
-  // State for YouTube URL Dialog
   const [isYouTubeDialogOpen, setIsYouTubeDialogOpen] = useState(false);
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
+
+  const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
+  const [embedCodeInput, setEmbedCodeInput] = useState("");
 
 
   useEffect(() => {
@@ -185,15 +190,13 @@ const CreateNewsArticlePage = () => {
   }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
-    let newToolbarStyleObj: React.CSSProperties | null = null;
-    let shouldShowContextualUIFlag = false;
+    let shouldShowBaseUI = false;
     const currentLineText = getCurrentLineText();
-    const currentLineIsEmptyOrSpecial = currentLineText === "" || currentLineText === "NO_CURRENT_BLOCK" || currentLineText === "PRE_HAS_CONTENT" || currentLineText === "FIGURE_HAS_CONTENT" || currentLineText === "HR_HAS_CONTENT";
-    
+    const lineIsEmpty = currentLineText === "" || currentLineText === "NO_CURRENT_BLOCK";
+
     if (focusedField && (document.activeElement === titleInputRef.current || document.activeElement === contentEditableRef.current)) {
       const lineYOffsetClient = calculateCursorLineYOffset();
       if (lineYOffsetClient !== null) {
-        shouldShowContextualUIFlag = true;
         let referenceElementRect: DOMRect | undefined;
         if (focusedField === 'title' && titleWrapperRef.current) referenceElementRect = titleWrapperRef.current.getBoundingClientRect();
         else if (focusedField === 'content' && contentWrapperRef.current) referenceElementRect = contentWrapperRef.current.getBoundingClientRect();
@@ -202,25 +205,22 @@ const CreateNewsArticlePage = () => {
           const formRect = formWrapperRef.current.getBoundingClientRect();
           const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
           const newTop = lineYOffsetClient - formRect.top - (TOOLBAR_HEIGHT / 2);
-          newToolbarStyleObj = { top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' as 'absolute' };
+          setToolbarStyle({ top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' as 'absolute' });
+        }
+        // Condition to show the base "+" button or expanded toolbar.
+        if (lineIsEmpty || isToolbarExpanded) {
+          shouldShowBaseUI = true;
         }
       }
     }
-
-    if (newToolbarStyleObj) setToolbarStyle(newToolbarStyleObj);
-    
-    if (shouldShowContextualUIFlag) {
-      setShowContextualUI(true); // Always show the base "+" if eligible
-      if (!isToolbarExpanded && !currentLineIsEmptyOrSpecial) { // If toolbar is NOT expanded and line has text, hide everything
-        setShowContextualUI(false);
-      }
-      // isToolbarExpanded is handled separately by its own toggle
-    } else {
-      setShowContextualUI(false);
-      setIsToolbarExpanded(false); // Collapse if focus lost or no valid line
+    setShowContextualUI(shouldShowBaseUI);
+    // isToolbarExpanded state is managed by its own toggle, not directly here.
+    // If shouldShowBaseUI is false, it implies the toolbar items should also not be expanded.
+    if (!shouldShowBaseUI) {
+      setIsToolbarExpanded(false);
     }
 
-  }, [focusedField, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded]);
+  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef]);
 
   useEffect(() => {
     calculateAndUpdateToolbarStyle();
@@ -251,9 +251,11 @@ const CreateNewsArticlePage = () => {
       const activeEl = document.activeElement;
       let isFocusWithinToolbarOrInput = false;
       if (
-        (toolbarRef.current && toolbarRef.current.contains(activeEl)) ||
+        (toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) ||
         titleInputRef.current === activeEl ||
-        contentEditableRef.current === activeEl
+        contentEditableRef.current === activeEl ||
+        isYouTubeDialogOpen || // Prevent closing if dialog is open
+        isEmbedDialogOpen    // Prevent closing if embed dialog is open
       ) {
         isFocusWithinToolbarOrInput = true;
       }
@@ -263,7 +265,7 @@ const CreateNewsArticlePage = () => {
         setShowContextualUI(false);
       }
     });
-  }, []);
+  }, [isYouTubeDialogOpen, isEmbedDialogOpen]); // Added dialog states to dependencies
 
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     const currentHTML = event.currentTarget.innerHTML;
@@ -330,9 +332,9 @@ const CreateNewsArticlePage = () => {
       }
     }
     setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
-    updateSelectionNonce();
     setIsToolbarExpanded(false);
-    setShowContextualUI(false);
+    setShowContextualUI(false); 
+    updateSelectionNonce();
   };
   
   const insertHTMLAndFocus = useCallback((htmlToInsert: string) => {
@@ -359,11 +361,10 @@ const CreateNewsArticlePage = () => {
     
     setStoryContent(editorEl.innerHTML);
     setIsToolbarExpanded(false); // Close the expanded toolbar after action
-    // setShowContextualUI(false) will be handled by calculateAndUpdateToolbarStyle due to content change
     
     setTimeout(() => {
       editorEl.focus();
-      updateSelectionNonce();
+      updateSelectionNonce(); // This will trigger calculateAndUpdateToolbarStyle, which hides UI if line not empty
     }, 0);
   }, [focusedField, getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded]);
   
@@ -390,14 +391,12 @@ const CreateNewsArticlePage = () => {
     }
   }, [insertHTMLAndFocus]);
   
-  // Modified to open the dialog
   const handleInsertYouTubeVideo = useCallback(() => {
     setIsYouTubeDialogOpen(true);
-    setYouTubeUrlInput(""); // Clear previous input
-    setIsToolbarExpanded(false); // Close the main toolbar when opening dialog
+    setYouTubeUrlInput("");
+    setIsToolbarExpanded(false);
   }, []);
 
-  // New handler for submitting YouTube URL from the dialog
   const handleYouTubeDialogSubmit = () => {
     if (youTubeUrlInput) {
       let videoId = '';
@@ -405,9 +404,9 @@ const CreateNewsArticlePage = () => {
         const urlObj = new URL(youTubeUrlInput);
         if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.substring(1);
         else if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v')!;
-        else videoId = youTubeUrlInput; // Assume it's an ID if not a standard URL
+        else videoId = youTubeUrlInput;
       } catch (e) {
-        videoId = youTubeUrlInput; // Assume it's an ID if URL parsing fails
+        videoId = youTubeUrlInput;
       }
 
       if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) {
@@ -421,16 +420,23 @@ const CreateNewsArticlePage = () => {
     setIsYouTubeDialogOpen(false);
   };
 
+  const handleOpenEmbedDialog = useCallback(() => {
+    setIsEmbedDialogOpen(true);
+    setEmbedCodeInput("");
+    setIsToolbarExpanded(false); // Close main toolbar when opening dialog
+  }, []);
 
-  const handleInsertEmbed = useCallback(() => {
-    const embedCode = window.prompt("Paste embed code (e.g., Twitter, Vimeo). Ensure it's iframe-based or similar safe HTML.");
-    if (embedCode) {
-      const sanitizedCode = embedCode.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-      insertHTMLAndFocus(`<div class="my-4" data-embed-wrapper="true">${sanitizedCode}</div><p><br></p>`);
-    } else {
-      setIsToolbarExpanded(false);
+  const handleEmbedDialogSubmit = () => {
+    if (embedCodeInput) {
+      const sanitizedCode = embedCodeInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
+      if (sanitizedCode.trim()) {
+        insertHTMLAndFocus(`<div class="my-4" data-embed-wrapper="true">${sanitizedCode}</div><p><br></p>`);
+      } else {
+        toast({ variant: 'destructive', title: 'Invalid Embed Code', description: 'Please provide valid embed code (e.g., an iframe).' });
+      }
     }
-  }, [insertHTMLAndFocus]);
+    setIsEmbedDialogOpen(false);
+  };
 
   const handleInsertCodeBlock = useCallback(() => insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`), [insertHTMLAndFocus]);
   
@@ -439,7 +445,7 @@ const CreateNewsArticlePage = () => {
   const handleToggleToolbar = () => {
     setIsToolbarExpanded(prev => {
       const newExpandedState = !prev;
-      if (newExpandedState) {
+      if (newExpandedState) { // If opening the toolbar, re-focus the field
           if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus();
           else if (focusedField === 'content' && contentEditableRef.current) contentEditableRef.current.focus();
       }
@@ -459,13 +465,13 @@ const CreateNewsArticlePage = () => {
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
         
         {showContextualUI && (
-          <div ref={toolbarRef} style={toolbarStyle} className="flex items-center space-x-1">
+          <div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button
               type="button"
               variant="outline"
               size="icon"
               onClick={handleToggleToolbar}
-              onMouseDown={(e) => e.preventDefault()}
+              onMouseDown={(e) => e.preventDefault()} 
               className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center"
               aria-expanded={isToolbarExpanded}
               aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}
@@ -483,7 +489,7 @@ const CreateNewsArticlePage = () => {
                 <button onClick={handleInsertYouTubeVideo} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert YouTube video" title="Insert YouTube video">
                   <YoutubeIcon className={iconClass} />
                 </button>
-                <button onClick={handleInsertEmbed} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert embed" title="Insert embed (e.g., Twitter, Vimeo)">
+                <button onClick={handleOpenEmbedDialog} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert embed" title="Insert embed (e.g., Twitter, Vimeo)">
                   <Link2Icon className={iconClass} />
                 </button>
                 <button onClick={handleInsertCodeBlock} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert code block" title="Insert code block">
@@ -621,7 +627,6 @@ const CreateNewsArticlePage = () => {
       </div>
     </div>
 
-    {/* YouTube URL Input Dialog */}
     <Dialog open={isYouTubeDialogOpen} onOpenChange={setIsYouTubeDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -640,13 +645,38 @@ const CreateNewsArticlePage = () => {
                 value={youTubeUrlInput}
                 onChange={(e) => setYouTubeUrlInput(e.target.value)}
                 className="col-span-3"
-                placeholder="e.g., https://www.youtube.com/watch?v=dQw4w9WgXcQ or dQw4w9WgXcQ"
+                placeholder="e.g., https://www.youtube.com/watch?v=VIDEO_ID"
               />
             </div>
           </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setIsYouTubeDialogOpen(false)}>Cancel</Button>
             <Button type="button" onClick={handleYouTubeDialogSubmit}>Embed Video</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={isEmbedDialogOpen} onOpenChange={setIsEmbedDialogOpen}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Embed External Content</DialogTitle>
+            <DialogDescription>
+              Paste your embed code (e.g., from Twitter, Vimeo, etc.). Ensure it&apos;s safe, typically iframe-based.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <Label htmlFor="embed-code" className="sr-only">Embed Code</Label>
+            <Textarea
+              id="embed-code"
+              value={embedCodeInput}
+              onChange={(e) => setEmbedCodeInput(e.target.value)}
+              className="min-h-[150px] font-mono text-xs"
+              placeholder="<iframe src='...'></iframe>"
+            />
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsEmbedDialogOpen(false)}>Cancel</Button>
+            <Button type="button" onClick={handleEmbedDialogSubmit}>Embed Content</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
