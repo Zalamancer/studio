@@ -506,8 +506,8 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm, handleValidationErrors)} className="space-y-0">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6 p-1">
-          {/* Left Column */}
+        <div className="grid grid-cols-1 gap-y-6 p-1"> {/* Changed to single column layout */}
+          {/* All fields will now stack vertically */}
           <div className="space-y-6 flex flex-col">
             <FormField
               control={form.control}
@@ -754,7 +754,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
             )} />
           </div>
 
-          {/* Right Column */}
           <div className="space-y-6">
             <FormField control={form.control} name="sector" render={({ field }) => (
               <FormItem>
@@ -821,12 +820,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
           </div>
         </div>
 
-        {/* This DialogFooter will now act as regular form buttons for the inline form */}
-        <DialogFooter className="pt-8 md:col-span-2">
-            {/* The `asChild` prop for DialogClose can be removed if it's not inside a Dialog,
-                but Button will still render. The important part is its onClick.
-                Or, we can just make it a regular Button.
-            */}
+        <DialogFooter className="pt-8">
             {onDialogClose && (
               <Button type="button" variant="outline" onClick={() => { resetFormValues(); onDialogClose(); }} disabled={isSubmitting || isCompressing || (showProblemDetailsSuggestions && isLoadingSuggestibleUsers) || !currentUserId}>
                 Cancel
