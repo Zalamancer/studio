@@ -30,8 +30,8 @@ const newsCategories = [
   "Case Studies",
 ];
 
-const TOOLBAR_HEIGHT = 36;
-const TOOLBAR_HORIZONTAL_OFFSET = 80; 
+const TOOLBAR_HEIGHT = 36; 
+const TOOLBAR_HORIZONTAL_OFFSET = 40; // Reduced offset for better alignment
 
 const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
@@ -40,8 +40,7 @@ const CreateNewsArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [storyContent, setStoryContent] = useState("<p><br></p>");
-  const [cursorPosition, setCursorPosition] = useState(0);
+  const [storyContent, setStoryContent] = useState("<p><br></p>"); // Initial empty state for contentEditable
   const [selectionNonce, setSelectionNonce] = useState(0);
 
   const [publishAttempted, setPublishAttempted] = useState(false);
@@ -54,12 +53,13 @@ const CreateNewsArticlePage = () => {
   const titleWrapperRef = useRef<HTMLDivElement>(null);
   const contentEditableRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
-  const coverImageInputRef = useRef<HTMLInputElement>(null);
-  const toolbarWrapperRef = useRef<HTMLDivElement>(null); // For the combined toolbar UI
+  const coverImageInputRef = useRef<HTMLInputElement>(null); // For header cover image
+  const inlineImageInputRef = useRef<HTMLInputElement>(null); // For toolbar image button
+  const toolbarRef = useRef<HTMLDivElement>(null); 
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
-  const [showContextualUI, setShowContextualUI] = useState(false); // Overall visibility of any toolbar UI
-  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false); // For the action items next to '+' / 'X'
+  const [showContextualUI, setShowContextualUI] = useState(false);
+  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
 
   const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
 
@@ -121,30 +121,10 @@ const CreateNewsArticlePage = () => {
     }
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
   }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
-
-  const updateCursorPosition = useCallback(() => {
-    const activeEl = document.activeElement;
-    const selection = window.getSelection();
-    let newPosition = 0;
-
-    if (activeEl === titleInputRef.current && titleInputRef.current) {
-      newPosition = titleInputRef.current.selectionStart || 0;
-    } else if (activeEl === contentEditableRef.current && contentEditableRef.current && selection && selection.rangeCount > 0) {
-      const range = selection.getRangeAt(0);
-      if (contentEditableRef.current.contains(range.startContainer)) {
-        const preCaretRange = range.cloneRange();
-        preCaretRange.selectNodeContents(contentEditableRef.current);
-        preCaretRange.setEnd(range.startContainer, range.startOffset);
-        newPosition = preCaretRange.toString().length;
-      } else {
-        newPosition = contentEditableRef.current.textContent?.length || 0;
-      }
-    } else if (contentEditableRef.current) {
-       newPosition = contentEditableRef.current.textContent?.length || 0;
-    }
-    setCursorPosition(newPosition);
-    setSelectionNonce(n => n + 1); 
-  }, [contentEditableRef, titleInputRef]);
+  
+  const updateSelectionNonce = useCallback(() => {
+    setSelectionNonce(n => n + 1);
+  }, []);
 
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
@@ -185,7 +165,7 @@ const CreateNewsArticlePage = () => {
       const computedStyleMain = window.getComputedStyle(contentEl);
       const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0;
       let lineHeightMain = parseFloat(computedStyleMain.lineHeight);
-      if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4;
+      if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4; // Default for editor content
       return mainDivRect.top + paddingTopMain + (lineHeightMain / 2);
     }
     return null;
@@ -193,68 +173,60 @@ const CreateNewsArticlePage = () => {
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
     let shouldShowBaseUI = false;
-    let newToolbarStyle: React.CSSProperties | null = null;
-
+    let newToolbarStyleObj: React.CSSProperties | null = null;
+    
     if (focusedField && (document.activeElement === titleInputRef.current || document.activeElement === contentEditableRef.current)) {
       const lineYOffsetClient = calculateCursorLineYOffset();
       if (lineYOffsetClient !== null) {
         shouldShowBaseUI = true;
         let referenceElementRect: DOMRect | undefined;
-        if (focusedField === 'title' && titleInputRef.current) {
-          referenceElementRect = titleWrapperRef.current?.getBoundingClientRect();
-        } else if (focusedField === 'content' && contentEditableRef.current) {
-          referenceElementRect = contentWrapperRef.current?.getBoundingClientRect();
+        if (focusedField === 'title' && titleWrapperRef.current) {
+          referenceElementRect = titleWrapperRef.current.getBoundingClientRect();
+        } else if (focusedField === 'content' && contentWrapperRef.current) {
+          referenceElementRect = contentWrapperRef.current.getBoundingClientRect();
         }
-
         if (referenceElementRect && formWrapperRef.current) {
           const formRect = formWrapperRef.current.getBoundingClientRect();
           const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
           const newTop = lineYOffsetClient - formRect.top - (TOOLBAR_HEIGHT / 2);
-          newToolbarStyle = { top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' as 'absolute' };
+          newToolbarStyleObj = { top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' as 'absolute' };
         }
       }
     }
 
-    if (newToolbarStyle) {
-        setToolbarStyle(newToolbarStyle);
+    if (newToolbarStyleObj) {
+        setToolbarStyle(newToolbarStyleObj);
     }
     
     const currentLineText = getCurrentLineText();
-    const currentLineIsEmpty = currentLineText === "" || currentLineText === "NO_CURRENT_BLOCK";
+    const currentLineIsEmptyOrSpecial = currentLineText === "" || currentLineText === "NO_CURRENT_BLOCK" || currentLineText === "PRE_HAS_CONTENT" || currentLineText === "FIGURE_HAS_CONTENT" || currentLineText === "HR_HAS_CONTENT";
     
     if (shouldShowBaseUI) {
         setShowContextualUI(true);
         if (isToolbarExpanded) {
-            // setShowToolbar(true); // Already managed by isToolbarExpanded
-            // setShowPlusButton(false);
-        } else if (currentLineIsEmpty) {
-            // setShowToolbar(false); // Already managed by isToolbarExpanded
-            // setShowPlusButton(true);
-        } else { // Line not empty and toolbar not expanded
-            setShowContextualUI(false); // Hide all contextual UI
-            setIsToolbarExpanded(false); // Ensure toolbar is collapsed if line isn't empty
+            // Keep toolbar expanded, plus button hidden
+        } else if (currentLineIsEmptyOrSpecial) {
+            // Show plus button if line is empty or special, and toolbar not expanded
+        } else { // Line not empty/special, and toolbar not expanded
+            setShowContextualUI(false);
         }
-    } else {
+    } else { // Not focused or no valid line
         setShowContextualUI(false);
         setIsToolbarExpanded(false); // Collapse if focus lost or no valid line
     }
-
   }, [
-      focusedField, 
-      titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef,
-      isToolbarExpanded, 
-      calculateCursorLineYOffset, 
-      getCurrentLineText,
+      focusedField, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef,
+      isToolbarExpanded, calculateCursorLineYOffset, getCurrentLineText,
     ]);
 
   useEffect(() => {
     calculateAndUpdateToolbarStyle();
-  }, [focusedField, title, storyContent, cursorPosition, isToolbarExpanded, selectionNonce, calculateAndUpdateToolbarStyle]);
+  }, [focusedField, title, storyContent, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
 
   useEffect(() => {
     const handleSelectionOrKey = () => {
       if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) {
-        updateCursorPosition();
+        updateSelectionNonce();
       }
     };
     document.addEventListener('selectionchange', handleSelectionOrKey);
@@ -265,11 +237,10 @@ const CreateNewsArticlePage = () => {
       document.removeEventListener('keyup', handleSelectionOrKey);
       document.removeEventListener('click', handleSelectionOrKey);
     };
-  }, [updateCursorPosition]);
+  }, [updateSelectionNonce]);
 
   const handleFocus = useCallback((field: 'title' | 'content') => {
     setFocusedField(field);
-    // calculateAndUpdateToolbarStyle will run due to focusedField change via useEffect
   }, []);
 
   const handleBlur = useCallback(() => {
@@ -277,7 +248,7 @@ const CreateNewsArticlePage = () => {
       const activeEl = document.activeElement;
       let isFocusWithinToolbarOrInput = false;
       if (
-        (toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) ||
+        (toolbarRef.current && toolbarRef.current.contains(activeEl)) ||
         titleInputRef.current === activeEl ||
         contentEditableRef.current === activeEl
       ) {
@@ -285,7 +256,7 @@ const CreateNewsArticlePage = () => {
       }
       if (!isFocusWithinToolbarOrInput) {
         setFocusedField(null);
-        setIsToolbarExpanded(false); // Also collapse if focus is completely lost
+        setIsToolbarExpanded(false);
       }
     });
   }, []);
@@ -305,8 +276,8 @@ const CreateNewsArticlePage = () => {
         setStoryError("Story content is required.");
       }
     }
-    updateCursorPosition();
-  }, [publishAttempted, setStoryError, updateCursorPosition]);
+    updateSelectionNonce();
+  }, [publishAttempted, setStoryError, updateSelectionNonce]);
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (event.key === 'Enter') {
@@ -315,11 +286,11 @@ const CreateNewsArticlePage = () => {
       setTimeout(() => {
         if (contentEditableRef.current) {
           setStoryContent(contentEditableRef.current.innerHTML);
-          updateCursorPosition();
+          updateSelectionNonce();
         }
       }, 0);
     }
-  }, [updateCursorPosition]);
+  }, [updateSelectionNonce]);
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -355,62 +326,67 @@ const CreateNewsArticlePage = () => {
       }
     }
     setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
-    setCursorPosition(0);
+    updateSelectionNonce();
     setIsToolbarExpanded(false);
   };
   
   const insertHTMLAndFocus = useCallback((htmlToInsert: string) => {
-    const targetFieldRef = focusedField === 'title' ? titleInputRef : contentEditableRef;
-    const editorEl = targetFieldRef.current;
-    
-    if (!editorEl || !contentEditableRef.current) return;
+    const editorEl = contentEditableRef.current;
+    if (!editorEl || focusedField !== 'content') return;
     
     editorEl.focus();
     
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
-      const range = document.createRange();
-      range.selectNodeContents(editorEl);
-      range.collapse(false);
-      selection?.removeAllRanges();
-      selection?.addRange(range);
+      const range = document.createRange(); range.selectNodeContents(editorEl); range.collapse(false);
+      selection?.removeAllRanges(); selection?.addRange(range);
     }
     
     let range = selection.getRangeAt(0);
-    if (!editorEl.contains(range.startContainer)) {
-      range.selectNodeContents(editorEl);
-      range.collapse(false);
-    }
+    if (!editorEl.contains(range.startContainer)) { range.selectNodeContents(editorEl); range.collapse(false); }
 
-    if (targetFieldRef === contentEditableRef) {
-      const currentBlock = getCurrentBlockElement();
-      if (currentBlock && currentBlock.contains(range.startContainer) && 
-          (currentBlock.textContent?.trim() === "") && 
-          (currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "" || currentBlock.innerHTML.toLowerCase() === "<p><br></p>" || currentBlock.innerHTML.toLowerCase() === "<p></p>")) {
-        range.selectNodeContents(currentBlock);
-      }
+    const currentBlock = getCurrentBlockElement();
+    if (currentBlock && currentBlock.contains(range.startContainer) && 
+        (currentBlock.textContent?.trim() === "") && 
+        (currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "" || currentBlock.innerHTML.toLowerCase() === "<p><br></p>" || currentBlock.innerHTML.toLowerCase() === "<p></p>")) {
+      range.selectNodeContents(currentBlock);
     }
     
-    if (!range.collapsed) {
-      range.deleteContents();
-    }
-
+    if (!range.collapsed) { range.deleteContents(); }
     document.execCommand('insertHTML', false, htmlToInsert);
     
-    if (targetFieldRef === contentEditableRef && contentEditableRef.current) {
-      setStoryContent(contentEditableRef.current.innerHTML);
-    }
-
-    setIsToolbarExpanded(false); // Collapse toolbar items after insertion
+    setStoryContent(editorEl.innerHTML);
+    setIsToolbarExpanded(false);
     
     setTimeout(() => {
-        if (editorEl) editorEl.focus();
-        updateCursorPosition(); // This will trigger calculateAndUpdateToolbarStyle
+      editorEl.focus();
+      updateSelectionNonce();
     }, 0);
-    
-  }, [focusedField, getCurrentBlockElement, updateCursorPosition, contentEditableRef, titleInputRef, setStoryContent, setIsToolbarExpanded]);
+  }, [focusedField, getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded]);
+  
+  const triggerInlineImageUpload = useCallback(() => {
+    if (inlineImageInputRef.current) {
+      inlineImageInputRef.current.click();
+    }
+  }, []);
 
-  const handleInsertImage = useCallback(() => insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center"><img src="${encodeURI(window.prompt("Enter image URL:") || 'https://placehold.co/600x400.png')}" alt="User inserted image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="placeholder graphic" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p><br></p>`), [insertHTMLAndFocus]);
+  const handleInlineImageFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        const dataUri = reader.result as string;
+        insertHTMLAndFocus(
+          `<figure class="my-4 flex flex-col items-center"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p><br></p>`
+        );
+      };
+      reader.readAsDataURL(file);
+      if (inlineImageInputRef.current) {
+        inlineImageInputRef.current.value = ''; // Reset file input
+      }
+    }
+  }, [insertHTMLAndFocus]);
+  
   const handleInsertYouTubeVideo = useCallback(() => {
     const url = window.prompt("Enter YouTube video URL or ID:");
     if (url) {
@@ -428,6 +404,7 @@ const CreateNewsArticlePage = () => {
       }
     }
   }, [insertHTMLAndFocus, toast]);
+
   const handleInsertEmbed = useCallback(() => {
     const embedCode = window.prompt("Paste embed code (e.g., Twitter, Vimeo). Ensure it's iframe-based or similar safe HTML.");
     if (embedCode) {
@@ -435,7 +412,9 @@ const CreateNewsArticlePage = () => {
       insertHTMLAndFocus(`<div class="my-4" data-embed-wrapper="true">${sanitizedCode}</div><p><br></p>`);
     }
   }, [insertHTMLAndFocus]);
+
   const handleInsertCodeBlock = useCallback(() => insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`), [insertHTMLAndFocus]);
+  
   const handleInsertSeparator = useCallback(() => insertHTMLAndFocus(`<hr class="my-8 border-border" /><p><br></p>`), [insertHTMLAndFocus]);
   
   const handleToggleToolbar = () => {
@@ -460,7 +439,7 @@ const CreateNewsArticlePage = () => {
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
         
         {showContextualUI && (
-          <div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
+          <div ref={toolbarRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button
               type="button"
               variant="outline"
@@ -478,7 +457,7 @@ const CreateNewsArticlePage = () => {
               <div
                 className="bg-card border p-0.5 rounded-full shadow-lg flex items-center space-x-0.5 ml-1 animate-in fade-in-50 slide-in-from-left-2 duration-200"
               >
-                <button onClick={handleInsertImage} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert image" title="Insert image from URL">
+                <button onClick={triggerInlineImageUpload} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert image" title="Upload image">
                   <ImageIcon className={iconClass} />
                 </button>
                 <button onClick={handleInsertYouTubeVideo} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert YouTube video" title="Insert YouTube video">
@@ -528,6 +507,7 @@ const CreateNewsArticlePage = () => {
               <span className="sm:hidden">Image</span>
             </Button>
             <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} />
+             <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} />
           </div>
           <div className="flex items-center gap-2">
             <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked")} className="text-xs py-1.5 h-9 rounded-full">
@@ -550,12 +530,12 @@ const CreateNewsArticlePage = () => {
                 if (e.target.value.trim()) setTitleError("");
                 else setTitleError("Title is required.");
               }
-              updateCursorPosition();
+              updateSelectionNonce();
             }}
             onFocus={() => handleFocus('title')}
             onBlur={handleBlur}
-            onKeyUp={updateCursorPosition}
-            onClick={updateCursorPosition}
+            onKeyUp={updateSelectionNonce}
+            onClick={updateSelectionNonce}
             className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
             autoComplete="off"
           />
@@ -570,8 +550,8 @@ const CreateNewsArticlePage = () => {
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
-            onClick={updateCursorPosition}
-            onKeyUp={updateCursorPosition}
+            onClick={updateSelectionNonce}
+            onKeyUp={updateSelectionNonce}
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
