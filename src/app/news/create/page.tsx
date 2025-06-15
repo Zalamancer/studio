@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useIsMobile } from '@/hooks/use-mobile'; // For responsive error display
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -33,12 +34,13 @@ const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const isMobile = useIsMobile();
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [storyContent, setStoryContent] = useState(""); // Manages innerHTML of the contentEditable div
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
   const [categoryError, setCategoryError] = useState("");
@@ -46,7 +48,7 @@ const CreateNewsArticlePage = () => {
 
   const contentEditableRef = useRef<HTMLDivElement>(null);
   const coverImageInputRef = useRef<HTMLInputElement>(null);
-  const titleInputRef = useRef<HTMLInputElement>(null); // Ref for title input
+  const titleInputRef = useRef<HTMLInputElement>(null);
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -64,47 +66,41 @@ const CreateNewsArticlePage = () => {
       setCategoryError("");
     }
 
-    const currentStoryText = contentEditableRef.current?.textContent || "";
-    const currentStoryHTML = contentEditableRef.current?.innerHTML || "";
-    // A basic check for non-textual content like images. More complex checks might be needed for other block elements.
-    const hasNonTextualContent = /<img[^>]*>/.test(currentStoryHTML);
+    const currentStoryText = contentEditableRef.current?.textContent?.trim() || "";
+    const hasNonTextualContent = contentEditableRef.current ? /<img[^>]*>|<div[^>]*>|<p[^>]*>/.test(contentEditableRef.current.innerHTML) : false;
 
-    if (currentStoryText.trim() === '' && !hasNonTextualContent) {
+    if (currentStoryText === '' && !hasNonTextualContent && storyContent.replace(/<br\s*\/?>/gi, '').trim() === '') {
       setStoryError("Story content is required.");
       isValid = false;
     } else {
       setStoryError("");
     }
     return isValid;
-  }, [title, category, contentEditableRef]);
+  }, [title, category, storyContent]); // Added storyContent to dependencies
 
 
   const handlePublish = () => {
     setPublishAttempted(true);
     if (!validateFields()) {
-        // Optionally focus the first error field
-        if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-        else if (!category) { /* No easy way to focus select */ }
-        else if (contentEditableRef.current && (contentEditableRef.current.textContent || "").trim() === '') contentEditableRef.current.focus();
-        return;
+      if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
+      else if (!category) { /* No easy way to focus Select directly */ }
+      else if (contentEditableRef.current && (contentEditableRef.current.textContent || "").trim() === '') contentEditableRef.current.focus();
+      return;
     }
 
     setIsSubmitting(true);
-    // Use contentEditableRef.current.innerHTML for the actual content to publish
-    const finalStoryContent = contentEditableRef.current?.innerHTML || "";
     console.log("Publishing Article Data:", {
       title: title.trim(),
       category,
-      storyContent: finalStoryContent,
+      storyContent: storyContent, // Use the state which holds innerHTML
     });
 
     new Promise(resolve => setTimeout(resolve, 1500)).then(() => {
       toast({ title: "Article Submitted (Placeholder)", description: `"${title.trim()}" published.` });
       setIsSubmitting(false);
-      // Reset fields
       setTitle("");
       setCategory("");
-      setStoryContent(""); // Update state
+      setStoryContent("");
       if (contentEditableRef.current) {
         contentEditableRef.current.innerHTML = ""; // Explicitly clear the div
       }
@@ -116,27 +112,29 @@ const CreateNewsArticlePage = () => {
   };
 
   const handleContentEditableInput = (event: React.FormEvent<HTMLDivElement>) => {
-    const newContent = event.currentTarget.innerHTML;
-    setStoryContent(newContent); // Keep state in sync with innerHTML
-    if (publishAttempted) { // Clear error on input if publish was attempted
-      const textContent = event.currentTarget.textContent || "";
-      const hasNonTextualContent = /<img[^>]*>/.test(newContent);
-      if (textContent.trim() !== '' || hasNonTextualContent) {
+    const currentHTML = event.currentTarget.innerHTML;
+    const currentText = event.currentTarget.textContent || "";
+    
+    // If the div is visually empty (only contains a <br> or is truly empty), treat storyContent as empty
+    const effectivelyEmpty = currentHTML === "<br>" || currentHTML.trim() === "";
+    setStoryContent(effectivelyEmpty ? "" : currentHTML);
+
+    if (publishAttempted) {
+      const hasNonTextualContent = /<img[^>]*>|<div[^>]*>|<p[^>]*>/.test(currentHTML);
+      if (currentText.trim() !== '' || hasNonTextualContent || (!effectivelyEmpty && currentHTML.trim() !== '')) {
         setStoryError("");
       } else {
         setStoryError("Story content is required.");
       }
     }
   };
-  
-  // Auto-adjust height of contentEditable div
+
+  // Effect to synchronize storyContent state with the contentEditable div's innerHTML
   useEffect(() => {
-    if (contentEditableRef.current) {
-      contentEditableRef.current.style.height = 'auto'; // Reset height to get accurate scrollHeight
-      // Add a small buffer (e.g., 2px) to scrollHeight if needed for exact fit, depends on box-sizing
-      contentEditableRef.current.style.height = `${contentEditableRef.current.scrollHeight}px`;
+    if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
+      contentEditableRef.current.innerHTML = storyContent;
     }
-  }, [storyContent]); // Re-run when storyContent (innerHTML) changes
+  }, [storyContent]);
 
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
@@ -167,7 +165,7 @@ const CreateNewsArticlePage = () => {
                   ))}
                 </SelectContent>
               </Select>
-              {publishAttempted && categoryError && !isMobile && <p className="text-xs text-destructive hidden sm:block">{categoryError}</p>}
+              {publishAttempted && categoryError && <p className="text-xs text-destructive mt-1">{categoryError}</p>}
             </div>
             <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9">
               <ImageUp className="mr-1.5 h-3.5 w-3.5" />
@@ -186,9 +184,6 @@ const CreateNewsArticlePage = () => {
             </Button>
           </div>
         </div>
-        {publishAttempted && categoryError && isMobile && <p className="text-center text-sm mb-2 text-destructive sm:hidden">{categoryError}</p>}
-        {!publishAttempted && !category && <p className="text-center text-sm mb-2 text-destructive hidden sm:block">Category is required for publishing.</p>}
-
 
         <div className="relative mb-4">
           <Input
@@ -215,26 +210,31 @@ const CreateNewsArticlePage = () => {
           onInput={handleContentEditableInput}
           data-placeholder="Tell your story..."
           className={cn(
-            "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case overflow-y-hidden min-h-0",
+            "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case",
             "focus:outline-none",
             // Apply styles from previous Textarea
-            "py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case"
+            "py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case min-h-[28px]" // Added min-height for initial empty state
           )}
           style={{
             fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
             fontSize: "20px",
             lineHeight: "28px",
-            color: "hsl(var(--foreground))", // Use theme variable
-            minHeight: "28px", // Start with roughly one line height
+            color: "hsl(var(--foreground))",
           }}
           role="textbox"
           aria-multiline="true"
           aria-label="News article content"
-          // No value prop, content is managed via innerHTML and storyContent state
         />
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
         <style jsx global>{`
           div[contentEditable="true"][data-placeholder]:empty:before {
+            content: attr(data-placeholder);
+            color: hsl(var(--muted-foreground) / 0.5);
+            pointer-events: none;
+            display: block;
+          }
+          /* Ensure div is not considered empty if it just contains a <br> */
+          div[contentEditable="true"][data-placeholder]:has(br:only-child):before {
             content: attr(data-placeholder);
             color: hsl(var(--muted-foreground) / 0.5);
             pointer-events: none;
@@ -247,3 +247,4 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
+
