@@ -67,15 +67,23 @@ const CreateNewsArticlePage = () => {
 
   const isCurrentLineEmpty = useCallback((text: string, currentCursorPosition: number): boolean => {
     if (!text) return true;
-    const textUpToCursor = text.substring(0, currentCursorPosition);
-    const lastNewlineBeforeCursor = textUpToCursor.lastIndexOf('\n');
-    const currentLineStart = lastNewlineBeforeCursor + 1;
-
-    let currentLineEnd = text.indexOf('\n', currentCursorPosition);
-    if (currentLineEnd === -1) {
-      currentLineEnd = text.length;
+    // Find the start of the current line
+    let lineStart = 0;
+    for (let i = currentCursorPosition - 1; i >= 0; i--) {
+      if (text[i] === '\n') {
+        lineStart = i + 1;
+        break;
+      }
     }
-    const currentLineText = text.substring(currentLineStart, currentLineEnd);
+    // Find the end of the current line
+    let lineEnd = text.length;
+    for (let i = currentCursorPosition; i < text.length; i++) {
+      if (text[i] === '\n') {
+        lineEnd = i;
+        break;
+      }
+    }
+    const currentLineText = text.substring(lineStart, lineEnd);
     return currentLineText.trim() === '';
   }, []);
 
@@ -87,14 +95,18 @@ const CreateNewsArticlePage = () => {
   };
 
   const handleBlur = (field: 'title' | 'content') => {
+    // Delay blur processing to allow toolbar interaction
     setTimeout(() => {
       if (toolbarRef.current && toolbarRef.current.contains(document.activeElement)) {
-        return; // Don't blur if focus moved to the toolbar
+        // If focus moved to the toolbar, keep the field conceptually "focused"
+        // for the toolbar logic.
+        return;
       }
-      if (!isFormatMenuOpen) { // Only hide if menu isn't open
-        setFocusedField(null);
+      // If focus truly moved away from field and toolbar
+      if (!isFormatMenuOpen) {
+         setFocusedField(null);
       }
-    }, 150); // Delay to allow click on toolbar
+    }, 150); // Delay must be longer than toolbar button click handlers might take
   };
   
   const handleTitleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -126,6 +138,7 @@ const CreateNewsArticlePage = () => {
       form.setValue('content', newValue, { shouldValidate: true, shouldDirty: true });
       setCursorPosition(start + textToInsert.length);
 
+      // Re-focus and set cursor position after state update
       requestAnimationFrame(() => {
         textarea.focus();
         textarea.setSelectionRange(start + textToInsert.length, start + textToInsert.length);
@@ -220,10 +233,13 @@ const CreateNewsArticlePage = () => {
   const shouldShowFormatMenu = focusedField && isFormatMenuOpen;
 
   const getToolbarPositionClass = () => {
-    if (focusedField === 'title') return "top-1/2 -translate-y-1/2 left-[-50px] sm:left-[-55px]"; // Left of title input
-    if (focusedField === 'content') return "top-2 left-[-50px] sm:left-[-55px]"; // Top-left of content textarea's container
-    return "hidden"; // Should not happen if logic is correct
+    if (focusedField === 'title') return "top-1/2 -translate-y-1/2 left-[-50px] sm:left-[-55px]";
+    if (focusedField === 'content') return "top-2 left-2"; // Position inside the relative container of Textarea
+    return "hidden"; 
   };
+  
+  const activeToolbarRef = focusedField === 'title' ? titleInputRef : contentTextareaRef;
+
 
   if (authLoading) {
     return (
@@ -247,36 +263,38 @@ const CreateNewsArticlePage = () => {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0">
           
-          <div className="flex items-center justify-between gap-x-3 gap-y-2 mb-6 flex-wrap">
-            <div className="flex items-center gap-2 flex-wrap">
-              <Controller
-                name="category"
-                control={form.control}
-                render={({ field }) => (
-                  <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
-                    <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0">
-                      <SelectValue placeholder="Category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {newsCategories.map((category) => (
-                        <SelectItem key={category} value={category} className="text-sm">
-                          {category}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+          <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
+            {/* Category and Image Upload moved to the right, next to publish buttons */}
+            <div className="flex items-center gap-2 mr-auto"> {/* mr-auto pushes this group to the left */}
+                <Controller
+                    name="category"
+                    control={form.control}
+                    render={({ field }) => (
+                    <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                        <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0">
+                        <SelectValue placeholder="Category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                        {newsCategories.map((category) => (
+                            <SelectItem key={category} value={category} className="text-sm">
+                            {category}
+                            </SelectItem>
+                        ))}
+                        </SelectContent>
+                    </Select>
+                    )}
+                />
+                {form.formState.errors.category && (
+                    <p className="text-xs text-destructive mt-1 sm:hidden">{form.formState.errors.category.message}</p>
                 )}
-              />
-               {form.formState.errors.category && (
-                 <p className="text-xs text-destructive mt-1 sm:hidden">{form.formState.errors.category.message}</p>
-               )}
-              <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('article-image-input-header')?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9">
-                  <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Image</span>
-              </Button>
-              <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" disabled={isSubmitting}/>
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('article-image-input-header')?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9">
+                    <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Image</span>
+                </Button>
+                <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" disabled={isSubmitting}/>
             </div>
 
-            <div className="flex items-center gap-2 ml-auto">
+
+            <div className="flex items-center gap-2"> {/* This group naturally stays on the right */}
               <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-xs py-1.5 h-9 rounded-full">
                   <Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft
               </Button>
@@ -296,9 +314,9 @@ const CreateNewsArticlePage = () => {
                 <Button 
                     type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" 
                     onClick={() => setIsFormatMenuOpen(prev => !prev)}
-                    onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+                    onMouseDown={(e) => e.preventDefault()}
                 >
-                  {isFormatMenuOpen ? <X className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
+                  {isFormatMenuOpen ? <X className="h-5 w-5" /> : <PlusCircle className="h-5 w-5" />}
                 </Button>
                 {shouldShowFormatMenu && (
                   <>
@@ -341,9 +359,9 @@ const CreateNewsArticlePage = () => {
                 <Button 
                     type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" 
                     onClick={() => setIsFormatMenuOpen(prev => !prev)}
-                    onMouseDown={(e) => e.preventDefault()} // Prevent input blur
+                    onMouseDown={(e) => e.preventDefault()}
                 >
-                  {isFormatMenuOpen ? <X className="h-4 w-4" /> : <PlusCircle className="h-4 w-4" />}
+                  {isFormatMenuOpen ? <X className="h-5 w-5" /> : <PlusCircle className="h-5 w-5" />}
                 </Button>
                 {shouldShowFormatMenu && (
                   <>
@@ -388,5 +406,3 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
-
-        
