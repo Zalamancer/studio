@@ -111,7 +111,7 @@ export interface CreatePostFormProps {
   detailedSectorsData: SectorWithSubSectors[];
   isSubmitting: boolean;
   currentUserId: string | null;
-  onDialogClose?: () => void; // This prop now means "onCancel" or "onFinish" for the inline form
+  onDialogClose?: () => void; 
 }
 
 export const CreatePostForm: React.FC<CreatePostFormProps> = ({
@@ -120,14 +120,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   detailedSectorsData,
   isSubmitting,
   currentUserId,
-  onDialogClose, // Renamed to onCancelCreate for clarity in use
+  onDialogClose, 
 }) => {
   const form = useForm<z.infer<typeof postFormSchema>>({
     resolver: zodResolver(postFormSchema),
     defaultValues: {
       requestType: 'post',
       question: "",
-      descriptionDetails: "",
+      descriptionDetails: "", // Ensure this is empty
       descriptionTried: "",
       descriptionOutcome: "",
       tags: [],
@@ -151,7 +151,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   const [showCompressionDialog, setShowCompressionDialog] = useState(false);
   const [isCompressing, setIsCompressing] = useState(false);
 
-  const [problemDetailsValue, setProblemDetailsValue] = useState('');
+  const [problemDetailsValue, setProblemDetailsValue] = useState(''); // Initialized to empty
   const [problemDetailsMentionQuery, setProblemDetailsMentionQuery] = useState('');
   const [debouncedProblemDetailsQuery, setDebouncedProblemDetailsQuery] = useState('');
   const [showProblemDetailsSuggestions, setShowProblemDetailsSuggestions] = useState(false);
@@ -166,7 +166,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     form.reset({
       requestType: 'post',
       question: "",
-      descriptionDetails: "",
+      descriptionDetails: "", // Ensure reset to empty
       descriptionTried: "",
       descriptionOutcome: "",
       tags: [],
@@ -177,7 +177,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       maxBudget: undefined,
       deadline: undefined,
     });
-    setProblemDetailsValue('');
+    setProblemDetailsValue(''); // Explicitly reset local state
     setImagePreviewUrls([]);
     setFileForCompression(null);
     setShowCompressionDialog(false);
@@ -191,15 +191,10 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   }, [form]);
 
   useEffect(() => {
-    // This effect handles resetting the form if onDialogClose is called
-    // after a successful submission (which is handled in page.tsx now)
-    // OR if the form is part of a component that gets unmounted/remounted.
-    // For the inline case, onDialogClose will be directly called.
     if (form.formState.isSubmitSuccessful && onDialogClose) {
       const timer = setTimeout(() => {
         resetFormValues();
-        // onDialogClose(); // The parent component will call this to hide the form
-      }, 100); // A small delay might be good
+      }, 100); 
       return () => clearTimeout(timer);
     }
   }, [form.formState.isSubmitSuccessful, onDialogClose, resetFormValues]);
@@ -408,7 +403,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
         try {
           form.setValue("imageFiles", updatedFiles, { shouldValidate: true, shouldDirty: true });
         } catch (setValueError) {
-          // console.error("[DEBUG] Error during form.setValue for imageFiles:", setValueError);
         }
 
         const updatePreviews = async () => {
@@ -471,7 +465,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
   };
 
   const handleValidationErrors = (errors: any) => {
-    // Removed console.error statements
     if (Object.keys(errors).length === 0) {
       const currentFormValues = form.getValues();
       const parseResult = postFormSchema.safeParse(currentFormValues);
@@ -503,11 +496,36 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
       return (firstInitial + lastInitial).toUpperCase();
   };
 
+  // Effect for auto-sizing the content textarea
+  useEffect(() => {
+    const textarea = problemDetailsTextareaRef.current; // Changed from contentTextareaRef
+    if (textarea) {
+      textarea.style.height = 'auto'; 
+      textarea.style.height = `${textarea.scrollHeight}px`; 
+    }
+  }, [problemDetailsValue]); // Runs when problemDetailsValue changes
+
+  // Effect for resetting form and initial height after successful submission, or on mount.
+  useEffect(() => {
+    if (form.formState.isSubmitSuccessful) {
+      const textarea = problemDetailsTextareaRef.current; // Changed from contentTextareaRef
+      if (textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${textarea.scrollHeight}px`;
+      }
+    }
+    // Initial height calculation on mount
+    const textarea = problemDetailsTextareaRef.current; // Changed from contentTextareaRef
+    if (textarea) {
+        textarea.style.height = 'auto';
+        textarea.style.height = `${textarea.scrollHeight}px`;
+    }
+  }, [form.formState.isSubmitSuccessful]);
+
   return (
     <Form {...form}>
       <form onSubmit={form.handleSubmit(handleSubmitForm, handleValidationErrors)} className="space-y-0">
-        <div className="grid grid-cols-1 gap-y-6 p-1"> {/* Changed to single column layout */}
-          {/* All fields will now stack vertically */}
+        <div className="grid grid-cols-1 gap-y-6 p-1">
           <div className="space-y-6 flex flex-col">
             <FormField
               control={form.control}
@@ -578,7 +596,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 </TabsList>
 
                 <TabsContent value="details" className="mt-2 rounded-md border p-4 bg-background flex-grow">
-                  <FormField control={form.control} name="descriptionDetails" render={({ field }) => (
+                  <FormField control={form.control} name="descriptionDetails" render={({ field }) => ( // field is used internally by RHF for Textarea if spread
                     <FormItem className="h-full flex flex-col">
                       <FormLabel className="sr-only">Problem Details</FormLabel>
                       <Popover
@@ -589,10 +607,17 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                           <FormControl>
                             <Textarea
                               placeholder="Describe the specific problem, idea, or need... (@mention users)"
-                              className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
+                              className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none overflow-y-hidden min-h-0"
+                              autoComplete="off"
+                              style={{
+                                fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif',
+                                fontSize: '16px', // Adjusted for better readability if Medium fonts not present
+                                lineHeight: '1.6', // Standard line height
+                                color: 'hsl(var(--foreground))', // Use theme color
+                              }}
                               ref={problemDetailsTextareaRef}
-                              value={problemDetailsValue}
-                              onChange={handleProblemDetailsChange}
+                              value={problemDetailsValue} // Controlled by local state
+                              onChange={handleProblemDetailsChange} // Updates local state & RHF
                               onFocus={handleProblemDetailsFocus}
                               onKeyDownCapture={(e) => { if (showProblemDetailsSuggestions && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape')) { if (e.key !== 'Escape') e.preventDefault(); } }}
                               onBlurCapture={() => setTimeout(() => { if (problemDetailsSuggestionsPopoverRef.current && !problemDetailsSuggestionsPopoverRef.current.contains(document.activeElement as Node) && problemDetailsTextareaRef.current !== document.activeElement) { if(showProblemDetailsSuggestions) setShowProblemDetailsSuggestions(false); } }, 150)}
@@ -631,7 +656,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                       <FormControl>
                         <Textarea
                           placeholder="Solutions or approaches you&apos;ve already attempted (optional)..."
-                          className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
+                          className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none overflow-y-hidden min-h-0"
+                          autoComplete="off"
+                           style={{
+                            fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif',
+                            fontSize: '16px',
+                            lineHeight: '1.6',
+                            color: 'hsl(var(--foreground))',
+                          }}
                           {...field}
                           value={field.value || ''}
                           disabled={isSubmitting}
@@ -648,7 +680,14 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                       <FormControl>
                         <Textarea
                           placeholder="Ideal result or solution you&apos;re looking for (optional)?"
-                          className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none"
+                          className="flex-grow resize-y min-h-[120px] flex-1 border-0 focus-visible:ring-0 focus-visible:ring-offset-0 p-0 shadow-none overflow-y-hidden min-h-0"
+                          autoComplete="off"
+                           style={{
+                            fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif',
+                            fontSize: '16px',
+                            lineHeight: '1.6',
+                            color: 'hsl(var(--foreground))',
+                          }}
                           {...field}
                            value={field.value || ''}
                           disabled={isSubmitting}
@@ -730,7 +769,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                 </div>
                 {imagePreviewUrls.length > 0 && (
                     <div className="mt-4 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-                        {imagePreviewUrls.map((url, index) => ( // Changed key to index
+                        {imagePreviewUrls.map((url, index) => ( 
                             <div key={index} className="relative group aspect-square border rounded-md overflow-hidden">
                                 <Image src={url} alt={`Preview ${index + 1}`} fill style={{objectFit:"cover"}} className="rounded-md" data-ai-hint="user upload preview"/>
                                 <Button
@@ -863,7 +902,6 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                       reader.readAsDataURL(compressedFile);
                       toast({ title: "Image Compressed & Added" });
                   } catch (error) {
-                      // console.error("Error compressing image:", error);
                       toast({ variant: "destructive", title: "Compression Failed", description: "Could not compress the image." });
                   } finally {
                       setIsCompressing(false);
