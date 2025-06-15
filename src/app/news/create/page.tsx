@@ -17,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -30,8 +30,8 @@ const newsCategories = [
   "Case Studies",
 ];
 
-const TOOLBAR_HEIGHT = 36;
-const TOOLBAR_HORIZONTAL_OFFSET = 80; // Increased to move it further left
+const TOOLBAR_HEIGHT = 36; // Approximate height of the toolbar button itself
+const TOOLBAR_HORIZONTAL_OFFSET = 80; // How far left of the input field the toolbar should appear
 
 const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
@@ -40,7 +40,7 @@ const CreateNewsArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [storyContent, setStoryContent] = useState("<p><br></p>");
+  const [storyContent, setStoryContent] = useState("<p><br></p>"); // Initial content with an empty paragraph
   const [cursorPosition, setCursorPosition] = useState(0);
 
   const [publishAttempted, setPublishAttempted] = useState(false);
@@ -54,20 +54,21 @@ const CreateNewsArticlePage = () => {
   const contentEditableRef = useRef<HTMLDivElement>(null);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
   const coverImageInputRef = useRef<HTMLInputElement>(null);
-
-  const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
-  
-  const [showContextualUI, setShowContextualUI] = useState(false);
-  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
-  const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
   const toolbarRef = useRef<HTMLDivElement>(null);
 
+  const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
+  const [showContextualUI, setShowContextualUI] = useState(false); // For the entire contextual UI (button + items)
+  const [isToolbarExpanded, setIsToolbarExpanded] = useState(false); // For the action items specifically
+  const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
 
   useEffect(() => {
+    // Set initial content for the contentEditable div ONCE on mount if it's empty
     if (contentEditableRef.current && contentEditableRef.current.innerHTML.trim() === "") {
       contentEditableRef.current.innerHTML = "<p><br></p>";
+      // No need to setStoryContent here as onInput will handle it if user types,
+      // and default state is already <p><br></p>
     }
-  }, []);
+  }, []); // Empty dependency array ensures this runs only once on mount
 
   const getCurrentBlockElement = useCallback((): HTMLElement | null => {
     const selection = window.getSelection();
@@ -75,16 +76,22 @@ const CreateNewsArticlePage = () => {
     if (!contentEl) return null;
 
     if (!selection || selection.rangeCount === 0) {
-      if (contentEl.innerHTML === "<p><br></p>" || contentEl.innerHTML === "<p></p>" || contentEl.innerHTML === "") {
-          return contentEl.firstChild as HTMLElement || contentEl;
+      // If editor is focused but no explicit selection (e.g. after execCommand)
+      // try to get the block where the cursor effectively is.
+      // A more robust solution would involve a deeper selection/range analysis
+      // or using a library that manages this. For now, if activeElement is the div,
+      // and it has a paragraph, take the last one.
+      if (document.activeElement === contentEl && contentEl.lastChild && contentEl.lastChild.nodeType === Node.ELEMENT_NODE) {
+          return contentEl.lastChild as HTMLElement;
       }
-      return contentEl.firstChild as HTMLElement || contentEl;
+      return contentEl; // Fallback if totally empty or only text nodes
     }
 
     let node = selection.focusNode;
     if (!node || !contentEl.contains(node)) {
-      if (contentEl.firstChild) return contentEl.firstChild as HTMLElement;
-      return contentEl;
+      // If focusNode is outside, try the first child of contentEditable
+      if (contentEl.firstChild && contentEl.firstChild.nodeType === Node.ELEMENT_NODE) return contentEl.firstChild as HTMLElement;
+      return contentEl; // Fallback to the contentEditable div itself if no children
     }
     
     while (node && node !== contentEl) {
@@ -97,12 +104,16 @@ const CreateNewsArticlePage = () => {
       }
       node = node.parentNode;
     }
-    return contentEl.firstChild as HTMLElement || contentEl;
-  }, []);
+    // If no block element found up the tree, it might be direct text content or empty
+    // Return the contentEditable div itself or its first child if it's a block
+    if (contentEl.firstChild && contentEl.firstChild.nodeType === Node.ELEMENT_NODE) return contentEl.firstChild as HTMLElement;
+    return contentEl;
+  }, [contentEditableRef]);
+
 
   const getCurrentLineText = useCallback((): string => {
     const contentEl = contentEditableRef.current;
-    if (!contentEl) return "";
+    if (!contentEl) return "NO_CONTENT_EDITABLE_REF";
 
     if (focusedField === 'title' && titleInputRef.current) {
         return titleInputRef.current.value.trim();
@@ -111,19 +122,15 @@ const CreateNewsArticlePage = () => {
     if (focusedField === 'content') {
         const currentBlock = getCurrentBlockElement();
         if (currentBlock) {
-            if (currentBlock.tagName === 'PRE') {
-                return currentBlock.textContent?.trim() === '' ? '' : 'PRE_HAS_CONTENT';
-            }
-            if (currentBlock.tagName === 'FIGURE') {
-                return currentBlock.querySelector('img, iframe') ? 'FIGURE_HAS_CONTENT' : '';
-            }
-            if (currentBlock.tagName === 'HR') {
-                return 'HR_HAS_CONTENT';
-            }
+            if (currentBlock.tagName === 'PRE' && currentBlock.textContent?.trim() !== '') return 'PRE_HAS_CONTENT';
+            if (currentBlock.tagName === 'FIGURE' && currentBlock.querySelector('img, iframe')) return 'FIGURE_HAS_CONTENT';
+            if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT';
+            // An empty paragraph <p><br></p> or <p></p> will have textContent.trim() === ""
             return currentBlock.textContent?.trim() || "";
         }
+        return "NO_CURRENT_BLOCK";
     }
-    return "NO_FOCUS_OR_BLOCK";
+    return "NO_FOCUS_OR_UNHANDLED_FIELD";
   }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
 
   const updateCursorPosition = useCallback(() => {
@@ -151,94 +158,110 @@ const CreateNewsArticlePage = () => {
 
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
-    if (!contentEl) return null;
+    if (!contentEl && focusedField !== 'title') return null;
 
-    const selection = window.getSelection();
-    if (selection && selection.rangeCount > 0) {
-        const range = selection.getRangeAt(0);
-        const rects = range.getClientRects();
-        if (rects.length > 0) return rects[0].top + rects[0].height / 2;
-        
-        let container = range.startContainer;
-        if (container.nodeType === Node.TEXT_NODE && container.parentElement) container = container.parentElement;
-        if (container.nodeType === Node.ELEMENT_NODE && contentEl.contains(container)) {
-            const elementRect = (container as HTMLElement).getBoundingClientRect();
-            if (elementRect.height > 0) {
-                const tempRange = document.createRange();
-                try { tempRange.selectNodeContents(container as HTMLElement); } catch(e) {/*ignore*/}
-                const tempRects = tempRange.getClientRects();
-                if(tempRects.length > 0) return tempRects[0].top + tempRects[0].height / 2;
-                return elementRect.top + elementRect.height / 2;
-            }
-        }
+    if (focusedField === 'title' && titleInputRef.current) {
+        const titleRect = titleInputRef.current.getBoundingClientRect();
+        return titleRect.top + titleRect.height / 2; // Middle of the input field itself
     }
     
-    const currentBlock = getCurrentBlockElement();
-    if (currentBlock && currentBlock !== contentEl && currentBlock.offsetHeight > 0) {
-        const blockRect = currentBlock.getBoundingClientRect();
-        const computedStyle = window.getComputedStyle(currentBlock);
-        const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
-        let lineHeight = parseFloat(computedStyle.lineHeight);
-        if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4;
-        return blockRect.top + paddingTop + (lineHeight / 2);
-    }
+    if (focusedField === 'content' && contentEl) {
+        const selection = window.getSelection();
+        if (selection && selection.rangeCount > 0) {
+            const range = selection.getRangeAt(0);
+            const rects = range.getClientRects();
+            if (rects.length > 0) {
+                // Use the first rect, typically the caret position or start of selection
+                return rects[0].top + rects[0].height / 2;
+            }
+            
+            // Fallback if getClientRects is empty (e.g., totally empty line)
+            let container = range.startContainer;
+            if (container.nodeType === Node.TEXT_NODE && container.parentElement) {
+                container = container.parentElement;
+            }
+            if (container.nodeType === Node.ELEMENT_NODE && contentEl.contains(container)) {
+                const elementRect = (container as HTMLElement).getBoundingClientRect();
+                if (elementRect.height > 0) { // Ensure the element has some height
+                    const computedStyle = window.getComputedStyle(container as HTMLElement);
+                    const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+                    let lineHeight = parseFloat(computedStyle.lineHeight);
+                    if (isNaN(lineHeight) || lineHeight <= 0) {
+                        lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; // Estimate line height
+                    }
+                    return elementRect.top + paddingTop + (lineHeight / 2); // Approx middle of the first line
+                }
+            }
+        }
+        // If all else fails, try the current block element
+        const currentBlock = getCurrentBlockElement();
+        if (currentBlock && currentBlock !== contentEl && currentBlock.offsetHeight > 0) {
+            const blockRect = currentBlock.getBoundingClientRect();
+            const computedStyle = window.getComputedStyle(currentBlock);
+            const paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+            let lineHeight = parseFloat(computedStyle.lineHeight);
+            if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4;
+            return blockRect.top + paddingTop + (lineHeight / 2);
+        }
 
-    const mainDivRect = contentEl.getBoundingClientRect();
-    const computedStyleMain = window.getComputedStyle(contentEl);
-    const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0;
-    let lineHeightMain = parseFloat(computedStyleMain.lineHeight);
-    if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4;
-    return mainDivRect.top + paddingTopMain + (lineHeightMain / 2);
-  }, [getCurrentBlockElement]);
+        // Ultimate fallback to the contentEditable div's top if it's focused and completely empty
+        const mainDivRect = contentEl.getBoundingClientRect();
+        const computedStyleMain = window.getComputedStyle(contentEl);
+        const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0;
+        let lineHeightMain = parseFloat(computedStyleMain.lineHeight);
+        if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4;
+        return mainDivRect.top + paddingTopMain + (lineHeightMain / 2);
+    }
+    return null;
+  }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
     requestAnimationFrame(() => {
       const formEl = formWrapperRef.current;
-      const titleWrapperEl = titleWrapperRef.current;
-      const contentWrapperEl = contentWrapperRef.current;
-      
-      if (!formEl || (!titleInputRef.current && !contentEditableRef.current) ) {
+      if (!formEl || (!titleInputRef.current && !contentEditableRef.current)) {
         setShowContextualUI(false);
         return;
       }
 
       const formRect = formEl.getBoundingClientRect();
-      let shouldShowBaseUI = false; // Should *any* UI (plus or full toolbar) be shown?
+      let shouldShowBaseUI = false;
       let newTop = 0;
       let newLeft = 0;
-      let targetLineY: number | null = null;
+      let lineYOffsetClient: number | null = null;
 
-      if (focusedField === 'title' && titleWrapperEl && titleInputRef.current) {
-        if (title.trim() === "") {
-          const titleRect = titleInputRef.current.getBoundingClientRect(); // Use input directly for title
-          targetLineY = titleRect.top + titleRect.height / 2;
-          newLeft = titleRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
-          shouldShowBaseUI = true;
-        }
-      } else if (focusedField === 'content' && contentWrapperEl && contentEditableRef.current) {
-        const currentLineIsEmpty = getCurrentLineText() === "";
-        if (currentLineIsEmpty) {
-          targetLineY = calculateCursorLineYOffset();
-          if (targetLineY !== null) {
-            const contentRect = contentEditableRef.current.getBoundingClientRect();
-            newLeft = contentRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
+      const currentLineIsEmptyOrTitleIsEmpty =
+        (focusedField === 'title' && title.trim() === "") ||
+        (focusedField === 'content' && getCurrentLineText() === "");
+
+      if (currentLineIsEmptyOrTitleIsEmpty) {
+        lineYOffsetClient = calculateCursorLineYOffset();
+        if (lineYOffsetClient !== null) {
+          let referenceElementRect: DOMRect | undefined;
+          if (focusedField === 'title' && titleWrapperRef.current) {
+            referenceElementRect = titleInputRef.current?.getBoundingClientRect();
+          } else if (focusedField === 'content' && contentWrapperRef.current) {
+            referenceElementRect = contentEditableRef.current?.getBoundingClientRect();
+          }
+          
+          if (referenceElementRect) {
+            newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
             shouldShowBaseUI = true;
           }
         }
       }
       
-      if (shouldShowBaseUI && targetLineY !== null) {
-        newTop = targetLineY - formRect.top - (TOOLBAR_HEIGHT / 2);
+      if (shouldShowBaseUI && lineYOffsetClient !== null) {
+        newTop = lineYOffsetClient - formRect.top - (TOOLBAR_HEIGHT / 2);
         setToolbarStyle({ top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' });
-        setShowContextualUI(true); // Show the wrapper for contextual UI
-        // If the full toolbar was explicitly closed, don't re-open it automatically,
-        // the plus button logic will handle its visibility.
+        setShowContextualUI(true);
       } else {
         setShowContextualUI(false);
-        setIsToolbarExpanded(false); // Collapse if context is lost
+        if (!currentLineIsEmptyOrTitleIsEmpty) { // Only collapse if line is NOT empty
+            setIsToolbarExpanded(false); 
+        }
       }
     });
-  }, [focusedField, title, storyContent, cursorPosition, getCurrentLineText, calculateCursorLineYOffset, formWrapperRef, titleWrapperRef, contentWrapperRef, isToolbarExpanded]); // Added storyContent & cursorPosition as they affect getCurrentLineText
+  }, [focusedField, title, storyContent, cursorPosition, isToolbarExpanded, getCurrentLineText, calculateCursorLineYOffset, formWrapperRef, titleWrapperRef, contentWrapperRef]);
 
   useEffect(() => {
     calculateAndUpdateToolbarStyle();
@@ -263,7 +286,6 @@ const CreateNewsArticlePage = () => {
 
   const handleFocus = useCallback((field: 'title' | 'content') => {
     setFocusedField(field);
-    // No need to set isToolbarExpanded here, calculateAndUpdateToolbarStyle will decide.
   }, []);
 
   const handleBlur = useCallback(() => {
@@ -281,12 +303,12 @@ const CreateNewsArticlePage = () => {
       
       if (!isFocusWithinToolbarOrInput) {
         setFocusedField(null);
-        setIsToolbarExpanded(false); // Also close expanded toolbar on blur
+        // Do not collapse toolbar here, let calculateAndUpdateToolbarStyle decide based on line content
+        // setIsToolbarExpanded(false); 
         setShowContextualUI(false);
       }
     });
   }, []);
-
 
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     const currentHTML = event.currentTarget.innerHTML;
@@ -367,9 +389,9 @@ const CreateNewsArticlePage = () => {
   
   const insertHTMLAndFocus = useCallback((htmlToInsert: string) => {
     const targetFieldRef = focusedField === 'title' ? titleInputRef : contentEditableRef;
-    if (!targetFieldRef.current) return;
+    if (!targetFieldRef.current || !contentEditableRef.current) return;
   
-    targetFieldRef.current.focus();
+    targetFieldRef.current.focus(); // Ensure focus
   
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) {
@@ -384,40 +406,44 @@ const CreateNewsArticlePage = () => {
     }
   
     const currentBlock = targetFieldRef === contentEditableRef ? getCurrentBlockElement() : null;
-    if (currentBlock && currentBlock.contains(range.startContainer) && range.startContainer !== currentBlock) {
-       if (currentBlock.textContent?.trim() === "" && (currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "") ) {
-           range.selectNodeContents(currentBlock);
-       }
+    // If current block is empty-ish (<p><br></p>), select its contents to replace them
+    if (currentBlock && currentBlock.contains(range.startContainer) && currentBlock.textContent?.trim() === "" && (currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "" || currentBlock.innerHTML.toLowerCase() === "<p><br></p>" || currentBlock.innerHTML.toLowerCase() === "<p></p>") ) {
+       range.selectNodeContents(currentBlock);
+    } else if (!range.collapsed) { // If there's a selection, delete it first
+       range.deleteContents();
     }
-    if (!range.collapsed) range.deleteContents();
   
     document.execCommand('insertHTML', false, htmlToInsert);
   
     if (targetFieldRef === contentEditableRef && contentEditableRef.current) {
-      setStoryContent(contentEditableRef.current.innerHTML);
-      contentEditableRef.current.focus();
+      setStoryContent(contentEditableRef.current.innerHTML); // Update state from DOM
+      contentEditableRef.current.focus(); // Re-focus explicitly
+      
+      // Try to place cursor after inserted content - this can be tricky
       const newRange = document.createRange();
       const newSel = window.getSelection();
       try {
         const lastChild = contentEditableRef.current.lastChild;
-        if (lastChild) {
+        if (lastChild) { // If there's a last child, set cursor after it
             newRange.setStartAfter(lastChild); 
             newRange.collapse(true);
             newSel?.removeAllRanges();
             newSel?.addRange(newRange);
-        } else { 
+        } else { // Fallback if editor is empty or lastChild not found
             newRange.selectNodeContents(contentEditableRef.current);
-            newRange.collapse(false);
+            newRange.collapse(false); // Collapse to the end
             newSel?.removeAllRanges();
             newSel?.addRange(newRange);
         }
-      } catch (e) { /* ignore cursor placement errors */ }
+      } catch (e) { /* ignore cursor placement errors, browser default is okay */ }
     } else if (targetFieldRef === titleInputRef && titleInputRef.current) {
-      // For title, we assume simple text or execCommand is enough.
+      // For title, updating value is handled by its own onChange,
+      // we just need to make sure storyContent isn't affected.
+      // This branch might not even be hit if toolbar only shows for content.
     }
     updateCursorPosition();
-    setIsToolbarExpanded(false); 
-    // setShowContextualUI(false); // Let calculateAndUpdateToolbarStyle handle this based on new content
+    setIsToolbarExpanded(false); // Collapse the toolbar after action
+    // setShowContextualUI(false); // Let calculateAndUpdateToolbarStyle decide based on new content
   }, [focusedField, getCurrentBlockElement, updateCursorPosition, contentEditableRef, titleInputRef]);
 
 
@@ -430,18 +456,21 @@ const CreateNewsArticlePage = () => {
         const urlObj = new URL(url);
         if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.substring(1);
         else if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v')!;
-        else videoId = url;
-      } catch (e) { videoId = url; }
+        else videoId = url; // Assume it might be just the ID
+      } catch (e) { videoId = url; } // If URL parsing fails, assume it's an ID
+      
+      // Basic regex to check if it looks like a YouTube ID
       if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) {
         insertHTMLAndFocus(`<figure class="my-4 relative" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border-radius: 0.25rem;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p><br></p>`);
       } else {
-        toast({ variant: 'destructive', title: 'Invalid YouTube URL/ID' });
+        toast({ variant: 'destructive', title: 'Invalid YouTube URL/ID', description: 'Please enter a valid YouTube video URL or ID.' });
       }
     }
   }, [insertHTMLAndFocus, toast]);
   const handleInsertEmbed = useCallback(() => {
     const embedCode = window.prompt("Paste embed code (e.g., Twitter, Vimeo). Ensure it's iframe-based or similar safe HTML.");
     if (embedCode) {
+      // Basic sanitization: remove script tags. Robust sanitization is complex.
       const sanitizedCode = embedCode.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
       insertHTMLAndFocus(`<div class="my-4" data-embed-wrapper="true">${sanitizedCode}</div><p><br></p>`);
     }
@@ -451,7 +480,10 @@ const CreateNewsArticlePage = () => {
 
   const handleToggleToolbar = () => {
     setIsToolbarExpanded(prev => !prev);
-    if (!isToolbarExpanded) { // If was closed and is now opening
+    // Re-focus the editor field if we are opening the toolbar from a collapsed state,
+    // this helps ensure the selection context is maintained for subsequent actions.
+    // Also, onMouseDown={(e) => e.preventDefault()} on the button prevents it from stealing focus.
+    if (!isToolbarExpanded) { // This condition means it *was* false, now it's becoming true.
         if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus();
         else if (focusedField === 'content' && contentEditableRef.current) contentEditableRef.current.focus();
     }
@@ -474,6 +506,7 @@ const CreateNewsArticlePage = () => {
               variant="outline"
               size="icon"
               onClick={handleToggleToolbar}
+              onMouseDown={(e) => e.preventDefault()} // Prevent focus stealing
               className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center"
               aria-expanded={isToolbarExpanded}
               aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}
@@ -607,7 +640,7 @@ const CreateNewsArticlePage = () => {
             pointer-events: none; 
             display: block; 
             position: absolute;
-            top: 0.5rem; 
+            top: 0.5rem; /* Corresponds to py-2 on the contentEditable div */
             left: 0;
           }
            div[contentEditable="true"][data-placeholder]:not(:empty):before,
@@ -630,3 +663,4 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
+
