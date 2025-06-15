@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
@@ -16,7 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useIsMobile } from '@/hooks/use-mobile'; // Corrected import path
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -29,12 +30,11 @@ const newsCategories = [
   "Case Studies",
 ];
 
-const TOOLBAR_HEIGHT = 36; // Example height, adjust as needed
-const TOOLBAR_WIDTH_WITH_OFFSET = 60; // Example width + offset, adjust
+const TOOLBAR_HEIGHT = 36;
+const TOOLBAR_WIDTH_WITH_OFFSET = 60;
 
 interface InlineToolbarProps {
   style: React.CSSProperties;
-  // Add action handlers as props later if functionality is added
 }
 
 const InlineToolbar: React.FC<InlineToolbarProps> = ({ style }) => {
@@ -44,18 +44,16 @@ const InlineToolbar: React.FC<InlineToolbarProps> = ({ style }) => {
       className="bg-card border p-1 rounded-md shadow-lg flex items-center space-x-1"
     >
       <button
-        onMouseDown={(e) => e.preventDefault()} // Prevent focus steal
+        onMouseDown={(e) => e.preventDefault()}
         className="p-1.5 hover:bg-muted rounded focus:outline-none focus:ring-1 focus:ring-primary"
         aria-label="Add element"
         title="Add element"
       >
         <PlusCircle className="h-5 w-5 text-primary" />
       </button>
-      {/* Add more toolbar buttons here later */}
     </div>
   );
 };
-
 
 const CreateNewsArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
@@ -65,22 +63,20 @@ const CreateNewsArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [storyContent, setStoryContent] = useState(""); // HTML content
+  const [storyContent, setStoryContent] = useState("");
 
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
   const [categoryError, setCategoryError] = useState("");
   const [storyError, setStoryError] = useState("");
 
-  // Refs for positioning and interaction
   const formWrapperRef = useRef<HTMLDivElement>(null);
   const titleInputRef = useRef<HTMLInputElement>(null);
-  const titleWrapperRef = useRef<HTMLDivElement>(null); // Wrapper for title input
+  const titleWrapperRef = useRef<HTMLDivElement>(null);
   const contentEditableRef = useRef<HTMLDivElement>(null);
-  const contentEditableWrapperRef = useRef<HTMLDivElement>(null); // Wrapper for contentEditable
+  const contentEditableWrapperRef = useRef<HTMLDivElement>(null);
   const coverImageInputRef = useRef<HTMLInputElement>(null);
-  const toolbarRef = useRef<HTMLDivElement>(null); // Ref for the toolbar itself
+  const toolbarRef = useRef<HTMLDivElement>(null);
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
   const [cursorPosition, setCursorPosition] = useState(0);
@@ -108,51 +104,38 @@ const CreateNewsArticlePage = () => {
 
   const getCurrentLineText = useCallback((): string => {
     const element = contentEditableRef.current;
-    if (!element) {
-        // console.log("[Toolbar Debug] getCurrentLineText: contentEditableRef.current is null.");
-        return "_REF_NULL_"; 
-    }
-    const text = element.textContent || ""; 
-    
-    if (text.length === 0) { 
-        // console.log("[Toolbar Debug] getCurrentLineText: textContent is empty. Returning empty string.");
-        return "";
-    }
+    if (!element || !element.textContent) return "_REF_NULL_OR_NO_TEXT_";
+
+    const text = element.textContent;
+    if (text.length === 0) return "";
 
     const currentCursorPos = Math.min(Math.max(0, cursorPosition), text.length);
-    
     let lineStart = 0;
-    if (currentCursorPos > 0) { 
-        lineStart = text.lastIndexOf('\n', currentCursorPos - 1) + 1;
+    if (currentCursorPos > 0) {
+      lineStart = text.lastIndexOf('\n', currentCursorPos - 1) + 1;
     }
-    
     let lineEnd = text.indexOf('\n', currentCursorPos);
-    if (lineEnd === -1) { 
-        lineEnd = text.length;
-    }
+    if (lineEnd === -1) lineEnd = text.length;
+    if (lineStart > lineEnd) lineStart = lineEnd;
 
-    if (lineStart > lineEnd) {
-      lineStart = lineEnd;
-    }
-
-    const currentLine = text.substring(lineStart, lineEnd);
-    // console.log(`[Toolbar Debug] getCurrentLineText: Line ("${currentLine.replace(/\n/g, "\\n")}") | Trimmed: ("${currentLine.trim()}"). Cursor: ${currentCursorPos}, Start: ${lineStart}, End: ${lineEnd}`);
-    return currentLine.trim();
+    return text.substring(lineStart, lineEnd).trim();
   }, [cursorPosition, contentEditableRef]);
+
 
   const calculateCursorLineYOffset = useCallback((element: HTMLElement, charOffset: number): number | null => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return null;
 
     const range = selection.getRangeAt(0);
+    
     if (!element.contains(range.focusNode) && !(element === range.focusNode && range.focusOffset === 0 && element.childNodes.length === 0)) {
-      if (element.innerHTML.trim() === "" || element.innerHTML.trim().toLowerCase() === "<br>" || element.innerHTML.trim().toLowerCase() === "<p><br></p>") {
-        const elementStyle = window.getComputedStyle(element);
-        const paddingTop = parseFloat(elementStyle.paddingTop) || 0;
-        const lineHeight = parseFloat(elementStyle.lineHeight) || (parseFloat(elementStyle.fontSize) * 1.4) || 28;
-        return paddingTop + (lineHeight / 2);
-      }
-      return null;
+        if (element.innerHTML.trim() === "" || element.innerHTML.trim().toLowerCase() === "<br>" || element.innerHTML.trim().toLowerCase() === "<p><br></p>" || element.textContent?.trim() === "") {
+            const elementStyle = window.getComputedStyle(element);
+            const paddingTop = parseFloat(elementStyle.paddingTop) || 0;
+            const lineHeight = parseFloat(elementStyle.lineHeight) || (parseFloat(elementStyle.fontSize) * 1.4) || 28;
+            return paddingTop + (lineHeight / 2);
+        }
+        return null; 
     }
     
     const clientRects = range.getClientRects();
@@ -162,7 +145,7 @@ const CreateNewsArticlePage = () => {
       const elementStyle = window.getComputedStyle(element);
       const paddingTop = parseFloat(elementStyle.paddingTop) || 0;
       const lineHeight = parseFloat(elementStyle.lineHeight) || (parseFloat(elementStyle.fontSize) * 1.4) || 28;
-      if (element.innerHTML.trim() === "" || element.innerHTML.trim().toLowerCase() === "<br>" || element.innerHTML.trim().toLowerCase() === "<p><br></p>") {
+      if (element.innerHTML.trim() === "" || element.innerHTML.trim().toLowerCase() === "<br>" || element.innerHTML.trim().toLowerCase() === "<p><br></p>" || element.textContent?.trim() === "") {
         return paddingTop + (lineHeight / 2);
       }
       const textBeforeCursor = (element.textContent || "").substring(0, charOffset);
@@ -170,7 +153,6 @@ const CreateNewsArticlePage = () => {
       return paddingTop + (numNewlinesBefore * lineHeight) + (lineHeight / 2);
     }
   }, []);
-
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
     requestAnimationFrame(() => {
@@ -185,7 +167,6 @@ const CreateNewsArticlePage = () => {
       let newToolbarStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50 };
 
       if (!formEl) {
-        // console.warn("[Toolbar Calc] formEl is null. Hiding toolbar.");
         setToolbarStyle(newToolbarStyle);
         return;
       }
@@ -197,9 +178,6 @@ const CreateNewsArticlePage = () => {
           const titleRect = titleWrapperEl.getBoundingClientRect();
           top = titleRect.top - formRect.top + (titleRect.height / 2) - (TOOLBAR_HEIGHT / 2);
           left = titleRect.left - formRect.left - TOOLBAR_WIDTH_WITH_OFFSET;
-          // console.log("[Toolbar Calc] Title - SHOWING at", {top, left});
-        } else {
-          // console.log("[Toolbar Calc] Title - HIDING (not empty)");
         }
       } else if (focusedField === 'content' && contentWrapperEl && contentEditableEl) {
         const currentLine = getCurrentLineText();
@@ -210,28 +188,20 @@ const CreateNewsArticlePage = () => {
             const contentWrapperRect = contentWrapperEl.getBoundingClientRect();
             top = (contentWrapperRect.top - formRect.top) + lineYOffset - (TOOLBAR_HEIGHT / 2);
             left = contentWrapperRect.left - formRect.left - TOOLBAR_WIDTH_WITH_OFFSET;
-            // console.log("[Toolbar Calc] Content - SHOWING at", {top, left}, "lineYOffset:", lineYOffset);
-          } else {
-            // console.log("[Toolbar Calc] Content - HIDING (lineYOffset is null)");
           }
-        } else {
-          // console.log(`[Toolbar Calc] Content - HIDING (line not empty: "${currentLine}")`);
         }
-      } else {
-        // console.log(`[Toolbar Calc] HIDING (no relevant focus or wrapper missing. Focused: ${focusedField})`);
       }
 
       if (showToolbar) {
         newToolbarStyle.display = 'flex';
-        newToolbarStyle.top = `${top}px`;
-        newToolbarStyle.left = `${left}px`;
+        newToolbarStyle.top = `${Math.max(0, top)}px`; 
+        newToolbarStyle.left = `${Math.max(0, left)}px`;
       }
       setToolbarStyle(newToolbarStyle);
     });
   }, [focusedField, title, storyContent, cursorPosition, getCurrentLineText, calculateCursorLineYOffset]);
-  
+
   useEffect(() => {
-    // console.log(`[Toolbar Effect] Triggered. F: ${focusedField}, T: "${title}", SC_len: ${storyContent.length}, CP: ${cursorPosition}`);
     calculateAndUpdateToolbarStyle();
   }, [focusedField, title, storyContent, cursorPosition, calculateAndUpdateToolbarStyle]);
 
@@ -249,7 +219,7 @@ const CreateNewsArticlePage = () => {
   const handleFocus = useCallback((field: 'title' | 'content') => {
     setFocusedField(field);
     if (field === 'content') {
-      setTimeout(updateCursorPosition, 0); 
+      setTimeout(updateCursorPosition, 0);
     }
   }, [updateCursorPosition]);
 
@@ -282,7 +252,7 @@ const CreateNewsArticlePage = () => {
     }
     
     const currentStoryText = contentEditableRef.current?.textContent?.trim() || "";
-    const currentStoryHTML = storyContent.trim(); 
+    const currentStoryHTML = storyContent.trim();
     const hasMeaningfulContent = currentStoryText !== '' || /<img|<div|<p/.test(currentStoryHTML);
 
     if (!hasMeaningfulContent) {
@@ -298,19 +268,17 @@ const CreateNewsArticlePage = () => {
     setPublishAttempted(true);
     if (!validateFields()) {
       if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-      else if (!category) { /* No easy way to focus Select directly */ }
+      else if (!category) { /* No easy way to focus Select */ }
       else if (contentEditableRef.current && storyError && (contentEditableRef.current.textContent || "").trim() === '') contentEditableRef.current.focus();
       return;
     }
-    setIsSubmitting(true);
-    console.log("Publishing Article Data:", { title: title.trim(), category, storyContent });
-    new Promise(resolve => setTimeout(resolve, 1500)).then(() => {
-      toast({ title: "Article Submitted (Placeholder)", description: `"${title.trim()}" published.` });
-      setIsSubmitting(false);
-      setTitle(""); setCategory(""); setStoryContent("");
-      if (contentEditableRef.current) contentEditableRef.current.innerHTML = "";
-      setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
-    });
+    // Placeholder for actual publish logic
+    console.log("Publishing Article:", { title: title.trim(), category, storyContent });
+    toast({ title: "Article Submitted (Placeholder)", description: `"${title.trim()}" published.` });
+    // Reset fields
+    setTitle(""); setCategory(""); setStoryContent("");
+    if (contentEditableRef.current) contentEditableRef.current.innerHTML = "";
+    setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
   };
 
   const handleContentEditableInput = useCallback((event: React.FormEvent<HTMLDivElement>) => {
@@ -327,17 +295,13 @@ const CreateNewsArticlePage = () => {
         setStoryError("Story content is required.");
       }
     }
-  }, [publishAttempted, updateCursorPosition]);
+  }, [publishAttempted, updateCursorPosition, setStoryContent, setStoryError]);
 
   useEffect(() => {
-    // This effect is for programmatically setting the contentEditable div's innerHTML
-    // when the `storyContent` state changes (e.g., on initial load or after reset).
-    // It does NOT run on user input because `onInput` directly updates `storyContent`.
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
       contentEditableRef.current.innerHTML = storyContent;
     }
   }, [storyContent]);
-
 
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
@@ -360,7 +324,6 @@ const CreateNewsArticlePage = () => {
                   }
                 }}
                 value={category}
-                disabled={isSubmitting}
               >
                 <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0">
                   <SelectValue placeholder="Category" />
@@ -373,20 +336,19 @@ const CreateNewsArticlePage = () => {
               </Select>
               {publishAttempted && categoryError && <p className="text-xs text-destructive mt-1">{categoryError}</p>}
             </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9">
+            <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9">
               <ImageUp className="mr-1.5 h-3.5 w-3.5" />
               <span className="hidden sm:inline">Cover Image</span>
               <span className="sm:hidden">Image</span>
             </Button>
-            <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} disabled={isSubmitting} />
+            <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} />
           </div>
           <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", {title, category, storyContent})} disabled={isSubmitting} className="text-xs py-1.5 h-9 rounded-full">
+            <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked")} className="text-xs py-1.5 h-9 rounded-full">
               <Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft
             </Button>
-            <Button type="button" onClick={handlePublish} disabled={isSubmitting} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">
-              {isSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
-              Publish
+            <Button type="button" onClick={handlePublish} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">
+              <Send className="mr-1.5 h-3.5 w-3.5" /> Publish
             </Button>
           </div>
         </div>
@@ -405,7 +367,6 @@ const CreateNewsArticlePage = () => {
             }}
             onFocus={() => handleFocus('title')}
             onBlur={handleBlur}
-            disabled={isSubmitting}
             className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
             autoComplete="off"
           />
@@ -415,12 +376,12 @@ const CreateNewsArticlePage = () => {
         <div ref={contentEditableWrapperRef} className="relative">
           <div
             ref={contentEditableRef}
-            contentEditable={!isSubmitting}
+            contentEditable={true}
             onInput={handleContentEditableInput}
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
-            onKeyUp={updateCursorPosition} 
-            onClick={updateCursorPosition}  
+            onKeyUp={updateCursorPosition}
+            onClick={updateCursorPosition}
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case min-h-0",
@@ -429,7 +390,7 @@ const CreateNewsArticlePage = () => {
             style={{
               fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
               fontSize: "20px",
-              lineHeight: "28px", 
+              lineHeight: "28px",
               color: "hsl(var(--foreground))",
             }}
             role="textbox"
@@ -444,8 +405,8 @@ const CreateNewsArticlePage = () => {
             content: attr(data-placeholder);
             color: hsl(var(--muted-foreground) / 0.5);
             pointer-events: none;
-            display: block; 
-            position: absolute; /* Ensure it overlays correctly */
+            display: block; /* To ensure it takes up space for positioning */
+            position: absolute;
             top: 0.5rem; /* Match py-2 of the div */
             left: 0;
           }
@@ -459,3 +420,4 @@ const CreateNewsArticlePage = () => {
 };
 
 export default CreateNewsArticlePage;
+    
