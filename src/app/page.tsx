@@ -14,7 +14,6 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import {
   AlertDialog,
@@ -59,7 +58,7 @@ import { ConnectionButton } from '@/components/ConnectionButton';
 import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService';
 import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
 import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
-import { getReviewsForProfile } from '@/services/reviewService';
+import { getReviewsForProfile } from '@/services/reviewService'; // Corrected import
 import type { UserProfileBasic } from '@/types/connection';
 import { availableTags, detailedSectorsData } from '@/components/layout/MainLayout';
 import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
@@ -93,7 +92,7 @@ const BoardPageContent = () => {
   const isMobile = useIsMobile();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
-  const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false); // Renamed from isCreatePostOpen
+  const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
 
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -181,7 +180,7 @@ const BoardPageContent = () => {
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
       toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
-      setShowCreatePostFormInline(false); // Hide the inline form on success
+      setShowCreatePostFormInline(false); 
 
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
         const descriptionSource = variables.descriptionDetails;
@@ -239,7 +238,7 @@ const BoardPageContent = () => {
     } else if (selectedPost) {
       setSelectedPost(null);
     }
-    setShowCreatePostFormInline(false); // Also hide create form if detail view is closed
+    setShowCreatePostFormInline(false);
   }, [searchParams, router, selectedPost, setSelectedPost, setShowCreatePostFormInline]);
 
 
@@ -247,7 +246,7 @@ const BoardPageContent = () => {
     const postIdFromUrl = searchParams?.get('postId');
 
     if (postIdFromUrl) {
-      setShowCreatePostFormInline(false); // If a post is selected from URL, don't show create form
+      setShowCreatePostFormInline(false); 
       if (!selectedPost || selectedPost.id !== postIdFromUrl) {
         if (posts.length > 0) {
           const postToOpen = posts.find(p => p.id === postIdFromUrl);
@@ -261,8 +260,6 @@ const BoardPageContent = () => {
         }
       }
     } else {
-      // If no postId in URL, and a post was previously selected, clear it
-      // This logic doesn't automatically open the create form, that's a separate action
       if (selectedPost) {
         setSelectedPost(null);
       }
@@ -271,7 +268,7 @@ const BoardPageContent = () => {
 
 
   const openPostCallback = useCallback((postToOpen: Post) => {
-    setShowCreatePostFormInline(false); // Hide create form when selecting a post
+    setShowCreatePostFormInline(false); 
     const currentPostIdInUrl = searchParams?.get('postId');
     if (currentPostIdInUrl === postToOpen.id) {
       handleCloseDetailView();
@@ -279,6 +276,15 @@ const BoardPageContent = () => {
       router.push(`/?postId=${postToOpen.id}`, { scroll: false });
     }
   }, [searchParams, router, handleCloseDetailView, setShowCreatePostFormInline]);
+
+  const handleOpenCreatePostForm = useCallback(() => {
+    if (user) {
+      setSelectedPost(null); // Ensure no post is selected when opening create form
+      setShowCreatePostFormInline(true);
+    } else {
+      toast({ variant: "default", title: "Login Required", description: "Please log in to create a post." });
+    }
+  }, [user, toast, setSelectedPost, setShowCreatePostFormInline]);
 
 
   const renderPostDetailPanel = () => {
@@ -312,13 +318,15 @@ const BoardPageContent = () => {
             selectedPostId={selectedPost?.id}
             availableTags={availableTags}
             detailedSectorsData={detailedSectorsData}
+            onInitiateCreatePost={handleOpenCreatePostForm}
+            currentUser={user}
           />
         </div>
 
         {isMobile ? (
           <>
             <Sheet
-              open={!!selectedPost && !showCreatePostFormInline} // Only open if a post is selected AND create form isn't shown
+              open={!!selectedPost && !showCreatePostFormInline} 
               onOpenChange={(isOpen) => {
                 if (!isOpen) {
                   handleCloseDetailView();
@@ -339,7 +347,7 @@ const BoardPageContent = () => {
               </SheetContent>
             </Sheet>
              <Sheet
-              open={showCreatePostFormInline && !selectedPost} // Only open if create form is active AND no post is selected
+              open={showCreatePostFormInline && !selectedPost} 
               onOpenChange={(isOpen) => {
                 if (!isOpen) {
                   setShowCreatePostFormInline(false);
@@ -356,7 +364,7 @@ const BoardPageContent = () => {
                     <SheetTitle>Create New Post</SheetTitle>
                      <Button variant="ghost" size="icon" onClick={() => setShowCreatePostFormInline(false)}><X className="h-4 w-4"/></Button>
                    </div>
-                   <DialogDescription> {/* Using DialogDescription for consistency with desktop */}
+                   <DialogDescription> 
                      Share your idea, question, or request help from the community.
                    </DialogDescription>
                 </SheetHeader>
@@ -377,7 +385,7 @@ const BoardPageContent = () => {
               </SheetContent>
             </Sheet>
           </>
-        ) : ( // Desktop view
+        ) : ( 
           (selectedPost || showCreatePostFormInline) ? (
              <div className="md:flex-1 md:min-w-0 md:border-l md:border-border md:pl-4 flex flex-col">
               {selectedPost && !showCreatePostFormInline && renderPostDetailPanel()}
@@ -402,13 +410,13 @@ const BoardPageContent = () => {
                 </Card>
               )}
             </div>
-          ) : ( // Desktop silhouette panel
+          ) : ( 
             <div className="hidden md:flex md:flex-1 md:min-w-0 md:pl-4 md:border-l md:border-border flex-col">
                 <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
                   <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
                     <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
                     {user && (
-                        <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={() => setShowCreatePostFormInline(true)}>
+                        <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleOpenCreatePostForm}>
                             <PlusCircle className="mr-2 h-4 w-4" />
                             Create Post
                         </Button>
@@ -433,11 +441,6 @@ const BoardPageContent = () => {
   );
 };
 
-// CreatePostDialogHeader is no longer needed as the form is inline or in Sheet
-// const CreatePostDialogHeader: React.FC<React.HTMLAttributes<HTMLDivElement>> = ({ className, ...props }) => (
-//   <div className={cn("flex flex-col space-y-1.5 text-left", className)} {...props} />
-// );
-
 export default BoardPageContent;
     
     
@@ -452,4 +455,5 @@ export default BoardPageContent;
 
 
     
+
 

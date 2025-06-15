@@ -1,3 +1,4 @@
+
 // src/components/board-page/PostList.tsx
 "use client";
 
@@ -8,7 +9,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Input } from "@/components/ui/input"; // Import Input
+import { Input } from "@/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -17,14 +18,15 @@ import {
   DialogDescription,
   DialogFooter,
   DialogClose,
-  DialogTrigger, // Added DialogTrigger
+  DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search } from "lucide-react"; // Import Search
+import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search, PlusCircle } from "lucide-react";
 import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from "@/hooks/use-mobile";
+import type { User as FirebaseUser } from 'firebase/auth'; // Import FirebaseUser type
 
 interface PostListProps {
   posts: Post[];
@@ -33,6 +35,8 @@ interface PostListProps {
   selectedPostId?: string | null;
   availableTags: string[];
   detailedSectorsData: SectorWithSubSectors[];
+  onInitiateCreatePost?: () => void; // New prop to handle opening create post form
+  currentUser: FirebaseUser | null; // New prop for current user
 }
 
 type PostTypeFilter = 'all' | 'help_request' | 'post';
@@ -44,6 +48,8 @@ export const PostList: React.FC<PostListProps> = ({
   selectedPostId,
   availableTags,
   detailedSectorsData,
+  onInitiateCreatePost, // Destructure new prop
+  currentUser, // Destructure new prop
 }) => {
   const isMobile = useIsMobile();
   const [isFilterContainerOpen, setIsFilterContainerOpen] = useState(false);
@@ -53,7 +59,7 @@ export const PostList: React.FC<PostListProps> = ({
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string | undefined>(undefined);
   const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string | undefined>(undefined);
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
-  const [searchTerm, setSearchTerm] = useState(''); // State for search term
+  const [searchTerm, setSearchTerm] = useState('');
 
   const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
   const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
@@ -96,8 +102,7 @@ export const PostList: React.FC<PostListProps> = ({
     setSelectedPostType("all");
     setSelectedTags([]);
     setSelectedSectorFilter(undefined);
-    setSearchTerm(''); // Clear search term
-    // Sub-sector and industry will be reset by the useEffect hooks above
+    setSearchTerm('');
   }, []);
 
   const activeFilterCount = useMemo(() => {
@@ -105,7 +110,7 @@ export const PostList: React.FC<PostListProps> = ({
     if (selectedPostType !== "all") count++;
     if (selectedTags.length > 0) count++;
     if (selectedSectorFilter) count++;
-    if (searchTerm.trim() !== '') count++; // Count search term as an active filter
+    if (searchTerm.trim() !== '') count++;
     return count;
   }, [selectedPostType, selectedTags, selectedSectorFilter, searchTerm]);
 
@@ -228,60 +233,65 @@ export const PostList: React.FC<PostListProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-4 p-1 flex flex-col sm:flex-row flex-wrap items-center gap-2 border-b pb-3">
-        {isMobile ? (
-          <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
-            <DialogTrigger asChild>
-              <Button
-                size="sm"
-                variant="default"
-                className={cn("text-xs flex-grow h-9 w-full sm:w-auto sm:flex-grow-0")}
-                type="button"
-              >
-                <Filter className="h-3.5 w-3.5 mr-1.5" />
-                Filters
-                {activeFilterCount > 0 && (
-                  <span className="ml-1.5 h-4 w-4 rounded-full bg-background/20 text-primary-foreground text-[10px] flex items-center justify-center">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </Button>
-            </DialogTrigger>
-            <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
-              <DialogHeader className="p-4 border-b">
-                <DialogTitle>Filter Posts</DialogTitle>
-                <DialogDescription>Refine posts by type, tags, or industry.</DialogDescription>
-              </DialogHeader>
-              <ScrollArea className="flex-grow min-h-0"><FilterContent /></ScrollArea>
-              <DialogFooter className="p-4 border-t">
-                <DialogClose asChild>
-                  <Button type="button" variant="default" size="sm">Done</Button>
-                </DialogClose>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        ) : (
+      <div className="mb-4 p-1 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 border-b pb-3">
+        <div className="flex w-full sm:w-auto gap-2"> {/* Group buttons on mobile */}
+          {isMobile && (
+            <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
+              <DialogTrigger asChild>
+                <Button
+                  size="sm"
+                  variant="outline" // Changed from default to outline for consistency
+                  className="text-xs flex-1 h-9" // flex-1 to share space
+                >
+                  <Filter className="h-3.5 w-3.5 mr-1.5" />
+                  Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+                </Button>
+              </DialogTrigger>
+              <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
+                <DialogHeader className="p-4 border-b">
+                  <DialogTitle>Filter Posts</DialogTitle>
+                  <DialogDescription>Refine posts by type, tags, or industry.</DialogDescription>
+                </DialogHeader>
+                <ScrollArea className="flex-grow min-h-0"><FilterContent /></ScrollArea>
+                <DialogFooter className="p-4 border-t">
+                  <DialogClose asChild>
+                    <Button type="button" variant="default" size="sm">Done</Button>
+                  </DialogClose>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+          )}
+          {isMobile && currentUser && onInitiateCreatePost && (
+            <Button
+              size="sm"
+              variant="default"
+              className="text-xs flex-1 h-9" // flex-1 to share space
+              onClick={onInitiateCreatePost}
+              type="button"
+            >
+              <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
+              Create Post
+            </Button>
+          )}
+        </div>
+
+        {/* Desktop Filter Popover */}
+        {!isMobile && (
           <Popover open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
             <PopoverTrigger asChild>
               <Button
                 size="sm"
                 variant="default"
-                className={cn("text-xs h-9")}
+                className="text-xs h-9"
               >
                 <Filter className="h-3.5 w-3.5 mr-1.5" />
-                Filters
-                {activeFilterCount > 0 && (
-                  <span className="ml-1.5 h-4 w-4 rounded-full bg-background/20 text-primary-foreground text-[10px] flex items-center justify-center">
-                    {activeFilterCount}
-                  </span>
-                )}
+                Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
               </Button>
             </PopoverTrigger>
             <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
           </Popover>
         )}
 
-        {/* Search Input Field */}
         <div className="relative flex items-center flex-grow w-full sm:w-auto">
           <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -327,3 +337,4 @@ export const PostList: React.FC<PostListProps> = ({
 };
 
 PostList.displayName = "PostList";
+
