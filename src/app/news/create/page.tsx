@@ -62,7 +62,7 @@ const ToolbarComponent: React.FC<ToolbarComponentProps> = ({
       style={style}
       className={cn("flex items-center gap-x-0.5 bg-card p-0.5 rounded-full border border-border shadow-lg")}
       data-toolbar-button="true"
-      onMouseDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()} // Prevent blur on toolbar itself
     >
       {!isFormatMenuOpen ? (
         <Button type="button" variant="ghost" size="icon" className="h-7 w-7 rounded-full" onClick={onPlusClick} title="Show formatting options" onMouseDown={(e) => e.preventDefault()}>
@@ -103,7 +103,7 @@ const CreateNewsArticlePage = () => {
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
-    defaultValues: { title: "", content: "", category: "" },
+    defaultValues: { title: "", content: "hyfhyfhfyhf\nyfhyfh\nyfhyhyfh\nhfyhy\nfhfy\nhf\nyh\nfy\nh\nyh\n\n\n\n\nhfyhyf\nhh", category: "" },
   });
 
   const titleValueFromForm = form.watch('title');
@@ -113,25 +113,20 @@ const CreateNewsArticlePage = () => {
   useEffect(() => {
     const textarea = contentTextareaRef.current;
     if (textarea) {
-      // Critical: Reset height to 'auto' to accurately measure scrollHeight
-      textarea.style.height = 'auto';
-      const currentScrollHeight = textarea.scrollHeight;
-      textarea.style.height = `${currentScrollHeight}px`;
-      // console.log(`[HeightDebug] contentValue updated. scrollHeight: ${currentScrollHeight}px. Setting height to: ${currentScrollHeight}px`);
+      textarea.style.height = 'auto'; // Reset height to accurately measure scrollHeight
+      textarea.style.height = `${textarea.scrollHeight}px`; // Set to scroll height
     }
-  }, [contentValueFromForm]);
+  }, [contentValueFromForm]); // Trigger on content change
 
-  // Run once on mount to set initial height based on possible initial content
+  // Initial height adjustment on mount
   useEffect(() => {
     const textarea = contentTextareaRef.current;
     if (textarea) {
       textarea.style.height = 'auto';
       textarea.style.height = `${textarea.scrollHeight}px`;
-      // console.log(`[HeightDebug] Initial mount. scrollHeight: ${textarea.scrollHeight}px. Setting height to: ${textarea.scrollHeight}px`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
+  }, []); // Runs once on mount
 
   const getCurrentLineText = useCallback((textarea: HTMLTextAreaElement, currentCursorPos: number): string => {
     const text = textarea.value;
@@ -143,6 +138,7 @@ const CreateNewsArticlePage = () => {
   }, []);
 
   const calculateCursorLineYOffset = useCallback((textareaElement: HTMLTextAreaElement, currentCursorPosition: number): number => {
+    if (!textareaElement) return 0;
     const computedStyle = window.getComputedStyle(textareaElement);
     const lineHeightString = computedStyle.lineHeight;
     const paddingTopString = computedStyle.paddingTop;
@@ -150,52 +146,42 @@ const CreateNewsArticlePage = () => {
 
     let lineHeight = parseFloat(lineHeightString);
     if (isNaN(lineHeight) || lineHeight <= 0) {
-      const fontSize = parseFloat(fontSizeString) || 16; // Default font size if not found
-      lineHeight = fontSize * 1.4; // Common multiplier for line height
+      const fontSize = parseFloat(fontSizeString) || 16;
+      lineHeight = fontSize * 1.4;
     }
     const paddingTop = parseFloat(paddingTopString) || 0;
 
-    // If the textarea is empty or cursor is at the very beginning
     if (textareaElement.value === '' || currentCursorPosition === 0) {
-      return paddingTop + lineHeight / 2; // Center on the first line's vertical middle
+      return paddingTop + lineHeight / 2;
     }
-
     const textUptoCursor = textareaElement.value.substring(0, currentCursorPosition);
-    const lineNumber = (textUptoCursor.match(/\n/g) || []).length; // 0-indexed line number
-    const lineY = paddingTop + (lineNumber * lineHeight) + (lineHeight / 2);
-
-    return Math.max(lineHeight / 2, Math.min(lineY, textareaElement.offsetHeight - lineHeight / 2));
+    const lineNumber = (textUptoCursor.match(/\n/g) || []).length;
+    return paddingTop + (lineNumber * lineHeight) + (lineHeight / 2);
   }, []);
 
   const updateToolbarPosition = useCallback(() => {
     requestAnimationFrame(() => {
       const newStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50, transform: 'translateY(-50%)' };
       const currentFormRef = formRef.current;
-      let titleWrapperRect: DOMRect | undefined;
-      let contentWrapperRect: DOMRect | undefined;
-
-      if (!currentFormRef) {
-        setToolbarStyle(newStyle);
-        return;
-      }
+      if (!currentFormRef) { setToolbarStyle(newStyle); return; }
       const formRect = currentFormRef.getBoundingClientRect();
 
       if (focusedField === 'title' && titleWrapperRef.current && titleInputRef.current) {
         const titleIsEmpty = titleValueFromForm.trim() === '';
         if (titleIsEmpty) {
-          titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
+          const titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
           newStyle.top = `${titleWrapperRect.top - formRect.top + titleWrapperRect.height / 2}px`;
-          newStyle.left = `${titleWrapperRef.current.offsetLeft - 45}px`; // Position relative to form
+          newStyle.left = `${titleWrapperRef.current.offsetLeft - 45}px`;
           newStyle.display = 'flex';
         }
       } else if (focusedField === 'content' && contentWrapperRef.current && contentTextareaRef.current) {
         const currentLine = getCurrentLineText(contentTextareaRef.current, cursorPosition);
         const contentLineIsEmpty = currentLine.trim() === '';
         if (contentLineIsEmpty) {
-          contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
+          const contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
           const calculatedTopOffsetPx = calculateCursorLineYOffset(contentTextareaRef.current, cursorPosition);
           newStyle.top = `${contentWrapperRect.top - formRect.top + calculatedTopOffsetPx}px`;
-          newStyle.left = `${contentWrapperRef.current.offsetLeft - 45}px`; // Position relative to form
+          newStyle.left = `${contentWrapperRef.current.offsetLeft - 45}px`;
           newStyle.display = 'flex';
         }
       }
@@ -203,49 +189,34 @@ const CreateNewsArticlePage = () => {
     });
   }, [focusedField, cursorPosition, titleValueFromForm, contentValueFromForm, getCurrentLineText, calculateCursorLineYOffset]);
 
-
   useEffect(() => {
     updateToolbarPosition();
   }, [updateToolbarPosition]);
 
   const handleFocus = (field: 'title' | 'content') => {
     setFocusedField(field);
-    setIsFormatMenuOpen(false); 
-    if (field === 'title' && titleInputRef.current) {
-      setCursorPosition(titleInputRef.current.selectionStart || 0);
-    } else if (field === 'content' && contentTextareaRef.current) {
-      setCursorPosition(contentTextareaRef.current.selectionStart || 0);
-    }
+    setIsFormatMenuOpen(false);
+    if (field === 'title' && titleInputRef.current) setCursorPosition(titleInputRef.current.selectionStart || 0);
+    else if (field === 'content' && contentTextareaRef.current) setCursorPosition(contentTextareaRef.current.selectionStart || 0);
   };
 
   const handleBlur = (fieldToBlur: 'title' | 'content') => {
     queueMicrotask(() => {
       const activeElement = document.activeElement;
       const isFocusStillWithinToolbar = toolbarRef.current?.contains(activeElement as Node);
-
       if (isFocusStillWithinToolbar) {
-        if (fieldToBlur === 'title' && titleInputRef.current) {
-          titleInputRef.current.focus();
-          setCursorPosition(titleInputRef.current.selectionStart || 0);
-        } else if (fieldToBlur === 'content' && contentTextareaRef.current) {
-          contentTextareaRef.current.focus();
-          setCursorPosition(contentTextareaRef.current.selectionStart || 0);
-        }
+        if (fieldToBlur === 'title' && titleInputRef.current) titleInputRef.current.focus();
+        else if (fieldToBlur === 'content' && contentTextareaRef.current) contentTextareaRef.current.focus();
       } else {
-        if (focusedField === fieldToBlur) {
-          setFocusedField(null);
-          setIsFormatMenuOpen(false);
-        }
+        if (focusedField === fieldToBlur) setFocusedField(null);
+        setIsFormatMenuOpen(false);
       }
     });
   };
 
-  const handleContentInteraction = () => { 
-    if (focusedField === 'content' && contentTextareaRef.current) {
-      setCursorPosition(contentTextareaRef.current.selectionStart || 0);
-    } else if (focusedField === 'title' && titleInputRef.current) {
-      setCursorPosition(titleInputRef.current.selectionStart || 0);
-    }
+  const handleContentInteraction = () => {
+    if (focusedField === 'content' && contentTextareaRef.current) setCursorPosition(contentTextareaRef.current.selectionStart || 0);
+    else if (focusedField === 'title' && titleInputRef.current) setCursorPosition(titleInputRef.current.selectionStart || 0);
   };
 
   const insertTextIntoContent = (textToInsert: string) => {
@@ -283,15 +254,15 @@ const CreateNewsArticlePage = () => {
         default: toast({ title: "Action", description: `${action} clicked.` });
       }
       contentTextareaRef.current.focus();
-      handleContentInteraction(); 
+      handleContentInteraction();
     }
     setIsFormatMenuOpen(false);
   };
 
   const handleToggleFormatMenu = () => {
     setIsFormatMenuOpen(prev => !prev);
-    if (focusedField === 'title') titleInputRef.current?.focus();
-    else if (focusedField === 'content') contentTextareaRef.current?.focus();
+    if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus();
+    else if (focusedField === 'content' && contentTextareaRef.current) contentTextareaRef.current.focus();
   };
 
   const onSubmit = async (data: ArticleFormData) => {
@@ -300,7 +271,7 @@ const CreateNewsArticlePage = () => {
     await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate submission
     toast({ title: "Article Submitted (Placeholder)", description: `"${data.title}" saved.` });
     setIsSubmitting(false);
-    form.reset();
+    form.reset({ title: "", content: "", category: "" });
     setFocusedField(null); setIsFormatMenuOpen(false); setCursorPosition(0);
   };
 
@@ -311,6 +282,7 @@ const CreateNewsArticlePage = () => {
     <div className="container mx-auto py-8 px-4 md:px-6">
       <Form {...form}>
         <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative">
+          {/* Single Toolbar Instance */}
           <ToolbarComponent
               toolbarRef={toolbarRef}
               isFormatMenuOpen={isFormatMenuOpen}
@@ -342,7 +314,12 @@ const CreateNewsArticlePage = () => {
                     ref={contentTextareaRef}
                     placeholder="Tell your story..."
                     className="border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-normal break-words normal-case overflow-y-hidden min-h-0"
-                    style={{ fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif', fontSize: '20px', lineHeight: '28px', color: 'rgba(0, 0, 0, 0.84)' }}
+                    style={{
+                      fontFamily: 'medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif',
+                      fontSize: '20px',
+                      lineHeight: '28px',
+                      color: 'rgba(0, 0, 0, 0.84)',
+                    }}
                     {...field}
                     onChange={(e) => { field.onChange(e); handleContentInteraction(); }}
                     onFocus={() => handleFocus('content')}
@@ -366,5 +343,5 @@ const CreateNewsArticlePage = () => {
 
 export default CreateNewsArticlePage;
     
-
+        
       
