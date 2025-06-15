@@ -1,3 +1,4 @@
+
 // src/app/news/page.tsx
 "use client";
 
@@ -10,7 +11,7 @@ import Link from 'next/link';
 const NewsPage = () => {
   const handleCreateNews = () => {
     // Placeholder for future functionality
-    alert("Create News Article functionality coming soon!");
+    alert("Create News functionality coming soon!");
   };
 
   return (
@@ -23,7 +24,7 @@ const NewsPage = () => {
             </h1>
             {/* Add Create News Button here, visible for relevant users in future */}
             <Button onClick={handleCreateNews} size="default">
-                <Edit2 className="mr-2 h-4 w-4" /> Create News Article
+                <Edit2 className="mr-2 h-4 w-4" /> Create News
             </Button>
         </div>
         <p className="text-lg text-muted-foreground mt-1">
@@ -61,3 +62,4 @@ const NewsPage = () => {
 };
 
 export default NewsPage;
+
