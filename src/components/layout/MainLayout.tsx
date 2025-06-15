@@ -1,4 +1,3 @@
-
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -24,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain } from "lucide-react";
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper } from "lucide-react"; // Added Newspaper
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -532,6 +531,7 @@ export default function MainLayout({
   const navItems = [
     { title: "Home", href: "/", icon: Home },
     { title: "Discover", href: "/discover", icon: Compass },
+    { title: "News", href: "/news", icon: Newspaper }, // Added News link
     { title: "Messages", href: "/messages", icon: MessageSquare },
   ];
 
