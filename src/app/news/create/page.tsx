@@ -3,13 +3,13 @@
 "use client";
 
 import React, { useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form'; // Added Controller
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import { Label } from '@/components/ui/label';
+// Label removed as it's not used directly for top-bar elements, FormLabel is used within FormField
 import {
   Select,
   SelectContent,
@@ -17,11 +17,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'; // Added FormLabel
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { Loader2, Save, Send, ImageUp } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
+import { cn } from '@/lib/utils'; // Added cn for conditional styling
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -98,22 +99,73 @@ const CreateNewsArticlePage = () => {
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-8">
           
-          <div className="flex justify-end gap-3 mb-6">
-              <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-sm py-2 px-4 h-9 rounded-full">
-                  <Save className="mr-2 h-4 w-4" /> Save Draft
+          <div className="flex items-center justify-between gap-4 mb-6 flex-wrap">
+            {/* Left side: Category and Image */}
+            <div className="flex items-center gap-3 flex-wrap">
+              <Controller
+                name="category"
+                control={form.control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value} disabled={isSubmitting}>
+                    <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[150px] sm:w-[180px] focus-visible:ring-0 focus-visible:ring-offset-0">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {newsCategories.map((category) => (
+                        <SelectItem key={category} value={category} className="text-sm">
+                          {category}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+               {/* FormMessage for category can be added here if needed, or rely on global form error summary */}
+               {form.formState.errors.category && !isSubmitting && (
+                 <p className="text-xs text-destructive mt-1 sm:hidden">{form.formState.errors.category.message}</p> // Show on mobile if needed
+               )}
+
+
+              <div className="flex items-center gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('article-image-input-header')?.click()} disabled={isSubmitting} className="text-xs py-1.5 h-9">
+                    <ImageUp className="mr-1.5 h-3.5 w-3.5" /> Upload Image
+                </Button>
+                <Input
+                    id="article-image-input-header"
+                    type="file"
+                    accept="image/png, image/jpeg, image/gif, image/webp"
+                    // onChange={handleImageChange} - keep this commented out if not implementing preview
+                    disabled={isSubmitting}
+                    className="hidden"
+                />
+                {/* Image preview logic can be added here if needed */}
+              </div>
+            </div>
+
+            {/* Right side: Save and Publish */}
+            <div className="flex items-center gap-2 ml-auto"> {/* ml-auto to push to the right */}
+              <Button type="button" variant="outline" onClick={() => console.log("Save Draft clicked. Data:", form.getValues())} disabled={isSubmitting} className="text-xs py-1.5 h-9 rounded-full">
+                  <Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft
               </Button>
-              <Button type="submit" disabled={isSubmitting} className="text-sm py-2 px-4 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">
-                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}
+              <Button type="submit" disabled={isSubmitting} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full">
+                {isSubmitting ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Send className="mr-1.5 h-3.5 w-3.5" />}
                 Publish
               </Button>
+            </div>
           </div>
+          {/* Display category error prominently if form submitted and error exists and it's not being fixed in the header */}
+          {form.formState.errors.category && form.formState.isSubmitted && (
+            <FormItem> 
+              <FormMessage className="text-center text-sm mb-2" /> 
+            </FormItem>
+          )}
+
 
           <FormField
             control={form.control}
             name="title"
             render={({ field }) => (
               <FormItem className="mb-8">
-                {/* No FormLabel */}
                 <FormControl>
                   <Input 
                     placeholder="Title" 
@@ -132,7 +184,6 @@ const CreateNewsArticlePage = () => {
             name="content"
             render={({ field }) => (
               <FormItem>
-                {/* No FormLabel */}
                 <FormControl>
                   <Textarea
                     placeholder="Tell your story..."
@@ -145,56 +196,7 @@ const CreateNewsArticlePage = () => {
               </FormItem>
             )}
           />
-
-          <div className="pt-8 space-y-6"> {/* Container for less prominent fields */}
-            <FormField
-              control={form.control}
-              name="category"
-              render={({ field }) => (
-                <FormItem>
-                  <FormLabel className="text-base">Category <span className="text-destructive">*</span></FormLabel>
-                  <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isSubmitting}>
-                    <FormControl>
-                      <SelectTrigger className="text-base py-2 h-auto focus:ring-0 focus:ring-offset-0 focus-visible:ring-0 focus-visible:ring-offset-0">
-                        <SelectValue placeholder="Select a category" />
-                      </SelectTrigger>
-                    </FormControl>
-                    <SelectContent>
-                      {newsCategories.map((category) => (
-                        <SelectItem key={category} value={category} className="text-base">
-                          {category}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FormMessage />
-                </FormItem>
-              )}
-            />
-
-            <div className="space-y-2">
-              <Label htmlFor="article-image" className="text-base">Cover Image (Optional)</Label>
-              <div className="flex items-center gap-3">
-                <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('article-image-input')?.click()} disabled={isSubmitting}>
-                    <ImageUp className="mr-2 h-4 w-4" /> Upload Image
-                </Button>
-                <Input
-                    id="article-image-input"
-                    type="file"
-                    accept="image/png, image/jpeg, image/gif, image/webp"
-                    // onChange={handleImageChange} - keep this commented out if not implementing preview
-                    disabled={isSubmitting}
-                    className="hidden" // Visually hidden, triggered by button
-                />
-                {/* {imagePreview && (
-                  <div className="border rounded-md p-1 h-12 w-12 relative overflow-hidden">
-                    <img src={imagePreview} alt="Preview" className="object-cover h-full w-full" />
-                  </div>
-                )} */}
-              </div>
-              <FormDescription className="text-xs">Upload an image to accompany your article (max 2MB).</FormDescription>
-            </div>
-          </div>
+          {/* Category and Image sections are removed from here as they are moved to the top */}
         </form>
       </Form>
     </div>
