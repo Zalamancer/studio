@@ -103,22 +103,20 @@ const CreateNewsArticlePage = () => {
 
   const form = useForm<ArticleFormData>({
     resolver: zodResolver(articleSchema),
-    defaultValues: { title: "", content: "hyfhyfhfyhf\nyfhyfh\nyfhyhyfh\nhfyhy\nfhfy\nhf\nyh\nfy\nh\nyh\n\n\n\n\nhfyhyf\nhh", category: "" },
+    defaultValues: { title: "", content: "", category: "" }, // Changed content to ""
   });
 
   const titleValueFromForm = form.watch('title');
   const contentValueFromForm = form.watch('content');
 
-  // Auto-adjust textarea height to fit content
   useEffect(() => {
     const textarea = contentTextareaRef.current;
     if (textarea) {
-      textarea.style.height = 'auto'; // Reset height to accurately measure scrollHeight
-      textarea.style.height = `${textarea.scrollHeight}px`; // Set to scroll height
+      textarea.style.height = 'auto'; 
+      textarea.style.height = `${textarea.scrollHeight}px`; 
     }
-  }, [contentValueFromForm]); // Trigger on content change
+  }, [contentValueFromForm]); 
 
-  // Initial height adjustment on mount
   useEffect(() => {
     const textarea = contentTextareaRef.current;
     if (textarea) {
@@ -126,7 +124,7 @@ const CreateNewsArticlePage = () => {
       textarea.style.height = `${textarea.scrollHeight}px`;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Runs once on mount
+  }, []); 
 
   const getCurrentLineText = useCallback((textarea: HTMLTextAreaElement, currentCursorPos: number): string => {
     const text = textarea.value;
@@ -163,31 +161,38 @@ const CreateNewsArticlePage = () => {
     requestAnimationFrame(() => {
       const newStyle: React.CSSProperties = { display: 'none', position: 'absolute', zIndex: 50, transform: 'translateY(-50%)' };
       const currentFormRef = formRef.current;
-      if (!currentFormRef) { setToolbarStyle(newStyle); return; }
+      let titleWrapperRect: DOMRect | undefined;
+      let contentWrapperRect: DOMRect | undefined;
+
+      if (!currentFormRef) {
+        setToolbarStyle(newStyle);
+        return;
+      }
       const formRect = currentFormRef.getBoundingClientRect();
 
       if (focusedField === 'title' && titleWrapperRef.current && titleInputRef.current) {
         const titleIsEmpty = titleValueFromForm.trim() === '';
         if (titleIsEmpty) {
-          const titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
+          titleWrapperRect = titleWrapperRef.current.getBoundingClientRect();
           newStyle.top = `${titleWrapperRect.top - formRect.top + titleWrapperRect.height / 2}px`;
-          newStyle.left = `${titleWrapperRef.current.offsetLeft - 45}px`;
+          newStyle.left = `${titleWrapperRef.current.offsetLeft - 45}px`; // Adjust as needed
           newStyle.display = 'flex';
         }
       } else if (focusedField === 'content' && contentWrapperRef.current && contentTextareaRef.current) {
         const currentLine = getCurrentLineText(contentTextareaRef.current, cursorPosition);
         const contentLineIsEmpty = currentLine.trim() === '';
         if (contentLineIsEmpty) {
-          const contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
+          contentWrapperRect = contentWrapperRef.current.getBoundingClientRect();
           const calculatedTopOffsetPx = calculateCursorLineYOffset(contentTextareaRef.current, cursorPosition);
           newStyle.top = `${contentWrapperRect.top - formRect.top + calculatedTopOffsetPx}px`;
-          newStyle.left = `${contentWrapperRef.current.offsetLeft - 45}px`;
+          newStyle.left = `${contentWrapperRef.current.offsetLeft - 45}px`; // Adjust as needed
           newStyle.display = 'flex';
         }
       }
       setToolbarStyle(newStyle);
     });
   }, [focusedField, cursorPosition, titleValueFromForm, contentValueFromForm, getCurrentLineText, calculateCursorLineYOffset]);
+
 
   useEffect(() => {
     updateToolbarPosition();
@@ -268,7 +273,7 @@ const CreateNewsArticlePage = () => {
   const onSubmit = async (data: ArticleFormData) => {
     if (!user) { toast({ variant: "destructive", title: "Not Authenticated" }); return; }
     setIsSubmitting(true);
-    await new Promise(resolve => setTimeout(resolve, 1500)); // Simulate submission
+    await new Promise(resolve => setTimeout(resolve, 1500)); 
     toast({ title: "Article Submitted (Placeholder)", description: `"${data.title}" saved.` });
     setIsSubmitting(false);
     form.reset({ title: "", content: "", category: "" });
@@ -282,7 +287,6 @@ const CreateNewsArticlePage = () => {
     <div className="container mx-auto py-8 px-4 md:px-6">
       <Form {...form}>
         <form ref={formRef} onSubmit={form.handleSubmit(onSubmit)} className="max-w-3xl mx-auto space-y-0 relative">
-          {/* Single Toolbar Instance */}
           <ToolbarComponent
               toolbarRef={toolbarRef}
               isFormatMenuOpen={isFormatMenuOpen}
