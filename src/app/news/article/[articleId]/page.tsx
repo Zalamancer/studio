@@ -144,15 +144,16 @@ const ArticlePage = () => {
 
   // Effect 2: Populate editor form fields when 'article' or 'isEditingAllowed' changes
   useEffect(() => {
-    if (article && isEditingAllowed) {
+    if (article) { // This effect now runs whether editing is allowed or not, to set initial display
       setTitle(article.title || "");
       setCategory(article.category || "");
       const initialEditorContent = article.content || "<p><br></p>";
       setStoryContent(initialEditorContent); 
 
       if (contentEditableRef.current) {
-        if (contentEditableRef.current.innerHTML !== initialEditorContent) {
-            contentEditableRef.current.innerHTML = initialEditorContent;
+        const contentToSet = article.content || (isEditingAllowed ? "<p><br></p>" : ""); // Empty for non-editable if no content
+        if (contentEditableRef.current.innerHTML !== contentToSet) {
+            contentEditableRef.current.innerHTML = contentToSet;
         }
       }
       setCoverImagePreview(article.coverImageUrl || null);
@@ -161,20 +162,8 @@ const ArticlePage = () => {
       setTitleError("");
       setCategoryError("");
       setStoryError("");
-    } else if (article && !isEditingAllowed) {
-      setTitle(article.title || ""); 
-      setCategory(article.category || ""); 
-      setStoryContent(article.content || "<p><br></p>"); 
-      setCoverImagePreview(article.coverImageUrl || null);
-      setCurrentCoverImageUrl(article.coverImageUrl || null);
-      if (contentEditableRef.current) {
-        const displayContent = article.content || "";
-        if (contentEditableRef.current.innerHTML !== displayContent) {
-          contentEditableRef.current.innerHTML = displayContent;
-        }
-      }
     }
-  }, [article, isEditingAllowed]); 
+  }, [article, isEditingAllowed]);
 
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
@@ -362,7 +351,7 @@ const ArticlePage = () => {
     return isValid;
   }, [title, category]);
 
-  const handleUpdateArticle = async (newStatus: NewsArticleStatus) => {
+  const handleUpdateArticle = async (newStatus: NewsArticleStatus, contentToUse?: string) => {
     if (!user || !articleId || !article || !isEditingAllowed) { 
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." }); 
       return; 
@@ -380,41 +369,59 @@ const ArticlePage = () => {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
+        // Cover image was removed by user
         newCoverImageUrl = null; 
       }
       
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         category,
-        content: storyContent,
+        content: contentToUse !== undefined ? contentToUse : storyContent,
         status: newStatus,
         ...(newCoverImageUrl !== undefined && { coverImageUrl: newCoverImageUrl }),
+        // We don't need to explicitly pass other fields if they aren't changing.
+        // The service's updateNewsArticle will preserve them if not in payload.
       };
 
       await updateNewsArticle(articleId, articleUpdateData);
       
       let successTitle = "Draft Updated!";
-      if (newStatus === 'published' && article.status === 'draft') successTitle = "Article Published!";
-      else if (newStatus === 'published' && article.status === 'published') successTitle = "Published Article Updated!";
-      else if (newStatus === 'draft' && article.status === 'published') successTitle = "Article Unpublished & Saved as Draft";
+      let successDescription = `"${title.trim()}" has been successfully saved as a draft.`;
 
-      toast({ title: successTitle, description: `"${title.trim()}" has been successfully updated.` });
+      if (newStatus === 'published') {
+        if (article.status === 'draft') {
+          successTitle = "Article Published!";
+          successDescription = `"${title.trim()}" is now live.`;
+        } else if (article.status === 'published') {
+          successTitle = "Live Article Updated!";
+          successDescription = `"${title.trim()}" has been successfully updated.`;
+        }
+      } else if (newStatus === 'draft' && article.status === 'published') {
+         if (contentToUse !== undefined && contentToUse === article.content) { // This implies "Unpublish (Revert to Draft)" was clicked
+            successTitle = "Article Unpublished";
+            successDescription = `"${title.trim()}" is no longer live and has been reverted to a draft.`;
+         } else { // This implies "Save Edits & Unpublish" was clicked
+            successTitle = "Changes Saved as Draft";
+            successDescription = `"${title.trim()}" is no longer live. Your edits have been saved as a draft.`;
+         }
+      }
+
+      toast({ title: successTitle, description: successDescription });
       
       setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
       
+      // Re-fetch the article to update the UI with the latest state from DB
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
       if (fetchedUpdatedArticle) {
-        setArticle(fetchedUpdatedArticle); 
+        setArticle(fetchedUpdatedArticle); // This will trigger the useEffect to repopulate form states
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-        setCoverImageFile(null);
+        setCoverImageFile(null); // Clear the file input state
       }
       
-      if (newStatus === 'published' && article.status === 'draft') {
-         router.push('/news');
-      } else if (newStatus === 'draft' && article.status === 'published') {
-        // Stay on page, it's now a draft
-      }
+      // If the article was just published from a draft state, or if a published article was updated,
+      // and the user is still on the page, no redirect is strictly necessary unless desired.
+      // If an article was unpublished, it stays on this editor page as a draft.
 
     } catch (error: any) {
       toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
@@ -664,8 +671,9 @@ const ArticlePage = () => {
                 </>
               ) : ( // Article is published
                 <>
-                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full border-orange-500 text-orange-600 hover:bg-orange-50" disabled={isSubmitting}><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Unpublish &amp; Save Draft</Button>
-                  <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Update Published Article</Button>
+                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Update Live Article</Button>
+                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full border-orange-500 text-orange-600 hover:bg-orange-50" disabled={isSubmitting}><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Save Edits &amp; Unpublish</Button>
+                  <Button type="button" variant="destructive" onClick={() => handleUpdateArticle('draft', article.content)} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}> Unpublish Only</Button>
                 </>
               )}
             </div>
@@ -730,3 +738,4 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
+
