@@ -20,7 +20,7 @@ import {
   type OrderByDirection, // Import OrderByDirection
 } from 'firebase/firestore';
 import type { NewsArticle, NewNewsArticleData, UpdateNewsArticleData, ClientNewsArticle, NewsArticleStatus } from '@/types/news';
-import { getUserPreferences, type UserPreference } from './userPreferenceService';
+import { getUserPreferences, type UserPreference } from './userPreferenceService'; // Import preference service
 
 const NEWS_ARTICLES_COLLECTION = 'newsArticles';
 const newsArticlesCollectionRef = collection(db, NEWS_ARTICLES_COLLECTION);
@@ -132,62 +132,36 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
 
 
 export const getNewsArticlesByUserId = async (userId: string, status?: NewsArticleStatus): Promise<ClientNewsArticle[]> => {
+  const clientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[newsService] getNewsArticlesByUserId: Fetching for target userId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
+
   if (!userId) {
     console.warn("[newsService] getNewsArticlesByUserId: Called with no userId. Returning empty array.");
     return [];
   }
 
-  const currentClientAuthUid = auth.currentUser?.uid;
-  console.log(`%c[newsService] getNewsArticlesByUserId: Fetching for target userId: '${userId}'. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: dodgerblue;");
-
   const constraints: QueryConstraint[] = [];
   constraints.push(where('userId', '==', userId));
 
   const effectiveLimit = 20;
-  let orderByFieldForLogging: string | null = null;
-  let orderByDirectionForLogging: OrderByDirection | undefined = undefined;
   let clientSideSortRequired = false;
-  let isOrderByAppliedToServer = false;
 
   if (status) {
     console.log(`%c  [newsService] getNewsArticlesByUserId: Status filter active: '${status}'. Querying by userId and status, orderBy('updatedAt', 'desc').`, "color: dodgerblue;");
     constraints.push(where('status', '==', status));
-    orderByFieldForLogging = 'updatedAt';
-    orderByDirectionForLogging = 'desc';
-    constraints.push(orderBy(orderByFieldForLogging, orderByDirectionForLogging));
-    isOrderByAppliedToServer = true;
+    constraints.push(orderBy('updatedAt', 'desc'));
   } else {
-    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId only. orderBy NOT applied to server query. Client-side sort by updatedAt will be applied.`, "color: orange; font-weight:bold;");
-    orderByFieldForLogging = 'updatedAt'; // Still relevant for rule simulation log if rule expects it
-    orderByDirectionForLogging = 'desc';
+    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId only. orderBy NOT applied to server query. Client-side sort by updatedAt will be applied.`, "color: dodgerblue;");
     clientSideSortRequired = true;
-    isOrderByAppliedToServer = false; // Explicitly set that orderBy is NOT sent to server
   }
   constraints.push(limit(effectiveLimit));
-
-  const filtersForRulesLog = constraints
-    .filter(c => (c as any)._type === 'where') // More robust way to identify 'where' constraints
-    .map(c => {
-        const cf = (c as any)._query?.filters[0]; // Access internal representation if needed or simplify
-        return cf ? [cf.field.segments.join('/'), cf.op, cf.value.value.stringValue || cf.value.value.integerValue || cf.value.value] : ['unknown_filter_field', 'unknown_op', 'unknown_value'];
-    });
-
-
-  console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
-    request.auth.uid:                     '${currentClientAuthUid || 'NULL'}'
-    request.query.filters.size():         ${filtersForRulesLog.length}
-    request.query.filters:                ${JSON.stringify(filtersForRulesLog)}
-    request.query.orderBy (exists?):      ${isOrderByAppliedToServer} 
-    string(request.query.orderBy.path):   '${isOrderByAppliedToServer ? orderByFieldForLogging : 'N/A'}'
-    request.query.orderBy.direction:      '${isOrderByAppliedToServer ? orderByDirectionForLogging : 'N/A'}'
-    request.query.limit:                  ${effectiveLimit}`, "color: magenta; font-weight: bold;"
-  );
 
   const q = query(newsArticlesCollectionRef, ...constraints);
 
   try {
     const querySnapshot = await getDocs(q);
-    console.log(`%c  [newsService] getNewsArticlesByUserId: Query successful. Found ${querySnapshot.docs.length} articles.`, "color: green;");
+    console.log(`%c  [newsService] getNewsArticlesByUserId: Query successful for userId '${userId}', status '${status || 'any'}'. Found ${querySnapshot.docs.length} articles.`, "color: green;");
+
     const articles = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data() as NewsArticle;
       return {
@@ -216,10 +190,10 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
         console.error(`%c  [newsService] PERMISSION DENIED. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
         const effectiveQueryLog = `Query: where('userId', '==', '${userId}')` +
                                   (status ? `, where('status', '==', '${status}')` : '') +
-                                  (isOrderByAppliedToServer ? `, orderBy('${orderByFieldForLogging}', '${orderByDirectionForLogging}')` : '') + // Log if orderBy was applied
+                                  // No orderBy logged here if clientSideSortRequired is true
                                   `, limit(${effectiveLimit})`;
         console.error(`%c  Query was effectively: ${effectiveQueryLog}`, "color: red; font-weight: bold;");
-        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.filters.`, "color: red; font-weight: bold;");
+        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met. With the current rule 'allow list: if request.auth != null;', this error points strongly to an INDEXING issue for the query Firestore is trying to run.`, "color: red; font-weight: bold;");
     }
     throw error;
   }
