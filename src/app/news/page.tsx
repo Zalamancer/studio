@@ -1,9 +1,9 @@
 
 // src/app/news/page.tsx
-"use client"; // <--- ADDED THIS DIRECTIVE
+"use client"; 
 
-import React, { useMemo, useEffect } from 'react'; // useEffect is already imported
-import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send, Loader2 } from 'lucide-react';
+import React, { useMemo, useEffect } from 'react';
+import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send, Loader2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -22,6 +22,7 @@ import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/ne
 import type { ClientNewsArticle } from '@/types/news';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
+import { useIsMobile } from "@/hooks/use-is-mobile"; // Import useIsMobile
 
 interface NewsItem {
   id: string;
@@ -58,11 +59,12 @@ const newsCategoriesConfig = [
 
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
+  const isMobile = useIsMobile(); // Call the hook here
 
   const { data: userArticles, isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
     queryKey: ['userNewsArticles', user?.uid],
     queryFn: () => {
-        console.log(`%c[NewsPage] Fetching user articles for UID: ${user?.uid}`, "color: teal");
+        // console.log(`%c[NewsPage] Fetching user articles for UID: ${user?.uid}`, "color: teal");
         return user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]);
     },
     enabled: !!user,
@@ -70,7 +72,7 @@ const NewsPage = () => {
 
   useEffect(() => {
     if (userArticles) {
-        console.log(`%c[NewsPage] Received userArticles (count: ${userArticles.length}). First two:`, "color: green;", userArticles.slice(0,2));
+        console.log(`%c[NewsPage] Received userArticles (count: ${userArticles.length}):`, "color: green;", userArticles.slice(0,2));
     }
     if (userArticlesError) {
         console.error(`%c[NewsPage] Error fetching userArticles:`, "color: red;", userArticlesError);
@@ -85,10 +87,10 @@ const NewsPage = () => {
   
   useEffect(() => {
     if (generalPublishedArticles) {
-        console.log(`%c[NewsPage] Received generalPublishedArticles (count: ${generalPublishedArticles.length}). First two:`, "color: green;", generalPublishedArticles.slice(0,2));
+        // console.log(`%c[NewsPage] Received generalPublishedArticles (count: ${generalPublishedArticles.length}). First two:`, "color: green;", generalPublishedArticles.slice(0,2));
     }
     if (generalArticlesError) {
-        console.error(`%c[NewsPage] Error fetching generalPublishedArticles:`, "color: red;", generalArticlesError);
+        // console.error(`%c[NewsPage] Error fetching generalPublishedArticles:`, "color: red;", generalArticlesError);
     }
   }, [generalPublishedArticles, generalArticlesError]);
   
@@ -107,10 +109,10 @@ const NewsPage = () => {
   });
 
   const categorizedNews = useMemo(() => {
-    console.log(`%c[NewsPage] Memoizing categorizedNews. Input userArticles (from query):`, "color: blue;", userArticles);
+    // console.log(`%c[NewsPage] Memoizing categorizedNews. Input userArticles (from query):`, "color: blue;", userArticles);
     const userDrafts: NewsItem[] = userArticles?.filter(a => a.status === 'draft').map(transformToNewsItem) || [];
     const userPublished: NewsItem[] = userArticles?.filter(a => a.status === 'published').map(transformToNewsItem) || [];
-    console.log(`%c  [NewsPage] Client-side filtered: Drafts count: ${userDrafts.length}, Published by user count: ${userPublished.length}`, "color: blue;");
+    // console.log(`%c  [NewsPage] Client-side filtered: Drafts count: ${userDrafts.length}, Published by user count: ${userPublished.length}`, "color: blue;");
 
     const generalFeed: { [key: string]: NewsItem[] } = {};
     if (generalPublishedArticles) {
@@ -122,7 +124,6 @@ const NewsPage = () => {
             }
         });
     } else {
-        // Fallback to mock if generalPublishedArticles is not ready or errored
         newsCategoriesConfig.forEach(catConfig => {
             if (catConfig.dataKey.startsWith('general')) {
                 generalFeed[catConfig.dataKey] = generalMockNewsData
@@ -138,7 +139,7 @@ const NewsPage = () => {
         });
     }
     
-    console.log(`%c[NewsPage] Final categorizedNews structure:`, "color: blue;", { userDrafts, userPublished, ...generalFeed });
+    // console.log(`%c[NewsPage] Final categorizedNews structure:`, "color: blue;", { userDrafts, userPublished, ...generalFeed });
 
     return {
       userDrafts,
@@ -166,7 +167,7 @@ const NewsPage = () => {
         )}
       </header>
 
-      {isLoadingUserArticles && userArticles === undefined && (
+      {(isLoadingUserArticles && !userArticles) && ( // Show loading only if data is undefined initially
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
           <p className="ml-2 text-sm text-muted-foreground">Loading your articles...</p>
@@ -187,7 +188,7 @@ const NewsPage = () => {
           
           if (!user && categoryConfig.dataKey.startsWith('user')) return null;
           
-          const isLoadingSection = categoryConfig.dataKey.startsWith('user') ? isLoadingUserArticles : isLoadingGeneralArticles;
+          const isLoadingSection = categoryConfig.dataKey.startsWith('user') ? (isLoadingUserArticles && !userArticles) : (isLoadingGeneralArticles && !generalPublishedArticles);
           const sectionHasError = categoryConfig.dataKey.startsWith('user') ? !!userArticlesError : !!generalArticlesError;
 
 
