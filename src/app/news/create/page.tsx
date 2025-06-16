@@ -1,12 +1,12 @@
 
+// src/app/news/create/page.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-// Select components removed
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2 } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft } from 'lucide-react'; // Added ArrowLeft
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -24,9 +24,7 @@ import { createNewsArticle } from '@/services/newsService';
 import { uploadNewsCoverImage } from '@/services/storageService';
 import type { NewNewsArticleData, NewsArticleStatus } from '@/types/news';
 import Image from 'next/image';
-import { TagsInput } from '@/components/TagsInput'; // ADDED TagsInput
-
-// newsCategories removed as category field is replaced by tags
+import { TagsInput } from '@/components/TagsInput';
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -37,7 +35,7 @@ const CreateNewsArticlePage = () => {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]); // ADDED for tags
+  const [tags, setTags] = useState<string[]>([]);
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -45,7 +43,7 @@ const CreateNewsArticlePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState(""); // ADDED for tags error
+  const [tagsError, setTagsError] = useState("");
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -253,18 +251,18 @@ const CreateNewsArticlePage = () => {
   const validateFields = useCallback(() => {
     let isValid = true;
     if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); }
-    if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); } // VALIDATION FOR TAGS
+    if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); }
     const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags, setTagsError]); // ADDED tags and setTagsError
+  }, [title, tags, setTagsError]);
 
   const handleFormSubmission = async (status: NewsArticleStatus) => {
     if (!user) { toast({ variant: "destructive", title: "Error", description: "You must be logged in." }); return; }
     setPublishAttempted(true);
     if (!validateFields()) {
       if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-      else if (tags.length === 0) { /* Focus TagsInput if possible, or just show error */ } // FOCUS FOR TAGS
+      else if (tags.length === 0) { /* Error for tags will be shown by TagsInput */ }
       else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
       return;
     }
@@ -275,18 +273,25 @@ const CreateNewsArticlePage = () => {
         coverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, 'article_placeholder_id');
       }
       const articleData: NewNewsArticleData = {
-        userId: user.uid, title: title.trim(), tags: tags, content: storyContent, status, coverImageUrl, // UPDATED: category removed, tags added
+        userId: user.uid, title: title.trim(), tags: tags, content: storyContent, status, coverImageUrl,
       };
       const articleId = await createNewsArticle(articleData);
       toast({ title: status === 'published' ? "Article Published!" : "Draft Saved!", description: `"${title.trim()}" has been successfully ${status}.` });
-      if (status === 'published') {
-        setTitle(""); setTags([]); setStoryContent("<p><br></p>"); setCoverImageFile(null); setCoverImagePreview(null); // RESET TAGS
-        if (contentEditableRef.current) contentEditableRef.current.innerHTML = "<p><br></p>";
-        router.push('/news');
-      }
-      setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError(""); // RESET TAGS ERROR
+      
+      setTitle(""); setTags([]); setStoryContent("<p><br></p>"); setCoverImageFile(null); setCoverImagePreview(null);
+      if (contentEditableRef.current) contentEditableRef.current.innerHTML = "<p><br></p>";
+      
+      setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
       updateSelectionNonce();
+
+      // Navigate to the newly created article's page if published, or to news list if saved as draft
+      if (status === 'published') {
+        router.push(`/news/article/${articleId}`);
+      } else {
+        router.push('/news');
+      }
+
     } catch (error: any) {
       toast({ variant: "destructive", title: "Submission Failed", description: error.message || "Could not save the article." });
     } finally {
@@ -296,11 +301,12 @@ const CreateNewsArticlePage = () => {
 
   const handlePublish = () => handleFormSubmission('published');
   const handleSaveDraft = () => {
-    if (!validateFields()) { // Adjusted validation logic for save draft
-      if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-      else if (tags.length === 0) { /* Error will be shown */ }
-      // Story content not strictly required for draft, but title/tags might be
-      return;
+    if (!title.trim() || tags.length === 0) { // Basic validation for draft: title and tags
+        setPublishAttempted(true); // Trigger validation display
+        if (!title.trim()) setTitleError("Title is required to save a draft."); else setTitleError("");
+        if (tags.length === 0) setTagsError("At least one tag is required to save a draft."); else setTagsError("");
+        toast({variant: "destructive", title: "Cannot Save Draft", description: "Please provide a title and at least one tag."});
+        return;
     }
     handleFormSubmission('draft');
   };
@@ -410,6 +416,32 @@ const CreateNewsArticlePage = () => {
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3">
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
+        </Button>
+        
+        <div className="flex-grow min-w-[240px] sm:min-w-[300px] md:max-w-xs order-3 sm:order-none w-full sm:w-auto">
+          <TagsInput
+            label={undefined}
+            value={tags}
+            onChange={setTags}
+            placeholder="Add tags (required)"
+            disabled={isSubmitting}
+            error={publishAttempted && tagsError ? tagsError : null}
+            onPublishAttempt={publishAttempted}
+          />
+        </div>
+        
+        <div className="flex items-center gap-1 sm:gap-1.5">
+          <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
+            <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
+          </Button>
+          <Button type="button" variant="outline" onClick={handleSaveDraft} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
+          <Button type="button" onClick={handlePublish} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-md" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
+        </div>
+      </div>
+
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
         {showContextualUI && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}>
@@ -423,34 +455,13 @@ const CreateNewsArticlePage = () => {
                 <button onClick={handleInsertSeparator} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert line separator" title="Insert line separator"><MinusIcon className={iconClass} /></button>
               </div>)}
           </div>)}
-        <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
-           <div className="flex items-center gap-2 mr-auto">
-            {/* TagsInput replaces category Select */}
-            <div className="space-y-1 min-w-[200px] sm:min-w-[250px]">
-                <TagsInput
-                    label="Tags"
-                    value={tags}
-                    onChange={setTags}
-                    placeholder="Add relevant tags..."
-                    disabled={isSubmitting}
-                    error={publishAttempted && tagsError ? tagsError : null}
-                    onPublishAttempt={publishAttempted}
-                />
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9" disabled={isSubmitting}>
-              <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
-            </Button>
-            <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting} />
-            <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting} />
-          </div>
-          <div className="flex items-center gap-2">
-            <Button type="button" variant="outline" onClick={handleSaveDraft} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
-            <Button type="button" onClick={handlePublish} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
-          </div>
-        </div>
+        
+        <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting} />
+        <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting} />
+
         {coverImagePreview && (
           <div className="mb-4 relative group">
-            <Image src={coverImagePreview} alt="Cover image preview" width={800} height={450} className="rounded-md object-cover w-full max-h-[300px] border" data-ai-hint="news cover" />
+            <Image src={coverImagePreview} alt="Cover image preview" width={800} height={450} className="rounded-md object-cover w-full max-h-[300px] border" data-ai-hint="news cover"/>
             <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); if(coverImageInputRef.current) coverImageInputRef.current.value = "";}} disabled={isSubmitting}><Trash2 className="h-4 w-4" /></Button>
           </div>
         )}

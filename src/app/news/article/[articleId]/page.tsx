@@ -1,4 +1,5 @@
 
+// src/app/news/article/[articleId]/page.tsx
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -11,7 +12,6 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-// Select components removed
 import { Label } from '@/components/ui/label';
 import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical } from 'lucide-react';
 import Image from 'next/image';
@@ -38,9 +38,8 @@ import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectio
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
-import { TagsInput } from '@/components/TagsInput'; // ADDED TagsInput
-
-// newsCategories removed
+import { TagsInput } from '@/components/TagsInput';
+import { Badge } from '@/components/ui/badge';
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -58,7 +57,7 @@ const ArticlePage = () => {
   const [errorLoadingArticle, setErrorLoadingArticle] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]); // ADDED for tags
+  const [tags, setTags] = useState<string[]>([]);
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -68,7 +67,7 @@ const ArticlePage = () => {
   const [isSavingDraftOfPublished, setIsSavingDraftOfPublished] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState(""); // ADDED for tags error
+  const [tagsError, setTagsError] = useState("");
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -141,7 +140,7 @@ const ArticlePage = () => {
   useEffect(() => {
     if (article) {
       setTitle(article.title || "");
-      setTags(article.tags || []); // SET TAGS
+      setTags(article.tags || []);
       let contentToLoadInEditor = "<p><br></p>";
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
@@ -151,13 +150,10 @@ const ArticlePage = () => {
           contentToLoadInEditor = article.content || "<p><br></p>";
         }
       } else if (article.status === 'published') {
-        contentToLoadInEditor = article.content || "<p><br></p>"; // Public viewers always see live content
+        contentToLoadInEditor = article.content || "<p><br></p>";
       } else if (article.status === 'draft' && !isEditingAllowed) {
-        // This case should ideally not happen if rules prevent viewing others' drafts.
-        // But if it does, show a "content not available" or redirect.
         contentToLoadInEditor = "<p>Draft content not available for viewing.</p>";
       }
-
 
       setStoryContent(contentToLoadInEditor);
       if (contentEditableRef.current && contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
@@ -168,7 +164,7 @@ const ArticlePage = () => {
       setCurrentCoverImageUrl(article.coverImageUrl || null);
       setPublishAttempted(false);
       setTitleError("");
-      setTagsError(""); // RESET TAGS ERROR
+      setTagsError("");
       setStoryError("");
     }
   }, [article, isEditingAllowed, toast]);
@@ -362,7 +358,7 @@ const ArticlePage = () => {
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
     contentToSaveParam?: string | null,
-    isSavingDraftOfPublishedArticleFlag: boolean = false // Renamed to avoid conflict with state
+    isSavingDraftOfPublishedArticleFlag: boolean = false
   ) => {
     if (!user || !articleId || !article || !isEditingAllowed) {
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." });
@@ -393,9 +389,9 @@ const ArticlePage = () => {
 
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
-        tags: tags, // UPDATED: category removed, tags added
+        tags: tags,
         status: newStatus,
-        content: mainContentForService, // Will be handled by service logic based on intent
+        content: mainContentForService,
       };
 
       if (newCoverImageUrl !== undefined) {
@@ -411,10 +407,10 @@ const ArticlePage = () => {
         successTitle = "Draft Saved!";
         successDescription = `Your changes to "${title.trim()}" have been saved as a draft. The live article remains unchanged.`;
       } else if (newStatus === 'published') {
-        if (article.status !== 'published') {
+        if (article.status !== 'published' || article.hasUnpublishedChanges) { // If publishing draft or draft changes
           successTitle = "Article Published!";
-          successDescription = `"${title.trim()}" is now live.`;
-        } else {
+          successDescription = `Changes to "${title.trim()}" are now live.`;
+        } else { // Simple update to already live article
           successTitle = "Live Article Updated!";
           successDescription = `Changes to "${title.trim()}" are now live.`;
         }
@@ -428,9 +424,10 @@ const ArticlePage = () => {
         }
       }
 
+
       toast({ title: successTitle, description: successDescription });
 
-      setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError(""); // RESET TAGS ERROR
+      setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
 
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
@@ -570,6 +567,7 @@ const ArticlePage = () => {
     );
   }
 
+  // Public View
   if (!isEditingAllowed && article.status === 'published') {
     const publishedDateStr = article.publishedAt ? format(new Date(article.publishedAt), 'PPP') : 'Not published';
     const lastEditedDateStr = article.updatedAt ? format(new Date(article.updatedAt), 'PPp') : '';
@@ -597,7 +595,6 @@ const ArticlePage = () => {
         </div>
         <article className="max-w-3xl mx-auto">
           <header className="mb-8">
-            {/* Display tags for published article */}
             {article.tags && article.tags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                     {article.tags.map(tag => (
@@ -620,7 +617,7 @@ const ArticlePage = () => {
           )}
           <div
             className="prose prose-lg dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: article.content || "" }} 
+            dangerouslySetInnerHTML={{ __html: article.content || "" }}
           />
         </article>
       </div>
@@ -643,16 +640,29 @@ const ArticlePage = () => {
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}>
-      <div className="flex items-center justify-between mb-4">
-        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
-        <div className="flex items-center gap-2">
+        
+        <div className="flex-grow min-w-[240px] sm:min-w-[300px] md:max-w-xs order-3 sm:order-none w-full sm:w-auto">
+          <TagsInput
+            label={undefined} // No explicit label text in this dense header
+            value={tags}
+            onChange={(newTags) => { setTags(newTags); if (publishAttempted) { if (newTags.length > 0) setTagsError(""); else setTagsError("At least one tag is required."); }}}
+            disabled={isSubmitting || !isEditingAllowed}
+            error={publishAttempted && tagsError ? tagsError : null}
+            onPublishAttempt={publishAttempted}
+            placeholder="Add tags (required)"
+          />
+        </div>
+
+        <div className="flex items-center gap-1 sm:gap-1.5">
           {user && articleId && article && (
             <Button
                 variant="ghost"
                 size="icon"
-                className="h-8 w-8 p-1"
+                className="h-9 w-9 p-1.5"
                 title={isArticleSaved ? "Unsave Article" : "Save Article"}
                 onClick={(e) => {e.stopPropagation(); setIsSaveToCollectionDialogOpen(true);}}
                 aria-pressed={isArticleSaved}
@@ -663,8 +673,8 @@ const ArticlePage = () => {
           {isEditingAllowed && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8 p-1">
-                  <MoreVertical className="h-4 w-4" />
+                <Button variant="ghost" size="icon" className="h-9 w-9 p-1.5">
+                  <MoreVertical className="h-5 w-5" />
                   <span className="sr-only">More options</span>
                 </Button>
               </DropdownMenuTrigger>
@@ -683,7 +693,7 @@ const ArticlePage = () => {
                       <Send className="mr-2 h-4 w-4" /> Publish
                     </DropdownMenuItem>
                   </>
-                ) : ( 
+                ) : ( // Article is 'published'
                   <>
                     <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
                       {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -701,7 +711,7 @@ const ArticlePage = () => {
                     )}
                     
                     <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting} className="cursor-pointer text-orange-600 focus:text-orange-700">
-                      <RotateCcw className="mr-2 h-4 w-4" /> Unpublish (Revert to Draft)
+                      <RotateCcw className="mr-2 h-4 w-4" /> Unpublish
                     </DropdownMenuItem>
                   </>
                 )}
@@ -725,19 +735,6 @@ const ArticlePage = () => {
               </div>)}
           </div>)}
         
-        <div className="mb-6 flex items-center gap-2">
-           {/* TagsInput replaces Category Select */}
-            <div className="space-y-1 min-w-[200px] sm:min-w-[250px] flex-grow">
-                <TagsInput
-                    label="Tags"
-                    value={tags}
-                    onChange={(newTags) => { setTags(newTags); if (publishAttempted) { if (newTags.length > 0) setTagsError(""); else setTagsError("At least one tag is required."); }}}
-                    disabled={isSubmitting || !isEditingAllowed}
-                    error={publishAttempted && tagsError ? tagsError : null}
-                    onPublishAttempt={publishAttempted}
-                />
-            </div>
-        </div>
         <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting || !isEditingAllowed} />
         <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting || !isEditingAllowed} />
 
