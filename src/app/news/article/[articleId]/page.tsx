@@ -13,7 +13,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Tag } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -38,7 +38,7 @@ import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectio
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
-import { TagsInput } from '@/components/TagsInput';
+import { TagsInput } from '@/components/TagsInput'; // Updated import path
 import { Badge } from '@/components/ui/badge';
 
 const TOOLBAR_HEIGHT = 36;
@@ -67,7 +67,7 @@ const ArticlePage = () => {
   const [isSavingDraftOfPublished, setIsSavingDraftOfPublished] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState("");
+  const [tagsError, setTagsError] = useState(""); // For TagsInput component
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -95,9 +95,9 @@ const ArticlePage = () => {
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
-    queryKey: ['userCollections', user?.uid],
+    queryKey: ['userCollections', user?.uid, articleId], // Add articleId to key if specific to article
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
-    enabled: !!user && !!articleId,
+    enabled: !!user && !!articleId, // Enable only when user and article are present
   });
 
   const isArticleSaved = useMemo(() => {
@@ -107,9 +107,9 @@ const ArticlePage = () => {
 
   const handleCollectionUpdate = useCallback(() => {
     if (user) {
-      queryClient.invalidateQueries({ queryKey: ['userCollections', user.uid] });
+      queryClient.invalidateQueries({ queryKey: ['userCollections', user.uid, articleId] });
     }
-  }, [user, queryClient]);
+  }, [user, queryClient, articleId]);
 
   const isEditingAllowed = useMemo(() => {
     return !!user && !!article && user.uid === article.userId;
@@ -119,7 +119,7 @@ const ArticlePage = () => {
     if (articleId) {
       setIsLoadingArticle(true);
       setErrorLoadingArticle(null);
-      setArticle(null);
+      setArticle(null); // Reset article state when ID changes
       getNewsArticleById(articleId)
         .then((fetchedArticle) => {
           if (fetchedArticle) {
@@ -131,16 +131,22 @@ const ArticlePage = () => {
         .catch((err) => setErrorLoadingArticle(err.message || "Failed to load article."))
         .finally(() => setIsLoadingArticle(false));
     } else {
+      // If no articleId, reset states
       setArticle(null);
       setIsLoadingArticle(false);
       setErrorLoadingArticle(null);
+      setTitle("");
+      setTags([]);
+      setStoryContent("<p><br></p>");
+      setCoverImagePreview(null);
+      setCurrentCoverImageUrl(null);
     }
   }, [articleId]);
 
   useEffect(() => {
     if (article) {
       setTitle(article.title || "");
-      setTags(article.tags || []);
+      setTags(article.tags || []); // Use tags
       let contentToLoadInEditor = "<p><br></p>";
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
@@ -353,18 +359,18 @@ const ArticlePage = () => {
     const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags, setTagsError]);
+  }, [title, tags, setTagsError]); // Removed category from dependencies
 
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
-    contentToSaveParam?: string | null,
+    contentToSaveParam?: string | null, // Optional: For saving specific content (e.g., original live content when unpublishing)
     isSavingDraftOfPublishedArticleFlag: boolean = false
   ) => {
     if (!user || !articleId || !article || !isEditingAllowed) {
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." });
       return;
     }
-    if (newStatus === 'published' || isSavingDraftOfPublishedArticleFlag) {
+    if (newStatus === 'published' || isSavingDraftOfPublishedArticleFlag) { // Validate fields if publishing OR saving a draft of a published article that needs title/tags
       setPublishAttempted(true);
       if (!validateFields()) {
         if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
@@ -382,22 +388,26 @@ const ArticlePage = () => {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
+        // This means the user explicitly removed the cover image
         newCoverImageUrl = null;
       }
 
+      // Determine which content to save based on action
       const mainContentForService = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
 
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
-        tags: tags,
+        tags: tags, // Changed from category to tags
         status: newStatus,
-        content: mainContentForService,
+        // Content field assignment logic is now inside the service for clarity with draftContent
+        content: mainContentForService, // This will be interpreted by the service
       };
 
-      if (newCoverImageUrl !== undefined) {
+      if (newCoverImageUrl !== undefined) { // Only include if it changed or was explicitly set to null
         articleUpdateData.coverImageUrl = newCoverImageUrl;
       }
 
+      // The newsService.updateNewsArticle will handle draftContent and hasUnpublishedChanges based on isSavingDraftOfPublishedArticleFlag
       await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticleFlag);
 
       let successTitle = "Update Successful";
@@ -430,11 +440,13 @@ const ArticlePage = () => {
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
 
+      // Refetch the article to get the latest state including draftContent and hasUnpublishedChanges
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
       if (fetchedUpdatedArticle) {
-        setArticle(fetchedUpdatedArticle);
+        setArticle(fetchedUpdatedArticle); // This will trigger the useEffect to update form fields
+        // Update cover image related states if it was part of the update
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-        setCoverImageFile(null);
+        setCoverImageFile(null); // Reset file input state
       }
 
     } catch (error: any) {
@@ -548,7 +560,9 @@ const ArticlePage = () => {
       reader.onloadend = () => setCoverImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     } else {
-      setCoverImageFile(null); setCoverImagePreview(currentCoverImageUrl);
+      // If no file is selected (e.g., user cancels file dialog), revert to current DB URL or null
+      setCoverImageFile(null);
+      setCoverImagePreview(currentCoverImageUrl);
     }
   };
 
@@ -567,7 +581,6 @@ const ArticlePage = () => {
     );
   }
 
-  // Public View
   if (!isEditingAllowed && article.status === 'published') {
     const publishedDateStr = article.publishedAt ? format(new Date(article.publishedAt), 'PPP') : 'Not published';
     const lastEditedDateStr = article.updatedAt ? format(new Date(article.updatedAt), 'PPp') : '';
@@ -617,7 +630,7 @@ const ArticlePage = () => {
           )}
           <div
             className="prose prose-lg dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: article.content || "" }}
+            dangerouslySetInnerHTML={{ __html: article.content || "" }} // Public always sees live content
           />
         </article>
       </div>
@@ -645,18 +658,16 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        <div className="flex-grow min-w-[240px] sm:min-w-[300px] md:max-w-xs order-3 sm:order-none w-full sm:w-auto">
-          <TagsInput
-            label={undefined} // No explicit label text in this dense header
+        <TagsInput
             value={tags}
             onChange={(newTags) => { setTags(newTags); if (publishAttempted) { if (newTags.length > 0) setTagsError(""); else setTagsError("At least one tag is required."); }}}
             disabled={isSubmitting || !isEditingAllowed}
             error={publishAttempted && tagsError ? tagsError : null}
             onPublishAttempt={publishAttempted}
             placeholder="Add tags (required)"
-          />
-        </div>
-
+            className="flex-grow min-w-[200px] sm:min-w-[240px] max-w-xs text-xs" // Added className
+        />
+        
         <div className="flex items-center gap-1 sm:gap-1.5">
           {user && articleId && article && (
             <Button
@@ -697,7 +708,7 @@ const ArticlePage = () => {
                   <>
                     <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
                       {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Save Draft of Published
+                      Save Draft of Published Article
                     </DropdownMenuItem>
                     
                     {article.hasUnpublishedChanges && article.draftContent ? (

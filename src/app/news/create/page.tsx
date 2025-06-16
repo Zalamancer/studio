@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft } from 'lucide-react'; // Added ArrowLeft
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Tag } from 'lucide-react'; // Added Tag
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -24,7 +24,7 @@ import { createNewsArticle } from '@/services/newsService';
 import { uploadNewsCoverImage } from '@/services/storageService';
 import type { NewNewsArticleData, NewsArticleStatus } from '@/types/news';
 import Image from 'next/image';
-import { TagsInput } from '@/components/TagsInput';
+import { TagsInput } from '@/components/TagsInput'; // Updated import
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -35,7 +35,7 @@ const CreateNewsArticlePage = () => {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]); // Changed from category
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -43,7 +43,7 @@ const CreateNewsArticlePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState("");
+  const [tagsError, setTagsError] = useState(""); // For TagsInput
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -251,11 +251,11 @@ const CreateNewsArticlePage = () => {
   const validateFields = useCallback(() => {
     let isValid = true;
     if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); }
-    if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); }
+    if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); } // Using tags
     const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags, setTagsError]);
+  }, [title, tags, setTagsError]); // Changed category to tags
 
   const handleFormSubmission = async (status: NewsArticleStatus) => {
     if (!user) { toast({ variant: "destructive", title: "Error", description: "You must be logged in." }); return; }
@@ -270,10 +270,11 @@ const CreateNewsArticlePage = () => {
     let coverImageUrl: string | undefined = undefined;
     try {
       if (coverImageFile) {
-        coverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, 'article_placeholder_id');
+        // For new articles, a placeholder ID might be needed if articleId is part of path, or use userId
+        coverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, 'new_article_placeholder');
       }
       const articleData: NewNewsArticleData = {
-        userId: user.uid, title: title.trim(), tags: tags, content: storyContent, status, coverImageUrl,
+        userId: user.uid, title: title.trim(), tags: tags, content: storyContent, status, coverImageUrl, // Using tags
       };
       const articleId = await createNewsArticle(articleData);
       toast({ title: status === 'published' ? "Article Published!" : "Draft Saved!", description: `"${title.trim()}" has been successfully ${status}.` });
@@ -285,7 +286,6 @@ const CreateNewsArticlePage = () => {
       setIsToolbarExpanded(false); setShowContextualUI(false);
       updateSelectionNonce();
 
-      // Navigate to the newly created article's page if published, or to news list if saved as draft
       if (status === 'published') {
         router.push(`/news/article/${articleId}`);
       } else {
@@ -301,8 +301,8 @@ const CreateNewsArticlePage = () => {
 
   const handlePublish = () => handleFormSubmission('published');
   const handleSaveDraft = () => {
-    if (!title.trim() || tags.length === 0) { // Basic validation for draft: title and tags
-        setPublishAttempted(true); // Trigger validation display
+    if (!title.trim() || tags.length === 0) {
+        setPublishAttempted(true);
         if (!title.trim()) setTitleError("Title is required to save a draft."); else setTitleError("");
         if (tags.length === 0) setTagsError("At least one tag is required to save a draft."); else setTagsError("");
         toast({variant: "destructive", title: "Cannot Save Draft", description: "Please provide a title and at least one tag."});
@@ -421,17 +421,15 @@ const CreateNewsArticlePage = () => {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        <div className="flex-grow min-w-[240px] sm:min-w-[300px] md:max-w-xs order-3 sm:order-none w-full sm:w-auto">
-          <TagsInput
-            label={undefined}
+        <TagsInput
             value={tags}
-            onChange={setTags}
-            placeholder="Add tags (required)"
+            onChange={setTags} // Already debounced internally if needed
+            placeholder="Search or add tags (required)"
             disabled={isSubmitting}
             error={publishAttempted && tagsError ? tagsError : null}
             onPublishAttempt={publishAttempted}
-          />
-        </div>
+            className="flex-grow min-w-[200px] sm:min-w-[240px] max-w-xs text-xs"
+        />
         
         <div className="flex items-center gap-1 sm:gap-1.5">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
