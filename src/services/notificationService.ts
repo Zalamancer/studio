@@ -1,3 +1,4 @@
+
 // src/services/notificationService.ts
 import { db, auth } from '@/lib/firebase/config'; // Import auth
 import {
@@ -168,14 +169,20 @@ export const getNotificationsForUser = async (userId: string, count = 20): Promi
     return notifications;
 
   } catch (error: any) {
-    // console.error(`[notificationService] Error fetching notifications for user ${userId}:`, error);
+    console.error(`%c[notificationService] Error fetching notifications for user ${userId}:`, "color: red;", error);
     if (error.code === 'permission-denied') {
       // console.error("Firestore permission denied fetching notifications. Check rules for reading 'notifications'.");
-      throw new Error('Permission denied fetching notifications. Check Firestore rules.');
+      throw new Error('Permission denied fetching notifications. Check Firestore rules. Ensure rules allow querying "notifications" where "userId" == auth.uid, ordered by "timestamp" desc.');
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
       // console.error("Firestore query for notifications requires an index. Create an index on 'userId' (==) and 'timestamp' (desc) in the Firebase console.");
-      throw new Error("Firestore query requires an index for notifications. Please create it in the Firebase console.");
+      const errorMessage = `Firestore query requires an index for notifications (collection: notifications, field: userId == ${userId}, orderBy: timestamp desc). Please create it in the Firebase console.`;
+      const firebaseConsoleLinkRegex = /(https:\/\/console\.firebase\.google\.com\/v1\/r\/project\/[^/]+\/firestore\/indexes\?create_composite=[a-zA-Z0-9%_.-]+)/;
+      const match = error.message.match(firebaseConsoleLinkRegex);
+      if (match && match[1]) {
+          throw new Error(`${errorMessage} You can create it here: ${match[1]}`);
+      }
+      throw new Error(errorMessage);
     }
     throw new Error(`Failed to fetch notifications: ${error.message}`);
   }
@@ -187,13 +194,13 @@ export const markNotificationAsRead = async (notificationId: string): Promise<vo
   }
   try {
     const notificationDocRef = doc(db, 'notifications', notificationId);
-    await updateDoc(notificationDocRef, { isRead: true });
+    await updateDoc(notificationDocRef, { isRead: true, updatedAt: serverTimestamp() });
     // console.log(`[notificationService] Notification ${notificationId} marked as read.`);
   } catch (error: any) {
     // console.error(`[notificationService] Error marking notification ${notificationId} as read:`, error);
     if (error.code === 'permission-denied') {
       // console.error("[notificationService] Firestore permission denied updating notification. Check rules.");
-      throw new Error('Permission denied updating notification.');
+      throw new Error('Permission denied updating notification. Ensure rules allow updating "isRead" for own notifications.');
     }
     throw new Error(`Failed to mark notification as read: ${error.message}`);
   }
@@ -219,8 +226,9 @@ export const markAllNotificationsAsRead = async (userId: string): Promise<void> 
     }
 
     const batch = writeBatch(db);
+    const currentTime = serverTimestamp(); // Get timestamp once for all updates
     querySnapshot.docs.forEach((docSnap) => {
-      batch.update(docSnap.ref, { isRead: true });
+      batch.update(docSnap.ref, { isRead: true, updatedAt: currentTime });
     });
 
     await batch.commit();
@@ -230,11 +238,17 @@ export const markAllNotificationsAsRead = async (userId: string): Promise<void> 
     // console.error(`[notificationService] Error marking all notifications as read for user ${userId}:`, error);
     if (error.code === 'permission-denied') {
       // console.error("[notificationService] Firestore permission denied marking notifications as read. Check rules.");
-      throw new Error('Permission denied marking notifications as read.');
+      throw new Error('Permission denied marking notifications as read. Ensure rules allow querying by "userId" and "isRead", and updating "isRead".');
     }
      if (error.code === 'failed-precondition' && error.message.includes('index')) {
         // console.error("[notificationService] Firestore query for marking notifications requires an index. Create an index on 'userId' (==) and 'isRead' (==) in the Firebase console.");
-        throw new Error("Firestore query requires an index for marking notifications. Please create it.");
+        const errorMessage = `Firestore query for marking notifications requires an index (collection: notifications, fields: userId == ${userId}, isRead == false). Please create it in the Firebase console.`;
+        const firebaseConsoleLinkRegex = /(https:\/\/console\.firebase\.google\.com\/v1\/r\/project\/[^/]+\/firestore\/indexes\?create_composite=[a-zA-Z0-9%_.-]+)/;
+        const match = error.message.match(firebaseConsoleLinkRegex);
+        if (match && match[1]) {
+            throw new Error(`${errorMessage} You can create it here: ${match[1]}`);
+        }
+        throw new Error(errorMessage);
     }
     throw new Error(`Failed to mark all notifications as read: ${error.message}`);
   }
