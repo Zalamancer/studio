@@ -40,21 +40,21 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     category: string;
     content: string;
     status: NewsArticleStatus;
-    coverImageUrl: string | null; 
+    coverImageUrl: string | null;
     createdAt: FieldValue;
     updatedAt: FieldValue;
-    publishedAt: FieldValue | null; 
+    publishedAt: FieldValue | null;
   } = {
     userId: articleData.userId,
     title: articleData.title,
     category: articleData.category,
     content: articleData.content,
     status: articleData.status,
-    coverImageUrl: articleData.coverImageUrl || null, 
+    coverImageUrl: articleData.coverImageUrl || null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     publishedAt: articleData.status === 'published'
-      ? (articleData.publishedAt instanceof Timestamp ? articleData.publishedAt : (articleData.publishedAt ? serverTimestamp() : null) ) 
+      ? (articleData.publishedAt instanceof Timestamp ? articleData.publishedAt : (articleData.publishedAt ? serverTimestamp() : null) )
       : null,
   };
 
@@ -106,19 +106,19 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
   if (dataToUpdate.content !== undefined) payload.content = dataToUpdate.content;
   if (dataToUpdate.status !== undefined) payload.status = dataToUpdate.status;
 
-  if (dataToUpdate.coverImageUrl !== undefined) { 
+  if (dataToUpdate.coverImageUrl !== undefined) {
     payload.coverImageUrl = dataToUpdate.coverImageUrl;
   }
 
   if (dataToUpdate.status === 'published') {
     const existingData = docSnap.data();
     if (dataToUpdate.publishedAt === undefined && !existingData?.publishedAt) {
-        payload.publishedAt = serverTimestamp(); 
+        payload.publishedAt = serverTimestamp();
     } else if (dataToUpdate.publishedAt !== undefined) {
-        payload.publishedAt = dataToUpdate.publishedAt; 
+        payload.publishedAt = dataToUpdate.publishedAt;
     }
   } else if (dataToUpdate.status === 'draft') {
-    payload.publishedAt = null; 
+    payload.publishedAt = null;
   }
 
 
@@ -144,53 +144,53 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
   constraints.push(where('userId', '==', userId));
 
   const effectiveLimit = 20;
-  let orderByField: string = 'updatedAt'; // Default order by updatedAt
-  let orderByDirection: OrderByDirection = 'desc';
+  let orderByField: string | null = null; // Default to null (Firestore's default order)
+  let orderByDirection: OrderByDirection | undefined = undefined;
 
   if (status) {
     console.log(`%c  [newsService] getNewsArticlesByUserId: Status filter active: '${status}'. Querying by userId and status, orderBy('updatedAt', 'desc').`, "color: dodgerblue;");
     constraints.push(where('status', '==', status));
-    // orderByField remains 'updatedAt' as per existing logic
+    orderByField = 'updatedAt';
+    orderByDirection = 'desc';
+    constraints.push(orderBy(orderByField, orderByDirection));
   } else {
-    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId, orderBy('updatedAt', 'desc').`, "color: dodgerblue;");
-    // orderByField remains 'updatedAt'
+    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId only. orderBy removed for this specific case to simplify query for rules.`, "color: orange; font-weight:bold;");
+    // No orderBy('updatedAt', 'desc') here anymore for the base "all user articles" case
   }
-  constraints.push(orderBy(orderByField, orderByDirection));
   constraints.push(limit(effectiveLimit));
 
   // Enhanced logging for constraints array
   const loggedConstraints = constraints.map(c => {
     const constraintObj = c as any; // Type assertion for internal properties
-    if (constraintObj.type === 'where') { // Firebase v9 internal type property
+    if (constraintObj.type === 'where') {
       return { type: 'where', field: constraintObj._fieldPath.segments.join('/'), op: constraintObj._op, value: constraintObj._value };
     }
     if (constraintObj.type === 'orderBy') {
-      return { type: 'orderBy', field: constraintObj._f.field.segments.join('/'), direction: constraintObj._f.dir };
+      return { type: 'orderBy', field: constraintObj._field.segments.join('/'), direction: constraintObj._direction };
     }
     if (constraintObj.type === 'limit') {
       return { type: 'limit', limit: constraintObj._limit, limitType: constraintObj._limitToLast ? 'last' : 'first' };
     }
-    return { type: 'unknown', details: JSON.stringify(c).substring(0,100) }; // Fallback for other types
+    return { type: 'unknown', details: JSON.stringify(c).substring(0,100) };
   });
   console.log(`%c  [newsService] getNewsArticlesByUserId: Final query constraints prepared:`, "color: dodgerblue;", loggedConstraints);
 
-  // Log details for rules comparison
-  const firstFilter = loggedConstraints.find(c => c.type === 'where') as any;
+  // Detailed log for rules debugging
+  const firstFilter = loggedConstraints.find(c => c.type === 'where' && c.field === 'userId') as any;
+  const statusFilter = loggedConstraints.find(c => c.type === 'where' && c.field === 'status') as any;
   const orderByClause = loggedConstraints.find(c => c.type === 'orderBy') as any;
   const limitClause = loggedConstraints.find(c => c.type === 'limit') as any;
 
   console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
     request.auth.uid:                     '${currentClientAuthUid || 'NULL'}'
-    request.query.filters.size():         ${firstFilter ? (loggedConstraints.filter(c => c.type === 'where').length) : 0}
-    request.query.filters[0][0] (field):  '${firstFilter?.field || 'N/A'}'
-    request.query.filters[0][1] (op):     '${firstFilter?.op || 'N/A'}'
-    request.query.filters[0][2] (value):  '${firstFilter?.value || 'N/A'}'
+    request.query.filters.size():         ${loggedConstraints.filter(c => c.type === 'where').length}
+    Filter 1 (userId):                    ${firstFilter ? `${firstFilter.field} ${firstFilter.op} ${firstFilter.value}` : 'N/A'}
+    Filter 2 (status, if any):            ${statusFilter ? `${statusFilter.field} ${statusFilter.op} ${statusFilter.value}` : 'N/A'}
     request.query.orderBy != null:        ${!!orderByClause}
     string(request.query.orderBy.path):   '${orderByClause?.field || 'N/A'}'
     request.query.orderBy.direction:      '${orderByClause?.direction || 'N/A'}'
     request.query.limit:                  ${limitClause?.limit || 'N/A'}`, "color: magenta; font-weight: bold;"
   );
-
 
   const q = query(newsArticlesCollectionRef, ...constraints);
 
@@ -207,14 +207,21 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
         publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : null,
       } as ClientNewsArticle;
     });
+    // Client-side sort if server-side ordering was removed for this case
+    if (!status && !orderByField) {
+        articles.sort((a, b) => b.updatedAt - a.updatedAt);
+    }
     return articles;
   } catch (error: any) {
     console.error(`%c[newsService] Error fetching news articles for user ${userId} (status: ${status || 'any'}):`, "color: red;", error);
     if (error.code === 'permission-denied') {
         console.error(`%c  [newsService] PERMISSION DENIED. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
-        const effectiveQueryLog = `where('userId', '==', '${userId}') ${status ? `, where('status', '==', '${status}')` : ''}, orderBy('${orderByField}', '${orderByDirection}'), limit(${effectiveLimit})`;
+        const effectiveQueryLog = `Query: where('userId', '==', '${userId}')` +
+                                  (status ? `, where('status', '==', '${status}')` : '') +
+                                  (orderByField ? `, orderBy('${orderByField}', '${orderByDirection}')` : '') +
+                                  `, limit(${effectiveLimit})`;
         console.error(`%c  Query was effectively: ${effectiveQueryLog}`, "color: red; font-weight: bold;");
-        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.filters.`, "color: red; font-weight: bold;");
+        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met.`, "color: red; font-weight: bold;");
     }
     throw error;
   }
@@ -236,7 +243,7 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
       return { type: 'where', field: constraintObj._fieldPath.segments.join('/'), op: constraintObj._op, value: constraintObj._value };
     }
     if (constraintObj.type === 'orderBy') {
-      return { type: 'orderBy', field: constraintObj._f.field.segments.join('/'), direction: constraintObj._f.dir };
+      return { type: 'orderBy', field: constraintObj._field.segments.join('/'), direction: constraintObj._direction };
     }
     if (constraintObj.type === 'limit') {
       return { type: 'limit', limit: constraintObj._limit, limitType: constraintObj._limitToLast ? 'last' : 'first' };
@@ -257,7 +264,7 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
         id: docSnap.id,
         createdAt: (data.createdAt as Timestamp).toMillis(),
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
-        publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : Date.now(), 
+        publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : Date.now(),
       } as ClientNewsArticle;
     });
     return Promise.all(articlesPromises);
@@ -294,12 +301,17 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
     const docSnap = await getDoc(articleDocRef);
     if (docSnap.exists()) {
       const data = docSnap.data() as NewsArticle;
+      // Ensure publishedAt is handled correctly even if it's null from Firestore
+      const publishedAtMillis = data.publishedAt instanceof Timestamp 
+        ? data.publishedAt.toMillis() 
+        : (data.publishedAt === null ? null : undefined); // Convert null to null, undefined to undefined
+
       return {
         ...data,
         id: docSnap.id,
         createdAt: (data.createdAt as Timestamp).toMillis(),
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
-        publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : null,
+        publishedAt: publishedAtMillis,
       };
     }
     return null;
