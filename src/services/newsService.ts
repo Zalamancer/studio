@@ -44,6 +44,25 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     createdAt: FieldValue;
     updatedAt: FieldValue;
     publishedAt: FieldValue | null;
+    // Fields from Post type that are now part of NewsArticle
+    commentCount: number;
+    descriptionDetails: string | null;
+    descriptionOutcome: string | null;
+    descriptionTried: string | null;
+    imageUrls: string[];
+    maxBudget: number | null;
+    deadline: Timestamp | null;
+    mentionedUserIds: string[];
+    naicsCode: string | null;
+    question: string | null; // Assuming 'title' is primary, 'question' might be redundant or used differently
+    ratingScore: number;
+    requestType: string | null; // Assuming 'news' or similar, or null if not applicable
+    sector: string | null;
+    subSector: string | null;
+    industry: string | null;
+    tags: string[] | null;
+
+
   } = {
     userId: articleData.userId,
     title: articleData.title,
@@ -56,7 +75,28 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     publishedAt: articleData.status === 'published'
       ? (articleData.publishedAt instanceof Timestamp ? articleData.publishedAt : (articleData.publishedAt ? serverTimestamp() : null) )
       : null,
+    // Default values for fields inherited/assumed from Post structure for rule validation
+    commentCount: 0,
+    descriptionDetails: null, // Assuming these are not primary for news, but rules might expect them
+    descriptionOutcome: null,
+    descriptionTried: null,
+    imageUrls: [], // News might not have multiple 'post-style' images beyond cover
+    maxBudget: null,
+    deadline: null,
+    mentionedUserIds: [],
+    naicsCode: null, // Can be set if relevant for news category (e.g., industry news)
+    question: null, // Title is primary for news
+    ratingScore: 0,
+    requestType: null, // Or a specific type like 'news_article'
+    sector: null, // Can be set
+    subSector: null, // Can be set
+    industry: null, // Can be set
+    tags: [], // News can have tags
   };
+
+  // Clean up any undefined keys before saving if they are truly optional and not expected by rules with null
+  // Object.keys(dataToSave).forEach(key => (dataToSave as any)[key] === undefined && delete (dataToSave as any)[key]);
+
 
   const dataKeys = Object.keys(dataToSave);
   console.log(`%c[newsService] createNewsArticle - PREPARING TO SAVE ARTICLE.
@@ -72,7 +112,11 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
       return value;
     }, 2)
   );
-  console.log(`%c[newsService] RULE CHECK REMINDER: Ensure your Firestore 'allow create' rule for 'newsArticles' expects EXACTLY ${dataKeys.length} fields and lists them correctly in any 'hasAll' or 'hasOnly' checks. Timestamp fields ('createdAt', 'updatedAt', 'publishedAt') should be validated against 'request.time'. Ownership ('userId == request.auth.uid') is also critical.`, "color: orange;");
+   const expectedFields = ['userId', 'title', 'category', 'content', 'status', 'coverImageUrl', 'createdAt', 'updatedAt', 'publishedAt', 'commentCount', 'descriptionDetails', 'descriptionOutcome', 'descriptionTried', 'imageUrls', 'maxBudget', 'deadline', 'mentionedUserIds', 'naicsCode', 'question', 'ratingScore', 'requestType', 'sector', 'subSector', 'industry']; // Added 'tags'
+   if (dataToSave.tags !== undefined) expectedFields.push('tags');
+   const expectedSize = expectedFields.length;
+
+  console.log(`%c[newsService] RULE CHECK REMINDER: Ensure your Firestore 'allow create' rule for 'newsArticles' expects EXACTLY ${expectedSize} fields and lists them correctly in any 'hasAll' or 'hasOnly' checks. Timestamp fields ('createdAt', 'updatedAt', 'publishedAt') should be validated against 'request.time'. Ownership ('userId == request.auth.uid') is also critical. Expected fields: ${expectedFields.join(', ')}`, "color: orange;");
 
 
   try {
@@ -144,17 +188,42 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
   constraints.push(where('userId', '==', userId));
 
   const effectiveLimit = 20;
-  let clientSideSortRequired = false;
+  let isOrderByAppliedToServer = false;
 
   if (status) {
     console.log(`%c  [newsService] getNewsArticlesByUserId: Status filter active: '${status}'. Querying by userId and status, orderBy('updatedAt', 'desc').`, "color: dodgerblue;");
     constraints.push(where('status', '==', status));
     constraints.push(orderBy('updatedAt', 'desc'));
+    isOrderByAppliedToServer = true;
   } else {
-    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId only. orderBy NOT applied to server query. Client-side sort by updatedAt will be applied.`, "color: dodgerblue;");
-    clientSideSortRequired = true;
+    // For fetching ALL user's articles (drafts and published for "Your Articles" sections)
+    // We NOW re-introduce orderBy to match the more secure rule (Case 1.1)
+    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId, ORDERING BY 'updatedAt', 'desc' ON SERVER.`, "color: dodgerblue;");
+    constraints.push(orderBy('updatedAt', 'desc'));
+    isOrderByAppliedToServer = true;
   }
   constraints.push(limit(effectiveLimit));
+
+  // Debugging log for rules
+  const filterClausesForLog = constraints
+    .filter(c => (c as any)._type === 'where') // Check for actual where clauses
+    .map(c => {
+        const filter = c as any; // Firestore QueryFilterConstraint
+        return `${filter._fieldPath.segments.join('.') || 'UNKNOWN_FIELD'} ${filter._op || 'UNKNOWN_OP'} '${filter._value || 'UNKNOWN_VALUE'}'`;
+    })
+    .join(', ');
+
+  const orderByClauseForLog = constraints.find(c => (c as any)._type === 'orderBy');
+  const orderByLog = orderByClauseForLog
+    ? `orderBy('${(orderByClauseForLog as any)._fieldPath.segments.join('.') || 'UNKNOWN_FIELD'}', '${(orderByClauseForLog as any)._direction || 'UNKNOWN_DIR'}')`
+    : 'no server orderBy';
+
+  console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
+    request.auth.uid:                     '${clientAuthUid || 'NULL'}'
+    request.query.filters (expected):     [${filterClausesForLog || 'none'}]
+    request.query.orderBy (expected):     ${orderByLog}
+    request.query.limit:                  ${effectiveLimit}`, "color: #FFD700; background: #333; padding: 2px;");
+
 
   const q = query(newsArticlesCollectionRef, ...constraints);
 
@@ -179,21 +248,19 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
         console.log(`%c  [newsService] getNewsArticlesByUserId: No articles mapped (querySnapshot was empty or all docs were invalid).`, "color: orange;");
     }
 
-    if (clientSideSortRequired) {
-        articles.sort((a, b) => b.updatedAt - a.updatedAt);
-        console.log(`%c  [newsService] getNewsArticlesByUserId: Articles sorted client-side by updatedAt descending.`, "color: dodgerblue;");
-    }
+    // Client-side sort is only needed if server-side orderBy was NOT applied.
+    // With the current logic, server-side orderBy is always applied.
+    // if (!isOrderByAppliedToServer) {
+    //     articles.sort((a, b) => b.updatedAt - a.updatedAt);
+    //     console.log(`%c  [newsService] getNewsArticlesByUserId: Articles sorted client-side by updatedAt descending.`, "color: dodgerblue;");
+    // }
     return articles;
   } catch (error: any) {
     console.error(`%c[newsService] Error fetching news articles for user ${userId} (status: ${status || 'any'}):`, "color: red;", error);
     if (error.code === 'permission-denied') {
         console.error(`%c  [newsService] PERMISSION DENIED. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
-        const effectiveQueryLog = `Query: where('userId', '==', '${userId}')` +
-                                  (status ? `, where('status', '==', '${status}')` : '') +
-                                  // No orderBy logged here if clientSideSortRequired is true
-                                  `, limit(${effectiveLimit})`;
-        console.error(`%c  Query was effectively: ${effectiveQueryLog}`, "color: red; font-weight: bold;");
-        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met. With the current rule 'allow list: if request.auth != null;', this error points strongly to an INDEXING issue for the query Firestore is trying to run.`, "color: red; font-weight: bold;");
+        console.error(`%c  Query was effectively: ${filterClausesForLog ? `Query: ${filterClausesForLog}` : 'Query: (no client-side where clauses)'}, ${orderByLog}, limit(${effectiveLimit})`, "color: red; font-weight: bold;");
+        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.filters/orderBy.`, "color: red; font-weight: bold;");
     }
     throw error;
   }
@@ -209,7 +276,6 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
     limit(count)
   ];
 
-  // Simplified logging for getPublishedNewsArticles as it's working
   console.log(`%c  [newsService] getPublishedNewsArticles: Query constraints: where('status','==','published'), orderBy('publishedAt','desc'), limit(${count})`, "color: dodgerblue;");
 
   const q = query(newsArticlesCollectionRef, ...constraints);
@@ -224,7 +290,7 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
         id: docSnap.id,
         createdAt: (data.createdAt as Timestamp).toMillis(),
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
-        publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : Date.now(),
+        publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : Date.now(), // Fallback for safety, though publishedAt should exist for published status
       } as ClientNewsArticle;
     });
     const articles = await Promise.all(articlesPromises);
@@ -236,7 +302,6 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
     console.error(`%c[newsService] Error fetching published news articles:`, "color: red;", error);
      if (error.code === 'permission-denied') {
         console.error(`%c  [newsService] PERMISSION DENIED for getPublishedNewsArticles. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
-        // Simplified log for working query
         console.error(`%c  Query was: where('status','==','published'), orderBy('publishedAt','desc'), limit(${count})`, "color: red; font-weight: bold;");
         console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met.`, "color: red; font-weight: bold;");
     }
@@ -265,10 +330,9 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
     const docSnap = await getDoc(articleDocRef);
     if (docSnap.exists()) {
       const data = docSnap.data() as NewsArticle;
-      // Ensure publishedAt is handled correctly even if it's null from Firestore
       const publishedAtMillis = data.publishedAt instanceof Timestamp
         ? data.publishedAt.toMillis()
-        : (data.publishedAt === null ? null : undefined); // Convert null to null, undefined to undefined
+        : (data.publishedAt === null ? null : undefined);
 
       return {
         ...data,
