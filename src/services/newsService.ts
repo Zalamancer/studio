@@ -43,8 +43,7 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     coverImageUrl: string | null;
     createdAt: FieldValue;
     updatedAt: FieldValue;
-    publishedAt: FieldValue | null; // Corrected type
-    // Fields from Post type that are now part of NewsArticle
+    publishedAt: FieldValue | null;
     commentCount: number;
     descriptionDetails: string | null; 
     descriptionOutcome: string | null; 
@@ -70,7 +69,6 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     coverImageUrl: articleData.coverImageUrl || null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
-    // CRITICAL FIX: Ensure serverTimestamp() is used for publishedAt when status is 'published'
     publishedAt: articleData.status === 'published' ? serverTimestamp() : null,
     commentCount: 0,
     descriptionDetails: articleData.descriptionDetails || null, 
@@ -126,50 +124,61 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
   }
 
   const articleDocRef = doc(db, NEWS_ARTICLES_COLLECTION, articleId);
-
   const docSnap = await getDoc(articleDocRef);
   if (!docSnap.exists() || docSnap.data()?.userId !== user.uid) {
     throw new Error("Article not found or user is not authorized to update this article.");
   }
+  const existingData = docSnap.data() as NewsArticle;
 
   const payload: Partial<Omit<NewsArticle, 'id' | 'userId' | 'createdAt'>> & { updatedAt: FieldValue } = {
     updatedAt: serverTimestamp(),
   };
 
-  if (dataToUpdate.title !== undefined) payload.title = dataToUpdate.title;
-  if (dataToUpdate.category !== undefined) payload.category = dataToUpdate.category;
-  if (dataToUpdate.content !== undefined) payload.content = dataToUpdate.content;
-  if (dataToUpdate.status !== undefined) payload.status = dataToUpdate.status;
-
-  if (dataToUpdate.coverImageUrl !== undefined) {
-    payload.coverImageUrl = dataToUpdate.coverImageUrl;
-  }
-  
-  const optionalFields: (keyof UpdateNewsArticleData)[] = [
-    'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'requestType', 'question', 
+  // Assign updatable fields from dataToUpdate to payload
+  const updatableFields: (keyof UpdateNewsArticleData)[] = [
+    'title', 'category', 'content', 'status', 'coverImageUrl',
+    'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'requestType', 'question',
     'descriptionDetails', 'descriptionTried', 'descriptionOutcome', 'maxBudget', 'deadline',
     'imageUrls', 'mentionedUserIds'
   ];
 
-  optionalFields.forEach(key => {
+  updatableFields.forEach(key => {
     if (dataToUpdate[key] !== undefined) {
       (payload as any)[key] = dataToUpdate[key];
     }
   });
-
-  const existingData = docSnap.data();
-  if (dataToUpdate.status === 'published') {
-    if (existingData?.status !== 'published' || existingData?.publishedAt === null) {
-        payload.publishedAt = serverTimestamp();
-    } else if (dataToUpdate.publishedAt !== undefined) {
-        if (dataToUpdate.publishedAt instanceof Timestamp || dataToUpdate.publishedAt === null || (dataToUpdate.publishedAt as FieldValue)?._methodName?.includes('serverTimestamp')) {
-            payload.publishedAt = dataToUpdate.publishedAt;
-        }
-    }
-  } else if (dataToUpdate.status === 'draft') {
-    payload.publishedAt = null;
+  
+  // Handle deadline specifically if it's a Date object
+  if (dataToUpdate.deadline instanceof Date) {
+    payload.deadline = Timestamp.fromDate(dataToUpdate.deadline);
+  } else if (dataToUpdate.deadline === null) {
+    payload.deadline = null;
   }
 
+
+  // Specific logic for status and publishedAt
+  const newStatus = dataToUpdate.status;
+  if (newStatus !== undefined) {
+    payload.status = newStatus; // Set status in payload
+    if (newStatus === 'published') {
+      // If transitioning to published OR updating an already published article and publishedAt was somehow null
+      if (existingData.status !== 'published' || !existingData.publishedAt) {
+        payload.publishedAt = serverTimestamp();
+      } else {
+        // If already published and status remains published, publishedAt is not changed by this update.
+        // The rule `request.resource.data.publishedAt == resource.data.publishedAt` will ensure it's preserved.
+        // No need to explicitly set payload.publishedAt to existingData.publishedAt here,
+        // as it won't be in `affectedKeys` if not changed.
+      }
+    } else if (newStatus === 'draft') {
+      payload.publishedAt = null; // Moving to draft sets publishedAt to null
+    }
+  } else {
+    // If status is not in dataToUpdate, it means status isn't changing.
+    // We need to ensure publishedAt from existingData is preserved if the article is (and remains) published.
+    // This is primarily handled by the security rule, payload should not send publishedAt if status isn't changing to published.
+    // If status is not being changed, and it's currently 'published', publishedAt should not be touched in payload.
+  }
 
   try {
     await updateDoc(articleDocRef, payload);
@@ -182,10 +191,8 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
 
 export const getNewsArticlesByUserId = async (userId: string, status?: NewsArticleStatus): Promise<ClientNewsArticle[]> => {
   const clientAuthUid = auth.currentUser?.uid;
-  // console.log(`%c[newsService] getNewsArticlesByUserId: Fetching for target userId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
   if (!userId) {
-    // console.warn("[newsService] getNewsArticlesByUserId: Called with no userId. Returning empty array.");
     return [];
   }
 
@@ -195,14 +202,15 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
   const effectiveLimit = 20;
   let orderByField = 'updatedAt'; 
   let orderByDirection: OrderByDirection = 'desc'; 
+  let isOrderByAppliedToServer = false;
 
   if (status) {
-    // console.log(`%c  [newsService] getNewsArticlesByUserId: Status filter active: '${status}'. Querying by userId and status, ORDERING BY '${orderByField}', '${orderByDirection}' ON SERVER.`, "color: dodgerblue;");
     constraints.push(where('status', '==', status));
     constraints.push(orderBy(orderByField, orderByDirection));
+    isOrderByAppliedToServer = true;
   } else {
-    // console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId, ORDERING BY '${orderByField}', '${orderByDirection}' ON SERVER.`, "color: dodgerblue;");
-    constraints.push(orderBy(orderByField, orderByDirection)); 
+    constraints.push(orderBy(orderByField, orderByDirection));
+    isOrderByAppliedToServer = true;
   }
   constraints.push(limit(effectiveLimit));
 
@@ -218,7 +226,7 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
   let orderByLogPath = 'N/A';
   let orderByLogDirection = 'N/A';
 
-  if (orderByConstraintForLog) {
+  if (orderByConstraintForLog && isOrderByAppliedToServer) { // Check if orderBy was applied
       const fieldPathSegments = orderByConstraintForLog._fieldPath?.segments;
       if (Array.isArray(fieldPathSegments) && fieldPathSegments.length > 0) {
           orderByLogPath = fieldPathSegments.join('.');
@@ -228,18 +236,17 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
       orderByLogDirection = orderByConstraintForLog._direction || 'UNKNOWN_DIR';
   }
 
-  // console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
-  //   request.auth.uid:                     '${clientAuthUid || 'NULL'}'
-  //   request.query.filters (from client):  [${filterClausesForLog || 'none'}]
-  //   request.query.orderBy (from client):  path: '${orderByLogPath}', direction: '${orderByLogDirection}'
-  //   request.query.limit:                  ${effectiveLimit}`, "color: #FFD700; background: #333; padding: 2px;");
+  console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
+    request.auth.uid:                     '${clientAuthUid || 'NULL'}'
+    request.query.filters (expected):     [${filterClausesForLog || 'none'}]
+    request.query.orderBy (expected):     ${isOrderByAppliedToServer ? `path: '${orderByLogPath}', direction: '${orderByLogDirection}'` : 'no server orderBy'}
+    request.query.limit:                  ${effectiveLimit}`, "color: #FFD700; background: #333; padding: 2px;");
 
 
   const q = query(newsArticlesCollectionRef, ...constraints);
 
   try {
     const querySnapshot = await getDocs(q);
-    // console.log(`%c  [newsService] getNewsArticlesByUserId: Query successful for userId '${userId}', status '${status || 'any'}'. Found ${querySnapshot.docs.length} articles.`, "color: green;");
 
     const articles = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data() as NewsArticle;
@@ -251,19 +258,12 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
         publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : null,
       } as ClientNewsArticle;
     });
-
-    // if (articles.length > 0) {
-    //     console.log(`%c  [newsService] getNewsArticlesByUserId: First mapped article sample:`, "color: green;", articles[0]);
-    // } else {
-    //     console.log(`%c  [newsService] getNewsArticlesByUserId: No articles mapped (querySnapshot was empty or all docs were invalid).`, "color: orange;");
-    // }
+    
     return articles;
   } catch (error: any) {
-    // console.error(`%c[newsService] Error fetching news articles for user ${userId} (status: ${status || 'any'}):`, "color: red;", error);
+    console.error(`%c[newsService] Error fetching news articles for user ${userId} (status: ${status || 'any'}):`, "color: red;", error);
     if (error.code === 'permission-denied') {
         const attemptedQueryLog = `Query constraints: ${filterClausesForLog ? `${filterClausesForLog}` : '(no client-side where clauses)'}, orderBy(${orderByLogPath}, ${orderByLogDirection}), limit(${effectiveLimit})`;
-        // console.error(`%c  [newsService] PERMISSION DENIED. Attempted query by client: ${attemptedQueryLog}`, "color: red; font-weight: bold;");
-        // console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.`, "color: red; font-weight: bold;");
     }
     throw error;
   }
@@ -271,21 +271,16 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
 
 export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsArticle[]> => {
   const currentClientAuthUid = auth.currentUser?.uid;
-  // console.log(`%c[newsService] getPublishedNewsArticles: Fetching ${count} published articles. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: dodgerblue;");
-
   const constraints: QueryConstraint[] = [
     where('status', '==', 'published'),
     orderBy('publishedAt', 'desc'),
     limit(count)
   ];
 
-  // console.log(`%c  [newsService] getPublishedNewsArticles: Query constraints: where('status','==','published'), orderBy('publishedAt','desc'), limit(${count})`, "color: dodgerblue;");
-
   const q = query(newsArticlesCollectionRef, ...constraints);
 
   try {
     const querySnapshot = await getDocs(q);
-    // console.log(`%c  [newsService] getPublishedNewsArticles: Query successful. Found ${querySnapshot.docs.length} articles.`, "color: green;");
     const articlesPromises = querySnapshot.docs.map(async (docSnap) => {
       const data = docSnap.data() as NewsArticle;
       return {
@@ -297,17 +292,8 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
       } as ClientNewsArticle;
     });
     const articles = await Promise.all(articlesPromises);
-    // if (articles.length > 0) {
-    //     console.log(`%c  [newsService] getPublishedNewsArticles: First mapped article sample:`, "color: green;", articles[0]);
-    // }
     return articles;
   } catch (error: any) {
-    // console.error(`%c[newsService] Error fetching published news articles:`, "color: red;", error);
-     if (error.code === 'permission-denied') {
-        // console.error(`%c  [newsService] PERMISSION DENIED for getPublishedNewsArticles. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
-        // console.error(`%c  Query was: where('status','==','published'), orderBy('publishedAt','desc'), limit(${count})`, "color: red; font-weight: bold;");
-        // console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met.`, "color: red; font-weight: bold;");
-    }
     throw error;
   }
 };
@@ -321,7 +307,6 @@ export const deleteNewsArticle = async (articleId: string, userId: string): Prom
   try {
     await deleteDoc(articleDocRef);
   } catch (error: any) {
-    // console.error(`[newsService] deleteNewsArticle - Error deleting article ${articleId}:`, error);
     throw error;
   }
 };
@@ -370,7 +355,6 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
     }
     return null;
   } catch (error: any) {
-    // console.error(`[newsService] Error fetching article ${articleId}:`, error);
     throw error;
   }
 };

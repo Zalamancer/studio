@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -27,7 +27,8 @@ import {
   DialogClose,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { format } from 'date-fns';
+import { format, formatDistanceToNowStrict } from 'date-fns';
+import { serverTimestamp } from 'firebase/firestore';
 
 const newsCategories = [
   "Collaborative Ventures",
@@ -91,7 +92,7 @@ const ArticlePage = () => {
   const [embedCodeInput, setEmbedCodeInput] = useState("");
   
   const isEditingAllowed = useMemo(() => {
-    return article?.status === 'draft' && user?.uid === article?.userId;
+    return user?.uid === article?.userId; // Owner can always edit
   }, [article, user]);
 
   // Effect to fetch article data
@@ -112,9 +113,9 @@ const ArticlePage = () => {
     }
   }, [articleId]);
 
-  // Effect to populate editor form when article data (for a draft) is available
+  // Effect to populate editor form when article data is available and editing is allowed
   useEffect(() => {
-    if (article && article.status === 'draft' && user?.uid === article.userId) {
+    if (article && isEditingAllowed) {
       setTitle(article.title);
       setCategory(article.category);
       const initialContent = article.content || "<p><br></p>";
@@ -125,7 +126,7 @@ const ArticlePage = () => {
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
     }
-  }, [article, user?.uid]); // Depends on `article` and `user`
+  }, [article, isEditingAllowed]);
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
 
@@ -312,8 +313,11 @@ const ArticlePage = () => {
     return isValid;
   }, [title, category]);
 
-  const handleUpdateArticle = async (status: NewsArticleStatus) => {
-    if (!user || !articleId || !isEditingAllowed) { toast({ variant: "destructive", title: "Error", description: "Cannot update article." }); return; }
+  const handleUpdateArticle = async (newStatus: NewsArticleStatus) => {
+    if (!user || !articleId || !article || !isEditingAllowed) { 
+      toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." }); 
+      return; 
+    }
     setPublishAttempted(true);
     if (!validateFields()) {
       if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
@@ -327,29 +331,45 @@ const ArticlePage = () => {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
+        // This means the user clicked "Remove Avatar" for an existing cover image
         newCoverImageUrl = null; 
       }
       
       const articleUpdateData: UpdateNewsArticleData = {
-        title: title.trim(), category, content: storyContent, status,
+        title: title.trim(),
+        category,
+        content: storyContent,
+        status: newStatus,
         ...(newCoverImageUrl !== undefined && { coverImageUrl: newCoverImageUrl }),
+        // `publishedAt` is handled by the service based on status transitions
       };
 
       await updateNewsArticle(articleId, articleUpdateData);
-      toast({ title: status === 'published' ? "Article Published!" : "Draft Updated!", description: `"${title.trim()}" has been successfully ${status}.` });
+      
+      let successTitle = "Draft Updated!";
+      if (newStatus === 'published' && article.status === 'draft') successTitle = "Article Published!";
+      else if (newStatus === 'published' && article.status === 'published') successTitle = "Published Article Updated!";
+      else if (newStatus === 'draft' && article.status === 'published') successTitle = "Article Reverted to Draft!";
+
+      toast({ title: successTitle, description: `"${title.trim()}" has been successfully updated.` });
+      
       setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
-      if (status === 'published') {
-         router.push('/news');
-      } else {
-        getNewsArticleById(articleId).then(fetchedUpdatedArticle => {
-          if (fetchedUpdatedArticle) {
-            setArticle(fetchedUpdatedArticle); // Update local article state
-            // The useEffect depending on 'article' will repopulate editor fields
-            setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-          }
-        });
+      
+      // Refetch article to update local state and UI
+      getNewsArticleById(articleId).then(fetchedUpdatedArticle => {
+        if (fetchedUpdatedArticle) {
+          setArticle(fetchedUpdatedArticle); 
+          // Editor fields will be repopulated by the useEffect that depends on `article` and `isEditingAllowed`
+          setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
+          setCoverImageFile(null); // Clear selected file after successful update
+        }
+      });
+      
+      if (newStatus === 'published' && article.status === 'draft') {
+         router.push('/news'); // Redirect only when publishing a draft for the first time
       }
+
     } catch (error: any) {
       toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
     } finally {
@@ -468,8 +488,12 @@ const ArticlePage = () => {
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
   if (!article) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-foreground">Article Not Found</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
 
-  // Published View
-  if (article.status === 'published' && !isEditingAllowed) {
+  // Read-only View for non-owners of drafts OR published articles (if not editing)
+  if (!isEditingAllowed) {
+    const publishedDateStr = article.publishedAt ? format(new Date(article.publishedAt), 'PPP') : 'Not published';
+    const lastEditedDateStr = article.updatedAt ? format(new Date(article.updatedAt), 'PPp') : '';
+    const showLastEdited = article.status === 'published' && article.publishedAt && article.updatedAt && (article.updatedAt > (article.publishedAt + 60000)); // show if edited > 1 min after publish
+
     return (
       <div className="container mx-auto py-8 px-4 md:px-6">
         <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="mb-6 text-xs">
@@ -479,11 +503,12 @@ const ArticlePage = () => {
           <header className="mb-8">
             <p className="text-sm text-primary font-semibold mb-1">{article.category}</p>
             <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">{article.title}</h1>
-            {article.publishedAt && (
-              <p className="text-sm text-muted-foreground">
-                Published on <time dateTime={new Date(article.publishedAt).toISOString()}>{format(new Date(article.publishedAt), 'PPP')}</time>
-              </p>
-            )}
+            <p className="text-sm text-muted-foreground">
+              {article.status === 'published' 
+                ? <>Published on <time dateTime={new Date(article.publishedAt || 0).toISOString()}>{publishedDateStr}</time></>
+                : `Draft (Last saved: ${formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true })} ago)`}
+              {showLastEdited && ` (Last edited: ${lastEditedDateStr})`}
+            </p>
           </header>
           {article.coverImageUrl && (
             <div className="mb-8 relative aspect-video rounded-lg overflow-hidden shadow-md">
@@ -499,11 +524,10 @@ const ArticlePage = () => {
     );
   }
 
-  if (article.status === 'draft' && !isEditingAllowed) {
-    return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-foreground">Access Denied</p><p className="text-muted-foreground">You do not have permission to edit this draft.</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
-  }
+  // Editor UI (Draft or Published & Owner)
+  const buttonSaveText = article.status === 'draft' ? 'Save Draft' : 'Save Changes';
+  const buttonPublishText = article.status === 'draft' ? 'Publish' : 'Update Published Article';
 
-  // Editor UI for Drafts
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -540,8 +564,11 @@ const ArticlePage = () => {
           </div>
           {isEditingAllowed && (
             <div className="flex items-center gap-2">
-              <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
-              <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
+              {article?.status === 'published' && (
+                 <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full border-orange-500 text-orange-600 hover:bg-orange-50" disabled={isSubmitting}><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to Draft</Button>
+              )}
+              <Button type="button" variant="outline" onClick={() => handleUpdateArticle(article?.status === 'published' ? 'published' : 'draft')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> {buttonSaveText}</Button>
+              <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> {buttonPublishText}</Button>
             </div>
           )}
         </div>
@@ -557,7 +584,7 @@ const ArticlePage = () => {
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
-            key={articleId} // Add key to force re-mount if articleId changes (though not typical for this page structure)
+            key={articleId} 
             ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} onClick={updateSelectionNonce} onKeyUp={updateSelectionNonce} data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
             style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}

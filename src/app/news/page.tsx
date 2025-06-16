@@ -2,7 +2,7 @@
 // src/app/news/page.tsx
 "use client"; 
 
-import React, { useMemo, useEffect, useState } from 'react'; // Added useState
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send, Loader2, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/ne
 import type { ClientNewsArticle } from '@/types/news';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { useIsMobile } from "@/hooks/use-mobile"; 
+import { useIsMobile } from "@/hooks/use-is-mobile"; 
 
 interface NewsItem {
   id: string;
@@ -37,25 +37,57 @@ interface NewsItem {
   status?: 'draft' | 'published';
   userId?: string;
   publishedAt?: number | null;
+  updatedAt: number; // Added for sorting and display
 }
 
-// This generalMockNewsData is fine as a fallback if the generalPublishedArticles query fails or is loading
-const generalMockNewsData: Omit<NewsItem, 'id' | 'date' | 'link' | 'publishedAt'>[] = [
-  { title: 'Market Trends: Q4 Investment Outlook', category: 'Financial Insights', source: 'Finance Globe', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'stock market', excerpt: 'Analysts predict cautious optimism in key sectors.' },
-  { title: 'New Data Privacy Laws: What Businesses Need to Know', category: 'Political & Regulatory', source: 'Legal Business Review', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'government law', excerpt: 'Understanding compliance for upcoming GDPR-like regulations.' },
-  { title: 'Emerging Tech Hubs for 2024', category: 'New Opportunities', source: 'Startup Ecosystems', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'city skyline', excerpt: 'Discover the next wave of innovation centers worldwide.' },
-  { title: 'Webinar: AI in B2B Marketing - Nov 15', category: 'Events', source: 'Marketing Masters', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'webinar screen', excerpt: 'Learn how to leverage AI for your marketing strategies.' },
-];
-
 const newsCategoriesConfig = [
-  { id: 'user_drafts', title: 'Your Drafts', icon: FileText, dataKey: 'userDrafts' as const, showIfEmpty: true },
-  { id: 'user_published', title: 'Your Published Articles', icon: Send, dataKey: 'userPublished' as const, showIfEmpty: true },
+  { id: 'user_drafts', title: 'Your Drafts', icon: FileText, dataKey: 'userDrafts' as const, showIfEmpty: true, requiresAuth: true },
+  { id: 'user_published', title: 'Your Published Articles', icon: Send, dataKey: 'userPublished' as const, showIfEmpty: true, requiresAuth: true },
   { id: 'collaborative', title: 'Collaborative Ventures', icon: Handshake, dataKey: 'generalCollaborative' as const },
   { id: 'financial', title: 'Financial Insights', icon: Banknote, dataKey: 'generalFinancial' as const },
   { id: 'political', title: 'Political & Regulatory Landscape', icon: Landmark, dataKey: 'generalPolitical' as const },
   { id: 'opportunities', title: 'New Opportunities', icon: TrendingUp, dataKey: 'generalOpportunities' as const },
   { id: 'events', title: 'Upcoming Events', icon: CalendarDaysIcon, dataKey: 'generalEvents' as const },
 ];
+
+function getCleanTextExcerpt(htmlString: string | null | undefined, maxLength: number = 120): string {
+  if (typeof document === 'undefined' || !htmlString) return 'No content preview available.';
+  
+  try {
+    const tempDiv = document.createElement('div');
+    tempDiv.innerHTML = htmlString;
+
+    // Remove non-textual block elements specifically
+    tempDiv.querySelectorAll('pre, figure, hr, img, iframe, div[data-embed-wrapper="true"]').forEach(el => el.remove());
+    
+    let textContent = tempDiv.textContent || tempDiv.innerText || "";
+    textContent = textContent.replace(/\s\s+/g, ' ').trim(); // Consolidate multiple spaces and trim
+
+    if (textContent.length === 0) return 'No text content found.';
+
+    if (textContent.length <= maxLength) {
+      return textContent;
+    }
+    
+    let excerpt = textContent.substring(0, maxLength);
+    // Try to cut at a sentence boundary if a period is found near the end
+    const lastPeriod = excerpt.lastIndexOf('.');
+    if (lastPeriod > Math.floor(maxLength * 0.7) && lastPeriod < excerpt.length -1) { // Ensure period is not the last char
+      excerpt = excerpt.substring(0, lastPeriod + 1);
+    } else {
+      // Fallback to word boundary
+      const lastSpace = excerpt.lastIndexOf(' ');
+      if (lastSpace > Math.floor(maxLength * 0.6)) { 
+         excerpt = excerpt.substring(0, lastSpace);
+      }
+      excerpt += "...";
+    }
+    return excerpt;
+  } catch (e) {
+    console.error("Error parsing HTML for excerpt:", e);
+    return htmlString.substring(0, maxLength) + (htmlString.length > maxLength ? "..." : ""); // Basic fallback
+  }
+}
 
 
 const NewsPage = () => {
@@ -66,17 +98,14 @@ const NewsPage = () => {
   const { data: userArticlesDataFromQuery, isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
     queryKey: ['userNewsArticles', user?.uid],
     queryFn: () => {
-        console.log(`%c[NewsPage] Fetching user articles for UID: ${user?.uid}`, "color: teal");
         return user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]);
     },
-    enabled: !!user && !authLoading, // Ensure auth is not loading before enabling
+    enabled: !!user && !authLoading,
   });
 
-  // Update local state when query data changes
   useEffect(() => {
     if (userArticlesDataFromQuery) {
       setLocalUserArticles(userArticlesDataFromQuery);
-      console.log(`%c[NewsPage] userArticlesDataFromQuery updated (count: ${userArticlesDataFromQuery.length}):`, "color: green;", userArticlesDataFromQuery.slice(0,2));
     }
   }, [userArticlesDataFromQuery]);
 
@@ -86,34 +115,26 @@ const NewsPage = () => {
      queryFn: () => getPublishedNewsArticles(15),
   });
   
-  useEffect(() => {
-    if (generalPublishedArticles) {
-        console.log(`%c[NewsPage] Received generalPublishedArticles (count: ${generalPublishedArticles.length}). First two:`, "color: green;", generalPublishedArticles.slice(0,2));
-    }
-    if (generalArticlesError) {
-        console.error(`%c[NewsPage] Error fetching generalPublishedArticles:`, "color: red;", generalArticlesError);
-    }
-  }, [generalPublishedArticles, generalArticlesError]);
-  
-  const transformToNewsItem = (article: ClientNewsArticle): NewsItem => ({
+  const transformToNewsItem = useCallback((article: ClientNewsArticle): NewsItem => ({
     id: article.id,
     title: article.title,
     category: article.category,
-    date: article.publishedAt ? formatDistanceToNowStrict(new Date(article.publishedAt), { addSuffix: true }) : formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true }),
-    excerpt: article.content.substring(0, 100).replace(/<[^>]+>/g, '') + '...',
+    date: article.status === 'published' && article.publishedAt 
+        ? formatDistanceToNowStrict(new Date(article.publishedAt), { addSuffix: true }) 
+        : formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true }), // Fallback to updatedAt for drafts
+    excerpt: getCleanTextExcerpt(article.content, 120),
     imageUrl: article.coverImageUrl,
     aiHint: article.category.toLowerCase().replace(/\s+/g, '-').substring(0,15) || 'news item',
     link: `/news/article/${article.id}`,
     status: article.status,
     userId: article.userId,
     publishedAt: article.publishedAt,
-  });
+    updatedAt: article.updatedAt,
+  }), []);
 
   const categorizedNews = useMemo(() => {
-    console.log(`%c[NewsPage] Memoizing categorizedNews. Input localUserArticles:`, "color: blue;", localUserArticles);
-    const userDrafts: NewsItem[] = localUserArticles?.filter(a => a.status === 'draft').map(transformToNewsItem) || [];
-    const userPublished: NewsItem[] = localUserArticles?.filter(a => a.status === 'published').map(transformToNewsItem) || [];
-    console.log(`%c  [NewsPage] Client-side filtered: Drafts count: ${userDrafts.length}, Published by user count: ${userPublished.length}`, "color: blue;");
+    const userDrafts: NewsItem[] = localUserArticles?.filter(a => a.status === 'draft').map(transformToNewsItem).sort((a, b) => b.updatedAt - a.updatedAt) || [];
+    const userPublished: NewsItem[] = localUserArticles?.filter(a => a.status === 'published').map(transformToNewsItem).sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0)) || [];
 
     const generalFeed: { [key: string]: NewsItem[] } = {};
     if (generalPublishedArticles) {
@@ -124,32 +145,15 @@ const NewsPage = () => {
                     .map(transformToNewsItem);
             }
         });
-    } else { // Fallback to mock data if generalPublishedArticles is not yet loaded or fails
-        newsCategoriesConfig.forEach(catConfig => {
-            if (catConfig.dataKey.startsWith('general')) {
-                generalFeed[catConfig.dataKey] = generalMockNewsData
-                .filter(item => item.category.toLowerCase().includes(catConfig.title.toLowerCase().split(' ')[0]))
-                .map((item, index) => ({
-                    ...item,
-                    id: `${catConfig.id}-mock-${index}`,
-                    date: item.category === 'Events' ? 'Various Dates' : new Date(Date.now() - index * 24 * 60 * 60 * 1000 * (Math.random()*5 + 1)).toLocaleDateString(),
-                    link: '#', // Mock link
-                    publishedAt: Date.now() - index * 24 * 60 * 60 * 1000 * (Math.random()*5 + 1),
-                }));
-            }
-        });
     }
-    
-    console.log(`%c[NewsPage] Final categorizedNews structure:`, "color: blue;", { userDrafts, userPublished, ...generalFeed });
-
     return {
       userDrafts,
       userPublished,
       ...generalFeed,
     };
-  }, [localUserArticles, generalPublishedArticles]); // Depend on localUserArticles
+  }, [localUserArticles, generalPublishedArticles, transformToNewsItem]); 
 
-  const isLoading = authLoading || isLoadingUserArticles || isLoadingGeneralArticles;
+  const isLoading = authLoading || (user && isLoadingUserArticles) || isLoadingGeneralArticles;
 
   return (
     <div className="container mx-auto p-4 md:p-8 min-h-[calc(100vh-8rem)]">
@@ -168,13 +172,13 @@ const NewsPage = () => {
         )}
       </header>
 
-      {(isLoadingUserArticles && !localUserArticles.length) && ( // Show loading if user articles are loading and local state is empty
+      {(isLoadingUserArticles && user && !localUserArticles.length) && ( 
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
           <p className="ml-2 text-sm text-muted-foreground">Loading your articles...</p>
         </div>
       )}
-      {userArticlesError && (
+      {userArticlesError && user && (
          <div className="text-destructive flex flex-col items-center gap-2 text-sm p-6 bg-destructive/5 rounded-md justify-center border border-destructive/20 mb-6">
            <AlertTriangle className="h-8 w-8 flex-shrink-0" />
            <p className="font-semibold">Error Loading Your Articles</p>
@@ -185,15 +189,18 @@ const NewsPage = () => {
 
       <div className="space-y-12">
         {newsCategoriesConfig.map((categoryConfig) => {
+          if (categoryConfig.requiresAuth && !user) return null;
+          
           const items = categorizedNews[categoryConfig.dataKey] || [];
-          
-          if (!user && categoryConfig.dataKey.startsWith('user')) return null;
-          
-          const isLoadingThisSection = categoryConfig.dataKey.startsWith('user') ? (isLoadingUserArticles && !localUserArticles.length) : (isLoadingGeneralArticles && !generalPublishedArticles);
-          const sectionHasError = categoryConfig.dataKey.startsWith('user') ? !!userArticlesError : !!generalArticlesError;
+          const isLoadingThisSection = 
+            (categoryConfig.dataKey.startsWith('user') && user && isLoadingUserArticles && !localUserArticles.length) ||
+            (categoryConfig.dataKey.startsWith('general') && isLoadingGeneralArticles && !generalPublishedArticles);
+          const sectionHasError = 
+            (categoryConfig.dataKey.startsWith('user') && user && !!userArticlesError) ||
+            (categoryConfig.dataKey.startsWith('general') && !!generalArticlesError);
 
 
-          if (items.length === 0 && !categoryConfig.showIfEmpty && !categoryConfig.dataKey.startsWith('user') && !isLoadingThisSection && !sectionHasError) return null;
+          if (items.length === 0 && !categoryConfig.showIfEmpty && !isLoadingThisSection && !sectionHasError) return null;
 
           return (
             <section key={categoryConfig.id} aria-labelledby={`category-title-${categoryConfig.id}`}>
@@ -209,7 +216,7 @@ const NewsPage = () => {
                   <p className="text-sm text-destructive text-center py-4">Could not load articles for this section.</p>
               ) : items.length > 0 ? (
                 <Carousel
-                  opts={{ align: "start", loop: items.length > (isMobile ? 1 : 3) }}
+                  opts={{ align: "start", loop: items.length > (isMobile ? 1 : (items.length > 2 ? 3: items.length)) }}
                   className="w-full"
                 >
                   <CarouselContent className="-ml-4">
@@ -218,16 +225,16 @@ const NewsPage = () => {
                         <Card className="h-full flex flex-col overflow-hidden shadow-md hover:shadow-lg transition-shadow rounded-lg border-border">
                           <CardHeader className="p-0">
                             {item.imageUrl ? (
-                              <div className="aspect-[16/9] relative w-full">
+                              <Link href={item.link} className="block aspect-[16/9] relative w-full">
                                 <Image
                                   src={item.imageUrl} alt={item.title} fill sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
                                   className="object-cover" data-ai-hint={item.aiHint}
                                 />
-                              </div>
+                              </Link>
                             ) : (
-                              <div className="aspect-[16/9] relative w-full bg-muted flex items-center justify-center">
+                               <Link href={item.link} className="block aspect-[16/9] relative w-full bg-muted flex items-center justify-center">
                                 <Newspaper className="h-12 w-12 text-muted-foreground/50" />
-                              </div>
+                               </Link>
                             )}
                           </CardHeader>
                           <CardContent className="p-4 flex-grow flex flex-col">
@@ -237,7 +244,7 @@ const NewsPage = () => {
                               </Link>
                             </CardTitle>
                              {item.status && (
-                              <Badge variant={item.status === 'draft' ? 'outline' : 'secondary'} className="text-xs mb-1 self-start">
+                              <Badge variant={item.status === 'draft' ? 'outline' : 'secondary'} className="text-xs mb-1 self-start cursor-default border-dashed">
                                 {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
                               </Badge>
                             )}
@@ -258,11 +265,11 @@ const NewsPage = () => {
                       </CarouselItem>
                     ))}
                   </CarouselContent>
-                  {items.length > (isMobile ? 1 : 3) && (<> <CarouselPrevious className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" /> <CarouselNext className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" /> </>)}
+                  {items.length > (isMobile ? 1 : (items.length > 2 ? 3 : items.length)) && (<> <CarouselPrevious className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" /> <CarouselNext className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" /> </>)}
                 </Carousel>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  {categoryConfig.dataKey.startsWith('user') ? `You have no ${categoryConfig.title.toLowerCase().replace('your ','')}.` : `No news items in this category yet.`}
+                  {categoryConfig.dataKey.startsWith('user') && user ? `You have no ${categoryConfig.title.toLowerCase().replace('your ','')}.` : `No news items in this category yet.`}
                 </p>
               )}
             </section>
