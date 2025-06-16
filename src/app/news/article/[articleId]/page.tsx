@@ -142,16 +142,16 @@ const ArticlePage = () => {
     }
   }, [articleId]);
 
-  // Effect 2: Populate editor form fields when 'article' or 'isEditingAllowed' changes
+  // Effect 2: Populate editor form fields when 'article' changes
   useEffect(() => {
-    if (article) { // This effect now runs whether editing is allowed or not, to set initial display
+    if (article) { 
       setTitle(article.title || "");
       setCategory(article.category || "");
       const initialEditorContent = article.content || "<p><br></p>";
       setStoryContent(initialEditorContent); 
 
       if (contentEditableRef.current) {
-        const contentToSet = article.content || (isEditingAllowed ? "<p><br></p>" : ""); // Empty for non-editable if no content
+        const contentToSet = article.content || (isEditingAllowed ? "<p><br></p>" : "");
         if (contentEditableRef.current.innerHTML !== contentToSet) {
             contentEditableRef.current.innerHTML = contentToSet;
         }
@@ -351,7 +351,7 @@ const ArticlePage = () => {
     return isValid;
   }, [title, category]);
 
-  const handleUpdateArticle = async (newStatus: NewsArticleStatus, contentToUse?: string) => {
+  const handleUpdateArticle = async (newStatus: NewsArticleStatus, contentToSave?: string) => {
     if (!user || !articleId || !article || !isEditingAllowed) { 
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." }); 
       return; 
@@ -369,18 +369,15 @@ const ArticlePage = () => {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
-        // Cover image was removed by user
         newCoverImageUrl = null; 
       }
       
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         category,
-        content: contentToUse !== undefined ? contentToUse : storyContent,
+        content: contentToSave !== undefined ? contentToSave : storyContent,
         status: newStatus,
         ...(newCoverImageUrl !== undefined && { coverImageUrl: newCoverImageUrl }),
-        // We don't need to explicitly pass other fields if they aren't changing.
-        // The service's updateNewsArticle will preserve them if not in payload.
       };
 
       await updateNewsArticle(articleId, articleUpdateData);
@@ -397,10 +394,10 @@ const ArticlePage = () => {
           successDescription = `"${title.trim()}" has been successfully updated.`;
         }
       } else if (newStatus === 'draft' && article.status === 'published') {
-         if (contentToUse !== undefined && contentToUse === article.content) { // This implies "Unpublish (Revert to Draft)" was clicked
+         if (contentToSave !== undefined && contentToSave === article.content) { 
             successTitle = "Article Unpublished";
             successDescription = `"${title.trim()}" is no longer live and has been reverted to a draft.`;
-         } else { // This implies "Save Edits & Unpublish" was clicked
+         } else { 
             successTitle = "Changes Saved as Draft";
             successDescription = `"${title.trim()}" is no longer live. Your edits have been saved as a draft.`;
          }
@@ -411,18 +408,13 @@ const ArticlePage = () => {
       setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
       
-      // Re-fetch the article to update the UI with the latest state from DB
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
       if (fetchedUpdatedArticle) {
-        setArticle(fetchedUpdatedArticle); // This will trigger the useEffect to repopulate form states
+        setArticle(fetchedUpdatedArticle); 
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-        setCoverImageFile(null); // Clear the file input state
+        setCoverImageFile(null); 
       }
       
-      // If the article was just published from a draft state, or if a published article was updated,
-      // and the user is still on the page, no redirect is strictly necessary unless desired.
-      // If an article was unpublished, it stays on this editor page as a draft.
-
     } catch (error: any) {
       toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
     } finally {
@@ -669,11 +661,20 @@ const ArticlePage = () => {
                   <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
                   <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
                 </>
-              ) : ( // Article is published
+              ) : ( 
                 <>
                   <Button type="button" variant="outline" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Update Live Article</Button>
-                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full border-orange-500 text-orange-600 hover:bg-orange-50" disabled={isSubmitting}><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Save Edits &amp; Unpublish</Button>
-                  <Button type="button" variant="destructive" onClick={() => handleUpdateArticle('draft', article.content)} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}> Unpublish Only</Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => handleUpdateArticle('published')} // Changed from 'draft'
+                    className="text-xs py-1.5 h-9 rounded-full border-input text-foreground hover:bg-muted" // Standard outline style
+                    disabled={isSubmitting}
+                  >
+                    <Save className="mr-1.5 h-3.5 w-3.5" /> {/* Changed icon */}
+                    Save & Keep Published {/* Changed text */}
+                  </Button>
+                  <Button type="button" variant="destructive" onClick={() => handleUpdateArticle('draft', article.content)} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}>Unpublish (Revert to Draft)</Button>
                 </>
               )}
             </div>
@@ -738,4 +739,3 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
-
