@@ -1,292 +1,208 @@
 
 // src/app/news/page.tsx
-"use client"; 
+"use client";
 
-import React, { useMemo, useEffect, useState, useCallback } from 'react';
-import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDays, Edit2, FileText, Send, Loader2, AlertTriangle } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, ChevronRight } from 'lucide-react'; // Added Filter, Search, ChevronRight
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
-import Image from 'next/image';
-import {
-  Carousel,
-  CarouselContent,
-  CarouselItem,
-  CarouselNext,
-  CarouselPrevious,
-} from "@/components/ui/carousel";
-import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery } from '@tanstack/react-query';
-import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/newsService';
+import { getPublishedNewsArticles, getNewsArticlesByUserId } from '@/services/newsService'; // Added getNewsArticlesByUserId
 import type { ClientNewsArticle } from '@/types/news';
-import { formatDistanceToNowStrict } from 'date-fns';
-import { Badge } from '@/components/ui/badge';
-import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from '@/lib/utils';
+import { ArticleListItem } from '@/components/news/ArticleListItem'; // New component
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"; // For filter bar
+import { Input } from '@/components/ui/input';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
-interface NewsItem {
-  id: string;
-  title: string;
-  category: string;
-  date: string;
-  source?: string;
-  imageUrl?: string | null;
-  aiHint: string;
-  excerpt: string;
-  link: string;
-  status?: 'draft' | 'published';
-  userId?: string;
-  publishedAt?: number | null;
-  updatedAt: number; 
-}
 
-const newsCategoriesConfig = [
-  { id: 'user_drafts', title: 'My Article Drafts', icon: FileText, dataKey: 'userDrafts' as const, showIfEmpty: true, requiresAuth: true },
-  { id: 'user_published', title: 'My Published Articles', icon: Send, dataKey: 'userPublished' as const, showIfEmpty: true, requiresAuth: true },
-  { id: 'collaborative_ventures', title: 'Collaborative Ventures & Partnerships', icon: Handshake, dataKey: 'generalCollaborativeVentures' as const },
-  { id: 'financial_insights', title: 'Market & Financial Insights', icon: Banknote, dataKey: 'generalFinancialInsights' as const },
-  { id: 'political_regulatory', title: 'Political & Regulatory Landscape', icon: Landmark, dataKey: 'generalPoliticalRegulatory' as const },
-  { id: 'new_opportunities', title: 'Emerging Opportunities & Trends', icon: TrendingUp, dataKey: 'generalNewOpportunities' as const },
-  { id: "events", title: "Upcoming Events & Conferences", icon: CalendarDays, dataKey: "generalEvents" as const }, // Corrected icon
-  { id: 'platform_updates', title: 'AnonyCollab Platform Updates', icon: Newspaper, dataKey: 'generalPlatformUpdates' as const },
-  { id: 'industry_analysis', title: 'In-depth Industry Analysis', icon: Newspaper, dataKey: 'generalIndustryAnalysis' as const },
-  { id: 'case_studies', title: 'Success Stories & Case Studies', icon: Newspaper, dataKey: 'generalCaseStudies' as const },
+const newsCategoriesForFilter = [
+  { id: 'for_you', title: 'For you' },
+  { id: 'following', title: 'Following' }, // Placeholder
+  { id: 'featured', title: 'Featured', isNew: true }, // Placeholder
+  { id: 'collaborative_ventures', title: 'Collaborative Ventures' },
+  { id: 'financial_insights', title: 'Financial Insights' },
+  { id: 'political_regulatory', title: 'Political & Regulatory' },
+  { id: 'new_opportunities', title: 'New Opportunities' },
+  { id: 'events', title: 'Events' },
+  { id: 'platform_updates', title: 'Platform Updates' },
+  { id: 'industry_analysis', title: 'Industry Analysis' },
+  { id: 'case_studies', title: 'Case Studies' },
+  // Add more relevant categories if needed, matching your article categories
 ];
-
-
-function getCleanTextExcerpt(htmlString: string | null | undefined, maxLength: number = 120): string {
-  if (typeof document === 'undefined' || !htmlString) return 'No content preview available.';
-  
-  try {
-    const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = htmlString;
-
-    tempDiv.querySelectorAll('pre, figure, hr, img, iframe, div[data-embed-wrapper="true"]').forEach(el => el.remove());
-    
-    let textContent = tempDiv.textContent || tempDiv.innerText || "";
-    textContent = textContent.replace(/\s\s+/g, ' ').trim(); 
-
-    if (textContent.length === 0) return 'No text content found.';
-
-    if (textContent.length <= maxLength) {
-      return textContent;
-    }
-    
-    let excerpt = textContent.substring(0, maxLength);
-    const lastPeriod = excerpt.lastIndexOf('.');
-    if (lastPeriod > Math.floor(maxLength * 0.7) && lastPeriod < excerpt.length -1) { 
-      excerpt = excerpt.substring(0, lastPeriod + 1);
-    } else {
-      const lastSpace = excerpt.lastIndexOf(' ');
-      if (lastSpace > Math.floor(maxLength * 0.6)) { 
-         excerpt = excerpt.substring(0, lastSpace);
-      }
-      excerpt += "...";
-    }
-    return excerpt;
-  } catch (e) {
-    console.error("Error parsing HTML for excerpt:", e);
-    return htmlString.substring(0, maxLength) + (htmlString.length > maxLength ? "..." : ""); 
-  }
-}
 
 
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
-  const isMobile = useIsMobile(); 
-  const [localUserArticles, setLocalUserArticles] = useState<ClientNewsArticle[]>([]);
+  const [selectedFilter, setSelectedFilter] = useState<string>('for_you'); // Default filter
+  const [searchTerm, setSearchTerm] = useState('');
 
-  const { data: userArticlesDataFromQuery, isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
-    queryKey: ['userNewsArticles', user?.uid],
-    queryFn: () => {
-        return user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]);
-    },
-    enabled: !!user && !authLoading,
-  });
-
-  useEffect(() => {
-    if (userArticlesDataFromQuery) {
-      setLocalUserArticles(userArticlesDataFromQuery);
-    }
-  }, [userArticlesDataFromQuery]);
-
-
-  const { data: generalPublishedArticles, isLoading: isLoadingGeneralArticles, error: generalArticlesError } = useQuery<ClientNewsArticle[]>({
-     queryKey: ['publishedNewsArticles'],
-     queryFn: () => getPublishedNewsArticles(50), 
+  // Fetch all published articles initially
+  const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
+     queryKey: ['publishedNewsArticlesAll'], // Different key to not interfere with original limited query if used elsewhere
+     queryFn: () => getPublishedNewsArticles(100), // Fetch a larger number for client-side filtering
+     staleTime: 1000 * 60 * 5, // 5 minutes
   });
   
-  const transformToNewsItem = useCallback((article: ClientNewsArticle): NewsItem => ({
-    id: article.id,
-    title: article.title,
-    category: article.category,
-    date: article.status === 'published' && article.publishedAt 
-        ? formatDistanceToNowStrict(new Date(article.publishedAt), { addSuffix: true }) 
-        : formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true }),
-    excerpt: getCleanTextExcerpt(article.content, 120),
-    imageUrl: article.coverImageUrl,
-    aiHint: article.category.toLowerCase().replace(/\s+/g, '-').substring(0,15) || 'news item',
-    link: `/news/article/${article.id}`,
-    status: article.status,
-    userId: article.userId,
-    publishedAt: article.publishedAt,
-    updatedAt: article.updatedAt,
-  }), []);
+  // Fetch user's own articles (drafts and published)
+  const { data: userArticles = [], isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
+    queryKey: ['userNewsArticlesAllStatuses', user?.uid],
+    queryFn: () => user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]),
+    enabled: !!user,
+  });
 
-  const categorizedNews = useMemo(() => {
-    const userDrafts: NewsItem[] = localUserArticles?.filter(a => a.status === 'draft').map(transformToNewsItem).sort((a, b) => b.updatedAt - a.updatedAt) || [];
-    const userPublished: NewsItem[] = localUserArticles?.filter(a => a.status === 'published').map(transformToNewsItem).sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0)) || [];
+  const filteredArticles = useMemo(() => {
+    let articlesToDisplay = allPublishedArticles;
 
-    const result: { [key: string]: NewsItem[] } = {
-      userDrafts,
-      userPublished,
-    };
-
-    if (generalPublishedArticles) {
-        newsCategoriesConfig.forEach(catConfig => {
-            if (catConfig.dataKey.startsWith('general')) {
-                result[catConfig.dataKey] = generalPublishedArticles
-                    .filter(article => article.category.toLowerCase() === catConfig.title.toLowerCase())
-                    .map(transformToNewsItem)
-                    .sort((a,b) => (b.publishedAt || 0) - (a.publishedAt || 0)); 
-            }
-        });
-    } else {
-      newsCategoriesConfig.forEach(catConfig => {
-        if (catConfig.dataKey.startsWith('general')) {
-          result[catConfig.dataKey] = [];
-        }
-      });
+    if (selectedFilter === 'my_articles' && user) {
+      articlesToDisplay = userArticles.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+    } else if (selectedFilter !== 'for_you' && selectedFilter !== 'following' && selectedFilter !== 'featured' && selectedFilter !== 'my_articles') {
+      articlesToDisplay = allPublishedArticles.filter(
+        article => article.category.toLowerCase() === selectedFilter.toLowerCase()
+      );
+    } else if (selectedFilter === 'for_you') {
+      // "For you" could be all published, or personalized in the future
+      articlesToDisplay = allPublishedArticles;
     }
-    return result;
-  }, [localUserArticles, generalPublishedArticles, transformToNewsItem]); 
+    // Placeholders for following/featured
+    else if (selectedFilter === 'following') articlesToDisplay = []; 
+    else if (selectedFilter === 'featured') articlesToDisplay = allPublishedArticles.slice(0, 5); // Example: first 5 as featured
 
-  const isLoading = authLoading || (user && isLoadingUserArticles) || isLoadingGeneralArticles;
+
+    if (searchTerm.trim() !== '') {
+      const lowerSearchTerm = searchTerm.toLowerCase();
+      articlesToDisplay = articlesToDisplay.filter(
+        article =>
+          article.title.toLowerCase().includes(lowerSearchTerm) ||
+          article.category.toLowerCase().includes(lowerSearchTerm) ||
+          (article.content && getCleanTextExcerpt(article.content, 200).toLowerCase().includes(lowerSearchTerm))
+      );
+    }
+    if (selectedFilter !== 'my_articles') { // Don't sort "My Articles" by publishedAt if it includes drafts
+      return articlesToDisplay.sort((a,b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0));
+    }
+    return articlesToDisplay;
+
+  }, [allPublishedArticles, userArticles, selectedFilter, searchTerm, user]);
+
+  const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles);
+
+
+  // Function to get a clean text excerpt (moved from old page)
+  const getCleanTextExcerpt = useCallback((htmlString: string | null | undefined, maxLength: number = 150): string => {
+    if (typeof document === 'undefined' || !htmlString) return '';
+    try {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = htmlString;
+      // Remove non-content elements
+      tempDiv.querySelectorAll('pre, figure, hr, img, iframe, div[data-embed-wrapper="true"], h1, h2, h3, h4, h5, h6').forEach(el => el.remove());
+      let textContent = tempDiv.textContent || tempDiv.innerText || "";
+      textContent = textContent.replace(/\s\s+/g, ' ').trim();
+      if (textContent.length <= maxLength) return textContent;
+      let excerpt = textContent.substring(0, maxLength);
+      const lastSpace = excerpt.lastIndexOf(' ');
+      if (lastSpace > Math.floor(maxLength * 0.7)) excerpt = excerpt.substring(0, lastSpace);
+      return excerpt + "...";
+    } catch (e) {
+      return htmlString.substring(0, maxLength) + (htmlString.length > maxLength ? "..." : "");
+    }
+  }, []);
+
 
   return (
-    <div className="container mx-auto p-4 md:p-8 min-h-[calc(100vh-8rem)]">
-      <header className="mb-10 text-center">
-        <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center justify-center">
-          <Newspaper className="mr-3 h-8 w-8 text-primary" />
-          Latest News & Updates
-        </h1>
-        <p className="text-lg text-muted-foreground mt-1 max-w-2xl mx-auto">
-          Stay informed about AnonyCollab, industry insights, financial trends, and new opportunities.
-        </p>
-         {user && (
-          <Button asChild className="mt-4">
-            <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
-          </Button>
-        )}
-      </header>
+    <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
+      {/* Top Filter Bar */}
+      <div className="mb-6 sticky top-14 (or your header height) z-40 bg-background py-3 border-b">
+        <div className="flex items-center justify-between">
+          <ScrollArea className="w-full whitespace-nowrap">
+            <div className="flex items-center gap-1 pb-2">
+              {user && (
+                  <Button
+                    variant={selectedFilter === 'my_articles' ? "secondary" : "ghost"}
+                    size="sm"
+                    className={cn("h-8 px-3 text-xs rounded-full shrink-0", selectedFilter === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                    onClick={() => setSelectedFilter('my_articles')}
+                  >
+                   My Articles
+                  </Button>
+              )}
+              {newsCategoriesForFilter.map((cat) => (
+                <Button
+                  key={cat.id}
+                  variant={selectedFilter === cat.title.toLowerCase() ? "secondary" : "ghost"}
+                  size="sm"
+                  className={cn("h-8 px-3 text-xs rounded-full shrink-0", selectedFilter === cat.title.toLowerCase() && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                  onClick={() => setSelectedFilter(cat.title.toLowerCase())}
+                >
+                  {cat.title}
+                  {cat.isNew && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-green-500 text-white rounded-sm">New</span>}
+                </Button>
+              ))}
+            </div>
+             <span className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-background to-transparent md:hidden" />
+          </ScrollArea>
+          {/* Could add a ChevronRight here for mobile if list overflows */}
+        </div>
+        <div className="mt-3 relative">
+            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <Input
+                type="search"
+                placeholder="Search articles..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-9 pr-3 h-9 text-xs w-full rounded-md border-input focus:ring-primary focus:border-primary"
+                aria-label="Search articles"
+            />
+        </div>
+      </div>
 
-      {(isLoadingUserArticles && user && !localUserArticles.length) && ( 
-        <div className="flex justify-center items-center py-10">
+
+      {/* Create Article Button - Prominent for Desktop, perhaps different for mobile */}
+       <div className="mb-6 flex justify-end">
+          {user && (
+            <Button asChild size="sm">
+                <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
+            </Button>
+          )}
+       </div>
+
+      {isLoading && (
+        <div className="flex flex-col items-center justify-center py-10">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
-          <p className="ml-2 text-sm text-muted-foreground">Loading your articles...</p>
+          <p className="ml-2 text-sm text-muted-foreground mt-2">Loading articles...</p>
         </div>
       )}
-      {userArticlesError && user && (
+
+      {(allArticlesError || (user && userArticlesError)) && !isLoading &&(
          <div className="text-destructive flex flex-col items-center gap-2 text-sm p-6 bg-destructive/5 rounded-md justify-center border border-destructive/20 mb-6">
            <AlertTriangle className="h-8 w-8 flex-shrink-0" />
-           <p className="font-semibold">Error Loading Your Articles</p>
-           <p>{userArticlesError.message || "An unexpected error occurred."}</p>
+           <p className="font-semibold">Error Loading Articles</p>
+           <p>{allArticlesError?.message || userArticlesError?.message || "An unexpected error occurred."}</p>
          </div>
       )}
 
+      {!isLoading && !allArticlesError && filteredArticles.length === 0 && (
+        <div className="text-center py-10">
+          <Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
+          <p className="text-lg font-medium text-muted-foreground">
+            {searchTerm ? `No articles found for "${searchTerm}"` : (selectedFilter === 'for_you' || selectedFilter === 'my_articles') ? "No articles to show right now." : `No articles found in "${selectedFilter.replace(/_/g, ' ')}".`}
+          </p>
+          <p className="text-sm text-muted-foreground mt-1">
+            {selectedFilter === 'my_articles' && !userArticlesError && !userArticles.find(a => a.status === 'draft' || a.status === 'published') ? "You haven't created any articles yet." : "Try adjusting your filters or search term."}
+          </p>
+        </div>
+      )}
 
-      <div className="space-y-12">
-        {newsCategoriesConfig.map((categoryConfig) => {
-          if (categoryConfig.requiresAuth && !user) return null;
-          
-          const items = categorizedNews[categoryConfig.dataKey] || [];
-          const isLoadingThisSection = 
-            (categoryConfig.dataKey.startsWith('user') && user && isLoadingUserArticles && !localUserArticles.length) ||
-            (categoryConfig.dataKey.startsWith('general') && isLoadingGeneralArticles && !generalPublishedArticles);
-          const sectionHasError = 
-            (categoryConfig.dataKey.startsWith('user') && user && !!userArticlesError) ||
-            (categoryConfig.dataKey.startsWith('general') && !!generalArticlesError);
-
-
-          if (items.length === 0 && !categoryConfig.showIfEmpty && !isLoadingThisSection && !sectionHasError) return null;
-
-          return (
-            <section key={categoryConfig.id} aria-labelledby={`category-title-${categoryConfig.id}`}>
-              <div className="flex items-center mb-4">
-                <categoryConfig.icon className="h-6 w-6 text-primary mr-2" />
-                <h2 id={`category-title-${categoryConfig.id}`} className="text-2xl font-semibold text-foreground">
-                  {categoryConfig.title}
-                </h2>
-              </div>
-              {isLoadingThisSection && items.length === 0 ? (
-                  <div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/> <span className="ml-2 text-muted-foreground text-sm">Loading...</span></div>
-              ) : sectionHasError && items.length === 0 ? (
-                  <p className="text-sm text-destructive text-center py-4">Could not load articles for this section.</p>
-              ) : items.length > 0 ? (
-                <Carousel
-                  opts={{ align: "start", loop: items.length > (isMobile ? 1 : (items.length > 2 ? 3: items.length)) }}
-                  className="w-full"
-                >
-                  <CarouselContent className="-ml-4">
-                    {items.map((item) => (
-                      <CarouselItem key={item.id} className="pl-4 basis-full md:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-                        <Card className="h-full flex flex-col overflow-hidden shadow-md hover:shadow-lg transition-shadow rounded-lg border-border">
-                          <CardHeader className="p-0">
-                            {item.imageUrl ? (
-                              <Link href={item.link} className="block aspect-[16/9] relative w-full">
-                                <Image
-                                  src={item.imageUrl} alt={item.title} fill sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                                  className="object-cover" data-ai-hint={item.aiHint}
-                                />
-                              </Link>
-                            ) : (
-                               <Link href={item.link} className="block aspect-[16/9] relative w-full bg-muted flex items-center justify-center">
-                                <Newspaper className="h-12 w-12 text-muted-foreground/50" />
-                               </Link>
-                            )}
-                          </CardHeader>
-                          <CardContent className="p-4 flex-grow flex flex-col">
-                            <CardTitle className="text-md font-semibold leading-snug mb-1 line-clamp-2">
-                              <Link href={item.link} className="hover:text-primary transition-colors">
-                                {item.title}
-                              </Link>
-                            </CardTitle>
-                             {item.status && (
-                              <Badge variant={item.status === 'draft' ? 'outline' : 'secondary'} className="text-xs mb-1 self-start cursor-default border-dashed">
-                                {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-                              </Badge>
-                            )}
-                            <CardDescription className="text-xs text-muted-foreground mb-2 line-clamp-3 flex-grow">
-                              {item.excerpt}
-                            </CardDescription>
-                            <div className="text-xs text-muted-foreground/80 mt-auto pt-2">
-                              {item.source && <span>{item.source} &bull; </span>}
-                              <span>{item.date}</span>
-                            </div>
-                          </CardContent>
-                          <CardFooter className="p-3 border-t">
-                             <Button variant="outline" size="xs" asChild className="w-full text-xs h-8">
-                              <Link href={item.link}>{item.status === 'draft' ? "Edit Draft" : "Read More"}</Link>
-                            </Button>
-                          </CardFooter>
-                        </Card>
-                      </CarouselItem>
-                    ))}
-                  </CarouselContent>
-                  {items.length > (isMobile ? 1 : (items.length > 2 ? 3 : items.length)) && (<> <CarouselPrevious className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" /> <CarouselNext className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" /> </>)}
-                </Carousel>
-              ) : (
-                <p className="text-sm text-muted-foreground text-center py-4">
-                  {categoryConfig.dataKey.startsWith('user') && user ? `You have no ${categoryConfig.title.toLowerCase().replace('my ','')}.` : `No news items in this category yet.`}
-                </p>
-              )}
-            </section>
-          );
-        })}
-      </div>
+      {!isLoading && !allArticlesError && filteredArticles.length > 0 && (
+        <div className="max-w-3xl mx-auto space-y-8"> {/* Changed from grid to single column centered */}
+          {filteredArticles.map((article) => (
+            <ArticleListItem key={article.id} article={article} getCleanTextExcerpt={getCleanTextExcerpt} currentUserId={user?.uid || null} />
+          ))}
+        </div>
+      )}
     </div>
   );
 };
 
 export default NewsPage;
-    
