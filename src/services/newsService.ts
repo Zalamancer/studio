@@ -151,34 +151,26 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
   // Handle deadline specifically if it's a Date object
   if (dataToUpdate.deadline instanceof Date) {
     payload.deadline = Timestamp.fromDate(dataToUpdate.deadline);
-  } else if (dataToUpdate.deadline === null) {
+  } else if (dataToUpdate.hasOwnProperty('deadline') && dataToUpdate.deadline === null) {
     payload.deadline = null;
   }
 
-
-  // Specific logic for status and publishedAt
   const newStatus = dataToUpdate.status;
   if (newStatus !== undefined) {
-    payload.status = newStatus; // Set status in payload
+    payload.status = newStatus;
     if (newStatus === 'published') {
-      // If transitioning to published OR updating an already published article and publishedAt was somehow null
+      // Only set publishedAt if it's a new publish (draft -> published or fixing a missing publishedAt)
       if (existingData.status !== 'published' || !existingData.publishedAt) {
         payload.publishedAt = serverTimestamp();
-      } else {
-        // If already published and status remains published, publishedAt is not changed by this update.
-        // The rule `request.resource.data.publishedAt == resource.data.publishedAt` will ensure it's preserved.
-        // No need to explicitly set payload.publishedAt to existingData.publishedAt here,
-        // as it won't be in `affectedKeys` if not changed.
       }
-    } else if (newStatus === 'draft') {
-      payload.publishedAt = null; // Moving to draft sets publishedAt to null
+      // If newStatus is 'published' and existingData.status was also 'published' (and existingData.publishedAt is valid),
+      // then payload.publishedAt is NOT set here, meaning the original publishedAt is preserved.
+      // The Firestore rule `request.resource.data.publishedAt == resource.data.publishedAt` will then check this.
+    } else { // newStatus is 'draft' or any other non-published state
+      payload.publishedAt = null;
     }
-  } else {
-    // If status is not in dataToUpdate, it means status isn't changing.
-    // We need to ensure publishedAt from existingData is preserved if the article is (and remains) published.
-    // This is primarily handled by the security rule, payload should not send publishedAt if status isn't changing to published.
-    // If status is not being changed, and it's currently 'published', publishedAt should not be touched in payload.
   }
+  // If dataToUpdate.status is undefined (status not changing), no specific action for publishedAt here unless it was missing and is now being corrected (unlikely scenario for this path).
 
   try {
     await updateDoc(articleDocRef, payload);
@@ -358,3 +350,4 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
     throw error;
   }
 };
+
