@@ -1,3 +1,4 @@
+
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -52,11 +53,6 @@ service cloud.firestore {
           // Owner cannot change userId or createdAt
           request.resource.data.userId == resource.data.userId &&
           request.resource.data.createdAt == resource.data.createdAt &&
-          // Ensure other fields are also not maliciously changed if we aren't using hasOnly for owner edits
-          // For simplicity, allow most fields to be updated by owner except commentCount here.
-          // A more robust rule would list all allowed mutable fields by owner.
-          // This rule implies owner CANNOT directly set commentCount (it's handled by Branch 2)
-          // unless they send all fields and the specific count.
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['commentCount']) &&
           request.resource.data.updatedAt == request.time
         ) ||
@@ -65,8 +61,6 @@ service cloud.firestore {
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'updatedAt']) &&
           (request.resource.data.commentCount == resource.data.commentCount + 1 || request.resource.data.commentCount == resource.data.commentCount - 1) &&
           request.resource.data.updatedAt == request.time
-          // No need to check other fields like userId == resource.data.userId here,
-          // because hasOnly ensures they are not part of the request.resource.data if not listed.
         )
       );
       allow delete: if isAuthUser() && resource.data.userId == request.auth.uid;
@@ -214,7 +208,7 @@ service cloud.firestore {
           isGroupOwner(request.auth.uid, resource.data) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'adminIds', 'updatedAt']) &&
           request.resource.data.participants is list &&
-          request.resource.data.participants.size() > request.resource.data.participants.size() &&
+          resource.data.participants.size() > request.resource.data.participants.size() &&
           resource.data.participants.hasAll(request.resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
@@ -224,7 +218,7 @@ service cloud.firestore {
           isGroupAdmin(request.auth.uid, resource.data) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'updatedAt']) &&
           request.resource.data.participants is list &&
-          request.resource.data.participants.size() > request.resource.data.participants.size() &&
+          resource.data.participants.size() > request.resource.data.participants.size() &&
           resource.data.participants.hasAll(request.resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
@@ -379,7 +373,7 @@ service cloud.firestore {
                          'createdAt', 'updatedAt', 'version', 'roadmap',
                          'visibility', 'editability', 'viewUserIds', 'editUserIds'
                        ]) &&
-                       request.resource.data.size() == 15;
+                       request.resource.data.size() == 15; 
 
       allow list: if (request.query.filters.size() > 0 &&
                  request.query.filters[0].field == 'visibility' &&
@@ -392,17 +386,21 @@ service cloud.firestore {
               (request.auth != null && request.auth.uid == resource.data.ownerId) ||
               (request.auth != null && resource.data.viewUserIds.hasAny([request.auth.uid]));
 
+
       function isOwner() {
         return request.auth.uid == resource.data.ownerId;
       }
+
       function isPlanEditor() {
         return request.auth.uid == resource.data.ownerId ||
                (resource.data.editability == 'collaborators' && resource.data.editUserIds.hasAny([request.auth.uid])) ||
-               (resource.data.editability == 'everyone' && request.auth != null);
+               (resource.data.editability == 'everyone' && request.auth != null); 
       }
+
       function isValidSettingsUpdate(requestData, resourceData) {
         let allowedKeys = ['name', 'description', 'sector', 'subSector', 'industry', 'naicsCode', 'visibility', 'editability', 'viewUserIds', 'editUserIds', 'updatedAt'];
         let changedKeys = requestData.diff(resourceData).affectedKeys();
+
         return changedKeys.hasOnly(allowedKeys) &&
                (!('roadmap' in changedKeys)) &&
                (!('version' in changedKeys)) &&
@@ -417,9 +415,11 @@ service cloud.firestore {
                (requestData.viewUserIds == null || requestData.viewUserIds is list) &&
                (requestData.editUserIds == null || requestData.editUserIds is list);
       }
+
       function isValidRoadmapUpdate(requestData, resourceData) {
         let allowedKeys = ['roadmap', 'version', 'updatedAt'];
         let changedKeys = requestData.diff(resourceData).affectedKeys();
+
         return changedKeys.hasOnly(allowedKeys) &&
                requestData.roadmap is list;
       }
@@ -433,6 +433,7 @@ service cloud.firestore {
                          ||
                          (isPlanEditor() && isValidRoadmapUpdate(request.resource.data, resource.data))
                        );
+
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
 
       match /versions/{versionId} {
@@ -455,18 +456,42 @@ service cloud.firestore {
       
       allow list: if request.auth != null &&
                     (
-                      // Case 1: User is fetching their own articles.
-                      // Query must filter by userId == auth.uid.
-                      // The client query includes orderBy('updatedAt', 'desc') and limit(20).
-                      // This rule allows the query if the correct index (userId, updatedAt DESC) exists.
+                      // Case 1.1: User is fetching their own articles (NO status filter, but WITH orderBy)
                       (
-                        request.query.filters.size() >= 1 &&
-                        request.query.filters.size() <= 2 && // Allows for an optional status filter
-                        request.query.filters.exists(filter, filter[0] == 'userId' && filter[1] == '==' && filter[2] == request.auth.uid) &&
-                        request.query.limit <= 20
-                        // We are temporarily NOT strictly enforcing the orderBy('updatedAt', 'desc') in the rule,
-                        // relying on the client to send it and Firestore to use the index.
-                        // This is to see if the orderBy check itself was the issue.
+                        request.query.filters.size() == 1 &&
+                        request.query.filters[0][0] == 'userId' &&
+                        request.query.filters[0][1] == '==' &&
+                        request.query.filters[0][2] == request.auth.uid &&
+                        request.query.limit <= 20 &&
+                        request.query.orderBy.path.string() == 'updatedAt' && // Ensure this matches the field name used in orderBy
+                        request.query.orderBy.direction == 'desc'
+                      )
+                      ||
+                      // Case 1.2: User is fetching their own articles WITH a status filter AND orderBy
+                      (
+                        request.query.filters.size() == 2 &&
+                        request.query.limit <= 20 &&
+                        request.query.orderBy.path.string() == 'updatedAt' && // Ensure this matches
+                        request.query.orderBy.direction == 'desc' &&
+                        // Check that one filter is userId and the other is status
+                        (
+                          ( // userId filter is first, status is second
+                            request.query.filters[0][0] == 'userId' &&
+                            request.query.filters[0][1] == '==' &&
+                            request.query.filters[0][2] == request.auth.uid &&
+                            request.query.filters[1][0] == 'status' &&
+                            request.query.filters[1][1] == '==' &&
+                            (request.query.filters[1][2] == 'draft' || request.query.filters[1][2] == 'published')
+                          ) ||
+                          ( // status filter is first, userId filter is second
+                            request.query.filters[1][0] == 'userId' &&
+                            request.query.filters[1][1] == '==' &&
+                            request.query.filters[1][2] == request.auth.uid &&
+                            request.query.filters[0][0] == 'status' &&
+                            request.query.filters[0][1] == '==' &&
+                            (request.query.filters[0][2] == 'draft' || request.query.filters[0][2] == 'published')
+                          )
+                        )
                       )
                       ||
                       // Case 2: Fetching all published articles (keep this as it works)
