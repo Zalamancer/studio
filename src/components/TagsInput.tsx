@@ -5,10 +5,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
+import { Label } from '@/components/ui/label'; // Added import for Label
 import { X, PlusCircle, Tag, Loader2 } from 'lucide-react';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { searchTags } from '@/services/tagService'; // Assuming you have this
+import { searchTags } from '@/services/tagService';
 import type { ClientTag } from '@/types/tag';
 import { cn } from '@/lib/utils';
 
