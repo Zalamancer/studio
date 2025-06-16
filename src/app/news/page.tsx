@@ -22,7 +22,7 @@ import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/ne
 import type { ClientNewsArticle } from '@/types/news';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { useIsMobile } from "@/hooks/use-is-mobile"; 
+import { useIsMobile } from "@/hooks/use-mobile"; // Corrected import path
 
 interface NewsItem {
   id: string;
