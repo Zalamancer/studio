@@ -3,25 +3,32 @@ rules_version = '2';
 
 service firebase.storage {
   match /b/{bucket}/o {
-    // Rules for images uploaded for posts.
-    // The path structure used by storageService.ts is `posts/${userId}/${fileName}`.
-    match /posts/{userId}/{fileName} {
-      // Allow anyone to read post images (e.g., to display them in the app).
-      allow read: if true;
+    // Default: Deny all reads and writes if no other rules match.
+    // Consider your app's specific needs if you want a global deny.
+    // match /{allPaths=**} {
+    //  allow read, write: if false;
+    // }
 
-      // Allow authenticated users to write (create, update, delete)
-      // files only if the {userId} in the path matches their own UID.
+    // User profile avatars
+    // Path: users/{userId}/avatar/{fileName}
+    match /users/{userId}/avatar/{fileName} {
+      allow read: if true; // Publicly readable for display
       allow write: if request.auth != null && request.auth.uid == userId;
-
-      // Optional: You can add more granular checks here, for example, on file size or content type.
-      // Example:
-      // allow write: if request.auth != null && request.auth.uid == userId
-      //               && request.resource.size < 5 * 1024 * 1024 // 5MB limit
-      //               && request.resource.contentType.matches('image/.*'); // Only image types
     }
 
-    // Note: Access to any path not explicitly matched by a rule above will be denied by default.
-    // This is a secure default. If you need to allow access to other paths (e.g., user avatars),
-    // you would add additional `match` blocks similar to the one for `/posts`.
+    // Images for general posts
+    // Path: posts/{userId}/{postId_or_fileName}/{fileName} (flexible for single or multiple images per post)
+    match /posts/{userId}/{pathSegment}/{fileName} {
+      allow read: if true; // Publicly readable
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Cover images for news articles
+    // Path: newsCovers/{userId}/{articleIdOrPlaceholder}/{fileName}
+    // Here, {articleIdOrPlaceholder} can be an actual article ID or a temporary one like 'new'.
+    match /newsCovers/{userId}/{articleIdOrPlaceholder}/{fileName} {
+      allow read: if true; // Publicly readable for display
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
   }
 }
