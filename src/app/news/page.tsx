@@ -47,7 +47,7 @@ const newsCategoriesConfig = [
   { id: 'financial_insights', title: 'Market & Financial Insights', icon: Banknote, dataKey: 'generalFinancialInsights' as const },
   { id: 'political_regulatory', title: 'Political & Regulatory Landscape', icon: Landmark, dataKey: 'generalPoliticalRegulatory' as const },
   { id: 'new_opportunities', title: 'Emerging Opportunities & Trends', icon: TrendingUp, dataKey: 'generalNewOpportunities' as const },
-  { id: "events", title: "Upcoming Events & Conferences", icon: CalendarDaysIcon, dataKey: "generalEvents" as const },
+  { id: "events", title: "Upcoming Events & Conferences", icon: CalendarDays, dataKey: "generalEvents" as const }, // Corrected icon
   { id: 'platform_updates', title: 'AnonyCollab Platform Updates', icon: Newspaper, dataKey: 'generalPlatformUpdates' as const },
   { id: 'industry_analysis', title: 'In-depth Industry Analysis', icon: Newspaper, dataKey: 'generalIndustryAnalysis' as const },
   { id: 'case_studies', title: 'Success Stories & Case Studies', icon: Newspaper, dataKey: 'generalCaseStudies' as const },
