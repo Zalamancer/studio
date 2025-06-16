@@ -189,39 +189,40 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
 
   const effectiveLimit = 20;
   let isOrderByAppliedToServer = false;
+  let orderByField = 'updatedAt'; // Default
+  let orderByDirection: OrderByDirection = 'desc'; // Default
 
   if (status) {
     console.log(`%c  [newsService] getNewsArticlesByUserId: Status filter active: '${status}'. Querying by userId and status, orderBy('updatedAt', 'desc').`, "color: dodgerblue;");
     constraints.push(where('status', '==', status));
-    constraints.push(orderBy('updatedAt', 'desc'));
+    constraints.push(orderBy(orderByField, orderByDirection));
     isOrderByAppliedToServer = true;
   } else {
     // For fetching ALL user's articles (drafts and published for "Your Articles" sections)
-    // We NOW re-introduce orderBy to match the more secure rule (Case 1.1)
-    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId, ORDERING BY 'updatedAt', 'desc' ON SERVER.`, "color: dodgerblue;");
-    constraints.push(orderBy('updatedAt', 'desc'));
+    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId, ORDERING BY '${orderByField}', '${orderByDirection}' ON SERVER.`, "color: dodgerblue;");
+    constraints.push(orderBy(orderByField, orderByDirection));
     isOrderByAppliedToServer = true;
   }
   constraints.push(limit(effectiveLimit));
 
-  // Debugging log for rules
+  // Debugging log for rules (Corrected for accuracy)
   const filterClausesForLog = constraints
-    .filter(c => (c as any)._type === 'where') // Check for actual where clauses
+    .filter(c => (c as any)._type === 'where')
     .map(c => {
-        const filter = c as any; // Firestore QueryFilterConstraint
-        return `${filter._fieldPath.segments.join('.') || 'UNKNOWN_FIELD'} ${filter._op || 'UNKNOWN_OP'} '${filter._value || 'UNKNOWN_VALUE'}'`;
+        const filter = c as any;
+        return `{field: '${filter._fieldPath.segments.join('.')}', op: '${filter._op}', value: '${filter._value}'}`;
     })
     .join(', ');
 
-  const orderByClauseForLog = constraints.find(c => (c as any)._type === 'orderBy');
-  const orderByLog = orderByClauseForLog
-    ? `orderBy('${(orderByClauseForLog as any)._fieldPath.segments.join('.') || 'UNKNOWN_FIELD'}', '${(orderByClauseForLog as any)._direction || 'UNKNOWN_DIR'}')`
-    : 'no server orderBy';
+  const orderByConstraintForLog = constraints.find(c => (c as any)._type === 'orderBy') as any;
+  const orderByLogPath = orderByConstraintForLog ? (orderByConstraintForLog._fieldPath.segments.join('.') || 'UNKNOWN_FIELD') : 'N/A';
+  const orderByLogDirection = orderByConstraintForLog ? (orderByConstraintForLog._direction || 'UNKNOWN_DIR') : 'N/A';
 
   console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
     request.auth.uid:                     '${clientAuthUid || 'NULL'}'
-    request.query.filters (expected):     [${filterClausesForLog || 'none'}]
-    request.query.orderBy (expected):     ${orderByLog}
+    request.query.filters.size():         ${constraints.filter(c => (c as any)._type === 'where').length}
+    request.query.filters (client-side):  [${filterClausesForLog || 'none'}]
+    request.query.orderBy (client-side):  ${isOrderByAppliedToServer ? `path: '${orderByLogPath}', direction: '${orderByLogDirection}'` : 'false (no server orderBy)'}
     request.query.limit:                  ${effectiveLimit}`, "color: #FFD700; background: #333; padding: 2px;");
 
 
@@ -248,9 +249,8 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
         console.log(`%c  [newsService] getNewsArticlesByUserId: No articles mapped (querySnapshot was empty or all docs were invalid).`, "color: orange;");
     }
 
-    // Client-side sort is only needed if server-side orderBy was NOT applied.
-    // With the current logic, server-side orderBy is always applied.
-    // if (!isOrderByAppliedToServer) {
+    // Client-side sort is now only needed if server-side ordering was intentionally skipped (which is not the case here anymore)
+    // if (!isOrderByAppliedToServer) { // This condition will be false now
     //     articles.sort((a, b) => b.updatedAt - a.updatedAt);
     //     console.log(`%c  [newsService] getNewsArticlesByUserId: Articles sorted client-side by updatedAt descending.`, "color: dodgerblue;");
     // }
@@ -259,8 +259,9 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
     console.error(`%c[newsService] Error fetching news articles for user ${userId} (status: ${status || 'any'}):`, "color: red;", error);
     if (error.code === 'permission-denied') {
         console.error(`%c  [newsService] PERMISSION DENIED. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
-        console.error(`%c  Query was effectively: ${filterClausesForLog ? `Query: ${filterClausesForLog}` : 'Query: (no client-side where clauses)'}, ${orderByLog}, limit(${effectiveLimit})`, "color: red; font-weight: bold;");
-        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.filters/orderBy.`, "color: red; font-weight: bold;");
+        const attemptedQueryLog = `Query: ${filterClausesForLog ? `${filterClausesForLog}` : '(no client-side where clauses)'}, ${isOrderByAppliedToServer ? `orderBy(${orderByLogPath}, ${orderByLogDirection})` : 'no server orderBy'}, limit(${effectiveLimit})`;
+        console.error(`%c  Attempted query components by client: ${attemptedQueryLog}`, "color: red; font-weight: bold;");
+        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.`, "color: red; font-weight: bold;");
     }
     throw error;
   }
@@ -348,5 +349,3 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
     throw error;
   }
 };
-
-    
