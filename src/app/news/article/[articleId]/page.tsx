@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -100,7 +100,7 @@ const ArticlePage = () => {
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
-    enabled: !!user && !!articleId,
+    enabled: !!user && !!articleId, // Enable when user is logged in and articleId is present
   });
 
   const isArticleSaved = useMemo(() => {
@@ -123,7 +123,7 @@ const ArticlePage = () => {
     if (articleId) {
       setIsLoadingArticle(true);
       setErrorLoadingArticle(null);
-      setArticle(null);
+      setArticle(null); // Reset article state before fetching
       getNewsArticleById(articleId)
         .then((fetchedArticle) => {
           if (fetchedArticle) {
@@ -141,29 +141,31 @@ const ArticlePage = () => {
     }
   }, [articleId]);
 
-  // Effect 2: Populate editor form fields when 'article' changes
+  // Effect 2: Populate editor form fields when 'article' changes or editing status changes
   useEffect(() => {
     if (article) {
       setTitle(article.title || "");
       setCategory(article.category || "");
 
-      let contentToLoad = article.content || "<p><br></p>";
-      if (isEditingAllowed && article.status === 'published' && article.hasUnpublishedChanges && article.draftContent) {
-        contentToLoad = article.draftContent;
-        // Consider a subtle toast or indicator that a draft is being edited
-        // toast({ title: "Editing Draft", description: "You are viewing/editing a saved draft. Publish changes to make them live." });
-      } else if (!isEditingAllowed && article.status === 'draft') {
-        // Non-owner trying to view a draft - this case is handled by the redirect/error display logic
-        contentToLoad = "Access Denied. This is a draft.";
+      let contentToLoadInEditor = article.content || "<p><br></p>";
+      if (isEditingAllowed) {
+        if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
+          contentToLoadInEditor = article.draftContent;
+          // console.log("Editing published article with unpublished changes, loading DRAFT content into editor.");
+        } else {
+          // For new drafts, or published articles without separate draft content, or if editing draft content that became null
+          contentToLoadInEditor = article.content || "<p><br></p>";
+          // console.log("Editing new draft or published article without separate draft, loading MAIN content into editor.");
+        }
       }
+      // For non-editing view, contentToLoadInEditor is already article.content (or <p><br></p>)
 
-      setStoryContent(contentToLoad);
-      if (contentEditableRef.current) {
-        const domContentToSet = (isEditingAllowed && article.status === 'draft' && contentToLoad === "<p><br></p>" && !article.content)
-                                 ? "<p><br></p>" // Ensure empty draft starts with placeholder paragraph
-                                 : contentToLoad;
-        if (contentEditableRef.current.innerHTML !== domContentToSet) {
-            contentEditableRef.current.innerHTML = domContentToSet;
+      setStoryContent(contentToLoadInEditor); // Set React state for story content
+
+      // Directly set innerHTML only if editing is allowed and ref is available
+      if (isEditingAllowed && contentEditableRef.current) {
+        if (contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
+          contentEditableRef.current.innerHTML = contentToLoadInEditor;
         }
       }
 
@@ -174,7 +176,7 @@ const ArticlePage = () => {
       setCategoryError("");
       setStoryError("");
     }
-  }, [article, isEditingAllowed]);
+  }, [article, isEditingAllowed]); // Runs when article or isEditingAllowed changes
 
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
@@ -364,74 +366,73 @@ const ArticlePage = () => {
 
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
-    contentToSaveParam?: string | null,
-    saveAsDraftOfPublished: boolean = false
+    contentToSaveParam?: string | null, // Content to use for the main 'content' field
+    isSavingDraftOfPublishedArticle: boolean = false // New flag
   ) => {
     if (!user || !articleId || !article || !isEditingAllowed) {
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." });
       return;
     }
-    setPublishAttempted(true);
-    if (!validateFields()) {
-      if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-      else if (!category) { /* No direct focus */ }
-      else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
-      return;
+    if (newStatus === 'published' || isSavingDraftOfPublishedArticle) { // Validate only if publishing or saving draft
+        setPublishAttempted(true);
+        if (!validateFields()) {
+            if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
+            else if (!category) { /* No direct focus */ }
+            else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
+            return;
+        }
     }
 
+
     setIsSubmitting(true);
-    if (saveAsDraftOfPublished) setIsSavingDraftOfPublished(true);
+    if (isSavingDraftOfPublishedArticle) setIsSavingDraftOfPublished(true);
 
     let newCoverImageUrl: string | null | undefined = undefined;
     try {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
-        newCoverImageUrl = null;
+        newCoverImageUrl = null; // Signal to remove cover image
       }
 
-      const contentForUpdate = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
+      // Determine the content for the main 'content' field for the service
+      // If contentToSaveParam is provided (like when unpublishing, using original live content), use it.
+      // Otherwise, use storyContent (current editor state).
+      const mainContentForService = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
 
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         category,
-        // status, content, draftContent, hasUnpublishedChanges, publishedAt are handled by service now
+        status: newStatus, // This is the target status
+        content: mainContentForService, // This will be handled by service based on intent
+        // draftContent, hasUnpublishedChanges, publishedAt handled by service
       };
 
       if (newCoverImageUrl !== undefined) {
         articleUpdateData.coverImageUrl = newCoverImageUrl;
       }
 
-      // Pass content and status explicitly based on intent
-      articleUpdateData.status = newStatus;
-      articleUpdateData.content = contentForUpdate; // This is the content from the editor
-
-      // If saving draft of published, special handling is done in the service
-      // The `saveAsDraftOfPublishedArticle` flag signals this intent to the service.
-      // If publishing changes or updating live, content from editor becomes main content.
-      // If unpublishing, `contentToSaveParam` (original live content) is used.
-
-      await updateNewsArticle(articleId, articleUpdateData, saveAsDraftOfPublished);
+      await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticle);
 
       let successTitle = "Update Successful";
-      let successDescription = `"${title.trim()}" updated.`;
+      let successDescription = `Article "${title.trim()}" updated.`;
 
-      if (saveAsDraftOfPublished && article.status === 'published') {
+      if (isSavingDraftOfPublishedArticle && article.status === 'published') {
         successTitle = "Draft Saved!";
         successDescription = `Your changes to "${title.trim()}" have been saved as a draft. The live article remains unchanged.`;
       } else if (newStatus === 'published') {
-        if (article.status === 'draft') { // draft -> published
+        if (article.status !== 'published') { // draft -> published, or other -> published
           successTitle = "Article Published!";
           successDescription = `"${title.trim()}" is now live.`;
-        } else if (article.status === 'published') { // live update
+        } else { // live update (from published to published, could be publishing a draft or just updating live)
           successTitle = "Live Article Updated!";
-          successDescription = `"${title.trim()}" has been successfully updated.`;
+          successDescription = `Changes to "${title.trim()}" are now live.`;
         }
       } else if (newStatus === 'draft') {
         if (article.status === 'published') { // published -> draft (unpublish)
           successTitle = "Article Unpublished";
           successDescription = `"${title.trim()}" is no longer live. Its content is now a draft.`;
-        } else if (article.status === 'draft') { // draft -> draft
+        } else { // draft -> draft
           successTitle = "Draft Updated!";
           successDescription = `Draft for "${title.trim()}" has been saved.`;
         }
@@ -444,23 +445,10 @@ const ArticlePage = () => {
 
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
       if (fetchedUpdatedArticle) {
-        setArticle(fetchedUpdatedArticle);
-        // Update local state based on the fetched article, including new draftContent if relevant
-        setTitle(fetchedUpdatedArticle.title || "");
-        setCategory(fetchedUpdatedArticle.category || "");
-
-        let contentToLoadInEditor = fetchedUpdatedArticle.content || "<p><br></p>";
-        if (fetchedUpdatedArticle.status === 'published' && fetchedUpdatedArticle.hasUnpublishedChanges && fetchedUpdatedArticle.draftContent) {
-            contentToLoadInEditor = fetchedUpdatedArticle.draftContent;
-        }
-        setStoryContent(contentToLoadInEditor);
-        if (contentEditableRef.current) {
-            if (contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
-                 contentEditableRef.current.innerHTML = contentToLoadInEditor;
-            }
-        }
+        setArticle(fetchedUpdatedArticle); // This will trigger the useEffect to repopulate form fields
+        // The useEffect will now correctly load draftContent into the editor if applicable
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-        setCoverImageFile(null);
+        setCoverImageFile(null); // Clear selected file after successful upload
       }
 
     } catch (error: any) {
@@ -636,7 +624,7 @@ const ArticlePage = () => {
           )}
           <div
             className="prose prose-lg dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: article.hasUnpublishedChanges && article.draftContent ? article.draftContent : article.content || "" }} // Show draft if exists and different, else live
+            dangerouslySetInnerHTML={{ __html: article.content || "" }} 
           />
         </article>
       </div>
@@ -655,9 +643,10 @@ const ArticlePage = () => {
     );
   }
 
+  // Editing View
   return (
     <>
-    <div className="container mx-auto py-8 px-4 md:px-6">
+    <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}> {/* Added key to help with re-initialization */}
       <div className="flex items-center justify-between mb-4">
         <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
@@ -707,14 +696,14 @@ const ArticlePage = () => {
             <div className="flex items-center gap-2">
               {article?.status === 'draft' ? (
                 <>
-                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
-                  <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
+                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft', storyContent, false)} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
+                  <Button type="button" onClick={() => handleUpdateArticle('published', storyContent, false)} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
                 </>
               ) : ( // Article is published
                 <>
                   <Button
                     type="button" variant="outline"
-                    onClick={() => handleUpdateArticle('published', storyContent, true)} // saveAsDraftOfPublished = true
+                    onClick={() => handleUpdateArticle('published', storyContent, true)} 
                     className="text-xs py-1.5 h-9 rounded-full"
                     disabled={isSubmitting || !isEditingAllowed}
                   >
@@ -725,16 +714,16 @@ const ArticlePage = () => {
                   {article.hasUnpublishedChanges && article.draftContent ? (
                      <Button
                        type="button"
-                       onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} // Publish draft content
+                       onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} 
                        className="text-xs py-1.5 h-9 rounded-full bg-green-600 hover:bg-green-700 text-white"
                        disabled={isSubmitting || !isEditingAllowed}
                      >
-                       <Send className="mr-1.5 h-3.5 w-3.5" /> Publish Changes
+                       <CheckCircle className="mr-1.5 h-3.5 w-3.5" /> Publish Draft Changes
                      </Button>
                   ) : (
                      <Button
                         type="button"
-                        onClick={() => handleUpdateArticle('published', storyContent, false)} // Update live with current editor content
+                        onClick={() => handleUpdateArticle('published', storyContent, false)} 
                         className="text-xs py-1.5 h-9 rounded-full"
                         disabled={isSubmitting || !isEditingAllowed}
                       >
@@ -744,7 +733,7 @@ const ArticlePage = () => {
                   
                   <Button
                     type="button" variant="destructive"
-                    onClick={() => handleUpdateArticle('draft', article.content, false)} // contentToSaveParam is original live content
+                    onClick={() => handleUpdateArticle('draft', article.content, false)}
                     className="text-xs py-1.5 h-9 rounded-full"
                     disabled={isSubmitting || !isEditingAllowed}
                   >
@@ -761,15 +750,16 @@ const ArticlePage = () => {
             {isEditingAllowed && <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); setCurrentCoverImageUrl(null); if(coverImageInputRef.current) coverImageInputRef.current.value = "";}} disabled={isSubmitting}><Trash2 className="h-4 w-4" /></Button>}
           </div>
         )}
-         {article && article.status === 'published' && article.hasUnpublishedChanges && (
+         {article && article.status === 'published' && article.hasUnpublishedChanges && isEditingAllowed && (
             <div className="mb-3 p-2 text-sm bg-yellow-100 border border-yellow-300 text-yellow-700 rounded-md flex items-center gap-2">
               <AlertTriangle className="h-4 w-4" />
-              You are viewing/editing a saved draft. The live article may be different.
+              You are editing a saved draft. The live article may be different.
               <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => {
                   if (contentEditableRef.current && article.content) {
-                      setStoryContent(article.content);
-                      contentEditableRef.current.innerHTML = article.content;
+                      setStoryContent(article.content); // Update React state
+                      contentEditableRef.current.innerHTML = article.content; // Update DOM
                   }
+                  toast({title: "Viewing Live Content", description: "Editor now shows the live published content. Any unsaved draft changes were not applied."});
               }}>View live content</Button>
             </div>
         )}
