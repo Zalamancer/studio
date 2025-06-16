@@ -2,7 +2,7 @@
 // src/components/news/ArticleListItem.tsx
 "use client";
 
-import React, { useMemo, useState } from 'react'; // Added useState
+import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
@@ -10,18 +10,18 @@ import { fetchUserProfileBasic } from '@/services/connectionService';
 import type { ClientNewsArticle } from '@/types/news';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import { format } from 'date-fns';
-import { MessageSquareText, Bookmark, MoreHorizontal, Edit3 } from 'lucide-react';
+import { MessageSquareText, Bookmark, MoreHorizontal, Edit3, Tag } from 'lucide-react'; // Added Tag
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
-import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog'; // Import the dialog
+import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
 
 interface ArticleListItemProps {
   article: ClientNewsArticle;
   getCleanTextExcerpt: (htmlString: string | null | undefined, maxLength?: number) => string;
   currentUserId: string | null;
-  savedItemIds: Set<string>; // New prop for saved status
-  onCollectionUpdate: () => void; // New prop to trigger collection refetch
+  savedItemIds: Set<string>;
+  onCollectionUpdate: () => void;
 }
 
 export const ArticleListItem: React.FC<ArticleListItemProps> = ({
@@ -60,12 +60,11 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
   const isSaved = savedItemIds.has(article.id);
 
   const handleSaveClick = (e: React.MouseEvent) => {
-    e.stopPropagation(); // Prevent event bubbling to Link
-    e.preventDefault();   // Prevent default Link behavior
+    e.stopPropagation(); 
+    e.preventDefault();   
     if (currentUserId) {
       setIsSaveToCollectionDialogOpen(true);
     }
-    // If no user, could prompt to login, or button could be disabled
   };
 
   return (
@@ -75,10 +74,24 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
           <div className="flex-grow min-w-0">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
               <span className="font-medium text-foreground">{authorName}</span>
-              <span className="text-muted-foreground/70">in</span>
-              <Link href={`/news?category=${encodeURIComponent(article.category.toLowerCase())}`} className="hover:underline text-foreground/90">
-                {article.category}
-              </Link>
+              {/* Display Tags instead of Category */}
+              {article.tags && article.tags.length > 0 && (
+                <>
+                  <span className="text-muted-foreground/70">in</span>
+                  <span className="flex flex-wrap gap-1">
+                    {article.tags.slice(0, 2).map(tag => (
+                       <Badge key={tag} variant="outline" className="text-xs px-1.5 py-0.5 cursor-pointer hover:bg-muted">
+                         #{tag}
+                       </Badge>
+                    ))}
+                    {article.tags.length > 2 && (
+                        <span className="text-muted-foreground/70 text-[10px] self-center">
+                            +{article.tags.length - 2} more
+                        </span>
+                    )}
+                  </span>
+                </>
+              )}
             </div>
 
             <Link href={`/news/article/${article.id}`} className="group">
@@ -148,9 +161,9 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
           isOpen={isSaveToCollectionDialogOpen}
           onOpenChange={(open) => {
             setIsSaveToCollectionDialogOpen(open);
-            if (!open) onCollectionUpdate(); // Refetch collections when dialog closes
+            if (!open) onCollectionUpdate();
           }}
-          postId={article.id} // Pass article ID as postId
+          postId={article.id}
           postTitle={article.title}
         />
       )}

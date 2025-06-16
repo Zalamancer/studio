@@ -20,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import type { NewsArticle, NewNewsArticleData, UpdateNewsArticleData, ClientNewsArticle, NewsArticleStatus } from '@/types/news';
 import { getUserPreferences, type UserPreference } from './userPreferenceService';
+import { getOrCreateTagsAndUpdateUsage } from './tagService'; // Import tag service
 
 const NEWS_ARTICLES_COLLECTION = 'newsArticles';
 const newsArticlesCollectionRef = collection(db, NEWS_ARTICLES_COLLECTION);
@@ -36,10 +37,10 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
   const dataToSave: {
     userId: string;
     title: string;
-    category: string;
-    content: string; // Main content
-    draftContent: string | null; // Initialize draft content
-    hasUnpublishedChanges: boolean; // Initialize flag
+    tags?: string[] | null; // UPDATED from category
+    content: string; 
+    draftContent: string | null; 
+    hasUnpublishedChanges: boolean; 
     status: NewsArticleStatus;
     coverImageUrl: string | null;
     createdAt: FieldValue;
@@ -60,14 +61,13 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     sector: string | null;
     subSector: string | null;
     industry: string | null;
-    tags: string[] | null;
   } = {
     userId: articleData.userId,
     title: articleData.title,
-    category: articleData.category,
-    content: articleData.content, // Initial content
-    draftContent: null, // Explicitly null for new articles
-    hasUnpublishedChanges: false, // Explicitly false for new articles
+    tags: Array.isArray(articleData.tags) ? articleData.tags : [], // UPDATED
+    content: articleData.content,
+    draftContent: null, 
+    hasUnpublishedChanges: false, 
     status: articleData.status,
     coverImageUrl: articleData.coverImageUrl || null,
     createdAt: serverTimestamp(),
@@ -88,28 +88,25 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     sector: articleData.sector || null,
     subSector: articleData.subSector || null,
     industry: articleData.industry || null,
-    tags: Array.isArray(articleData.tags) ? articleData.tags : [],
   };
-
-  const dataKeys = Object.keys(dataToSave);
-   const expectedFields = ['userId', 'title', 'category', 'content', 'draftContent', 'hasUnpublishedChanges', 'status', 'coverImageUrl', 'createdAt', 'updatedAt', 'publishedAt', 'commentCount', 'descriptionDetails', 'descriptionOutcome', 'descriptionTried', 'imageUrls', 'maxBudget', 'deadline', 'mentionedUserIds', 'naicsCode', 'question', 'ratingScore', 'requestType', 'sector', 'subSector', 'industry', 'tags'];
-   const expectedSize = expectedFields.length;
-
-  console.log(`%c[newsService DEBUG] createNewsArticle - Firestore 'allow create' rule check: Expects EXACTLY ${expectedSize} fields. Provided ${dataKeys.length}. Missing: ${expectedFields.filter(f => !dataKeys.includes(f)).join(', ') || 'None'}. Extra: ${dataKeys.filter(f => !expectedFields.includes(f)).join(', ') || 'None'}.`, "color: orange;");
-  console.log(`%c[newsService] createNewsArticle - Payload:`, "color: blue; font-weight: bold;", JSON.stringify(dataToSave, (key, value) => {
-      if (value && typeof value === 'object' && (value as any)._methodName && (value as any)._methodName.includes('serverTimestamp')) {
-        return { _methodName: (value as any)._methodName, type: 'FieldValue.serverTimestamp()' };
-      }
-      if (value instanceof Timestamp) {
-        return { type: 'Timestamp', seconds: value.seconds, nanoseconds: value.nanoseconds };
-      }
-      return value;
-    }, 2)
-  );
-
+  
+  // Firestore rule expects specific field count.
+  // Ensure category is removed and tags is added.
+  // Previous count was 25 with category. Now 25 with tags.
+  const expectedFields = ['userId', 'title', 'tags', 'content', 'status', 'coverImageUrl', 'createdAt', 'updatedAt', 'publishedAt', 'commentCount', 'descriptionDetails', 'descriptionOutcome', 'descriptionTried', 'imageUrls', 'maxBudget', 'deadline', 'mentionedUserIds', 'naicsCode', 'question', 'ratingScore', 'requestType', 'sector', 'subSector', 'industry', 'draftContent', 'hasUnpublishedChanges'];
+  const currentKeys = Object.keys(dataToSave);
+  if (currentKeys.length !== expectedFields.length || !expectedFields.every(f => currentKeys.includes(f))) {
+       console.warn(`[newsService DEBUG] createNewsArticle - Field mismatch detected. Expected ${expectedFields.length} fields, got ${currentKeys.length}.
+       Expected: ${expectedFields.sort().join(', ')}
+       Actual:   ${currentKeys.sort().join(', ')}`);
+  }
 
   try {
     const docRef = await addDoc(newsArticlesCollectionRef, dataToSave);
+    // Update tag usage counts
+    if (dataToSave.tags && dataToSave.tags.length > 0) {
+      await getOrCreateTagsAndUpdateUsage(dataToSave.tags, user.uid, 1);
+    }
     return docRef.id;
   } catch (error: any) {
     console.error(`[newsService] createNewsArticle - Firestore addDoc ERROR: ${error.message}. Data sent:`, JSON.stringify(dataToSave, null, 2));
@@ -120,7 +117,7 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
 export const updateNewsArticle = async (
   articleId: string,
   dataToUpdate: UpdateNewsArticleData,
-  isSavingDraftOfPublishedArticle: boolean = false // New flag to distinguish intent
+  isSavingDraftOfPublishedArticle: boolean = false
 ): Promise<void> => {
   const user = auth.currentUser;
   if (!user) {
@@ -134,16 +131,14 @@ export const updateNewsArticle = async (
   }
   const existingData = docSnap.data() as NewsArticle;
 
-  const payload: Partial<Omit<NewsArticle, 'id' | 'userId' | 'createdAt'>> & { updatedAt: FieldValue } = {
+  const payload: Partial<Omit<NewsArticle, 'id' | 'userId' | 'createdAt' | 'category'>> & { updatedAt: FieldValue } = { // Removed category from Omit
     updatedAt: serverTimestamp(),
   };
 
-  // Assign updatable fields from dataToUpdate to payload, EXCLUDING content-related fields for now
   const generalUpdatableFields: (keyof UpdateNewsArticleData)[] = [
-    'title', 'category', 'coverImageUrl', 'tags', 'sector', 'subSector',
+    'title', 'tags', 'coverImageUrl', 'sector', 'subSector', // UPDATED: category removed, tags added
     'industry', 'naicsCode', 'requestType', 'question', 'descriptionDetails',
     'descriptionTried', 'descriptionOutcome', 'maxBudget', 'imageUrls', 'mentionedUserIds'
-    // 'status', 'content', 'draftContent', 'hasUnpublishedChanges', 'publishedAt' are handled separately
   ];
 
   generalUpdatableFields.forEach(key => {
@@ -157,172 +152,129 @@ export const updateNewsArticle = async (
   } else if (dataToUpdate.hasOwnProperty('deadline') && dataToUpdate.deadline === null) {
     payload.deadline = null;
   }
-
+  
   const newStatus = dataToUpdate.status;
 
   if (isSavingDraftOfPublishedArticle && existingData.status === 'published') {
-    // Intent: Save current editor content as a draft of an ALREADY PUBLISHED article
-    payload.draftContent = dataToUpdate.content; // Editor content becomes draftContent
+    payload.draftContent = dataToUpdate.content; 
     payload.hasUnpublishedChanges = true;
-    payload.status = 'published'; // Status remains published
-    // `content` (live) and `publishedAt` are NOT modified in Firestore by this specific action
+    payload.status = 'published'; 
   } else if (newStatus === 'published') {
-    // Intent: Publish a draft OR update a live article with editor's content
-    payload.content = dataToUpdate.content; // Editor content becomes live content
-    payload.draftContent = null; // Clear any previous draft
+    payload.content = dataToUpdate.content; 
+    payload.draftContent = null; 
     payload.hasUnpublishedChanges = false;
     payload.status = 'published';
     if (existingData.status !== 'published' || !existingData.publishedAt) {
-      payload.publishedAt = serverTimestamp(); // Set/update publishedAt only if it was a draft or had no publishedAt
+      payload.publishedAt = serverTimestamp(); 
     }
-    // If already published and has publishedAt, it's preserved (not included in payload)
   } else if (newStatus === 'draft') {
-    // Intent: Save a normal draft (was draft, remains draft) OR unpublish a published article
-    payload.content = dataToUpdate.content; // Editor content (or original live content if unpublishing) becomes draft's main content
-    payload.draftContent = null; // Clear draft content field
+    payload.content = dataToUpdate.content; 
+    payload.draftContent = null; 
     payload.hasUnpublishedChanges = false;
     payload.status = 'draft';
-    payload.publishedAt = null; // Always null for drafts
+    payload.publishedAt = null; 
   } else if (newStatus !== undefined) {
-    // Status is changing to something else, or just content is updating for an existing status
     payload.status = newStatus;
-    payload.content = dataToUpdate.content; // Assume content always updates unless specifically saving draft of published
+    payload.content = dataToUpdate.content; 
     payload.draftContent = null;
     payload.hasUnpublishedChanges = false;
-    // If it's some other status that isn't 'published', ensure publishedAt is null
     if (newStatus !== 'published') {
         payload.publishedAt = null;
     }
   } else if (dataToUpdate.content !== undefined && !isSavingDraftOfPublishedArticle) {
-    // Status is NOT changing, but content IS, and we are NOT saving a draft of a published article.
-    // This means we are updating the main content of either a draft or an already published article.
     payload.content = dataToUpdate.content;
     if (existingData.status === 'published') {
-        payload.draftContent = null; // If live content is updated, clear any pending draft
+        payload.draftContent = null; 
         payload.hasUnpublishedChanges = false;
     }
   }
-  // If only other fields like title/category are changing without status or content,
-  // content, draftContent, hasUnpublishedChanges, publishedAt are not touched in payload unless explicitly set above.
 
-  console.log(`%c[newsService] updateNewsArticle - Final Payload for article ${articleId}:`, "color: blue; font-weight: bold;", JSON.stringify(payload, null, 2));
+  // Handle tag updates
+  const oldTags = existingData.tags || [];
+  const newTags = dataToUpdate.tags || oldTags; // Use old if not provided in update
+
+  const tagsAdded = newTags.filter(tag => !oldTags.includes(tag));
+  const tagsRemoved = oldTags.filter(tag => !newTags.includes(tag));
+
+  payload.tags = newTags; // Always set the current state of tags in payload
 
   try {
     await updateDoc(articleDocRef, payload);
+    // Update tag usage counts
+    if (tagsAdded.length > 0) {
+      await getOrCreateTagsAndUpdateUsage(tagsAdded, user.uid, 1);
+    }
+    if (tagsRemoved.length > 0) {
+      await getOrCreateTagsAndUpdateUsage(tagsRemoved, user.uid, -1); // Decrement
+    }
   } catch (error: any) {
     console.error(`[newsService] updateNewsArticle - Firestore updateDoc ERROR for ${articleId}: ${error.message}. Payload sent:`, JSON.stringify(payload, null, 2));
     throw new Error(error.message || `Could not update news article ${articleId}.`);
   }
 };
 
-
 export const getNewsArticlesByUserId = async (userId: string, status?: NewsArticleStatus): Promise<ClientNewsArticle[]> => {
   const clientAuthUid = auth.currentUser?.uid;
+  if (!userId) return [];
 
-  if (!userId) {
-    return [];
-  }
-
-  const constraints: QueryConstraint[] = [];
-  constraints.push(where('userId', '==', userId));
-
+  const constraints: QueryConstraint[] = [where('userId', '==', userId)];
   const effectiveLimit = 20;
   let orderByField = 'updatedAt';
   let orderByDirection: OrderByDirection = 'desc';
-  let isOrderByAppliedToServer = false;
 
   if (status) {
     constraints.push(where('status', '==', status));
-    constraints.push(orderBy(orderByField, orderByDirection));
-    isOrderByAppliedToServer = true;
-  } else {
-    constraints.push(orderBy(orderByField, orderByDirection));
-    isOrderByAppliedToServer = true;
   }
+  constraints.push(orderBy(orderByField, orderByDirection));
   constraints.push(limit(effectiveLimit));
-
-  const filterClausesForLog = constraints
-    .filter(c => (c as any)._type === 'where')
-    .map(c => {
-        const filter = c as any;
-        return `{field: '${filter._fieldPath.segments.join('.')}', op: '${filter._op}', value: '${filter._value}'}`;
-    })
-    .join(', ');
-
-  const orderByConstraintForLog = constraints.find(c => (c as any)._type === 'orderBy') as any;
-  let orderByLogPath = 'N/A';
-  let orderByLogDirection = 'N/A';
-
-  if (orderByConstraintForLog && isOrderByAppliedToServer) {
-      const fieldPathSegments = orderByConstraintForLog._fieldPath?.segments;
-      if (Array.isArray(fieldPathSegments) && fieldPathSegments.length > 0) {
-          orderByLogPath = fieldPathSegments.join('.');
-      } else if (typeof orderByConstraintForLog._fieldPath === 'string') {
-          orderByLogPath = orderByConstraintForLog._fieldPath;
-      }
-      orderByLogDirection = orderByConstraintForLog._direction || 'UNKNOWN_DIR';
-  }
-
-  console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
-    request.auth.uid:                     '${clientAuthUid || 'NULL'}'
-    request.query.filters (expected):     [${filterClausesForLog || 'none'}]
-    request.query.orderBy (expected):     ${isOrderByAppliedToServer ? `path: '${orderByLogPath}', direction: '${orderByLogDirection}'` : 'no server orderBy'}
-    request.query.limit:                  ${effectiveLimit}`, "color: #FFD700; background: #333; padding: 2px;");
-
-
+  
   const q = query(newsArticlesCollectionRef, ...constraints);
 
   try {
     const querySnapshot = await getDocs(q);
-
     const articles = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data() as NewsArticle;
       return {
         ...data,
         id: docSnap.id,
-        draftContent: data.draftContent || null, // Ensure new fields are included
+        draftContent: data.draftContent || null,
         hasUnpublishedChanges: data.hasUnpublishedChanges || false,
         createdAt: (data.createdAt as Timestamp).toMillis(),
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
         publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : null,
+        tags: data.tags || [], // ADDED
       } as ClientNewsArticle;
     });
-
     return articles;
   } catch (error: any) {
     console.error(`%c[newsService] Error fetching news articles for user ${userId} (status: ${status || 'any'}):`, "color: red;", error);
-    if (error.code === 'permission-denied') {
-        const attemptedQueryLog = `Query constraints: ${filterClausesForLog ? `${filterClausesForLog}` : '(no client-side where clauses)'}, orderBy(${orderByLogPath}, ${orderByLogDirection}), limit(${effectiveLimit})`;
-    }
     throw error;
   }
 };
 
 export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsArticle[]> => {
-  const currentClientAuthUid = auth.currentUser?.uid;
   const constraints: QueryConstraint[] = [
     where('status', '==', 'published'),
     orderBy('publishedAt', 'desc'),
     limit(count)
   ];
-
   const q = query(newsArticlesCollectionRef, ...constraints);
 
   try {
     const querySnapshot = await getDocs(q);
-    const articlesPromises = querySnapshot.docs.map(async (docSnap) => {
+    const articles = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data() as NewsArticle;
       return {
         ...data,
         id: docSnap.id,
-        draftContent: null, // Public views should not see draft content
-        hasUnpublishedChanges: false, // Public views reflect live state
+        draftContent: null,
+        hasUnpublishedChanges: false,
         createdAt: (data.createdAt as Timestamp).toMillis(),
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
         publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : Date.now(),
+        tags: data.tags || [], // ADDED
       } as ClientNewsArticle;
     });
-    const articles = await Promise.all(articlesPromises);
     return articles;
   } catch (error: any) {
     throw error;
@@ -336,6 +288,14 @@ export const deleteNewsArticle = async (articleId: string, userId: string): Prom
   }
   const articleDocRef = doc(db, NEWS_ARTICLES_COLLECTION, articleId);
   try {
+    const docSnap = await getDoc(articleDocRef);
+    if (docSnap.exists()) {
+      const articleData = docSnap.data() as NewsArticle;
+      // Decrement tag usage counts
+      if (articleData.tags && articleData.tags.length > 0) {
+        await getOrCreateTagsAndUpdateUsage(articleData.tags, user.uid, -1);
+      }
+    }
     await deleteDoc(articleDocRef);
   } catch (error: any) {
     throw error;
@@ -349,7 +309,6 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
     const docSnap = await getDoc(articleDocRef);
     if (docSnap.exists()) {
       const data = docSnap.data() as NewsArticle;
-
       const publishedAtMillis = data.publishedAt instanceof Timestamp
         ? data.publishedAt.toMillis()
         : (data.publishedAt === null ? null : undefined);
@@ -358,7 +317,7 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
         id: docSnap.id,
         userId: data.userId,
         title: data.title,
-        category: data.category,
+        tags: data.tags || [], // ADDED
         content: data.content,
         draftContent: data.draftContent || null,
         hasUnpublishedChanges: data.hasUnpublishedChanges || false,
@@ -382,7 +341,7 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
         sector: data.sector || null,
         subSector: data.subSector || null,
         industry: data.industry || null,
-        tags: data.tags || [],
+        // category field removed
       };
       return clientArticle;
     }

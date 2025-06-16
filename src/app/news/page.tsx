@@ -3,41 +3,36 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, ChevronRight, Landmark, TrendingUp, CalendarDays, Bookmark } from 'lucide-react'; // Added Bookmark
+import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, Tag, PlusCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQuery, useQueryClient } from '@tanstack/react-query'; // Added useQueryClient
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getPublishedNewsArticles, getNewsArticlesByUserId } from '@/services/newsService';
 import type { ClientNewsArticle } from '@/types/news';
 import { cn } from '@/lib/utils';
 import { ArticleListItem } from '@/components/news/ArticleListItem';
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+// Tabs components removed
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { getUserCollections } from '@/services/collectionService'; // Import collection service
-import type { ClientCollection } from '@/types/collection'; // Import collection type
+import { getUserCollections } from '@/services/collectionService';
+import type { ClientCollection } from '@/types/collection';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'; // For tag filter
+import { Checkbox } from '@/components/ui/checkbox'; // For tag filter
+import { Label } from '@/components/ui/label'; // For tag filter
+import { searchTags } from '@/services/tagService'; // Import tag search
+import type { ClientTag } from '@/types/tag'; // Import tag type
 
-const newsCategoriesForFilter = [
-  { id: 'for_you', title: 'For you' },
-  { id: 'following', title: 'Following' },
-  { id: 'featured', title: 'Featured', isNew: true },
-  { id: 'collaborative_ventures', title: 'Collaborative Ventures' },
-  { id: 'financial_insights', title: 'Financial Insights' },
-  { id: 'political_regulatory', title: 'Political & Regulatory Landscape' },
-  { id: 'new_opportunities', title: 'Emerging Opportunities & Trends' },
-  { id: "events", title: "Upcoming Events & Conferences", icon: CalendarDays },
-  { id: 'platform_updates', title: 'AnonyCollab Platform Updates', icon: Newspaper },
-  { id: 'industry_analysis', title: 'In-depth Industry Analysis', icon: Newspaper },
-  { id: 'case_studies', title: 'Success Stories & Case Studies', icon: Newspaper },
-];
-
+// newsCategoriesForFilter removed
 
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
-  const queryClient = useQueryClient(); // Get query client
-  const [selectedFilter, setSelectedFilter] = useState<string>('for_you');
+  const queryClient = useQueryClient();
+  // selectedFilter state removed, will filter by tags instead
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedTags, setSelectedTags] = useState<string[]>([]); // State for selected tags
+  const [tagSearchInput, setTagSearchInput] = useState(''); // For searching within tag filter
+  const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
 
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticlesAll'],
@@ -51,59 +46,57 @@ const NewsPage = () => {
     enabled: !!user,
   });
 
-  // Fetch user collections for bookmark status
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
     enabled: !!user,
-    staleTime: 1000 * 60 * 2, // Cache for 2 minutes
+    staleTime: 1000 * 60 * 2,
+  });
+
+  const { data: availableTagsForFilter = [], isLoading: isLoadingTagsForFilter } = useQuery<ClientTag[]>({
+    queryKey: ['searchTagsForFilter', tagSearchInput],
+    queryFn: () => searchTags(tagSearchInput, 20), // Fetch top 20 or based on search
+    staleTime: 1000 * 60 * 1, // Cache for 1 minute
   });
 
   const savedItemIds = useMemo(() => {
-    if (!userCollections || userCollections.length === 0) {
-      return new Set<string>();
-    }
+    if (!userCollections || userCollections.length === 0) return new Set<string>();
     const ids = new Set<string>();
-    userCollections.forEach(collection => {
-      collection.postIds?.forEach(id => ids.add(id));
-    });
+    userCollections.forEach(collection => collection.postIds?.forEach(id => ids.add(id)));
     return ids;
   }, [userCollections]);
 
+  const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
+
   const filteredArticles = useMemo(() => {
-    let articlesToDisplay = allPublishedArticles;
+    let articlesToDisplay = activeArticleView === 'my_articles' && user ? userArticles : allPublishedArticles;
 
-    if (selectedFilter === 'my_articles' && user) {
-      articlesToDisplay = userArticles.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-    } else if (selectedFilter !== 'for_you' && selectedFilter !== 'following' && selectedFilter !== 'featured' && selectedFilter !== 'my_articles') {
-      articlesToDisplay = allPublishedArticles.filter(
-        article => article.category.toLowerCase() === selectedFilter.toLowerCase()
+    if (selectedTags.length > 0) {
+      articlesToDisplay = articlesToDisplay.filter(
+        article => article.tags && selectedTags.every(filterTag => 
+          article.tags!.map(t => t.toLowerCase()).includes(filterTag.toLowerCase())
+        )
       );
-    } else if (selectedFilter === 'for_you') {
-      articlesToDisplay = allPublishedArticles;
     }
-    else if (selectedFilter === 'following') articlesToDisplay = []; 
-    else if (selectedFilter === 'featured') articlesToDisplay = allPublishedArticles.slice(0, 5); 
-
 
     if (searchTerm.trim() !== '') {
       const lowerSearchTerm = searchTerm.toLowerCase();
       articlesToDisplay = articlesToDisplay.filter(
         article =>
           article.title.toLowerCase().includes(lowerSearchTerm) ||
-          article.category.toLowerCase().includes(lowerSearchTerm) ||
+          (article.tags && article.tags.some(tag => tag.toLowerCase().includes(lowerSearchTerm))) ||
           (article.content && getCleanTextExcerpt(article.content, 200).toLowerCase().includes(lowerSearchTerm))
       );
     }
-    if (selectedFilter !== 'my_articles') { 
-      return articlesToDisplay.sort((a,b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0));
+    
+    if (activeArticleView === 'my_articles') {
+        return articlesToDisplay.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     }
-    return articlesToDisplay;
+    return articlesToDisplay.sort((a,b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0));
 
-  }, [allPublishedArticles, userArticles, selectedFilter, searchTerm, user]);
+  }, [allPublishedArticles, userArticles, activeArticleView, user, selectedTags, searchTerm]);
 
   const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles);
-
 
   const getCleanTextExcerpt = useCallback((htmlString: string | null | undefined, maxLength: number = 150): string => {
     if (typeof document === 'undefined' || !htmlString) return '';
@@ -129,59 +122,125 @@ const NewsPage = () => {
     }
   }, [user, queryClient]);
 
+  const handleTagToggle = (tag: string) => {
+    setSelectedTags(prev =>
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
+
+  const clearAllTagFilters = () => {
+    setSelectedTags([]);
+    setTagSearchInput('');
+    setIsTagFilterOpen(false);
+  };
+  
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedTags.length > 0) count++;
+    if (searchTerm.trim() !== '') count++;
+    return count;
+  }, [selectedTags, searchTerm]);
+
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      <div className="mb-6 sticky top-14 z-40 bg-background py-3 border-b">
-        <div className="flex items-center justify-between">
-          <ScrollArea className="w-full whitespace-nowrap">
-            <div className="flex items-center gap-1 pb-2">
-              {user && (
-                  <Button
-                    variant={selectedFilter === 'my_articles' ? "secondary" : "ghost"}
-                    size="sm"
-                    className={cn("h-8 px-3 text-xs rounded-full shrink-0", selectedFilter === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-                    onClick={() => setSelectedFilter('my_articles')}
-                  >
-                   My Articles
-                  </Button>
-              )}
-              {newsCategoriesForFilter.map((cat) => (
-                <Button
-                  key={cat.id}
-                  variant={selectedFilter === cat.id.toLowerCase() ? "secondary" : "ghost"}
-                  size="sm"
-                  className={cn("h-8 px-3 text-xs rounded-full shrink-0", selectedFilter === cat.id.toLowerCase() && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-                  onClick={() => setSelectedFilter(cat.id.toLowerCase())}
+      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+            <Button 
+                variant={activeArticleView === 'all' ? "secondary" : "ghost"}
+                size="sm" 
+                onClick={() => setActiveArticleView('all')}
+                className={cn("h-9 px-4 text-xs rounded-full", activeArticleView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+            >
+                All Articles
+            </Button>
+            {user && (
+                <Button 
+                    variant={activeArticleView === 'my_articles' ? "secondary" : "ghost"}
+                    size="sm" 
+                    onClick={() => setActiveArticleView('my_articles')}
+                    className={cn("h-9 px-4 text-xs rounded-full", activeArticleView === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
                 >
-                  {cat.title}
-                  {cat.isNew && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-green-500 text-white rounded-sm">New</span>}
+                    My Articles
                 </Button>
-              ))}
-            </div>
-             <span className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-background to-transparent md:hidden" />
-          </ScrollArea>
+            )}
         </div>
-        <div className="mt-3 relative">
+        {user && (
+          <Button asChild size="sm" className="w-full sm:w-auto">
+            <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
+          </Button>
+        )}
+      </div>
+
+      {/* Filters: Search Bar and Tag Filter */}
+      <div className="mb-6 sticky top-[56px] z-40 bg-background py-3 border-b flex flex-col sm:flex-row items-stretch gap-2">
+        <div className="relative flex items-center flex-grow">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <Input
                 type="search"
-                placeholder="Search articles..."
+                placeholder="Search articles by title, content, or tags..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="pl-9 pr-3 h-9 text-xs w-full rounded-md border-input focus:ring-primary focus:border-primary"
                 aria-label="Search articles"
             />
         </div>
-      </div>
-
-       <div className="mb-6 flex justify-end">
-          {user && (
-            <Button asChild size="sm">
-                <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
+        <Popover open={isTagFilterOpen} onOpenChange={setIsTagFilterOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" size="sm" className="h-9 text-xs w-full sm:w-auto flex-shrink-0">
+              <Tag className="mr-1.5 h-3.5 w-3.5" />
+              Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
             </Button>
-          )}
-       </div>
+          </PopoverTrigger>
+          <PopoverContent className="w-72 p-0" align="end">
+            <div className="p-3 border-b">
+              <Input
+                type="search"
+                placeholder="Search tags..."
+                value={tagSearchInput}
+                onChange={(e) => setTagSearchInput(e.target.value)}
+                className="h-8 text-xs"
+              />
+            </div>
+            <ScrollArea className="h-48">
+              <div className="p-3 space-y-1.5">
+                {isLoadingTagsForFilter ? (
+                  <div className="flex justify-center p-2"><Loader2 className="h-4 w-4 animate-spin"/></div>
+                ) : availableTagsForFilter.length > 0 ? (
+                  availableTagsForFilter.map((tag) => (
+                    <div key={tag.id} className="flex items-center space-x-2">
+                      <Checkbox
+                        id={`tag-filter-${tag.id}`}
+                        checked={selectedTags.includes(tag.name)}
+                        onCheckedChange={() => handleTagToggle(tag.name)}
+                      />
+                      <Label htmlFor={`tag-filter-${tag.id}`} className="text-xs font-normal flex items-center justify-between w-full">
+                        <span>{tag.name}</span>
+                        <span className="text-muted-foreground text-[10px]">({tag.usageCount})</span>
+                      </Label>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-muted-foreground text-center">
+                    {tagSearchInput ? `No tags matching "${tagSearchInput}".` : "No tags found."}
+                  </p>
+                )}
+              </div>
+            </ScrollArea>
+            {selectedTags.length > 0 && (
+              <div className="p-3 border-t">
+                <Button variant="ghost" size="xs" onClick={clearAllTagFilters} className="w-full text-primary">Clear Tag Filters</Button>
+              </div>
+            )}
+          </PopoverContent>
+        </Popover>
+
+        {activeFilterCount > 0 && !isTagFilterOpen && (
+          <Button variant="ghost" size="sm" onClick={clearAllTagFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0 w-full sm:w-auto">
+            Clear All Filters ({activeFilterCount})
+          </Button>
+        )}
+      </div>
 
       {isLoading && (
         <div className="flex flex-col items-center justify-center py-10">
@@ -202,11 +261,15 @@ const NewsPage = () => {
         <div className="text-center py-10">
           <Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
           <p className="text-lg font-medium text-muted-foreground">
-            {searchTerm ? `No articles found for "${searchTerm}"` : (selectedFilter === 'for_you' || selectedFilter === 'my_articles') ? "No articles to show right now." : `No articles found in "${newsCategoriesForFilter.find(c=>c.id === selectedFilter)?.title || selectedFilter}".`}
+            {searchTerm ? `No articles found for "${searchTerm}"` : 
+             selectedTags.length > 0 ? "No articles found with the selected tags." : 
+             activeArticleView === 'my_articles' ? "You haven't created any articles yet." : 
+             "No articles to show right now."
+            }
           </p>
-          <p className="text-sm text-muted-foreground mt-1">
-            {selectedFilter === 'my_articles' && !userArticlesError && !userArticles.find(a => a.status === 'draft' || a.status === 'published') ? "You haven't created any articles yet." : "Try adjusting your filters or search term."}
-          </p>
+          {activeArticleView === 'my_articles' && !searchTerm && selectedTags.length === 0 && user && (
+             <Button asChild size="sm" className="mt-4"><Link href="/news/create"><PlusCircle className="mr-2 h-4 w-4"/>Create Your First Article</Link></Button>
+          )}
         </div>
       )}
 
@@ -218,8 +281,8 @@ const NewsPage = () => {
               article={article}
               getCleanTextExcerpt={getCleanTextExcerpt}
               currentUserId={user?.uid || null}
-              savedItemIds={savedItemIds} // Pass the set of saved item IDs
-              onCollectionUpdate={handleCollectionUpdate} // Pass callback to invalidate collections query
+              savedItemIds={savedItemIds}
+              onCollectionUpdate={handleCollectionUpdate}
             />
           ))}
         </div>

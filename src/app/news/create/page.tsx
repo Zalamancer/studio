@@ -4,20 +4,13 @@
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
+// Select components removed
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2 } from 'lucide-react'; // Added Trash2
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
-import { useIsMobile } from "@/hooks/use-is-mobile";
 import {
   Dialog,
   DialogContent,
@@ -25,24 +18,15 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
 } from '@/components/ui/dialog';
 import { Textarea } from '@/components/ui/textarea';
-import { createNewsArticle, updateNewsArticle } from '@/services/newsService'; // Import news services
-import { uploadNewsCoverImage } from '@/services/storageService'; // Import image upload service
-import type { NewNewsArticleData, NewsArticleStatus } from '@/types/news'; // Import types
-import Image from 'next/image'; // Import Next Image
+import { createNewsArticle } from '@/services/newsService';
+import { uploadNewsCoverImage } from '@/services/storageService';
+import type { NewNewsArticleData, NewsArticleStatus } from '@/types/news';
+import Image from 'next/image';
+import { TagsInput } from '@/components/TagsInput'; // ADDED TagsInput
 
-const newsCategories = [
-  "Collaborative Ventures",
-  "Financial Insights",
-  "Political & Regulatory",
-  "New Opportunities",
-  "Events",
-  "Platform Updates",
-  "Industry Analysis",
-  "Case Studies",
-];
+// newsCategories removed as category field is replaced by tags
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -53,7 +37,7 @@ const CreateNewsArticlePage = () => {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
-  const [category, setCategory] = useState("");
+  const [tags, setTags] = useState<string[]>([]); // ADDED for tags
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -61,7 +45,7 @@ const CreateNewsArticlePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [categoryError, setCategoryError] = useState("");
+  const [tagsError, setTagsError] = useState(""); // ADDED for tags error
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -269,18 +253,18 @@ const CreateNewsArticlePage = () => {
   const validateFields = useCallback(() => {
     let isValid = true;
     if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); }
-    if (!category) { setCategoryError("Category is required."); isValid = false; } else { setCategoryError(""); }
+    if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); } // VALIDATION FOR TAGS
     const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, category]);
+  }, [title, tags, setTagsError]); // ADDED tags and setTagsError
 
   const handleFormSubmission = async (status: NewsArticleStatus) => {
     if (!user) { toast({ variant: "destructive", title: "Error", description: "You must be logged in." }); return; }
     setPublishAttempted(true);
     if (!validateFields()) {
       if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-      else if (!category) { /* No direct focus */ }
+      else if (tags.length === 0) { /* Focus TagsInput if possible, or just show error */ } // FOCUS FOR TAGS
       else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
       return;
     }
@@ -291,16 +275,16 @@ const CreateNewsArticlePage = () => {
         coverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, 'article_placeholder_id');
       }
       const articleData: NewNewsArticleData = {
-        userId: user.uid, title: title.trim(), category, content: storyContent, status, coverImageUrl,
+        userId: user.uid, title: title.trim(), tags: tags, content: storyContent, status, coverImageUrl, // UPDATED: category removed, tags added
       };
       const articleId = await createNewsArticle(articleData);
       toast({ title: status === 'published' ? "Article Published!" : "Draft Saved!", description: `"${title.trim()}" has been successfully ${status}.` });
       if (status === 'published') {
-        setTitle(""); setCategory(""); setStoryContent("<p><br></p>"); setCoverImageFile(null); setCoverImagePreview(null);
+        setTitle(""); setTags([]); setStoryContent("<p><br></p>"); setCoverImageFile(null); setCoverImagePreview(null); // RESET TAGS
         if (contentEditableRef.current) contentEditableRef.current.innerHTML = "<p><br></p>";
-        router.push('/news'); // Navigate to news page on publish
+        router.push('/news');
       }
-      setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
+      setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError(""); // RESET TAGS ERROR
       setIsToolbarExpanded(false); setShowContextualUI(false);
       updateSelectionNonce();
     } catch (error: any) {
@@ -312,10 +296,10 @@ const CreateNewsArticlePage = () => {
 
   const handlePublish = () => handleFormSubmission('published');
   const handleSaveDraft = () => {
-    if (!validateFields()) {
+    if (!validateFields()) { // Adjusted validation logic for save draft
       if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-      else if (!category) {}
-      else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
+      else if (tags.length === 0) { /* Error will be shown */ }
+      // Story content not strictly required for draft, but title/tags might be
       return;
     }
     handleFormSubmission('draft');
@@ -441,12 +425,17 @@ const CreateNewsArticlePage = () => {
           </div>)}
         <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
            <div className="flex items-center gap-2 mr-auto">
-            <div className="space-y-1">
-              <Select onValueChange={(value) => { setCategory(value); if (publishAttempted) { if (value) setCategoryError(""); else setCategoryError("Category is required."); }}} value={category} disabled={isSubmitting}>
-                <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue placeholder="Category" /></SelectTrigger>
-                <SelectContent>{newsCategories.map((cat) => (<SelectItem key={cat} value={cat} className="text-sm">{cat}</SelectItem>))}</SelectContent>
-              </Select>
-              {publishAttempted && categoryError && <p className="text-xs text-destructive mt-1">{categoryError}</p>}
+            {/* TagsInput replaces category Select */}
+            <div className="space-y-1 min-w-[200px] sm:min-w-[250px]">
+                <TagsInput
+                    label="Tags"
+                    value={tags}
+                    onChange={setTags}
+                    placeholder="Add relevant tags..."
+                    disabled={isSubmitting}
+                    error={publishAttempted && tagsError ? tagsError : null}
+                    onPublishAttempt={publishAttempted}
+                />
             </div>
             <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9" disabled={isSubmitting}>
               <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
