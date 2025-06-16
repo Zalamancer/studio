@@ -101,7 +101,7 @@ const ArticlePage = () => {
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
-    enabled: !!user && isOpen, // `isOpen` should ideally be part of dialog's control, or based on if dialog is mounted
+    enabled: !!user && !!articleId, 
   });
 
   const isArticleSaved = useMemo(() => {
