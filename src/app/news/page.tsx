@@ -3,7 +3,7 @@
 "use client"; 
 
 import React, { useMemo, useEffect, useState, useCallback } from 'react';
-import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send, Loader2, AlertTriangle } from 'lucide-react';
+import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDays, Edit2, FileText, Send, Loader2, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -41,16 +41,16 @@ interface NewsItem {
 }
 
 const newsCategoriesConfig = [
-  { id: 'user_drafts', title: 'Your Drafts', icon: FileText, dataKey: 'userDrafts' as const, showIfEmpty: true, requiresAuth: true },
-  { id: 'user_published', title: 'Your Published Articles', icon: Send, dataKey: 'userPublished' as const, showIfEmpty: true, requiresAuth: true },
-  { id: 'collaborative_ventures', title: 'Collaborative Ventures', icon: Handshake, dataKey: 'generalCollaborativeVentures' as const },
-  { id: 'financial_insights', title: 'Financial Insights', icon: Banknote, dataKey: 'generalFinancialInsights' as const },
-  { id: 'political_regulatory', title: 'Political & Regulatory', icon: Landmark, dataKey: 'generalPoliticalRegulatory' as const },
-  { id: 'new_opportunities', title: 'New Opportunities', icon: TrendingUp, dataKey: 'generalNewOpportunities' as const },
-  { id: 'events', title: 'Events', icon: CalendarDaysIcon, dataKey: 'generalEvents' as const },
-  { id: 'platform_updates', title: 'Platform Updates', icon: Newspaper, dataKey: 'generalPlatformUpdates' as const },
-  { id: 'industry_analysis', title: 'Industry Analysis', icon: Newspaper, dataKey: 'generalIndustryAnalysis' as const },
-  { id: 'case_studies', title: 'Case Studies', icon: Newspaper, dataKey: 'generalCaseStudies' as const },
+  { id: 'user_drafts', title: 'My Article Drafts', icon: FileText, dataKey: 'userDrafts' as const, showIfEmpty: true, requiresAuth: true },
+  { id: 'user_published', title: 'My Published Articles', icon: Send, dataKey: 'userPublished' as const, showIfEmpty: true, requiresAuth: true },
+  { id: 'collaborative_ventures', title: 'Collaborative Ventures & Partnerships', icon: Handshake, dataKey: 'generalCollaborativeVentures' as const },
+  { id: 'financial_insights', title: 'Market & Financial Insights', icon: Banknote, dataKey: 'generalFinancialInsights' as const },
+  { id: 'political_regulatory', title: 'Political & Regulatory Landscape', icon: Landmark, dataKey: 'generalPoliticalRegulatory' as const },
+  { id: 'new_opportunities', title: 'Emerging Opportunities & Trends', icon: TrendingUp, dataKey: 'generalNewOpportunities' as const },
+  { id: "events", title: "Upcoming Events & Conferences", icon: CalendarDaysIcon, dataKey: "generalEvents" as const },
+  { id: 'platform_updates', title: 'AnonyCollab Platform Updates', icon: Newspaper, dataKey: 'generalPlatformUpdates' as const },
+  { id: 'industry_analysis', title: 'In-depth Industry Analysis', icon: Newspaper, dataKey: 'generalIndustryAnalysis' as const },
+  { id: 'case_studies', title: 'Success Stories & Case Studies', icon: Newspaper, dataKey: 'generalCaseStudies' as const },
 ];
 
 
@@ -113,7 +113,7 @@ const NewsPage = () => {
 
   const { data: generalPublishedArticles, isLoading: isLoadingGeneralArticles, error: generalArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticles'],
-     queryFn: () => getPublishedNewsArticles(50), // Increased limit to fetch more articles for categorization
+     queryFn: () => getPublishedNewsArticles(50), 
   });
   
   const transformToNewsItem = useCallback((article: ClientNewsArticle): NewsItem => ({
@@ -277,7 +277,7 @@ const NewsPage = () => {
                 </Carousel>
               ) : (
                 <p className="text-sm text-muted-foreground text-center py-4">
-                  {categoryConfig.dataKey.startsWith('user') && user ? `You have no ${categoryConfig.title.toLowerCase().replace('your ','')}.` : `No news items in this category yet.`}
+                  {categoryConfig.dataKey.startsWith('user') && user ? `You have no ${categoryConfig.title.toLowerCase().replace('my ','')}.` : `No news items in this category yet.`}
                 </p>
               )}
             </section>
