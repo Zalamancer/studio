@@ -1,8 +1,8 @@
 // src/app/news/page.tsx
 "use client";
 
-import React from 'react';
-import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon } from 'lucide-react';
+import React, { useMemo } from 'react'; // Removed useState as mock data is now primarily for general feed
+import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send } from 'lucide-react'; // Added Edit2, FileText, Send
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -15,81 +15,119 @@ import {
   CarouselPrevious,
 } from "@/components/ui/carousel";
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
+import { useQuery } from '@tanstack/react-query'; // Import useQuery
+import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/newsService'; // Import news service
+import type { ClientNewsArticle } from '@/types/news'; // Import types
+import { Loader2 } from 'lucide-react'; // For loading state
+import { formatDistanceToNowStrict } from 'date-fns'; // For relative dates
 
-interface NewsItem {
+interface NewsItem { // This is now effectively a ClientNewsArticle with additional UI-specific fields if needed
   id: string;
   title: string;
-  category: string;
-  date: string;
-  source: string;
-  imageUrl: string;
-  imageHint: string; // Keep original hint for reference if needed, data-ai-hint will be 1-2 words
-  aiHint: string;    // New field for the actual data-ai-hint value
+  category: string; // Can be derived or kept for filtering if general feed uses it
+  date: string; // Formatted date string
+  source?: string; // Optional source for general news
+  imageUrl?: string | null;
+  aiHint: string;
   excerpt: string;
-  link: string;
+  link: string; // Link to view the full article (could be internal or external)
+  status?: 'draft' | 'published'; // For user's articles
+  userId?: string; // For user's articles
+  publishedAt?: number | null; // Milliseconds
 }
 
-interface NewsCategory {
-  id: string;
-  title: string;
-  icon: React.ElementType;
-  items: NewsItem[];
-}
-
-const mockNewsData: NewsCategory[] = [
-  {
-    id: 'collaborative',
-    title: 'Collaborative Ventures',
-    icon: Handshake,
-    items: [
-      { id: 'c1', title: 'AnonyCollab Platform Sees Record Sign-ups in Q3', category: 'collaborative', date: 'Oct 26, 2023', source: 'Platform Weekly', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'teamwork charts', aiHint: 'teamwork chart', excerpt: 'New features and strong community engagement drive growth.', link: '#' },
-      { id: 'c2', title: 'Cross-Industry Partnerships Flourishing on AnonyCollab', category: 'collaborative', date: 'Oct 20, 2023', source: 'Collaboration Today', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'connected world', aiHint: 'network connection', excerpt: 'Businesses are finding innovative ways to connect and co-create.', link: '#' },
-      { id: 'c3', title: 'The Future of Anonymous B2B Networking', category: 'collaborative', date: 'Oct 15, 2023', source: 'Tech Innovators Mag', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'futuristic network', aiHint: 'future network', excerpt: 'Exploring how platforms like AnonyCollab are changing the landscape.', link: '#' },
-      { id: 'c4', title: 'Guide: Maximizing Your Collaboration Plan Success', category: 'collaborative', date: 'Oct 10, 2023', source: 'AnonyCollab Blog', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'strategy board', aiHint: 'strategy board', excerpt: 'Tips and tricks for leveraging the new planning tools effectively.', link: '#' },
-    ],
-  },
-  {
-    id: 'financial',
-    title: 'Financial Insights',
-    icon: Banknote,
-    items: [
-      { id: 'f1', title: 'Market Trends: Q4 Investment Outlook', category: 'financial', date: 'Oct 25, 2023', source: 'Finance Globe', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'stock market', aiHint: 'stock market', excerpt: 'Analysts predict cautious optimism in key sectors.', link: '#' },
-      { id: 'f2', title: 'Navigating Startup Funding in a Bear Market', category: 'financial', date: 'Oct 18, 2023', source: 'VC Insights', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'investment money', aiHint: 'investment money', excerpt: 'Strategies for securing capital in challenging economic times.', link: '#' },
-      { id: 'f3', title: 'The Rise of Decentralized Finance (DeFi) in B2B', category: 'financial', date: 'Oct 12, 2023', source: 'Crypto Business', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'digital currency', aiHint: 'digital currency', excerpt: 'How DeFi solutions are impacting business transactions and investments.', link: '#' },
-    ],
-  },
-  {
-    id: 'political',
-    title: 'Political & Regulatory Landscape',
-    icon: Landmark,
-    items: [
-      { id: 'p1', title: 'New Data Privacy Laws: What Businesses Need to Know', category: 'political', date: 'Oct 23, 2023', source: 'Legal Business Review', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'government law', aiHint: 'government law', excerpt: 'Understanding compliance for upcoming GDPR-like regulations.', link: '#' },
-      { id: 'p2', title: 'Impact of Trade Agreements on Small Businesses', category: 'political', date: 'Oct 16, 2023', source: 'Global Policy Watch', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'international trade', aiHint: 'global trade', excerpt: 'Analyzing the opportunities and challenges for SMEs.', link: '#' },
-    ],
-  },
-  {
-    id: 'opportunities',
-    title: 'New Opportunities',
-    icon: TrendingUp,
-    items: [
-      { id: 'o1', title: 'Emerging Tech Hubs for 2024', category: 'opportunities', date: 'Oct 27, 2023', source: 'Startup Ecosystems', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'city skyline', aiHint: 'city skyline', excerpt: 'Discover the next wave of innovation centers worldwide.', link: '#' },
-      { id: 'o2', title: 'Grant Opportunities for Green Tech Startups', category: 'opportunities', date: 'Oct 19, 2023', source: 'Eco Grants Org', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'renewable energy', aiHint: 'renewable energy', excerpt: 'Funding avenues for businesses focused on sustainability.', link: '#' },
-      { id: 'o3', title: 'Call for Speakers: Global Innovation Summit', category: 'opportunities', date: 'Oct 11, 2023', source: 'EventCoord', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'conference stage', aiHint: 'conference stage', excerpt: 'Share your expertise at one of the year\'s biggest tech events.', link: '#' },
-    ],
-  },
-  {
-    id: 'events',
-    title: 'Upcoming Events',
-    icon: CalendarDaysIcon,
-    items: [
-      { id: 'e1', title: 'Webinar: AI in B2B Marketing - Nov 15', category: 'events', date: 'Nov 15, 2023', source: 'Marketing Masters', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'webinar screen', aiHint: 'webinar screen', excerpt: 'Learn how to leverage AI for your marketing strategies.', link: '#' },
-      { id: 'e2', title: 'AnonyCollab Community Meetup - Dec 5', category: 'events', date: 'Dec 05, 2023', source: 'AnonyCollab Events', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'community event', aiHint: 'community event', excerpt: 'Connect with fellow platform users and share insights.', link: '#' },
-      { id: 'e3', title: 'TechCrunch Disrupt 2024 - Call for Startups', category: 'events', date: 'Application Deadline: Jan 31, 2024', source: 'TechCrunch', imageUrl: 'https://placehold.co/600x400.png', imageHint: 'startup pitch', aiHint: 'startup pitch', excerpt: 'Showcase your startup to investors and industry leaders.', link: '#' },
-    ],
-  }
+// General mock news data - can be replaced by getPublishedNewsArticles later
+const generalMockNewsData: Omit<NewsItem, 'id' | 'date' | 'link' | 'publishedAt'>[] = [
+  { title: 'Market Trends: Q4 Investment Outlook', category: 'Financial Insights', source: 'Finance Globe', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'stock market', excerpt: 'Analysts predict cautious optimism in key sectors.' },
+  { title: 'New Data Privacy Laws: What Businesses Need to Know', category: 'Political & Regulatory', source: 'Legal Business Review', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'government law', excerpt: 'Understanding compliance for upcoming GDPR-like regulations.' },
+  { title: 'Emerging Tech Hubs for 2024', category: 'New Opportunities', source: 'Startup Ecosystems', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'city skyline', excerpt: 'Discover the next wave of innovation centers worldwide.' },
+  { title: 'Webinar: AI in B2B Marketing - Nov 15', category: 'Events', source: 'Marketing Masters', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'webinar screen', excerpt: 'Learn how to leverage AI for your marketing strategies.' },
 ];
 
+const newsCategoriesConfig = [
+  { id: 'user_drafts', title: 'Your Drafts', icon: FileText, dataKey: 'userDrafts' as const, showIfEmpty: true },
+  { id: 'user_published', title: 'Your Published Articles', icon: Send, dataKey: 'userPublished' as const, showIfEmpty: true },
+  { id: 'collaborative', title: 'Collaborative Ventures', icon: Handshake, dataKey: 'generalCollaborative' as const },
+  { id: 'financial', title: 'Financial Insights', icon: Banknote, dataKey: 'generalFinancial' as const },
+  { id: 'political', title: 'Political & Regulatory Landscape', icon: Landmark, dataKey: 'generalPolitical' as const },
+  { id: 'opportunities', title: 'New Opportunities', icon: TrendingUp, dataKey: 'generalOpportunities' as const },
+  { id: 'events', title: 'Upcoming Events', icon: CalendarDaysIcon, dataKey: 'generalEvents' as const },
+];
+
+
 const NewsPage = () => {
+  const { user, loading: authLoading } = useAuth();
+
+  const { data: userArticles, isLoading: isLoadingUserArticles } = useQuery<ClientNewsArticle[]>({
+    queryKey: ['userNewsArticles', user?.uid],
+    queryFn: () => user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]),
+    enabled: !!user,
+  });
+
+  // Placeholder for general published articles - can be activated later
+  const { data: generalPublishedArticles, isLoading: isLoadingGeneralArticles } = useQuery<ClientNewsArticle[]>({
+     queryKey: ['publishedNewsArticles'],
+     queryFn: () => getPublishedNewsArticles(15), // Fetch more for categories
+     // enabled: true, // Enable when ready to switch from mock
+  });
+  
+  const transformToNewsItem = (article: ClientNewsArticle): NewsItem => ({
+    id: article.id,
+    title: article.title,
+    category: article.category, // Keep original category
+    date: article.publishedAt ? formatDistanceToNowStrict(new Date(article.publishedAt), { addSuffix: true }) : formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true }),
+    excerpt: article.content.substring(0, 100).replace(/<[^>]+>/g, '') + '...', // Basic excerpt
+    imageUrl: article.coverImageUrl,
+    aiHint: article.category.toLowerCase().replace(/\s+/g, '-').substring(0,15) || 'news item', // Basic AI hint from category
+    link: `/news/article/${article.id}`, // Assuming a dynamic route for articles
+    status: article.status,
+    userId: article.userId,
+    publishedAt: article.publishedAt,
+  });
+
+  const categorizedNews = useMemo(() => {
+    const userDrafts: NewsItem[] = userArticles?.filter(a => a.status === 'draft').map(transformToNewsItem) || [];
+    const userPublished: NewsItem[] = userArticles?.filter(a => a.status === 'published').map(transformToNewsItem) || [];
+
+    // Map general mock data for now
+    const generalFeed: { [key: string]: NewsItem[] } = {};
+    newsCategoriesConfig.forEach(catConfig => {
+      if (catConfig.dataKey.startsWith('general')) {
+        generalFeed[catConfig.dataKey] = generalMockNewsData
+          .filter(item => item.category.toLowerCase().includes(catConfig.title.toLowerCase().split(' ')[0])) // Simple match
+          .map((item, index) => ({
+            ...item,
+            id: `${catConfig.id}-${index}`,
+            date: item.category === 'Events' ? 'Various Dates' : new Date(Date.now() - index * 24 * 60 * 60 * 1000 * (Math.random()*5 + 1)).toLocaleDateString(), // Mock date
+            link: '#',
+            publishedAt: Date.now() - index * 24 * 60 * 60 * 1000 * (Math.random()*5 + 1),
+          }));
+      }
+    });
+    
+    // If using fetched general articles:
+    /*
+    const generalFeedFromFetch: { [key: string]: NewsItem[] } = {};
+    if (generalPublishedArticles) {
+        generalPublishedArticles.forEach(article => {
+            const categoryKey = `general${article.category.replace(/\s+/g, '')}` as const;
+            if (!generalFeedFromFetch[categoryKey]) generalFeedFromFetch[categoryKey] = [];
+            generalFeedFromFetch[categoryKey].push(transformToNewsItem(article));
+        });
+    }
+    */
+
+    return {
+      userDrafts,
+      userPublished,
+      ...generalFeed, // Spread mock general feed for now
+      // ...generalFeedFromFetch, // Or spread fetched general feed when ready
+    };
+  }, [userArticles, generalPublishedArticles]); // Add generalPublishedArticles if using fetched data
+
+  const isLoading = authLoading || isLoadingUserArticles || isLoadingGeneralArticles; // Add isLoadingGeneralArticles if used
+
   return (
     <div className="container mx-auto p-4 md:p-8 min-h-[calc(100vh-8rem)]">
       <header className="mb-10 text-center">
@@ -100,76 +138,97 @@ const NewsPage = () => {
         <p className="text-lg text-muted-foreground mt-1 max-w-2xl mx-auto">
           Stay informed about AnonyCollab, industry insights, financial trends, and new opportunities.
         </p>
+         {user && (
+          <Button asChild className="mt-4">
+            <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
+          </Button>
+        )}
       </header>
 
-      <div className="space-y-12">
-        {mockNewsData.map((category) => (
-          <section key={category.id} aria-labelledby={`category-title-${category.id}`}>
-            <div className="flex items-center mb-4">
-              <category.icon className="h-6 w-6 text-primary mr-2" />
-              <h2 id={`category-title-${category.id}`} className="text-2xl font-semibold text-foreground">
-                {category.title}
-              </h2>
-            </div>
-            {category.items.length > 0 ? (
-              <Carousel
-                opts={{
-                  align: "start",
-                  loop: category.items.length > 3, // Loop only if more items than typically visible
-                }}
-                className="w-full"
-              >
-                <CarouselContent className="-ml-4">
-                  {category.items.map((item) => (
-                    <CarouselItem key={item.id} className="pl-4 basis-full md:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-                      <Card className="h-full flex flex-col overflow-hidden shadow-md hover:shadow-lg transition-shadow rounded-lg border-border">
-                        <CardHeader className="p-0">
-                          <div className="aspect-[16/9] relative w-full">
-                            <Image
-                              src={item.imageUrl}
-                              alt={item.title}
-                              fill
-                              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
-                              className="object-cover"
-                              data-ai-hint={item.aiHint} // Use the new aiHint field
-                            />
-                          </div>
-                        </CardHeader>
-                        <CardContent className="p-4 flex-grow flex flex-col">
-                          <CardTitle className="text-md font-semibold leading-snug mb-1 line-clamp-2">
-                            <Link href={item.link} className="hover:text-primary transition-colors" target="_blank" rel="noopener noreferrer">
-                              {item.title}
-                            </Link>
-                          </CardTitle>
-                          <CardDescription className="text-xs text-muted-foreground mb-2 line-clamp-3 flex-grow">
-                            {item.excerpt}
-                          </CardDescription>
-                          <div className="text-xs text-muted-foreground/80 mt-auto pt-2">
-                            <span>{item.source}</span> &bull; <span>{item.date}</span>
-                          </div>
-                        </CardContent>
-                        <CardFooter className="p-3 border-t">
-                           <Button variant="outline" size="xs" asChild className="w-full text-xs h-8">
-                            <Link href={item.link} target="_blank" rel="noopener noreferrer">Read More</Link>
-                          </Button>
-                        </CardFooter>
-                      </Card>
-                    </CarouselItem>
-                  ))}
-                </CarouselContent>
-                {category.items.length > 1 && ( // Show nav buttons only if more than one item
-                  <>
-                    <CarouselPrevious className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" />
-                    <CarouselNext className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" />
-                  </>
+      {isLoading && (
+        <div className="flex justify-center items-center py-10">
+          <Loader2 className="h-10 w-10 animate-spin text-primary" />
+        </div>
+      )}
+
+      {!isLoading && (
+        <div className="space-y-12">
+          {newsCategoriesConfig.map((categoryConfig) => {
+            const items = categorizedNews[categoryConfig.dataKey] || [];
+            if (!user && categoryConfig.dataKey.startsWith('user')) return null; // Don't show user sections if not logged in
+            if (items.length === 0 && !categoryConfig.showIfEmpty && !categoryConfig.dataKey.startsWith('user')) return null;
+
+            return (
+              <section key={categoryConfig.id} aria-labelledby={`category-title-${categoryConfig.id}`}>
+                <div className="flex items-center mb-4">
+                  <categoryConfig.icon className="h-6 w-6 text-primary mr-2" />
+                  <h2 id={`category-title-${categoryConfig.id}`} className="text-2xl font-semibold text-foreground">
+                    {categoryConfig.title}
+                  </h2>
+                </div>
+                {items.length > 0 ? (
+                  <Carousel
+                    opts={{ align: "start", loop: items.length > 3 }}
+                    className="w-full"
+                  >
+                    <CarouselContent className="-ml-4">
+                      {items.map((item) => (
+                        <CarouselItem key={item.id} className="pl-4 basis-full md:basis-1/2 lg:basis-1/3 xl:basis-1/4">
+                          <Card className="h-full flex flex-col overflow-hidden shadow-md hover:shadow-lg transition-shadow rounded-lg border-border">
+                            <CardHeader className="p-0">
+                              {item.imageUrl ? (
+                                <div className="aspect-[16/9] relative w-full">
+                                  <Image
+                                    src={item.imageUrl} alt={item.title} fill sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                    className="object-cover" data-ai-hint={item.aiHint}
+                                  />
+                                </div>
+                              ) : (
+                                <div className="aspect-[16/9] relative w-full bg-muted flex items-center justify-center">
+                                  <Newspaper className="h-12 w-12 text-muted-foreground/50" />
+                                </div>
+                              )}
+                            </CardHeader>
+                            <CardContent className="p-4 flex-grow flex flex-col">
+                              <CardTitle className="text-md font-semibold leading-snug mb-1 line-clamp-2">
+                                <Link href={item.link} className="hover:text-primary transition-colors">
+                                  {item.title}
+                                </Link>
+                              </CardTitle>
+                               {item.status && (
+                                <Badge variant={item.status === 'draft' ? 'outline' : 'secondary'} className="text-xs mb-1 self-start">
+                                  {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+                                </Badge>
+                              )}
+                              <CardDescription className="text-xs text-muted-foreground mb-2 line-clamp-3 flex-grow">
+                                {item.excerpt}
+                              </CardDescription>
+                              <div className="text-xs text-muted-foreground/80 mt-auto pt-2">
+                                {item.source && <span>{item.source} &bull; </span>}
+                                <span>{item.date}</span>
+                              </div>
+                            </CardContent>
+                            <CardFooter className="p-3 border-t">
+                               <Button variant="outline" size="xs" asChild className="w-full text-xs h-8">
+                                <Link href={item.link}>{item.status === 'draft' ? "Edit Draft" : "Read More"}</Link>
+                              </Button>
+                            </CardFooter>
+                          </Card>
+                        </CarouselItem>
+                      ))}
+                    </CarouselContent>
+                    {items.length > 1 && (<> <CarouselPrevious className="absolute left-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" /> <CarouselNext className="absolute right-[-10px] top-1/2 -translate-y-1/2 z-10 hidden md:flex" /> </>)}
+                  </Carousel>
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    {categoryConfig.dataKey.startsWith('user') ? `You have no ${categoryConfig.title.toLowerCase().replace('your ','')}.` : `No news items in this category yet.`}
+                  </p>
                 )}
-              </Carousel>
-            ) : (
-              <p className="text-sm text-muted-foreground">No news items in this category yet.</p>
-            )}
-          </section>
-        ))}
-      </div>
+              </section>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };
