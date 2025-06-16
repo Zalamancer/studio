@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -60,15 +59,15 @@ const ArticlePage = () => {
   const [isLoadingArticle, setIsLoadingArticle] = useState(true);
   const [errorLoadingArticle, setErrorLoadingArticle] = useState<string | null>(null);
 
-  // Editor state
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [storyContent, setStoryContent] = useState("<p><br></p>");
+  const [storyContent, setStoryContent] = useState("<p><br></p>"); // For editor state
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSavingDraftOfPublished, setIsSavingDraftOfPublished] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
   const [categoryError, setCategoryError] = useState("");
@@ -95,7 +94,7 @@ const ArticlePage = () => {
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
-  
+
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
@@ -124,11 +123,11 @@ const ArticlePage = () => {
     if (articleId) {
       setIsLoadingArticle(true);
       setErrorLoadingArticle(null);
-      setArticle(null); 
+      setArticle(null);
       getNewsArticleById(articleId)
         .then((fetchedArticle) => {
           if (fetchedArticle) {
-            setArticle(fetchedArticle); 
+            setArticle(fetchedArticle);
           } else {
             setErrorLoadingArticle("Article not found.");
           }
@@ -144,18 +143,30 @@ const ArticlePage = () => {
 
   // Effect 2: Populate editor form fields when 'article' changes
   useEffect(() => {
-    if (article) { 
+    if (article) {
       setTitle(article.title || "");
       setCategory(article.category || "");
-      const initialEditorContent = article.content || "<p><br></p>";
-      setStoryContent(initialEditorContent); 
 
+      let contentToLoad = article.content || "<p><br></p>";
+      if (isEditingAllowed && article.status === 'published' && article.hasUnpublishedChanges && article.draftContent) {
+        contentToLoad = article.draftContent;
+        // Consider a subtle toast or indicator that a draft is being edited
+        // toast({ title: "Editing Draft", description: "You are viewing/editing a saved draft. Publish changes to make them live." });
+      } else if (!isEditingAllowed && article.status === 'draft') {
+        // Non-owner trying to view a draft - this case is handled by the redirect/error display logic
+        contentToLoad = "Access Denied. This is a draft.";
+      }
+
+      setStoryContent(contentToLoad);
       if (contentEditableRef.current) {
-        const contentToSet = article.content || (isEditingAllowed ? "<p><br></p>" : "");
-        if (contentEditableRef.current.innerHTML !== contentToSet) {
-            contentEditableRef.current.innerHTML = contentToSet;
+        const domContentToSet = (isEditingAllowed && article.status === 'draft' && contentToLoad === "<p><br></p>" && !article.content)
+                                 ? "<p><br></p>" // Ensure empty draft starts with placeholder paragraph
+                                 : contentToLoad;
+        if (contentEditableRef.current.innerHTML !== domContentToSet) {
+            contentEditableRef.current.innerHTML = domContentToSet;
         }
       }
+
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
       setPublishAttempted(false);
@@ -351,10 +362,14 @@ const ArticlePage = () => {
     return isValid;
   }, [title, category]);
 
-  const handleUpdateArticle = async (newStatus: NewsArticleStatus, contentToSave?: string) => {
-    if (!user || !articleId || !article || !isEditingAllowed) { 
-      toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." }); 
-      return; 
+  const handleUpdateArticle = async (
+    newStatus: NewsArticleStatus,
+    contentToSaveParam?: string | null,
+    saveAsDraftOfPublished: boolean = false
+  ) => {
+    if (!user || !articleId || !article || !isEditingAllowed) {
+      toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." });
+      return;
     }
     setPublishAttempted(true);
     if (!validateFields()) {
@@ -363,62 +378,96 @@ const ArticlePage = () => {
       else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
       return;
     }
+
     setIsSubmitting(true);
-    let newCoverImageUrl: string | null | undefined = undefined; 
+    if (saveAsDraftOfPublished) setIsSavingDraftOfPublished(true);
+
+    let newCoverImageUrl: string | null | undefined = undefined;
     try {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
-        newCoverImageUrl = null; 
+        newCoverImageUrl = null;
       }
-      
+
+      const contentForUpdate = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
+
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         category,
-        content: contentToSave !== undefined ? contentToSave : storyContent,
-        status: newStatus,
-        ...(newCoverImageUrl !== undefined && { coverImageUrl: newCoverImageUrl }),
+        // status, content, draftContent, hasUnpublishedChanges, publishedAt are handled by service now
       };
 
-      await updateNewsArticle(articleId, articleUpdateData);
-      
-      let successTitle = "Draft Updated!";
-      let successDescription = `"${title.trim()}" has been successfully saved as a draft.`;
+      if (newCoverImageUrl !== undefined) {
+        articleUpdateData.coverImageUrl = newCoverImageUrl;
+      }
 
-      if (newStatus === 'published') {
-        if (article.status === 'draft') {
+      // Pass content and status explicitly based on intent
+      articleUpdateData.status = newStatus;
+      articleUpdateData.content = contentForUpdate; // This is the content from the editor
+
+      // If saving draft of published, special handling is done in the service
+      // The `saveAsDraftOfPublishedArticle` flag signals this intent to the service.
+      // If publishing changes or updating live, content from editor becomes main content.
+      // If unpublishing, `contentToSaveParam` (original live content) is used.
+
+      await updateNewsArticle(articleId, articleUpdateData, saveAsDraftOfPublished);
+
+      let successTitle = "Update Successful";
+      let successDescription = `"${title.trim()}" updated.`;
+
+      if (saveAsDraftOfPublished && article.status === 'published') {
+        successTitle = "Draft Saved!";
+        successDescription = `Your changes to "${title.trim()}" have been saved as a draft. The live article remains unchanged.`;
+      } else if (newStatus === 'published') {
+        if (article.status === 'draft') { // draft -> published
           successTitle = "Article Published!";
           successDescription = `"${title.trim()}" is now live.`;
-        } else if (article.status === 'published') {
+        } else if (article.status === 'published') { // live update
           successTitle = "Live Article Updated!";
           successDescription = `"${title.trim()}" has been successfully updated.`;
         }
-      } else if (newStatus === 'draft' && article.status === 'published') {
-         if (contentToSave !== undefined && contentToSave === article.content) { 
-            successTitle = "Article Unpublished";
-            successDescription = `"${title.trim()}" is no longer live and has been reverted to a draft.`;
-         } else { 
-            successTitle = "Changes Saved as Draft";
-            successDescription = `"${title.trim()}" is no longer live. Your edits have been saved as a draft.`;
-         }
+      } else if (newStatus === 'draft') {
+        if (article.status === 'published') { // published -> draft (unpublish)
+          successTitle = "Article Unpublished";
+          successDescription = `"${title.trim()}" is no longer live. Its content is now a draft.`;
+        } else if (article.status === 'draft') { // draft -> draft
+          successTitle = "Draft Updated!";
+          successDescription = `Draft for "${title.trim()}" has been saved.`;
+        }
       }
 
       toast({ title: successTitle, description: successDescription });
-      
+
       setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
-      
+
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
       if (fetchedUpdatedArticle) {
-        setArticle(fetchedUpdatedArticle); 
+        setArticle(fetchedUpdatedArticle);
+        // Update local state based on the fetched article, including new draftContent if relevant
+        setTitle(fetchedUpdatedArticle.title || "");
+        setCategory(fetchedUpdatedArticle.category || "");
+
+        let contentToLoadInEditor = fetchedUpdatedArticle.content || "<p><br></p>";
+        if (fetchedUpdatedArticle.status === 'published' && fetchedUpdatedArticle.hasUnpublishedChanges && fetchedUpdatedArticle.draftContent) {
+            contentToLoadInEditor = fetchedUpdatedArticle.draftContent;
+        }
+        setStoryContent(contentToLoadInEditor);
+        if (contentEditableRef.current) {
+            if (contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
+                 contentEditableRef.current.innerHTML = contentToLoadInEditor;
+            }
+        }
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-        setCoverImageFile(null); 
+        setCoverImageFile(null);
       }
-      
+
     } catch (error: any) {
       toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
     } finally {
       setIsSubmitting(false);
+      setIsSavingDraftOfPublished(false);
     }
   };
 
@@ -525,7 +574,7 @@ const ArticlePage = () => {
       reader.onloadend = () => setCoverImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     } else {
-      setCoverImageFile(null); setCoverImagePreview(currentCoverImageUrl); 
+      setCoverImageFile(null); setCoverImagePreview(currentCoverImageUrl);
     }
   };
 
@@ -543,7 +592,7 @@ const ArticlePage = () => {
       </div>
     );
   }
-  
+
   if (!isEditingAllowed && article.status === 'published') {
     const publishedDateStr = article.publishedAt ? format(new Date(article.publishedAt), 'PPP') : 'Not published';
     const lastEditedDateStr = article.updatedAt ? format(new Date(article.updatedAt), 'PPp') : '';
@@ -557,10 +606,10 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
           </Button>
           {user && articleId && article && (
-            <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 p-1" 
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-1"
                 title={isArticleSaved ? "Unsave Article" : "Save Article"}
                 onClick={(e) => {e.stopPropagation(); setIsSaveToCollectionDialogOpen(true);}}
                 aria-pressed={isArticleSaved}
@@ -574,7 +623,7 @@ const ArticlePage = () => {
             <p className="text-sm text-primary font-semibold mb-1">{article.category}</p>
             <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">{article.title}</h1>
             <p className="text-sm text-muted-foreground">
-              {article.status === 'published' 
+              {article.status === 'published'
                 ? <>Published on <time dateTime={new Date(article.publishedAt || 0).toISOString()}>{publishedDateStr}</time></>
                 : `Draft (Last saved: ${formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true })} ago)`}
               {showLastEdited && ` (Last edited: ${lastEditedDateStr})`}
@@ -587,7 +636,7 @@ const ArticlePage = () => {
           )}
           <div
             className="prose prose-lg dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: article.content || "" }}
+            dangerouslySetInnerHTML={{ __html: article.hasUnpublishedChanges && article.draftContent ? article.draftContent : article.content || "" }} // Show draft if exists and different, else live
           />
         </article>
       </div>
@@ -614,10 +663,10 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
          {user && articleId && article && (
-            <Button 
-                variant="ghost" 
-                size="icon" 
-                className="h-8 w-8 p-1" 
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-1"
                 title={isArticleSaved ? "Unsave Article" : "Save Article"}
                 onClick={(e) => {e.stopPropagation(); setIsSaveToCollectionDialogOpen(true);}}
                 aria-pressed={isArticleSaved}
@@ -661,20 +710,46 @@ const ArticlePage = () => {
                   <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
                   <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
                 </>
-              ) : ( 
+              ) : ( // Article is published
                 <>
-                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Update Live Article</Button>
                   <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => handleUpdateArticle('published')} // Changed from 'draft'
-                    className="text-xs py-1.5 h-9 rounded-full border-input text-foreground hover:bg-muted" // Standard outline style
-                    disabled={isSubmitting}
+                    type="button" variant="outline"
+                    onClick={() => handleUpdateArticle('published', storyContent, true)} // saveAsDraftOfPublished = true
+                    className="text-xs py-1.5 h-9 rounded-full"
+                    disabled={isSubmitting || !isEditingAllowed}
                   >
-                    <Save className="mr-1.5 h-3.5 w-3.5" /> {/* Changed icon */}
-                    Save & Keep Published {/* Changed text */}
+                    {isSavingDraftOfPublished ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
+                    Save Draft
                   </Button>
-                  <Button type="button" variant="destructive" onClick={() => handleUpdateArticle('draft', article.content)} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}>Unpublish (Revert to Draft)</Button>
+                  
+                  {article.hasUnpublishedChanges && article.draftContent ? (
+                     <Button
+                       type="button"
+                       onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} // Publish draft content
+                       className="text-xs py-1.5 h-9 rounded-full bg-green-600 hover:bg-green-700 text-white"
+                       disabled={isSubmitting || !isEditingAllowed}
+                     >
+                       <Send className="mr-1.5 h-3.5 w-3.5" /> Publish Changes
+                     </Button>
+                  ) : (
+                     <Button
+                        type="button"
+                        onClick={() => handleUpdateArticle('published', storyContent, false)} // Update live with current editor content
+                        className="text-xs py-1.5 h-9 rounded-full"
+                        disabled={isSubmitting || !isEditingAllowed}
+                      >
+                        <Save className="mr-1.5 h-3.5 w-3.5" /> Update Live Article
+                      </Button>
+                  )}
+                  
+                  <Button
+                    type="button" variant="destructive"
+                    onClick={() => handleUpdateArticle('draft', article.content, false)} // contentToSaveParam is original live content
+                    className="text-xs py-1.5 h-9 rounded-full"
+                    disabled={isSubmitting || !isEditingAllowed}
+                  >
+                    Unpublish
+                  </Button>
                 </>
               )}
             </div>
@@ -686,13 +761,25 @@ const ArticlePage = () => {
             {isEditingAllowed && <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); setCurrentCoverImageUrl(null); if(coverImageInputRef.current) coverImageInputRef.current.value = "";}} disabled={isSubmitting}><Trash2 className="h-4 w-4" /></Button>}
           </div>
         )}
+         {article && article.status === 'published' && article.hasUnpublishedChanges && (
+            <div className="mb-3 p-2 text-sm bg-yellow-100 border border-yellow-300 text-yellow-700 rounded-md flex items-center gap-2">
+              <AlertTriangle className="h-4 w-4" />
+              You are viewing/editing a saved draft. The live article may be different.
+              <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => {
+                  if (contentEditableRef.current && article.content) {
+                      setStoryContent(article.content);
+                      contentEditableRef.current.innerHTML = article.content;
+                  }
+              }}>View live content</Button>
+            </div>
+        )}
         <div ref={titleWrapperRef} className="relative mb-4">
           <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
-            key={articleId} 
+            key={articleId}
             ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} onClick={updateSelectionNonce} onKeyUp={updateSelectionNonce} data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
             style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
@@ -719,7 +806,7 @@ const ArticlePage = () => {
     </Dialog>
     <Dialog open={isEmbedDialogOpen} onOpenChange={(open) => { setIsEmbedDialogOpen(open); if (!open) setSavedRange(null); }}>
         <DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Embed External Content</DialogTitle><DialogDescription>Paste your embed code (e.g., from Twitter, Vimeo, etc.). Ensure it&apos;s safe, typically iframe-based.</DialogDescription></DialogHeader>
-          <div className="py-4"><Label htmlFor="embed-code" className="sr-only">Embed Code</Label><Textarea id="embed-code" value={embedCodeInput} onChange={(e) => setEmbedCodeInput(e.target.value)} className="min-h-[150px] font-mono text-xs" placeholder="&lt;iframe src='...'&gt;&lt;/iframe&gt;" /></div>
+          <div className="py-4"><Label htmlFor="embed-code" className="sr-only">Embed Code</Label><Textarea id="embed-code" value={embedCodeInput} onChange={(e) => setEmbedCodeInput(e.target.value)} className="min-h-[150px] font-mono text-xs" placeholder="<iframe src='...'></iframe>" /></div>
           <DialogFooter><Button type="button" variant="outline" onClick={() => {setIsEmbedDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleEmbedDialogSubmit}>Embed Content</Button></DialogFooter>
         </DialogContent>
     </Dialog>
