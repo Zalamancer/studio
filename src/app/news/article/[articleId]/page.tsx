@@ -116,7 +116,6 @@ const ArticlePage = () => {
   }, [user, queryClient]);
 
   const isEditingAllowed = useMemo(() => {
-    // Editing is allowed if the user is the owner of the article, regardless of status (draft or published)
     return !!user && !!article && user.uid === article.userId;
   }, [article, user]);
 
@@ -125,11 +124,11 @@ const ArticlePage = () => {
     if (articleId) {
       setIsLoadingArticle(true);
       setErrorLoadingArticle(null);
-      setArticle(null); // Clear previous article data
+      setArticle(null); 
       getNewsArticleById(articleId)
         .then((fetchedArticle) => {
           if (fetchedArticle) {
-            setArticle(fetchedArticle); // This will trigger the next useEffect
+            setArticle(fetchedArticle); 
           } else {
             setErrorLoadingArticle("Article not found.");
           }
@@ -137,7 +136,6 @@ const ArticlePage = () => {
         .catch((err) => setErrorLoadingArticle(err.message || "Failed to load article."))
         .finally(() => setIsLoadingArticle(false));
     } else {
-      // Handle case where articleId might become undefined (e.g., route change)
       setArticle(null);
       setIsLoadingArticle(false);
       setErrorLoadingArticle(null);
@@ -147,53 +145,36 @@ const ArticlePage = () => {
   // Effect 2: Populate editor form fields when 'article' or 'isEditingAllowed' changes
   useEffect(() => {
     if (article && isEditingAllowed) {
-      // console.log(`[ArticlePage] Populating editor for article ID: ${article.id}, Content snippet: ${article.content?.substring(0, 50) || '<empty>'}`);
       setTitle(article.title || "");
       setCategory(article.category || "");
       const initialEditorContent = article.content || "<p><br></p>";
-      setStoryContent(initialEditorContent); // Set React state for controlled input
+      setStoryContent(initialEditorContent); 
 
       if (contentEditableRef.current) {
-        // console.log("[ArticlePage] contentEditableRef.current is available. Setting innerHTML.");
         if (contentEditableRef.current.innerHTML !== initialEditorContent) {
-            contentEditableRef.current.innerHTML = initialEditorContent; // Directly set DOM
+            contentEditableRef.current.innerHTML = initialEditorContent;
         }
-      } else {
-        // console.warn("[ArticlePage] contentEditableRef.current is NULL when trying to set innerHTML for article:", article.id);
-        // This might happen if the editor div is not yet rendered. Consider a microtask if issues persist.
-        // queueMicrotask(() => {
-        //   if (contentEditableRef.current && contentEditableRef.current.innerHTML !== initialEditorContent) {
-        //     contentEditableRef.current.innerHTML = initialEditorContent;
-        //   }
-        // });
       }
-
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
-      // Reset validation states for a new/different draft
       setPublishAttempted(false);
       setTitleError("");
       setCategoryError("");
       setStoryError("");
     } else if (article && !isEditingAllowed) {
-      // Viewing a published article or a draft not owned by the user
-      // Clear editor-specific states if they were populated from a previous editable article
-      setTitle(article.title || ""); // Still set title for display
-      setCategory(article.category || ""); // Still set category for display
-      setStoryContent(article.content || "<p><br></p>"); // For read-only display
+      setTitle(article.title || ""); 
+      setCategory(article.category || ""); 
+      setStoryContent(article.content || "<p><br></p>"); 
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
       if (contentEditableRef.current) {
-        // If somehow editor ref is still present from a previous state, ensure its content matches
-        // or is cleared if not applicable to current non-editing view.
-        // This scenario should ideally not occur if editor is truly unmounted when not isEditingAllowed.
         const displayContent = article.content || "";
         if (contentEditableRef.current.innerHTML !== displayContent) {
           contentEditableRef.current.innerHTML = displayContent;
         }
       }
     }
-  }, [article, isEditingAllowed]); // Dependencies: article and isEditingAllowed
+  }, [article, isEditingAllowed]); 
 
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
@@ -415,7 +396,7 @@ const ArticlePage = () => {
       let successTitle = "Draft Updated!";
       if (newStatus === 'published' && article.status === 'draft') successTitle = "Article Published!";
       else if (newStatus === 'published' && article.status === 'published') successTitle = "Published Article Updated!";
-      else if (newStatus === 'draft' && article.status === 'published') successTitle = "Article Reverted to Draft!";
+      else if (newStatus === 'draft' && article.status === 'published') successTitle = "Article Unpublished & Saved as Draft";
 
       toast({ title: successTitle, description: `"${title.trim()}" has been successfully updated.` });
       
@@ -427,11 +408,12 @@ const ArticlePage = () => {
         setArticle(fetchedUpdatedArticle); 
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
         setCoverImageFile(null);
-        // No need to explicitly set form fields here, the useEffect for [article, isEditingAllowed] will handle it.
       }
       
       if (newStatus === 'published' && article.status === 'draft') {
          router.push('/news');
+      } else if (newStatus === 'draft' && article.status === 'published') {
+        // Stay on page, it's now a draft
       }
 
     } catch (error: any) {
@@ -625,9 +607,6 @@ const ArticlePage = () => {
     );
   }
 
-  const buttonSaveText = article.status === 'draft' ? 'Save Draft' : 'Save Changes';
-  const buttonPublishText = article.status === 'draft' ? 'Publish' : 'Update Published Article';
-
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -678,11 +657,17 @@ const ArticlePage = () => {
           </div>
           {isEditingAllowed && (
             <div className="flex items-center gap-2">
-              {article?.status === 'published' && (
-                 <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full border-orange-500 text-orange-600 hover:bg-orange-50" disabled={isSubmitting}><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Revert to Draft</Button>
+              {article?.status === 'draft' ? (
+                <>
+                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
+                  <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
+                </>
+              ) : ( // Article is published
+                <>
+                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft')} className="text-xs py-1.5 h-9 rounded-full border-orange-500 text-orange-600 hover:bg-orange-50" disabled={isSubmitting}><RotateCcw className="mr-1.5 h-3.5 w-3.5" /> Unpublish &amp; Save Draft</Button>
+                  <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Update Published Article</Button>
+                </>
               )}
-              <Button type="button" variant="outline" onClick={() => handleUpdateArticle(article?.status === 'published' ? 'published' : 'draft')} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> {buttonSaveText}</Button>
-              <Button type="button" onClick={() => handleUpdateArticle('published')} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> {buttonPublishText}</Button>
             </div>
           )}
         </div>
@@ -725,7 +710,7 @@ const ArticlePage = () => {
     </Dialog>
     <Dialog open={isEmbedDialogOpen} onOpenChange={(open) => { setIsEmbedDialogOpen(open); if (!open) setSavedRange(null); }}>
         <DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Embed External Content</DialogTitle><DialogDescription>Paste your embed code (e.g., from Twitter, Vimeo, etc.). Ensure it&apos;s safe, typically iframe-based.</DialogDescription></DialogHeader>
-          <div className="py-4"><Label htmlFor="embed-code" className="sr-only">Embed Code</Label><Textarea id="embed-code" value={embedCodeInput} onChange={(e) => setEmbedCodeInput(e.target.value)} className="min-h-[150px] font-mono text-xs" placeholder="<iframe src='...'></iframe>" /></div>
+          <div className="py-4"><Label htmlFor="embed-code" className="sr-only">Embed Code</Label><Textarea id="embed-code" value={embedCodeInput} onChange={(e) => setEmbedCodeInput(e.target.value)} className="min-h-[150px] font-mono text-xs" placeholder="&lt;iframe src='...'&gt;&lt;/iframe&gt;" /></div>
           <DialogFooter><Button type="button" variant="outline" onClick={() => {setIsEmbedDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleEmbedDialogSubmit}>Embed Content</Button></DialogFooter>
         </DialogContent>
     </Dialog>
@@ -745,4 +730,3 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
-
