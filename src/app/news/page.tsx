@@ -22,7 +22,7 @@ import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/ne
 import type { ClientNewsArticle } from '@/types/news';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { useIsMobile } from "@/hooks/use-is-mobile"; // Import useIsMobile
+import { useIsMobile } from "@/hooks/use-mobile"; // Corrected import path
 
 interface NewsItem {
   id: string;
@@ -59,7 +59,7 @@ const newsCategoriesConfig = [
 
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
-  const isMobile = useIsMobile(); // Call the hook here
+  const isMobile = useIsMobile(); 
 
   const { data: userArticles, isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
     queryKey: ['userNewsArticles', user?.uid],
@@ -72,10 +72,10 @@ const NewsPage = () => {
 
   useEffect(() => {
     if (userArticles) {
-        console.log(`%c[NewsPage] Received userArticles (count: ${userArticles.length}):`, "color: green;", userArticles.slice(0,2));
+        // console.log(`%c[NewsPage] Received userArticles (count: ${userArticles.length}):`, "color: green;", userArticles.slice(0,2));
     }
     if (userArticlesError) {
-        console.error(`%c[NewsPage] Error fetching userArticles:`, "color: red;", userArticlesError);
+        // console.error(`%c[NewsPage] Error fetching userArticles:`, "color: red;", userArticlesError);
     }
   }, [userArticles, userArticlesError]);
 
@@ -167,7 +167,7 @@ const NewsPage = () => {
         )}
       </header>
 
-      {(isLoadingUserArticles && !userArticles) && ( // Show loading only if data is undefined initially
+      {(isLoadingUserArticles && !userArticles) && ( 
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
           <p className="ml-2 text-sm text-muted-foreground">Loading your articles...</p>
