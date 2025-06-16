@@ -1,3 +1,4 @@
+
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -13,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -25,6 +26,13 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { Textarea } from '@/components/ui/textarea';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { serverTimestamp } from 'firebase/firestore';
@@ -61,7 +69,7 @@ const ArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
-  const [storyContent, setStoryContent] = useState("<p><br></p>"); // For editor state
+  const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string | null>(null);
@@ -100,7 +108,7 @@ const ArticlePage = () => {
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
-    enabled: !!user && !!articleId, // Enable when user is logged in and articleId is present
+    enabled: !!user && !!articleId,
   });
 
   const isArticleSaved = useMemo(() => {
@@ -118,12 +126,11 @@ const ArticlePage = () => {
     return !!user && !!article && user.uid === article.userId;
   }, [article, user]);
 
-  // Effect 1: Fetch article data
   useEffect(() => {
     if (articleId) {
       setIsLoadingArticle(true);
       setErrorLoadingArticle(null);
-      setArticle(null); // Reset article state before fetching
+      setArticle(null);
       getNewsArticleById(articleId)
         .then((fetchedArticle) => {
           if (fetchedArticle) {
@@ -141,32 +148,26 @@ const ArticlePage = () => {
     }
   }, [articleId]);
 
-  // Effect 2: Populate editor form fields when 'article' changes or editing status changes
   useEffect(() => {
     if (article) {
       setTitle(article.title || "");
       setCategory(article.category || "");
 
-      let contentToLoadInEditor = article.content || "<p><br></p>";
+      let contentToLoadInEditor = "<p><br></p>";
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
           contentToLoadInEditor = article.draftContent;
-          // console.log("Editing published article with unpublished changes, loading DRAFT content into editor.");
+          toast({ title: "Draft Loaded", description: "You are editing a saved draft of this published article.", duration: 4000 });
         } else {
-          // For new drafts, or published articles without separate draft content, or if editing draft content that became null
           contentToLoadInEditor = article.content || "<p><br></p>";
-          // console.log("Editing new draft or published article without separate draft, loading MAIN content into editor.");
         }
+      } else if (article.status === 'published') {
+        contentToLoadInEditor = article.content || "<p><br></p>";
       }
-      // For non-editing view, contentToLoadInEditor is already article.content (or <p><br></p>)
 
-      setStoryContent(contentToLoadInEditor); // Set React state for story content
-
-      // Directly set innerHTML only if editing is allowed and ref is available
-      if (isEditingAllowed && contentEditableRef.current) {
-        if (contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
-          contentEditableRef.current.innerHTML = contentToLoadInEditor;
-        }
+      setStoryContent(contentToLoadInEditor);
+      if (contentEditableRef.current && contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
+        contentEditableRef.current.innerHTML = contentToLoadInEditor;
       }
 
       setCoverImagePreview(article.coverImageUrl || null);
@@ -176,7 +177,7 @@ const ArticlePage = () => {
       setCategoryError("");
       setStoryError("");
     }
-  }, [article, isEditingAllowed]); // Runs when article or isEditingAllowed changes
+  }, [article, isEditingAllowed, toast]);
 
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
@@ -366,23 +367,22 @@ const ArticlePage = () => {
 
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
-    contentToSaveParam?: string | null, // Content to use for the main 'content' field
-    isSavingDraftOfPublishedArticle: boolean = false // New flag
+    contentToSaveParam?: string | null,
+    isSavingDraftOfPublishedArticle: boolean = false
   ) => {
     if (!user || !articleId || !article || !isEditingAllowed) {
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." });
       return;
     }
-    if (newStatus === 'published' || isSavingDraftOfPublishedArticle) { // Validate only if publishing or saving draft
-        setPublishAttempted(true);
-        if (!validateFields()) {
-            if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-            else if (!category) { /* No direct focus */ }
-            else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
-            return;
-        }
+    if (newStatus === 'published' || isSavingDraftOfPublishedArticle) {
+      setPublishAttempted(true);
+      if (!validateFields()) {
+        if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
+        else if (!category) { /* No direct focus */ }
+        else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
+        return;
+      }
     }
-
 
     setIsSubmitting(true);
     if (isSavingDraftOfPublishedArticle) setIsSavingDraftOfPublished(true);
@@ -392,20 +392,16 @@ const ArticlePage = () => {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
-        newCoverImageUrl = null; // Signal to remove cover image
+        newCoverImageUrl = null;
       }
 
-      // Determine the content for the main 'content' field for the service
-      // If contentToSaveParam is provided (like when unpublishing, using original live content), use it.
-      // Otherwise, use storyContent (current editor state).
       const mainContentForService = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
 
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         category,
-        status: newStatus, // This is the target status
-        content: mainContentForService, // This will be handled by service based on intent
-        // draftContent, hasUnpublishedChanges, publishedAt handled by service
+        status: newStatus,
+        content: mainContentForService,
       };
 
       if (newCoverImageUrl !== undefined) {
@@ -421,18 +417,18 @@ const ArticlePage = () => {
         successTitle = "Draft Saved!";
         successDescription = `Your changes to "${title.trim()}" have been saved as a draft. The live article remains unchanged.`;
       } else if (newStatus === 'published') {
-        if (article.status !== 'published') { // draft -> published, or other -> published
+        if (article.status !== 'published') {
           successTitle = "Article Published!";
           successDescription = `"${title.trim()}" is now live.`;
-        } else { // live update (from published to published, could be publishing a draft or just updating live)
+        } else {
           successTitle = "Live Article Updated!";
           successDescription = `Changes to "${title.trim()}" are now live.`;
         }
       } else if (newStatus === 'draft') {
-        if (article.status === 'published') { // published -> draft (unpublish)
+        if (article.status === 'published') {
           successTitle = "Article Unpublished";
           successDescription = `"${title.trim()}" is no longer live. Its content is now a draft.`;
-        } else { // draft -> draft
+        } else {
           successTitle = "Draft Updated!";
           successDescription = `Draft for "${title.trim()}" has been saved.`;
         }
@@ -445,10 +441,9 @@ const ArticlePage = () => {
 
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
       if (fetchedUpdatedArticle) {
-        setArticle(fetchedUpdatedArticle); // This will trigger the useEffect to repopulate form fields
-        // The useEffect will now correctly load draftContent into the editor if applicable
+        setArticle(fetchedUpdatedArticle);
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-        setCoverImageFile(null); // Clear selected file after successful upload
+        setCoverImageFile(null);
       }
 
     } catch (error: any) {
@@ -646,12 +641,13 @@ const ArticlePage = () => {
   // Editing View
   return (
     <>
-    <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}> {/* Added key to help with re-initialization */}
+    <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}>
       <div className="flex items-center justify-between mb-4">
         <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
-         {user && articleId && article && (
+        <div className="flex items-center gap-2">
+          {user && articleId && article && (
             <Button
                 variant="ghost"
                 size="icon"
@@ -663,7 +659,57 @@ const ArticlePage = () => {
               <Bookmark className={cn("h-5 w-5", isArticleSaved ? "fill-primary text-primary" : "text-muted-foreground")} />
             </Button>
           )}
+          {isEditingAllowed && (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8 p-1">
+                  <MoreVertical className="h-4 w-4" />
+                  <span className="sr-only">More options</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => coverImageInputRef.current?.click()} disabled={isSubmitting} className="cursor-pointer">
+                  <ImageUp className="mr-2 h-4 w-4" />
+                  <span>Change Cover Image</span>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                {article?.status === 'draft' ? (
+                  <>
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer">
+                      <Save className="mr-2 h-4 w-4" /> Save Draft
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                      <Send className="mr-2 h-4 w-4" /> Publish
+                    </DropdownMenuItem>
+                  </>
+                ) : ( // Article is published
+                  <>
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
+                      {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                      Save Draft
+                    </DropdownMenuItem>
+                    
+                    {article.hasUnpublishedChanges && article.draftContent ? (
+                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                        <CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes
+                      </DropdownMenuItem>
+                    ) : (
+                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer">
+                        <Save className="mr-2 h-4 w-4" /> Update Live Article
+                      </DropdownMenuItem>
+                    )}
+                    
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting} className="cursor-pointer text-orange-600 focus:text-orange-700">
+                      <RotateCcw className="mr-2 h-4 w-4" /> Unpublish
+                    </DropdownMenuItem>
+                  </>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
+        </div>
       </div>
+      
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
          {showContextualUI && isEditingAllowed && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}>
@@ -677,73 +723,20 @@ const ArticlePage = () => {
                 <button onClick={handleInsertSeparator} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert line separator" title="Insert line separator"><MinusIcon className={iconClass} /></button>
               </div>)}
           </div>)}
-        <div className="flex items-center justify-end gap-x-3 gap-y-2 mb-6 flex-wrap">
-           <div className="flex items-center gap-2 mr-auto">
-            <div className="space-y-1">
-              <Select onValueChange={(value) => { setCategory(value); if (publishAttempted) { if (value) setCategoryError(""); else setCategoryError("Category is required."); }}} value={category} disabled={isSubmitting || !isEditingAllowed}>
-                <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue placeholder="Category" /></SelectTrigger>
-                <SelectContent>{newsCategories.map((cat) => (<SelectItem key={cat} value={cat} className="text-sm">{cat}</SelectItem>))}</SelectContent>
-              </Select>
-              {publishAttempted && categoryError && <p className="text-xs text-destructive mt-1">{categoryError}</p>}
-            </div>
-            <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9" disabled={isSubmitting || !isEditingAllowed}>
-              <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
-            </Button>
-            <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting || !isEditingAllowed} />
-            <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting || !isEditingAllowed} />
+        
+        <div className="mb-6 flex items-center gap-2">
+          <div className="space-y-1">
+            <Select onValueChange={(value) => { setCategory(value); if (publishAttempted) { if (value) setCategoryError(""); else setCategoryError("Category is required."); }}} value={category} disabled={isSubmitting || !isEditingAllowed}>
+              <SelectTrigger className="text-xs py-1.5 h-9 w-auto min-w-[140px] sm:w-[160px] focus-visible:ring-0 focus-visible:ring-offset-0"><SelectValue placeholder="Category" /></SelectTrigger>
+              <SelectContent>{newsCategories.map((cat) => (<SelectItem key={cat} value={cat} className="text-sm">{cat}</SelectItem>))}</SelectContent>
+            </Select>
+            {publishAttempted && categoryError && <p className="text-xs text-destructive mt-1">{categoryError}</p>}
           </div>
-          {isEditingAllowed && (
-            <div className="flex items-center gap-2">
-              {article?.status === 'draft' ? (
-                <>
-                  <Button type="button" variant="outline" onClick={() => handleUpdateArticle('draft', storyContent, false)} className="text-xs py-1.5 h-9 rounded-full" disabled={isSubmitting}><Save className="mr-1.5 h-3.5 w-3.5" /> Save Draft</Button>
-                  <Button type="button" onClick={() => handleUpdateArticle('published', storyContent, false)} className="text-xs py-1.5 bg-green-600 hover:bg-green-700 text-white h-9 rounded-full" disabled={isSubmitting}><Send className="mr-1.5 h-3.5 w-3.5" /> Publish</Button>
-                </>
-              ) : ( // Article is published
-                <>
-                  <Button
-                    type="button" variant="outline"
-                    onClick={() => handleUpdateArticle('published', storyContent, true)} 
-                    className="text-xs py-1.5 h-9 rounded-full"
-                    disabled={isSubmitting || !isEditingAllowed}
-                  >
-                    {isSavingDraftOfPublished ? <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" /> : <Save className="mr-1.5 h-3.5 w-3.5" />}
-                    Save Draft
-                  </Button>
-                  
-                  {article.hasUnpublishedChanges && article.draftContent ? (
-                     <Button
-                       type="button"
-                       onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} 
-                       className="text-xs py-1.5 h-9 rounded-full bg-green-600 hover:bg-green-700 text-white"
-                       disabled={isSubmitting || !isEditingAllowed}
-                     >
-                       <CheckCircle className="mr-1.5 h-3.5 w-3.5" /> Publish Draft Changes
-                     </Button>
-                  ) : (
-                     <Button
-                        type="button"
-                        onClick={() => handleUpdateArticle('published', storyContent, false)} 
-                        className="text-xs py-1.5 h-9 rounded-full"
-                        disabled={isSubmitting || !isEditingAllowed}
-                      >
-                        <Save className="mr-1.5 h-3.5 w-3.5" /> Update Live Article
-                      </Button>
-                  )}
-                  
-                  <Button
-                    type="button" variant="destructive"
-                    onClick={() => handleUpdateArticle('draft', article.content, false)}
-                    className="text-xs py-1.5 h-9 rounded-full"
-                    disabled={isSubmitting || !isEditingAllowed}
-                  >
-                    Unpublish
-                  </Button>
-                </>
-              )}
-            </div>
-          )}
         </div>
+        {/* Hidden file inputs, not moved to dropdown */}
+        <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting || !isEditingAllowed} />
+        <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting || !isEditingAllowed} />
+
         {coverImagePreview && (
           <div className="mb-4 relative group">
             <Image src={coverImagePreview} alt="Cover image preview" width={800} height={450} className="rounded-md object-cover w-full max-h-[300px] border" data-ai-hint="news cover"/>
@@ -756,8 +749,8 @@ const ArticlePage = () => {
               You are editing a saved draft. The live article may be different.
               <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => {
                   if (contentEditableRef.current && article.content) {
-                      setStoryContent(article.content); // Update React state
-                      contentEditableRef.current.innerHTML = article.content; // Update DOM
+                      setStoryContent(article.content); 
+                      contentEditableRef.current.innerHTML = article.content; 
                   }
                   toast({title: "Viewing Live Content", description: "Editor now shows the live published content. Any unsaved draft changes were not applied."});
               }}>View live content</Button>
@@ -816,3 +809,4 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
+
