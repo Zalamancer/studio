@@ -82,7 +82,7 @@ service cloud.firestore {
             request.resource.data.text == resource.data.text &&
             request.resource.data.timestamp == resource.data.timestamp &&
             (
-              (request.resource.data.likedBy.hasAll(resource.data.likedBy) && request.resource.data.likedBy.hasAny([request.auth.uid]) && request.resource.data.likedBy.size() == resource.data.likedBy.size() + 1) ||
+              (request.resource.data.likedBy.hasAll(resource.data.likedBy) && request.resource.data.likedBy.hasAny([request.auth.uid]) && request.resource.data.likedBy.size() == resource.data.likedBy.size() + 1) || 
               (resource.data.likedBy.hasAll(request.resource.data.likedBy) && !request.resource.data.likedBy.hasAny([request.auth.uid]) && request.resource.data.likedBy.size() == resource.data.likedBy.size() - 1)
             ) &&
             (request.resource.data.likeCount == resource.data.likeCount + 1 || request.resource.data.likeCount == resource.data.likeCount - 1) &&
@@ -95,7 +95,7 @@ service cloud.firestore {
           allow read: if isAuthUser();
           allow create: if isAuthUser() && request.resource.data.userId == request.auth.uid
                         && request.resource.data.timestamp == request.time;
-          allow update: if isAuthUser() && (
+          allow update: if isAuthUser() && ( 
             ( 
               resource.data.userId == request.auth.uid &&
               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'mentionedUserIds', 'updatedAt']) &&
@@ -253,8 +253,8 @@ service cloud.firestore {
         allow create: if isAuthUser() &&
                       get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]) &&
                       request.resource.data.senderId == request.auth.uid &&
-                      request.resource.data.timestamp == request.time; 
-        allow update, delete: if false; 
+                      request.resource.data.timestamp == request.time;
+        allow update, delete: if false;
       }
     }
 
@@ -273,7 +273,7 @@ service cloud.firestore {
                     request.resource.data.userIds == resource.data.userIds && 
                     request.resource.data.connectedAt == request.time &&
                     request.resource.data.updatedAt == request.time;
-      allow delete: if isAuthUser() && resource.data.userIds.hasAny([request.auth.uid]); 
+      allow delete: if isAuthUser() && resource.data.userIds.hasAny([request.auth.uid]);
     }
 
     match /userPreferences/{userId} {
@@ -290,9 +290,9 @@ service cloud.firestore {
 
     match /notifications/{notificationId} {
       allow read: if isAuthUser() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthUser() && request.resource.data.timestamp == request.time; 
+      allow create: if isAuthUser() && request.resource.data.timestamp == request.time;
       allow update: if isAuthUser() && resource.data.userId == request.auth.uid &&
-                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']); 
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']);
       allow delete: if isAuthUser() && resource.data.userId == request.auth.uid;
     }
 
@@ -325,7 +325,7 @@ service cloud.firestore {
 
 
     match /plans/{planId} {
-      allow create: if request.auth != null &&
+            allow create: if request.auth != null &&
                        request.auth.uid == request.resource.data.ownerId &&
                        request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
                        request.resource.data.ownerId is string && request.resource.data.ownerId == request.auth.uid &&
@@ -347,7 +347,7 @@ service cloud.firestore {
                          'createdAt', 'updatedAt', 'version', 'roadmap',
                          'visibility', 'editability', 'viewUserIds', 'editUserIds'
                        ]) &&
-                       request.resource.data.size() == 15; 
+                       request.resource.data.size() == 15;
 
       allow list: if (request.query.filters.size() > 0 &&
                  request.query.filters[0].field == 'visibility' &&
@@ -364,17 +364,14 @@ service cloud.firestore {
       function isOwner() {
         return request.auth.uid == resource.data.ownerId;
       }
-
       function isPlanEditor() {
         return request.auth.uid == resource.data.ownerId ||
                (resource.data.editability == 'collaborators' && resource.data.editUserIds.hasAny([request.auth.uid])) ||
                (resource.data.editability == 'everyone' && request.auth != null); 
       }
-
       function isValidSettingsUpdate(requestData, resourceData) {
         let allowedKeys = ['name', 'description', 'sector', 'subSector', 'industry', 'naicsCode', 'visibility', 'editability', 'viewUserIds', 'editUserIds', 'updatedAt'];
         let changedKeys = requestData.diff(resourceData).affectedKeys();
-
         return changedKeys.hasOnly(allowedKeys) &&
                (!('roadmap' in changedKeys)) &&
                (!('version' in changedKeys)) &&
@@ -389,15 +386,11 @@ service cloud.firestore {
                (requestData.viewUserIds == null || requestData.viewUserIds is list) &&
                (requestData.editUserIds == null || requestData.editUserIds is list);
       }
-
       function isValidRoadmapUpdate(requestData, resourceData) {
         let allowedKeys = ['roadmap', 'version', 'updatedAt'];
         let changedKeys = requestData.diff(resourceData).affectedKeys();
-
-        return changedKeys.hasOnly(allowedKeys) &&
-               requestData.roadmap is list;
+        return changedKeys.hasOnly(allowedKeys) && requestData.roadmap is list;
       }
-
       allow update: if request.auth != null &&
                        request.resource.data.ownerId == resource.data.ownerId &&
                        request.resource.data.createdAt == resource.data.createdAt &&
@@ -407,9 +400,7 @@ service cloud.firestore {
                          ||
                          (isPlanEditor() && isValidRoadmapUpdate(request.resource.data, resource.data))
                        );
-
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
-
       match /versions/{versionId} {
         allow create: if request.auth != null &&
                          request.resource.data.editorUid == request.auth.uid &&
@@ -425,46 +416,43 @@ service cloud.firestore {
     }
     
     match /newsArticles/{articleId} {
-      // Anyone can read published articles
       allow read: if resource.data.status == 'published';
-      // Authenticated users can read their own drafts or any article if they have specific access
       allow get: if request.auth != null && (resource.data.userId == request.auth.uid || resource.data.status == 'published');
-
-      // MODIFIED RULE BELOW
       allow list: if request.auth != null && (
-        // Scenario 1: Fetching user's own articles (getNewsArticlesByUserId)
-        (
-          request.query.limit <= 20 && // Limit must be respected
-          request.query.filters[0][0] == 'userId' && // First filter MUST be userId
-          request.query.filters[0][1] == '==' &&     // Operator MUST be ==
-          request.query.filters[0][2] == request.auth.uid && // Value MUST be the authed user's ID
-          ( // After the userId filter, there can be zero or one additional filter (for status)
-            request.query.filters.size() == 1 || // Only the userId filter
-            (
-              request.query.filters.size() == 2 && // userId filter AND status filter
-              request.query.filters[1][0] == 'status' && // The second filter MUST be on 'status'
-              request.query.filters[1][1] == '=='       // And its operator MUST be '=='
-              // The value of the status filter (e.g., 'draft' or 'published') is allowed if the userId matches
-            )
-          )
-          // Optionally, you could enforce the orderBy clause if critical for security, e.g.,
-          // && request.query.orderBy.path == "updatedAt"
-        )
-        ||
-        // Scenario 2: Fetching all published articles (getPublishedNewsArticles)
-        (
-          request.query.limit <= 15 && // Limit must be respected
-          request.query.filters.size() == 1 && // Exactly one filter
-          request.query.filters[0][0] == 'status' && // That filter MUST be on 'status'
-          request.query.filters[0][1] == '==' &&     // Operator MUST be '=='
-          request.query.filters[0][2] == 'published' // Value MUST be 'published'
-          // Optionally, enforce orderBy for published articles, e.g.,
-          // && request.query.orderBy.path == "publishedAt"
-        )
-      );
-      // END OF MODIFIED RULE
-
-      // Authenticated users can create their own articles
+                    // Case 1: User is fetching their own articles
+                    (
+                        request.query.limit <= 20 && // Limit must be appropriate
+                        // Subcase 1.1: Query for own articles, any status (userId filter only)
+                        (
+                            request.query.filters.size() == 1 &&
+                            request.query.filters[0][0] == 'userId' &&
+                            request.query.filters[0][1] == '==' &&
+                            request.query.filters[0][2] == request.auth.uid
+                        ) ||
+                        // Subcase 1.2: Query for own articles with a specific status (userId + status filters)
+                        (
+                            request.query.filters.size() == 2 &&
+                            // Check that one filter is for userId == auth.uid
+                            (
+                                (request.query.filters[0][0] == 'userId' && request.query.filters[0][2] == request.auth.uid && request.query.filters[1][0] == 'status') ||
+                                (request.query.filters[1][0] == 'userId' && request.query.filters[1][2] == request.auth.uid && request.query.filters[0][0] == 'status')
+                            ) &&
+                            // Check that the status filter is for 'draft' or 'published'
+                            (
+                                (request.query.filters[0][0] == 'status' && (request.query.filters[0][2] == 'draft' || request.query.filters[0][2] == 'published')) ||
+                                (request.query.filters[1][0] == 'status' && (request.query.filters[1][2] == 'draft' || request.query.filters[1][2] == 'published'))
+                            )
+                        )
+                    ) ||
+                    // Case 2: Fetching all published articles
+                    (
+                        request.query.filters.size() == 1 &&
+                        request.query.filters[0][0] == 'status' &&
+                        request.query.filters[0][1] == '==' &&
+                        request.query.filters[0][2] == 'published' &&
+                        request.query.limit <= 15 // Limit for public feed
+                    )
+                );
       allow create: if request.auth != null && request.auth.uid == request.resource.data.userId
                       && request.resource.data.title is string && request.resource.data.title.size() > 0
                       && request.resource.data.category is string && request.resource.data.category.size() > 0
@@ -475,8 +463,6 @@ service cloud.firestore {
                       && (request.resource.data.publishedAt == request.time || request.resource.data.publishedAt == null)
                       && request.resource.data.keys().hasAll(['userId', 'title', 'category', 'content', 'status', 'createdAt', 'updatedAt', 'publishedAt', 'coverImageUrl']) 
                       && request.resource.data.size() == 9; 
-
-      // Users can update their own articles
       allow update: if request.auth != null && request.auth.uid == resource.data.userId
                       && request.resource.data.userId == resource.data.userId 
                       && request.resource.data.createdAt == resource.data.createdAt 
@@ -489,7 +475,6 @@ service cloud.firestore {
                       && (request.resource.data.coverImageUrl is string || request.resource.data.coverImageUrl == null || request.resource.data.coverImageUrl == resource.data.coverImageUrl)
                       && request.resource.data.keys().hasOnly(['userId', 'title', 'category', 'content', 'status', 'createdAt', 'updatedAt', 'publishedAt', 'coverImageUrl'])
                       && request.resource.data.size() == 9;
-
       allow delete: if request.auth != null && request.auth.uid == resource.data.userId;
     }
 
