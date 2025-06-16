@@ -1,3 +1,4 @@
+
 // src/services/newsService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -32,29 +33,43 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     throw new Error("Authenticated user does not match article's userId.");
   }
 
-  // Explicitly define the structure to match what Firestore rules might expect.
-  // Optional fields not provided by articleData should be explicitly null or omitted if rule allows.
   const dataToSave: {
     userId: string;
     title: string;
     category: string;
     content: string;
     status: NewsArticleStatus;
-    coverImageUrl: string | null; // Explicitly null if not provided
+    coverImageUrl: string | null;
     createdAt: FieldValue;
     updatedAt: FieldValue;
-    publishedAt: FieldValue | null; // Explicitly null or serverTimestamp
+    publishedAt: FieldValue | null;
   } = {
     userId: articleData.userId,
     title: articleData.title,
     category: articleData.category,
     content: articleData.content,
     status: articleData.status,
-    coverImageUrl: articleData.coverImageUrl || null, // Ensure it's null if undefined/empty
+    coverImageUrl: articleData.coverImageUrl || null,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     publishedAt: articleData.status === 'published' ? serverTimestamp() : null,
   };
+
+  // Enhanced logging for debugging Firestore rules
+  const dataKeys = Object.keys(dataToSave);
+  console.log(`%c[newsService] createNewsArticle - PREPARING TO SAVE ARTICLE.
+    User ID: ${dataToSave.userId}
+    Payload keys (${dataKeys.length}): ${dataKeys.join(', ')}
+    Payload:`, "color: blue; font-weight: bold;", JSON.stringify(dataToSave, (key, value) => {
+      // Firestore FieldValues are not directly stringifiable, show their type
+      if (value && typeof value === 'object' && value._methodName === 'serverTimestamp') {
+        return { _methodName: 'serverTimestamp' };
+      }
+      return value;
+    }, 2)
+  );
+  console.log(`%c[newsService] RULE CHECK REMINDER: Ensure your Firestore 'allow create' rule for 'newsArticles' expects EXACTLY ${dataKeys.length} fields and lists them correctly in any 'hasAll' or 'hasOnly' checks. Timestamp fields ('createdAt', 'updatedAt', 'publishedAt') should be validated against 'request.time'. Ownership ('userId == request.auth.uid') is also critical.`, "color: orange;");
+
 
   try {
     const docRef = await addDoc(newsArticlesCollectionRef, dataToSave);
@@ -74,9 +89,6 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
 
   const articleDocRef = doc(db, NEWS_ARTICLES_COLLECTION, articleId);
   
-  // It's good practice to fetch the document first to ensure the user is the owner,
-  // though Firestore rules should be the primary enforcer.
-  // This client-side check is more for UX and early error handling.
   const docSnap = await getDoc(articleDocRef);
   if (!docSnap.exists() || docSnap.data()?.userId !== user.uid) {
     throw new Error("Article not found or user is not authorized to update this article.");
@@ -86,37 +98,28 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
     updatedAt: serverTimestamp(),
   };
 
-  // Only include fields that are actually being updated and are allowed to be updated.
   if (dataToUpdate.title !== undefined) payload.title = dataToUpdate.title;
   if (dataToUpdate.category !== undefined) payload.category = dataToUpdate.category;
   if (dataToUpdate.content !== undefined) payload.content = dataToUpdate.content;
   if (dataToUpdate.status !== undefined) payload.status = dataToUpdate.status;
   
-  // Handle coverImageUrl: if explicitly passed as null, set it to null, otherwise only if a new URL is provided.
   if (dataToUpdate.coverImageUrl !== undefined) {
-    payload.coverImageUrl = dataToUpdate.coverImageUrl; // This allows setting it to null or a new URL
+    payload.coverImageUrl = dataToUpdate.coverImageUrl; 
   }
 
-  // If status is being changed to 'published' and publishedAt isn't already set (or explicitly being updated)
   if (dataToUpdate.status === 'published') {
-    // If publishedAt is not part of dataToUpdate or is null, set it to serverTimestamp.
-    // If dataToUpdate.publishedAt is already a FieldValue (like serverTimestamp itself), use that.
-    // If dataToUpdate.publishedAt is a specific Timestamp (from editing an already published article), that's fine.
     if (dataToUpdate.publishedAt === undefined || dataToUpdate.publishedAt === null) {
         const existingData = docSnap.data();
-        if (!existingData?.publishedAt) { // Only set it if it wasn't already published
+        if (!existingData?.publishedAt) { 
              payload.publishedAt = serverTimestamp();
         }
     } else {
-        payload.publishedAt = dataToUpdate.publishedAt; // Use the provided publishedAt
+        payload.publishedAt = dataToUpdate.publishedAt; 
     }
   } else if (dataToUpdate.status === 'draft' && payload.status === 'draft') {
-    // If moving back to draft, or just updating a draft, ensure publishedAt is cleared if it's not meant to persist
-    // This depends on business logic. For now, we assume publishedAt, once set, remains unless explicitly cleared.
-    // If you want to clear publishedAt when moving to draft:
-    // payload.publishedAt = null;
+    // If moving to draft, you might want to nullify publishedAt
+    // payload.publishedAt = null; // Uncomment if this is the desired behavior
   }
-
 
   try {
     await updateDoc(articleDocRef, payload);
@@ -200,4 +203,3 @@ export const deleteNewsArticle = async (articleId: string, userId: string): Prom
     throw error;
   }
 };
-
