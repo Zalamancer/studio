@@ -61,8 +61,7 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     User ID: ${dataToSave.userId}
     Payload keys (${dataKeys.length}): ${dataKeys.join(', ')}
     Payload:`, "color: blue; font-weight: bold;", JSON.stringify(dataToSave, (key, value) => {
-      // Firestore FieldValues are not directly stringifiable, show their type
-      if (value && typeof value === 'object' && value._methodName === 'serverTimestamp') {
+      if (value && typeof value === 'object' && (value as any)._methodName === 'serverTimestamp') {
         return { _methodName: 'serverTimestamp' };
       }
       return value;
@@ -76,7 +75,6 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     return docRef.id;
   } catch (error: any) {
     console.error(`[newsService] createNewsArticle - Firestore addDoc ERROR: ${error.message}. Data sent:`, JSON.stringify(dataToSave, null, 2));
-    // Log the exact data to help debug against Firestore rules
     throw new Error(error.message || "Could not create news article.");
   }
 };
@@ -117,8 +115,7 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
         payload.publishedAt = dataToUpdate.publishedAt; 
     }
   } else if (dataToUpdate.status === 'draft' && payload.status === 'draft') {
-    // If moving to draft, you might want to nullify publishedAt
-    // payload.publishedAt = null; // Uncomment if this is the desired behavior
+    // payload.publishedAt = null; 
   }
 
   try {
@@ -131,7 +128,13 @@ export const updateNewsArticle = async (articleId: string, dataToUpdate: UpdateN
 
 
 export const getNewsArticlesByUserId = async (userId: string, status?: NewsArticleStatus): Promise<ClientNewsArticle[]> => {
-  if (!userId) return [];
+  if (!userId) {
+    console.warn("[newsService] getNewsArticlesByUserId: Called with no userId. Returning empty array.");
+    return [];
+  }
+  
+  const currentClientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[newsService] getNewsArticlesByUserId: Fetching for target userId: '${userId}'. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: dodgerblue;");
 
   const constraints = [
     where('userId', '==', userId),
@@ -141,12 +144,25 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
 
   if (status) {
     constraints.push(where('status', '==', status));
+    console.log(`%c  [newsService] getNewsArticlesByUserId: Added status filter: '${status}'`, "color: dodgerblue;");
   }
+
+  console.log(`%c  [newsService] getNewsArticlesByUserId: Final query constraints:`, "color: dodgerblue;", constraints.map(c => {
+    // @ts-ignore
+    if (c._op) return { field: c._field.segments.join('/'), op: c._op, value: c._value };
+    // @ts-ignore
+    if (c.type === 'orderBy') return { field: c._field.segments.join('/'), dir: c.Ja };
+    // @ts-ignore
+    if (c.type === 'limit') return { limit: c.wa };
+    return c;
+  }));
+
 
   const q = query(newsArticlesCollectionRef, ...constraints);
 
   try {
     const querySnapshot = await getDocs(q);
+    console.log(`%c  [newsService] getNewsArticlesByUserId: Query successful. Found ${querySnapshot.docs.length} articles.`, "color: green;");
     return querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data() as NewsArticle;
       return {
@@ -158,21 +174,41 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
       } as ClientNewsArticle;
     });
   } catch (error: any) {
-    console.error(`[newsService] Error fetching news articles for user ${userId} (status: ${status || 'any'}):`, error);
+    console.error(`%c[newsService] Error fetching news articles for user ${userId} (status: ${status || 'any'}):`, "color: red;", error);
+    if (error.code === 'permission-denied') {
+        console.error(`%c  [newsService] PERMISSION DENIED. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
+        console.error(`%c  Query was: where('userId', '==', '${userId}') ${status ? `, where('status', '==', '${status}')` : ''}, orderBy('updatedAt', 'desc'), limit(20)`, "color: red; font-weight: bold;");
+        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.filters.`, "color: red; font-weight: bold;");
+    }
     throw error;
   }
 };
 
 export const getPublishedNewsArticles = async (count = 10): Promise<ClientNewsArticle[]> => {
-  const q = query(
-    newsArticlesCollectionRef,
+  const currentClientAuthUid = auth.currentUser?.uid;
+  console.log(`%c[newsService] getPublishedNewsArticles: Fetching ${count} published articles. Client Auth UID: '${currentClientAuthUid || 'NULL'}'`, "color: dodgerblue;");
+
+  const constraints = [
     where('status', '==', 'published'),
     orderBy('publishedAt', 'desc'),
     limit(count)
-  );
+  ];
+
+  console.log(`%c  [newsService] getPublishedNewsArticles: Query constraints:`, "color: dodgerblue;", constraints.map(c => {
+    // @ts-ignore
+    if (c._op) return { field: c._field.segments.join('/'), op: c._op, value: c._value };
+    // @ts-ignore
+    if (c.type === 'orderBy') return { field: c._field.segments.join('/'), dir: c.Ja };
+    // @ts-ignore
+    if (c.type === 'limit') return { limit: c.wa };
+    return c;
+  }));
+
+  const q = query(newsArticlesCollectionRef, ...constraints);
 
   try {
     const querySnapshot = await getDocs(q);
+    console.log(`%c  [newsService] getPublishedNewsArticles: Query successful. Found ${querySnapshot.docs.length} articles.`, "color: green;");
     const articlesPromises = querySnapshot.docs.map(async (docSnap) => {
       const data = docSnap.data() as NewsArticle;
       return {
@@ -185,7 +221,12 @@ export const getPublishedNewsArticles = async (count = 10): Promise<ClientNewsAr
     });
     return Promise.all(articlesPromises);
   } catch (error: any) {
-    console.error(`[newsService] Error fetching published news articles:`, error);
+    console.error(`%c[newsService] Error fetching published news articles:`, "color: red;", error);
+     if (error.code === 'permission-denied') {
+        console.error(`%c  [newsService] PERMISSION DENIED. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
+        console.error(`%c  Query was: where('status', '==', 'published'), orderBy('publishedAt', 'desc'), limit(${count})`, "color: red; font-weight: bold;");
+        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met.`, "color: red; font-weight: bold;");
+    }
     throw error;
   }
 };
@@ -203,3 +244,5 @@ export const deleteNewsArticle = async (articleId: string, userId: string): Prom
     throw error;
   }
 };
+
+    
