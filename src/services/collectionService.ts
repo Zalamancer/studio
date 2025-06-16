@@ -168,7 +168,13 @@ export const getUserCollections = async (userId: string): Promise<ClientCollecti
     }
     if (error.code === 'failed-precondition' && error.message.includes('index')) {
       console.error("  Firestore query for collections requires an index. Create relevant composite indexes in the Firebase console (e.g., for ownerId/createdAt and sharedWithUserIds/createdAt queries).");
-      throw new Error("Firestore query requires an index for collections. Please create it.");
+      let specificMessage = "Firestore query requires an index for collections. Please create it in the Firebase console.";
+      const firebaseConsoleLinkRegex = /(https:\/\/console\.firebase\.google\.com\/v1\/r\/project\/[^/]+\/firestore\/indexes\?create_composite=[a-zA-Z0-9%_.-]+)/;
+      const match = error.message.match(firebaseConsoleLinkRegex);
+      if (match && match[1]) {
+        specificMessage += ` You can create it here: ${match[1]}`;
+      }
+      throw new Error(specificMessage);
     }
     throw new Error(error.message || "Could not fetch collections.");
   }
@@ -313,15 +319,15 @@ export const getPostsForCollectionPage = async (collectionId: string): Promise<a
 
     const postPromises = collectionDetails.postIds.map(async (postId) => {
         try {
-            const postDocRef = doc(db, 'posts', postId);
+            const postDocRef = doc(db, 'posts', postId); // Assuming posts are in a top-level 'posts' collection
             const postSnap = await getDoc(postDocRef);
             if (postSnap.exists()) {
                 const data = postSnap.data();
                 return {
                     id: postSnap.id,
                     ...data,
-                    createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(),
-                    deadline: (data.deadline as Timestamp)?.toDate() || undefined,
+                    createdAt: (data.createdAt as Timestamp)?.toDate() || new Date(), // Ensure createdAt is a Date
+                    deadline: (data.deadline as Timestamp)?.toDate() || undefined, // Ensure deadline is a Date or undefined
                 };
             }
             return null;
