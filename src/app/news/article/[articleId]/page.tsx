@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark } from 'lucide-react'; // Added Bookmark
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -29,20 +29,20 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { serverTimestamp } from 'firebase/firestore';
-import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog'; // Import dialog
-import { useQuery, useQueryClient } from '@tanstack/react-query'; // For collections
+import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
 
 const newsCategories = [
   "Collaborative Ventures",
   "Financial Insights",
-  "Political & Regulatory Landscape", // Matched to news/page.tsx
-  "Emerging Opportunities & Trends", // Matched
-  "Upcoming Events & Conferences", // Matched
-  "AnonyCollab Platform Updates", // Matched
-  "In-depth Industry Analysis", // Matched
-  "Success Stories & Case Studies", // Matched
+  "Political & Regulatory Landscape",
+  "Emerging Opportunities & Trends",
+  "Upcoming Events & Conferences",
+  "AnonyCollab Platform Updates",
+  "In-depth Industry Analysis",
+  "Success Stories & Case Studies",
 ];
 
 const TOOLBAR_HEIGHT = 36;
@@ -101,7 +101,7 @@ const ArticlePage = () => {
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
-    enabled: !!user && !!articleId, 
+    enabled: !!user && !!articleId,
   });
 
   const isArticleSaved = useMemo(() => {
@@ -115,38 +115,86 @@ const ArticlePage = () => {
     }
   }, [user, queryClient]);
 
-
   const isEditingAllowed = useMemo(() => {
-    return user?.uid === article?.userId;
+    // Editing is allowed if the user is the owner of the article, regardless of status (draft or published)
+    return !!user && !!article && user.uid === article.userId;
   }, [article, user]);
 
+  // Effect 1: Fetch article data
   useEffect(() => {
     if (articleId) {
       setIsLoadingArticle(true);
       setErrorLoadingArticle(null);
+      setArticle(null); // Clear previous article data
       getNewsArticleById(articleId)
         .then((fetchedArticle) => {
           if (fetchedArticle) {
-            setArticle(fetchedArticle);
-            if (user?.uid === fetchedArticle.userId) { 
-              setTitle(fetchedArticle.title);
-              setCategory(fetchedArticle.category);
-              const initialContent = fetchedArticle.content || "<p><br></p>";
-              setStoryContent(initialContent);
-              if (contentEditableRef.current) { 
-                contentEditableRef.current.innerHTML = initialContent;
-              }
-              setCoverImagePreview(fetchedArticle.coverImageUrl || null);
-              setCurrentCoverImageUrl(fetchedArticle.coverImageUrl || null);
-            }
+            setArticle(fetchedArticle); // This will trigger the next useEffect
           } else {
             setErrorLoadingArticle("Article not found.");
           }
         })
         .catch((err) => setErrorLoadingArticle(err.message || "Failed to load article."))
         .finally(() => setIsLoadingArticle(false));
+    } else {
+      // Handle case where articleId might become undefined (e.g., route change)
+      setArticle(null);
+      setIsLoadingArticle(false);
+      setErrorLoadingArticle(null);
     }
-  }, [articleId, user?.uid]);
+  }, [articleId]);
+
+  // Effect 2: Populate editor form fields when 'article' or 'isEditingAllowed' changes
+  useEffect(() => {
+    if (article && isEditingAllowed) {
+      // console.log(`[ArticlePage] Populating editor for article ID: ${article.id}, Content snippet: ${article.content?.substring(0, 50) || '<empty>'}`);
+      setTitle(article.title || "");
+      setCategory(article.category || "");
+      const initialEditorContent = article.content || "<p><br></p>";
+      setStoryContent(initialEditorContent); // Set React state for controlled input
+
+      if (contentEditableRef.current) {
+        // console.log("[ArticlePage] contentEditableRef.current is available. Setting innerHTML.");
+        if (contentEditableRef.current.innerHTML !== initialEditorContent) {
+            contentEditableRef.current.innerHTML = initialEditorContent; // Directly set DOM
+        }
+      } else {
+        // console.warn("[ArticlePage] contentEditableRef.current is NULL when trying to set innerHTML for article:", article.id);
+        // This might happen if the editor div is not yet rendered. Consider a microtask if issues persist.
+        // queueMicrotask(() => {
+        //   if (contentEditableRef.current && contentEditableRef.current.innerHTML !== initialEditorContent) {
+        //     contentEditableRef.current.innerHTML = initialEditorContent;
+        //   }
+        // });
+      }
+
+      setCoverImagePreview(article.coverImageUrl || null);
+      setCurrentCoverImageUrl(article.coverImageUrl || null);
+      // Reset validation states for a new/different draft
+      setPublishAttempted(false);
+      setTitleError("");
+      setCategoryError("");
+      setStoryError("");
+    } else if (article && !isEditingAllowed) {
+      // Viewing a published article or a draft not owned by the user
+      // Clear editor-specific states if they were populated from a previous editable article
+      setTitle(article.title || ""); // Still set title for display
+      setCategory(article.category || ""); // Still set category for display
+      setStoryContent(article.content || "<p><br></p>"); // For read-only display
+      setCoverImagePreview(article.coverImageUrl || null);
+      setCurrentCoverImageUrl(article.coverImageUrl || null);
+      if (contentEditableRef.current) {
+        // If somehow editor ref is still present from a previous state, ensure its content matches
+        // or is cleared if not applicable to current non-editing view.
+        // This scenario should ideally not occur if editor is truly unmounted when not isEditingAllowed.
+        const displayContent = article.content || "";
+        if (contentEditableRef.current.innerHTML !== displayContent) {
+          contentEditableRef.current.innerHTML = displayContent;
+        }
+      }
+    }
+  }, [article, isEditingAllowed]); // Dependencies: article and isEditingAllowed
+
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
 
@@ -379,16 +427,7 @@ const ArticlePage = () => {
         setArticle(fetchedUpdatedArticle); 
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
         setCoverImageFile(null);
-        if (user?.uid === fetchedUpdatedArticle.userId) {
-            setTitle(fetchedUpdatedArticle.title);
-            setCategory(fetchedUpdatedArticle.category);
-            const newContent = fetchedUpdatedArticle.content || "<p><br></p>";
-            setStoryContent(newContent);
-            if (contentEditableRef.current) {
-              contentEditableRef.current.innerHTML = newContent;
-            }
-            setCoverImagePreview(fetchedUpdatedArticle.coverImageUrl || null);
-        }
+        // No need to explicitly set form fields here, the useEffect for [article, isEditingAllowed] will handle it.
       }
       
       if (newStatus === 'published' && article.status === 'draft') {
@@ -706,3 +745,4 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
+
