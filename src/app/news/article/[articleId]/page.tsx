@@ -54,14 +54,13 @@ const ArticlePage = () => {
   const [isLoadingArticle, setIsLoadingArticle] = useState(true);
   const [errorLoadingArticle, setErrorLoadingArticle] = useState<string | null>(null);
 
-  // Editor state (only used if editing a draft)
+  // Editor state
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string | null>(null);
-
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
@@ -95,7 +94,7 @@ const ArticlePage = () => {
     return article?.status === 'draft' && user?.uid === article?.userId;
   }, [article, user]);
 
-
+  // Effect to fetch article data
   useEffect(() => {
     if (articleId) {
       setIsLoadingArticle(true);
@@ -104,14 +103,6 @@ const ArticlePage = () => {
         .then((fetchedArticle) => {
           if (fetchedArticle) {
             setArticle(fetchedArticle);
-            if (fetchedArticle.status === 'draft' && user?.uid === fetchedArticle.userId) {
-              setTitle(fetchedArticle.title);
-              setCategory(fetchedArticle.category);
-              setStoryContent(fetchedArticle.content || "<p><br></p>");
-              if (contentEditableRef.current) contentEditableRef.current.innerHTML = fetchedArticle.content || "<p><br></p>";
-              setCoverImagePreview(fetchedArticle.coverImageUrl || null);
-              setCurrentCoverImageUrl(fetchedArticle.coverImageUrl || null);
-            }
           } else {
             setErrorLoadingArticle("Article not found.");
           }
@@ -119,7 +110,22 @@ const ArticlePage = () => {
         .catch((err) => setErrorLoadingArticle(err.message || "Failed to load article."))
         .finally(() => setIsLoadingArticle(false));
     }
-  }, [articleId, user?.uid]);
+  }, [articleId]);
+
+  // Effect to populate editor form when article data (for a draft) is available
+  useEffect(() => {
+    if (article && article.status === 'draft' && user?.uid === article.userId) {
+      setTitle(article.title);
+      setCategory(article.category);
+      const initialContent = article.content || "<p><br></p>";
+      setStoryContent(initialContent);
+      if (contentEditableRef.current) {
+        contentEditableRef.current.innerHTML = initialContent;
+      }
+      setCoverImagePreview(article.coverImageUrl || null);
+      setCurrentCoverImageUrl(article.coverImageUrl || null);
+    }
+  }, [article, user?.uid]); // Depends on `article` and `user`
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
 
@@ -148,7 +154,6 @@ const ArticlePage = () => {
     }
     return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl;
   }, [contentEditableRef]);
-
 
   const getCurrentLineText = useCallback((): string => {
     const contentEl = contentEditableRef.current;
@@ -317,12 +322,12 @@ const ArticlePage = () => {
       return;
     }
     setIsSubmitting(true);
-    let newCoverImageUrl: string | null | undefined = undefined; // undefined means no change
+    let newCoverImageUrl: string | null | undefined = undefined; 
     try {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
-        newCoverImageUrl = null; // Explicitly set to null if preview was removed
+        newCoverImageUrl = null; 
       }
       
       const articleUpdateData: UpdateNewsArticleData = {
@@ -337,9 +342,13 @@ const ArticlePage = () => {
       if (status === 'published') {
          router.push('/news');
       } else {
-        // Refetch current article data to update UI if it's still a draft
-        getNewsArticleById(articleId).then(setArticle);
-        setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
+        getNewsArticleById(articleId).then(fetchedUpdatedArticle => {
+          if (fetchedUpdatedArticle) {
+            setArticle(fetchedUpdatedArticle); // Update local article state
+            // The useEffect depending on 'article' will repopulate editor fields
+            setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
+          }
+        });
       }
     } catch (error: any) {
       toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
@@ -451,7 +460,7 @@ const ArticlePage = () => {
       reader.onloadend = () => setCoverImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     } else {
-      setCoverImageFile(null); setCoverImagePreview(currentCoverImageUrl); // Revert to original if selection cancelled
+      setCoverImageFile(null); setCoverImagePreview(currentCoverImageUrl); 
     }
   };
 
@@ -459,7 +468,7 @@ const ArticlePage = () => {
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
   if (!article) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-foreground">Article Not Found</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
 
-  // View Mode for Published Articles
+  // Published View
   if (article.status === 'published' && !isEditingAllowed) {
     return (
       <div className="container mx-auto py-8 px-4 md:px-6">
@@ -490,12 +499,11 @@ const ArticlePage = () => {
     );
   }
 
-  // Editor Mode for Drafts (if allowed) or Fallback if not allowed to edit
   if (article.status === 'draft' && !isEditingAllowed) {
     return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-foreground">Access Denied</p><p className="text-muted-foreground">You do not have permission to edit this draft.</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
   }
 
-  // Editor UI
+  // Editor UI for Drafts
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -549,6 +557,7 @@ const ArticlePage = () => {
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
+            key={articleId} // Add key to force re-mount if articleId changes (though not typical for this page structure)
             ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} onClick={updateSelectionNonce} onKeyUp={updateSelectionNonce} data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
             style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
