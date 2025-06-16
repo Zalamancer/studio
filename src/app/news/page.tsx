@@ -1,8 +1,9 @@
+
 // src/app/news/page.tsx
 "use client";
 
 import React, { useMemo } from 'react'; // Removed useState as mock data is now primarily for general feed
-import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send } from 'lucide-react'; // Added Edit2, FileText, Send
+import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send, Loader2 } from 'lucide-react'; // Added Loader2
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -19,8 +20,9 @@ import { useAuth } from '@/contexts/AuthContext'; // Import useAuth
 import { useQuery } from '@tanstack/react-query'; // Import useQuery
 import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/newsService'; // Import news service
 import type { ClientNewsArticle } from '@/types/news'; // Import types
-import { Loader2 } from 'lucide-react'; // For loading state
+// import { Loader2 } from 'lucide-react'; // Moved Loader2 import higher
 import { formatDistanceToNowStrict } from 'date-fns'; // For relative dates
+import { Badge } from '@/components/ui/badge'; // Ensure Badge is imported
 
 interface NewsItem { // This is now effectively a ClientNewsArticle with additional UI-specific fields if needed
   id: string;
@@ -59,18 +61,40 @@ const newsCategoriesConfig = [
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
 
-  const { data: userArticles, isLoading: isLoadingUserArticles } = useQuery<ClientNewsArticle[]>({
+  const { data: userArticles, isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
     queryKey: ['userNewsArticles', user?.uid],
-    queryFn: () => user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]),
+    queryFn: () => {
+        console.log(`%c[NewsPage] Fetching user articles for UID: ${user?.uid}`, "color: teal");
+        return user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]);
+    },
     enabled: !!user,
   });
 
+  useEffect(() => {
+    if (userArticles) {
+        console.log(`%c[NewsPage] Received userArticles (count: ${userArticles.length}):`, "color: green;", userArticles.slice(0,2));
+    }
+    if (userArticlesError) {
+        console.error(`%c[NewsPage] Error fetching userArticles:`, "color: red;", userArticlesError);
+    }
+  }, [userArticles, userArticlesError]);
+
+
   // Placeholder for general published articles - can be activated later
-  const { data: generalPublishedArticles, isLoading: isLoadingGeneralArticles } = useQuery<ClientNewsArticle[]>({
+  const { data: generalPublishedArticles, isLoading: isLoadingGeneralArticles, error: generalArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticles'],
      queryFn: () => getPublishedNewsArticles(15), // Fetch more for categories
      // enabled: true, // Enable when ready to switch from mock
   });
+  
+  useEffect(() => {
+    if (generalPublishedArticles) {
+        console.log(`%c[NewsPage] Received generalPublishedArticles (count: ${generalPublishedArticles.length}):`, "color: green;", generalPublishedArticles.slice(0,2));
+    }
+    if (generalArticlesError) {
+        console.error(`%c[NewsPage] Error fetching generalPublishedArticles:`, "color: red;", generalArticlesError);
+    }
+  }, [generalPublishedArticles, generalArticlesError]);
   
   const transformToNewsItem = (article: ClientNewsArticle): NewsItem => ({
     id: article.id,
@@ -87,8 +111,11 @@ const NewsPage = () => {
   });
 
   const categorizedNews = useMemo(() => {
+    console.log(`%c[NewsPage] Memoizing categorizedNews. Input userArticles count: ${userArticles?.length || 0}`, "color: blue;");
     const userDrafts: NewsItem[] = userArticles?.filter(a => a.status === 'draft').map(transformToNewsItem) || [];
     const userPublished: NewsItem[] = userArticles?.filter(a => a.status === 'published').map(transformToNewsItem) || [];
+    console.log(`%c  [NewsPage] Client-side filtered: Drafts: ${userDrafts.length}, Published by user: ${userPublished.length}`, "color: blue;");
+
 
     // Map general mock data for now
     const generalFeed: { [key: string]: NewsItem[] } = {};
@@ -145,18 +172,35 @@ const NewsPage = () => {
         )}
       </header>
 
-      {isLoading && (
+      {isLoading && userArticles === undefined && ( // Show loading only if userArticles is truly undefined (initial load)
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
         </div>
       )}
 
-      {!isLoading && (
+      {(!isLoading || userArticles !== undefined) && ( // Render sections if not initial loading OR if userArticles has resolved (even if to empty)
         <div className="space-y-12">
           {newsCategoriesConfig.map((categoryConfig) => {
             const items = categorizedNews[categoryConfig.dataKey] || [];
             if (!user && categoryConfig.dataKey.startsWith('user')) return null; // Don't show user sections if not logged in
+            
+            // Handle the case where userArticles is loading for user-specific sections
+            if (categoryConfig.dataKey.startsWith('user') && isLoadingUserArticles && user) {
+                return (
+                    <section key={categoryConfig.id} aria-labelledby={`category-title-${categoryConfig.id}`}>
+                        <div className="flex items-center mb-4">
+                          <categoryConfig.icon className="h-6 w-6 text-primary mr-2" />
+                          <h2 id={`category-title-${categoryConfig.id}`} className="text-2xl font-semibold text-foreground">
+                            {categoryConfig.title}
+                          </h2>
+                        </div>
+                        <div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/></div>
+                    </section>
+                );
+            }
+            
             if (items.length === 0 && !categoryConfig.showIfEmpty && !categoryConfig.dataKey.startsWith('user')) return null;
+
 
             return (
               <section key={categoryConfig.id} aria-labelledby={`category-title-${categoryConfig.id}`}>
@@ -234,3 +278,5 @@ const NewsPage = () => {
 };
 
 export default NewsPage;
+
+    

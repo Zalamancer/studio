@@ -143,9 +143,10 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
   const constraints: QueryConstraint[] = [];
   constraints.push(where('userId', '==', userId));
 
-  const effectiveLimit = 20;
-  let orderByField: string | null = null; // Default to null (Firestore's default order)
+  const effectiveLimit = 20; // Renamed from 'count'
+  let orderByField: string | null = null;
   let orderByDirection: OrderByDirection | undefined = undefined;
+  let clientSideSortRequired = false;
 
   if (status) {
     console.log(`%c  [newsService] getNewsArticlesByUserId: Status filter active: '${status}'. Querying by userId and status, orderBy('updatedAt', 'desc').`, "color: dodgerblue;");
@@ -154,19 +155,19 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
     orderByDirection = 'desc';
     constraints.push(orderBy(orderByField, orderByDirection));
   } else {
-    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId only. orderBy removed for this specific case to simplify query for rules.`, "color: orange; font-weight:bold;");
-    // No orderBy('updatedAt', 'desc') here anymore for the base "all user articles" case
+    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId only. orderBy removed for this specific case to simplify query for rules. Client-side sort by updatedAt will be applied.`, "color: orange; font-weight:bold;");
+    clientSideSortRequired = true;
+    // No server-side orderBy('updatedAt', 'desc') in this specific case
   }
   constraints.push(limit(effectiveLimit));
 
-  // Enhanced logging for constraints array
   const loggedConstraints = constraints.map(c => {
     const constraintObj = c as any; // Type assertion for internal properties
     if (constraintObj.type === 'where') {
       return { type: 'where', field: constraintObj._fieldPath.segments.join('/'), op: constraintObj._op, value: constraintObj._value };
     }
     if (constraintObj.type === 'orderBy') {
-      return { type: 'orderBy', field: constraintObj._field.segments.join('/'), direction: constraintObj._direction };
+      return { type: 'orderBy', field: constraintObj._field.segments.join('/'), direction: constraintObj._direction || 'asc' }; // Default to asc if not specified
     }
     if (constraintObj.type === 'limit') {
       return { type: 'limit', limit: constraintObj._limit, limitType: constraintObj._limitToLast ? 'last' : 'first' };
@@ -175,21 +176,18 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
   });
   console.log(`%c  [newsService] getNewsArticlesByUserId: Final query constraints prepared:`, "color: dodgerblue;", loggedConstraints);
 
-  // Detailed log for rules debugging
-  const firstFilter = loggedConstraints.find(c => c.type === 'where' && c.field === 'userId') as any;
-  const statusFilter = loggedConstraints.find(c => c.type === 'where' && c.field === 'status') as any;
-  const orderByClause = loggedConstraints.find(c => c.type === 'orderBy') as any;
-  const limitClause = loggedConstraints.find(c => c.type === 'limit') as any;
+  // Enhanced logging for rules debugging (matches Firestore rules request object structure)
+  const filtersForRulesLog = loggedConstraints.filter(c => c.type === 'where').map(f => [f.field, f.op, f.value]);
+  const orderByForRulesLog = loggedConstraints.find(c => c.type === 'orderBy');
 
   console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
     request.auth.uid:                     '${currentClientAuthUid || 'NULL'}'
-    request.query.filters.size():         ${loggedConstraints.filter(c => c.type === 'where').length}
-    Filter 1 (userId):                    ${firstFilter ? `${firstFilter.field} ${firstFilter.op} ${firstFilter.value}` : 'N/A'}
-    Filter 2 (status, if any):            ${statusFilter ? `${statusFilter.field} ${statusFilter.op} ${statusFilter.value}` : 'N/A'}
-    request.query.orderBy != null:        ${!!orderByClause}
-    string(request.query.orderBy.path):   '${orderByClause?.field || 'N/A'}'
-    request.query.orderBy.direction:      '${orderByClause?.direction || 'N/A'}'
-    request.query.limit:                  ${limitClause?.limit || 'N/A'}`, "color: magenta; font-weight: bold;"
+    request.query.filters.size():         ${filtersForRulesLog.length}
+    request.query.filters:                ${JSON.stringify(filtersForRulesLog)}
+    request.query.orderBy (exists?):      ${!!orderByForRulesLog}
+    string(request.query.orderBy.path):   '${orderByForRulesLog?.field || 'N/A'}'
+    request.query.orderBy.direction:      '${orderByForRulesLog?.direction || 'N/A'}'
+    request.query.limit:                  ${effectiveLimit}`, "color: magenta; font-weight: bold;"
   );
 
   const q = query(newsArticlesCollectionRef, ...constraints);
@@ -207,9 +205,16 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
         publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : null,
       } as ClientNewsArticle;
     });
-    // Client-side sort if server-side ordering was removed for this case
-    if (!status && !orderByField) {
+
+    if (articles.length > 0) {
+        console.log(`%c  [newsService] getNewsArticlesByUserId: First mapped article sample:`, "color: green;", articles[0]);
+    } else {
+        console.log(`%c  [newsService] getNewsArticlesByUserId: No articles mapped (querySnapshot was empty or all docs were invalid).`, "color: orange;");
+    }
+
+    if (clientSideSortRequired) {
         articles.sort((a, b) => b.updatedAt - a.updatedAt);
+        console.log(`%c  [newsService] getNewsArticlesByUserId: Articles sorted client-side by updatedAt descending.`, "color: dodgerblue;");
     }
     return articles;
   } catch (error: any) {
@@ -221,7 +226,7 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
                                   (orderByField ? `, orderBy('${orderByField}', '${orderByDirection}')` : '') +
                                   `, limit(${effectiveLimit})`;
         console.error(`%c  Query was effectively: ${effectiveQueryLog}`, "color: red; font-weight: bold;");
-        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met.`, "color: red; font-weight: bold;");
+        console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.filters.`, "color: red; font-weight: bold;");
     }
     throw error;
   }
@@ -243,7 +248,7 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
       return { type: 'where', field: constraintObj._fieldPath.segments.join('/'), op: constraintObj._op, value: constraintObj._value };
     }
     if (constraintObj.type === 'orderBy') {
-      return { type: 'orderBy', field: constraintObj._field.segments.join('/'), direction: constraintObj._direction };
+      return { type: 'orderBy', field: constraintObj._field.segments.join('/'), direction: constraintObj._direction || 'asc' };
     }
     if (constraintObj.type === 'limit') {
       return { type: 'limit', limit: constraintObj._limit, limitType: constraintObj._limitToLast ? 'last' : 'first' };
@@ -267,7 +272,11 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
         publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : Date.now(),
       } as ClientNewsArticle;
     });
-    return Promise.all(articlesPromises);
+    const articles = await Promise.all(articlesPromises);
+    if (articles.length > 0) {
+        console.log(`%c  [newsService] getPublishedNewsArticles: First mapped article sample:`, "color: green;", articles[0]);
+    }
+    return articles;
   } catch (error: any) {
     console.error(`%c[newsService] Error fetching published news articles:`, "color: red;", error);
      if (error.code === 'permission-denied') {
@@ -321,3 +330,4 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
   }
 };
 
+    
