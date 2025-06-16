@@ -50,7 +50,6 @@ service cloud.firestore {
         // Branch 1: Owner can update their post
         (
           resource.data.userId == request.auth.uid &&
-          // Owner cannot change userId or createdAt
           request.resource.data.userId == resource.data.userId &&
           request.resource.data.createdAt == resource.data.createdAt &&
           !request.resource.data.diff(resource.data).affectedKeys().hasAny(['commentCount']) &&
@@ -70,27 +69,22 @@ service cloud.firestore {
         allow create: if isAuthUser() && request.resource.data.userId == request.auth.uid
                       && request.resource.data.timestamp == request.time;
         allow update: if isAuthUser() && (
-          // Rule 1: Owner can edit their comment text and mentions
           (
             resource.data.userId == request.auth.uid &&
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'mentionedUserIds', 'updatedAt']) &&
-            request.resource.data.userId == resource.data.userId && // userId cannot change
-            request.resource.data.timestamp == resource.data.timestamp && // timestamp cannot change
+            request.resource.data.userId == resource.data.userId && 
+            request.resource.data.timestamp == resource.data.timestamp && 
             request.resource.data.updatedAt == request.time
           ) ||
-          // Rule 2: Any authenticated user can like/unlike (update likedBy and likeCount)
           (
             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy', 'likeCount', 'updatedAt']) &&
-            // Ensure other core fields are not being changed during a like operation
             request.resource.data.userId == resource.data.userId &&
             request.resource.data.text == resource.data.text &&
             request.resource.data.timestamp == resource.data.timestamp &&
-            // Validate likedBy array modification
             (
-              (request.resource.data.likedBy.hasAll(resource.data.likedBy) && request.resource.data.likedBy.hasAny([request.auth.uid]) && request.resource.data.likedBy.size() == resource.data.likedBy.size() + 1) || // Added a like
-              (resource.data.likedBy.hasAll(request.resource.data.likedBy) && !request.resource.data.likedBy.hasAny([request.auth.uid]) && request.resource.data.likedBy.size() == resource.data.likedBy.size() - 1) // Removed a like
+              (request.resource.data.likedBy.hasAll(resource.data.likedBy) && request.resource.data.likedBy.hasAny([request.auth.uid]) && request.resource.data.likedBy.size() == resource.data.likedBy.size() + 1) ||
+              (resource.data.likedBy.hasAll(request.resource.data.likedBy) && !request.resource.data.likedBy.hasAny([request.auth.uid]) && request.resource.data.likedBy.size() == resource.data.likedBy.size() - 1)
             ) &&
-            // Validate likeCount
             (request.resource.data.likeCount == resource.data.likeCount + 1 || request.resource.data.likeCount == resource.data.likeCount - 1) &&
             request.resource.data.updatedAt == request.time
           )
@@ -101,15 +95,15 @@ service cloud.firestore {
           allow read: if isAuthUser();
           allow create: if isAuthUser() && request.resource.data.userId == request.auth.uid
                         && request.resource.data.timestamp == request.time;
-          allow update: if isAuthUser() && ( // Similar OR logic for sub-comment likes vs edits
-            ( // Owner edit
+          allow update: if isAuthUser() && ( 
+            ( 
               resource.data.userId == request.auth.uid &&
               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'mentionedUserIds', 'updatedAt']) &&
               request.resource.data.userId == resource.data.userId &&
               request.resource.data.timestamp == resource.data.timestamp &&
               request.resource.data.updatedAt == request.time
             ) ||
-            ( // Like/Unlike
+            ( 
               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likedBy', 'likeCount', 'updatedAt']) &&
               request.resource.data.userId == resource.data.userId &&
               request.resource.data.text == resource.data.text &&
@@ -128,13 +122,11 @@ service cloud.firestore {
         allow create: if isAuthUser()
                       && request.resource.data.bidderId == request.auth.uid
                       && get(/databases/$(database)/documents/posts/$(postId)).data.userId != request.auth.uid;
-        allow update, delete: if false; // Bids are typically immutable once placed
+        allow update, delete: if false; 
       }
     }
 
-    // Conversations and their messages
     match /conversations/{conversationId} {
-      // Helper functions scoped to conversations
       function isAuthUserParticipant() {
         return resource.data.participants.hasAny([request.auth.uid]);
       }
@@ -153,7 +145,6 @@ service cloud.firestore {
       allow list: if isAuthUser() && request.query.limit <= 100;
 
       allow create: if isAuthUser() && (
-        // Branch 1: Creating a 'direct' chat
         (
           request.resource.data.type == 'direct' &&
           request.resource.data.participants.size() == 2 &&
@@ -161,29 +152,26 @@ service cloud.firestore {
           request.resource.data.createdAt == request.time &&
           request.resource.data.lastMessageTimestamp == request.time
         ) ||
-        // Branch 2: Creating a 'group' chat - SIMPLIFIED
         (
           request.resource.data.type == 'group' &&
-          request.resource.data.participants.hasAny([request.auth.uid]) && // Creator must be a participant
-          request.resource.data.participants.size() >= 2 && // At least 2 participants
-          request.resource.data.ownerId == request.auth.uid && // Creator must be owner
-          request.resource.data.adminIds.hasAny([request.auth.uid]) && // Creator must be admin
+          request.resource.data.participants.hasAny([request.auth.uid]) && 
+          request.resource.data.participants.size() >= 2 && 
+          request.resource.data.ownerId == request.auth.uid && 
+          request.resource.data.adminIds.hasAny([request.auth.uid]) && 
           request.resource.data.groupName is string &&
-          request.resource.data.groupName.size() > 0 && // Group name required
+          request.resource.data.groupName.size() > 0 && 
           request.resource.data.createdAt == request.time &&
           request.resource.data.lastMessageTimestamp == request.time
         )
       );
 
       allow update: if isAuthUser() && isAuthUserParticipant() && (
-        // Branch A: Any participant updating last message details (sending a message)
         (
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastMessageSenderId', 'lastMessageTimestamp', 'updatedAt']) &&
           request.resource.data.lastMessageSenderId == request.auth.uid &&
           request.resource.data.lastMessageTimestamp == request.time &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch B: Group Admin updating groupName or groupAvatarUrl
         (
           resource.data.type == 'group' &&
           isGroupAdmin(request.auth.uid, resource.data) &&
@@ -192,7 +180,6 @@ service cloud.firestore {
           (request.resource.data.containsKey('groupAvatarUrl') ? (request.resource.data.groupAvatarUrl == null || request.resource.data.groupAvatarUrl is string) : true) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch C: Group Admin adding participants
         (
           resource.data.type == 'group' &&
           isGroupAdmin(request.auth.uid, resource.data) &&
@@ -202,7 +189,6 @@ service cloud.firestore {
           request.resource.data.participants.hasAll(resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch D: Owner removing a participant
         (
           resource.data.type == 'group' &&
           isGroupOwner(request.auth.uid, resource.data) &&
@@ -212,7 +198,6 @@ service cloud.firestore {
           resource.data.participants.hasAll(request.resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch E: Admin removing a non-admin participant
         (
           resource.data.type == 'group' &&
           isGroupAdmin(request.auth.uid, resource.data) &&
@@ -222,7 +207,6 @@ service cloud.firestore {
           resource.data.participants.hasAll(request.resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch F: Participant leaving group - SIMPLIFIED
         (
           resource.data.type == 'group' &&
           request.auth.uid in resource.data.participants &&
@@ -233,7 +217,6 @@ service cloud.firestore {
           resource.data.participants.hasAll(request.resource.data.participants) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch G: Owner transferring ownership
         (
           resource.data.type == 'group' &&
           isGroupOwner(request.auth.uid, resource.data) &&
@@ -244,21 +227,19 @@ service cloud.firestore {
           request.resource.data.adminIds.hasAll([request.auth.uid]) &&
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch H: Owner promoting to admin - SIMPLIFIED
         (
           resource.data.type == 'group' &&
           isGroupOwner(request.auth.uid, resource.data) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['adminIds', 'updatedAt']) &&
           request.resource.data.adminIds is list &&
-          request.resource.data.adminIds.hasAll(resource.data.adminIds) && // Ensure no existing admins are removed
+          request.resource.data.adminIds.hasAll(resource.data.adminIds) && 
           request.resource.data.updatedAt == request.time
         ) ||
-        // Branch I: Owner demoting an admin - FURTHER SIMPLIFIED
           resource.data.type == 'group' &&
           isGroupOwner(request.auth.uid, resource.data) &&
           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['adminIds', 'updatedAt']) &&
           request.resource.data.adminIds is list &&
-          request.resource.data.adminIds.hasAll([request.auth.uid]) && // Owner must remain an admin
+          request.resource.data.adminIds.hasAll([request.auth.uid]) && 
           request.resource.data.updatedAt == request.time
       );
 
@@ -272,12 +253,11 @@ service cloud.firestore {
         allow create: if isAuthUser() &&
                       get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants.hasAny([request.auth.uid]) &&
                       request.resource.data.senderId == request.auth.uid &&
-                      request.resource.data.timestamp == request.time; // Message timestamp must be server time
-        allow update, delete: if false; // Messages are immutable
+                      request.resource.data.timestamp == request.time; 
+        allow update, delete: if false; 
       }
     }
 
-    // Mutual connections
     match /mutuals/{connectionDocId} {
       allow get: if isAuthUser() && (resource == null || (resource.data.userIds != null && resource.data.userIds.hasAny([request.auth.uid])));
       allow list: if isAuthUser();
@@ -286,58 +266,52 @@ service cloud.firestore {
                     request.resource.data.userIds.hasAll([request.auth.uid]) &&
                     request.resource.data.requestedAt == request.time;
       allow update: if isAuthUser() && resource.data.userIds.hasAny([request.auth.uid]) &&
-                    // Specific update for accepting a request
                     resource.data.status == 'pending' &&
                     request.resource.data.status == 'connected' &&
-                    request.resource.data.requesterId == resource.data.requesterId && // Requester cannot change
-                    !resource.data.userIds.hasAny([request.resource.data.requesterId]) && // Acceptor cannot be the original requester
-                    request.resource.data.userIds == resource.data.userIds && // UserIds array cannot change
+                    request.resource.data.requesterId == resource.data.requesterId && 
+                    !resource.data.userIds.hasAny([request.resource.data.requesterId]) && 
+                    request.resource.data.userIds == resource.data.userIds && 
                     request.resource.data.connectedAt == request.time &&
                     request.resource.data.updatedAt == request.time;
-      allow delete: if isAuthUser() && resource.data.userIds.hasAny([request.auth.uid]); // For cancelling/rejecting pending or removing connected
+      allow delete: if isAuthUser() && resource.data.userIds.hasAny([request.auth.uid]); 
     }
 
-    // User Preferences
     match /userPreferences/{userId} {
       allow read, write: if isAuthUser() && request.auth.uid == userId;
     }
 
-    // Whiteboard Annotations
     match /whiteboardAnnotations/{naicsDocId} {
       allow read: if isAuthUser();
       allow write: if isAuthUser() &&
-                   request.resource.data.naicsCode == naicsDocId && // Ensure doc ID matches field
+                   request.resource.data.naicsCode == naicsDocId && 
                    request.resource.data.lastUpdatedBy == request.auth.uid &&
                    request.resource.data.lastUpdatedAt == request.time;
     }
 
-    // Notifications collection
     match /notifications/{notificationId} {
       allow read: if isAuthUser() && resource.data.userId == request.auth.uid;
-      allow create: if isAuthUser() && request.resource.data.timestamp == request.time; // Sender can create for recipient
+      allow create: if isAuthUser() && request.resource.data.timestamp == request.time; 
       allow update: if isAuthUser() && resource.data.userId == request.auth.uid &&
-                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']); // Only allow marking as read
+                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead']); 
       allow delete: if isAuthUser() && resource.data.userId == request.auth.uid;
     }
 
-    // User profiles
     match /users/{userId} {
-      allow get: if isAuthUser(); // Any authenticated user can get any profile for now
-      allow list: if isAuthUser(); // Any authenticated user can list users (queries should be secured client-side or via functions)
+      allow get: if isAuthUser(); 
+      allow list: if isAuthUser(); 
       allow create: if isAuthUser() && request.auth.uid == userId &&
                     request.resource.data.uid == userId &&
                     request.resource.data.createdAt == request.time &&
                     request.resource.data.lastLoginAt == request.time &&
                     request.resource.data.updatedAt == request.time;
       allow update: if isAuthUser() && request.auth.uid == userId &&
-                    request.resource.data.uid == resource.data.uid && // UID cannot change
-                    request.resource.data.email == resource.data.email && // Email typically shouldn't change here (managed by auth)
-                    request.resource.data.createdAt == resource.data.createdAt && // CreatedAt cannot change
+                    request.resource.data.uid == resource.data.uid && 
+                    request.resource.data.email == resource.data.email && 
+                    request.resource.data.createdAt == resource.data.createdAt && 
                     request.resource.data.updatedAt == request.time;
       allow delete: if isAuthUser() && request.auth.uid == userId;
     }
 
-    // Reviews collection
     match /reviews/{reviewId} {
       allow read: if isAuthUser();
       allow create: if isAuthUser() &&
@@ -351,10 +325,8 @@ service cloud.firestore {
 
 
     match /plans/{planId} {
-      // ... your create, list, get rules ...
             allow create: if request.auth != null &&
                        request.auth.uid == request.resource.data.ownerId &&
-                       // Core plan fields (existing)
                        request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
                        request.resource.data.ownerId is string && request.resource.data.ownerId == request.auth.uid &&
                        request.resource.data.sector is string && request.resource.data.sector.size() > 0 &&
@@ -365,20 +337,17 @@ service cloud.firestore {
                        request.resource.data.roadmap is list &&
                        request.resource.data.createdAt == request.time &&
                        request.resource.data.updatedAt == request.time &&
-                       // New fields for visibility, editability, description
                        (request.resource.data.description == null || request.resource.data.description is string) &&
                        request.resource.data.visibility is string && request.resource.data.visibility in ['private', 'unlisted', 'public'] &&
                        request.resource.data.editability is string && request.resource.data.editability in ['owner_only', 'collaborators', 'everyone'] &&
                        request.resource.data.viewUserIds is list && (request.resource.data.visibility == 'public' ? request.resource.data.viewUserIds.size() == 0 : request.resource.data.viewUserIds.hasAny([request.auth.uid])) &&
                        request.resource.data.editUserIds is list && ((request.resource.data.editability in ['owner_only', 'collaborators'] && request.resource.data.editUserIds.hasAny([request.auth.uid])) || (request.resource.data.editability == 'everyone' && request.resource.data.editUserIds.size() == 0)) &&
-                       // Ensure all expected fields are present and no others
                        request.resource.data.keys().hasAll([
                          'name', 'ownerId', 'description', 'sector', 'subSector', 'industry', 'naicsCode',
                          'createdAt', 'updatedAt', 'version', 'roadmap',
                          'visibility', 'editability', 'viewUserIds', 'editUserIds'
                        ]) &&
-                       request.resource.data.size() == 15; // Updated size to 15 fields
-				// ... rest of your rules (list, get, update, delete) ..
+                       request.resource.data.size() == 15; 
 
       allow list: if (request.query.filters.size() > 0 &&
                  request.query.filters[0].field == 'visibility' &&
@@ -395,25 +364,17 @@ service cloud.firestore {
       function isOwner() {
         return request.auth.uid == resource.data.ownerId;
       }
-
-      // Function to check if the user is an authorized editor for roadmap changes
-      // (Owner OR a collaborator if editability is 'collaborators')
       function isPlanEditor() {
         return request.auth.uid == resource.data.ownerId ||
                (resource.data.editability == 'collaborators' && resource.data.editUserIds.hasAny([request.auth.uid])) ||
-               (resource.data.editability == 'everyone' && request.auth != null); // Any authenticated user can edit if 'everyone'
+               (resource.data.editability == 'everyone' && request.auth != null); 
       }
-
-      // Function to validate incoming settings fields (used for owner-only settings updates)
       function isValidSettingsUpdate(requestData, resourceData) {
         let allowedKeys = ['name', 'description', 'sector', 'subSector', 'industry', 'naicsCode', 'visibility', 'editability', 'viewUserIds', 'editUserIds', 'updatedAt'];
         let changedKeys = requestData.diff(resourceData).affectedKeys();
-
         return changedKeys.hasOnly(allowedKeys) &&
-               // Ensure roadmap and version are NOT changed by a settings update
                (!('roadmap' in changedKeys)) &&
                (!('version' in changedKeys)) &&
-               // Type and value validations for settings fields
                (requestData.name == null || (requestData.name is string && requestData.name.size() > 0 && requestData.name.size() <= 100)) &&
                (requestData.description == null || requestData.description is string) &&
                (requestData.sector == null || (requestData.sector is string && requestData.sector.size() > 0)) &&
@@ -425,33 +386,22 @@ service cloud.firestore {
                (requestData.viewUserIds == null || requestData.viewUserIds is list) &&
                (requestData.editUserIds == null || requestData.editUserIds is list);
       }
-
-      // Function to validate incoming roadmap update fields
       function isValidRoadmapUpdate(requestData, resourceData) {
         let allowedKeys = ['roadmap', 'version', 'updatedAt'];
         let changedKeys = requestData.diff(resourceData).affectedKeys();
-
         return changedKeys.hasOnly(allowedKeys) &&
                requestData.roadmap is list;
-               // Note: We can't easily validate request.resource.data.version == resource.data.version + 1
-               // when FieldValue.increment(1) is used, as 'version' becomes an object in the request.
-               // The hasOnly() check and trusting the client for increment(1) is a common approach.
       }
 
       allow update: if request.auth != null &&
-                       // Immutable fields must ALWAYS match
                        request.resource.data.ownerId == resource.data.ownerId &&
                        request.resource.data.createdAt == resource.data.createdAt &&
-                       // Timestamp must always be server time for any update
                        request.resource.data.updatedAt == request.time &&
                        (
-                         // SCENARIO 1: Owner is updating settings
                          (isOwner() && isValidSettingsUpdate(request.resource.data, resource.data))
                          ||
-                         // SCENARIO 2: An authorized editor (owner or collaborator) is updating the roadmap
                          (isPlanEditor() && isValidRoadmapUpdate(request.resource.data, resource.data))
                        );
-
       allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
 
       match /versions/{versionId} {
@@ -472,30 +422,43 @@ service cloud.firestore {
       allow read: if resource.data.status == 'published';
       allow get: if request.auth != null && (resource.data.userId == request.auth.uid || resource.data.status == 'published');
       allow list: if request.auth != null && (
-          // Case 1: User is fetching their own articles (userId filter is present and matches auth.uid)
+          // Case 1: User is fetching their own articles.
+          // This now matches queries with:
+          //    - where('userId', '==', auth.uid) AND orderBy('updatedAt' or 'publishedAt')
+          //    - where('userId', '==', auth.uid) AND where('status', '==', 'draft'/'published') AND orderBy(...)
           (
             request.query.limit <= 20 && // Enforce client-side limit
-            request.query.filters.size() >= 1 && request.query.filters[0][0] == 'userId' && request.query.filters[0][1] == '==' && request.query.filters[0][2] == request.auth.uid &&
-            ( // orderBy must be updatedAt desc
-              string(request.query.orderBy.path) == 'updatedAt' && request.query.orderBy.direction == 'desc'
+            request.query.filters.size() >= 1 && // Must have at least the userId filter
+            request.query.filters[0][0] == 'userId' &&
+            request.query.filters[0][1] == '==' &&
+            request.query.filters[0][2] == request.auth.uid &&
+            // Check for orderBy clause, which should now always be present for user-specific queries
+            (request.query.orderBy != null &&
+              (
+                (string(request.query.orderBy.path) == 'updatedAt' && request.query.orderBy.direction == 'desc') ||
+                (string(request.query.orderBy.path) == 'publishedAt' && request.query.orderBy.direction == 'desc')
+              )
             ) &&
-            ( // Handle optional status filter if present as the second filter OR if it's the only filter along with userId
-              (request.query.filters.size() == 1) || // Only userId filter
+            // Handle optional status filter if present as the second filter
+            (
+              request.query.filters.size() == 1 || // Only userId filter + orderBy
               (
                 request.query.filters.size() == 2 &&
-                request.query.filters[1][0] == 'status' && request.query.filters[1][1] == '==' && (request.query.filters[1][2] == 'draft' || request.query.filters[1][2] == 'published')
+                request.query.filters[1][0] == 'status' &&
+                request.query.filters[1][1] == '==' &&
+                (request.query.filters[1][2] == 'draft' || request.query.filters[1][2] == 'published')
               )
             )
           )
           ||
-          // Case 2: Fetching all published articles
+          // Case 2: Fetching all published articles (for the main news feed)
           (
-            request.query.limit <= 15 && // Enforce client-side limit for public feed
+            request.query.limit <= 15 && 
             request.query.filters.size() == 1 &&
-            request.query.filters[0][0] == 'status' && request.query.filters[0][1] == '==' && request.query.filters[0][2] == 'published' &&
-            ( // orderBy must be publishedAt desc
-                string(request.query.orderBy.path) == 'publishedAt' && request.query.orderBy.direction == 'desc'
-            )
+            request.query.filters[0][0] == 'status' &&
+            request.query.filters[0][1] == '==' &&
+            request.query.filters[0][2] == 'published' &&
+            (request.query.orderBy != null && string(request.query.orderBy.path) == 'publishedAt' && request.query.orderBy.direction == 'desc')
           )
         );
 
@@ -532,4 +495,6 @@ service cloud.firestore {
   }
 }
 
+    
+    
     
