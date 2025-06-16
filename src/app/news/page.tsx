@@ -22,7 +22,7 @@ import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/ne
 import type { ClientNewsArticle } from '@/types/news';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { useIsMobile } from "@/hooks/use-mobile"; // Corrected import path
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface NewsItem {
   id: string;
@@ -37,18 +37,22 @@ interface NewsItem {
   status?: 'draft' | 'published';
   userId?: string;
   publishedAt?: number | null;
-  updatedAt: number; // Added for sorting and display
+  updatedAt: number; 
 }
 
 const newsCategoriesConfig = [
   { id: 'user_drafts', title: 'Your Drafts', icon: FileText, dataKey: 'userDrafts' as const, showIfEmpty: true, requiresAuth: true },
   { id: 'user_published', title: 'Your Published Articles', icon: Send, dataKey: 'userPublished' as const, showIfEmpty: true, requiresAuth: true },
-  { id: 'collaborative', title: 'Collaborative Ventures', icon: Handshake, dataKey: 'generalCollaborative' as const },
-  { id: 'financial', title: 'Financial Insights', icon: Banknote, dataKey: 'generalFinancial' as const },
-  { id: 'political', title: 'Political & Regulatory Landscape', icon: Landmark, dataKey: 'generalPolitical' as const },
-  { id: 'opportunities', title: 'New Opportunities', icon: TrendingUp, dataKey: 'generalOpportunities' as const },
-  { id: 'events', title: 'Upcoming Events', icon: CalendarDaysIcon, dataKey: 'generalEvents' as const },
+  { id: 'collaborative_ventures', title: 'Collaborative Ventures', icon: Handshake, dataKey: 'generalCollaborativeVentures' as const },
+  { id: 'financial_insights', title: 'Financial Insights', icon: Banknote, dataKey: 'generalFinancialInsights' as const },
+  { id: 'political_regulatory', title: 'Political & Regulatory', icon: Landmark, dataKey: 'generalPoliticalRegulatory' as const },
+  { id: 'new_opportunities', title: 'New Opportunities', icon: TrendingUp, dataKey: 'generalNewOpportunities' as const },
+  { id: 'events', title: 'Events', icon: CalendarDaysIcon, dataKey: 'generalEvents' as const },
+  { id: 'platform_updates', title: 'Platform Updates', icon: Newspaper, dataKey: 'generalPlatformUpdates' as const },
+  { id: 'industry_analysis', title: 'Industry Analysis', icon: Newspaper, dataKey: 'generalIndustryAnalysis' as const },
+  { id: 'case_studies', title: 'Case Studies', icon: Newspaper, dataKey: 'generalCaseStudies' as const },
 ];
+
 
 function getCleanTextExcerpt(htmlString: string | null | undefined, maxLength: number = 120): string {
   if (typeof document === 'undefined' || !htmlString) return 'No content preview available.';
@@ -57,11 +61,10 @@ function getCleanTextExcerpt(htmlString: string | null | undefined, maxLength: n
     const tempDiv = document.createElement('div');
     tempDiv.innerHTML = htmlString;
 
-    // Remove non-textual block elements specifically
     tempDiv.querySelectorAll('pre, figure, hr, img, iframe, div[data-embed-wrapper="true"]').forEach(el => el.remove());
     
     let textContent = tempDiv.textContent || tempDiv.innerText || "";
-    textContent = textContent.replace(/\s\s+/g, ' ').trim(); // Consolidate multiple spaces and trim
+    textContent = textContent.replace(/\s\s+/g, ' ').trim(); 
 
     if (textContent.length === 0) return 'No text content found.';
 
@@ -70,12 +73,10 @@ function getCleanTextExcerpt(htmlString: string | null | undefined, maxLength: n
     }
     
     let excerpt = textContent.substring(0, maxLength);
-    // Try to cut at a sentence boundary if a period is found near the end
     const lastPeriod = excerpt.lastIndexOf('.');
-    if (lastPeriod > Math.floor(maxLength * 0.7) && lastPeriod < excerpt.length -1) { // Ensure period is not the last char
+    if (lastPeriod > Math.floor(maxLength * 0.7) && lastPeriod < excerpt.length -1) { 
       excerpt = excerpt.substring(0, lastPeriod + 1);
     } else {
-      // Fallback to word boundary
       const lastSpace = excerpt.lastIndexOf(' ');
       if (lastSpace > Math.floor(maxLength * 0.6)) { 
          excerpt = excerpt.substring(0, lastSpace);
@@ -85,7 +86,7 @@ function getCleanTextExcerpt(htmlString: string | null | undefined, maxLength: n
     return excerpt;
   } catch (e) {
     console.error("Error parsing HTML for excerpt:", e);
-    return htmlString.substring(0, maxLength) + (htmlString.length > maxLength ? "..." : ""); // Basic fallback
+    return htmlString.substring(0, maxLength) + (htmlString.length > maxLength ? "..." : ""); 
   }
 }
 
@@ -112,7 +113,7 @@ const NewsPage = () => {
 
   const { data: generalPublishedArticles, isLoading: isLoadingGeneralArticles, error: generalArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticles'],
-     queryFn: () => getPublishedNewsArticles(15),
+     queryFn: () => getPublishedNewsArticles(50), // Increased limit to fetch more articles for categorization
   });
   
   const transformToNewsItem = useCallback((article: ClientNewsArticle): NewsItem => ({
@@ -121,7 +122,7 @@ const NewsPage = () => {
     category: article.category,
     date: article.status === 'published' && article.publishedAt 
         ? formatDistanceToNowStrict(new Date(article.publishedAt), { addSuffix: true }) 
-        : formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true }), // Fallback to updatedAt for drafts
+        : formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true }),
     excerpt: getCleanTextExcerpt(article.content, 120),
     imageUrl: article.coverImageUrl,
     aiHint: article.category.toLowerCase().replace(/\s+/g, '-').substring(0,15) || 'news item',
@@ -136,21 +137,28 @@ const NewsPage = () => {
     const userDrafts: NewsItem[] = localUserArticles?.filter(a => a.status === 'draft').map(transformToNewsItem).sort((a, b) => b.updatedAt - a.updatedAt) || [];
     const userPublished: NewsItem[] = localUserArticles?.filter(a => a.status === 'published').map(transformToNewsItem).sort((a, b) => (b.publishedAt || 0) - (a.publishedAt || 0)) || [];
 
-    const generalFeed: { [key: string]: NewsItem[] } = {};
+    const result: { [key: string]: NewsItem[] } = {
+      userDrafts,
+      userPublished,
+    };
+
     if (generalPublishedArticles) {
         newsCategoriesConfig.forEach(catConfig => {
             if (catConfig.dataKey.startsWith('general')) {
-                generalFeed[catConfig.dataKey] = generalPublishedArticles
-                    .filter(article => article.category.toLowerCase().includes(catConfig.title.toLowerCase().split(' ')[0]))
-                    .map(transformToNewsItem);
+                result[catConfig.dataKey] = generalPublishedArticles
+                    .filter(article => article.category.toLowerCase() === catConfig.title.toLowerCase())
+                    .map(transformToNewsItem)
+                    .sort((a,b) => (b.publishedAt || 0) - (a.publishedAt || 0)); 
             }
         });
+    } else {
+      newsCategoriesConfig.forEach(catConfig => {
+        if (catConfig.dataKey.startsWith('general')) {
+          result[catConfig.dataKey] = [];
+        }
+      });
     }
-    return {
-      userDrafts,
-      userPublished,
-      ...generalFeed,
-    };
+    return result;
   }, [localUserArticles, generalPublishedArticles, transformToNewsItem]); 
 
   const isLoading = authLoading || (user && isLoadingUserArticles) || isLoadingGeneralArticles;
