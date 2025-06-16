@@ -14,7 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark } from 'lucide-react'; // Added Bookmark
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -29,16 +29,20 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { serverTimestamp } from 'firebase/firestore';
+import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog'; // Import dialog
+import { useQuery, useQueryClient } from '@tanstack/react-query'; // For collections
+import { getUserCollections } from '@/services/collectionService';
+import type { ClientCollection } from '@/types/collection';
 
 const newsCategories = [
   "Collaborative Ventures",
   "Financial Insights",
-  "Political & Regulatory",
-  "New Opportunities",
-  "Events",
-  "Platform Updates",
-  "Industry Analysis",
-  "Case Studies",
+  "Political & Regulatory Landscape", // Matched to news/page.tsx
+  "Emerging Opportunities & Trends", // Matched
+  "Upcoming Events & Conferences", // Matched
+  "AnonyCollab Platform Updates", // Matched
+  "In-depth Industry Analysis", // Matched
+  "Success Stories & Case Studies", // Matched
 ];
 
 const TOOLBAR_HEIGHT = 36;
@@ -50,6 +54,7 @@ const ArticlePage = () => {
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [article, setArticle] = useState<ClientNewsArticle | null>(null);
   const [isLoadingArticle, setIsLoadingArticle] = useState(true);
@@ -91,11 +96,30 @@ const ArticlePage = () => {
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
   
+  const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
+
+  const { data: userCollections = [] } = useQuery<ClientCollection[]>({
+    queryKey: ['userCollections', user?.uid],
+    queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
+    enabled: !!user && isOpen, // `isOpen` should ideally be part of dialog's control, or based on if dialog is mounted
+  });
+
+  const isArticleSaved = useMemo(() => {
+    if (!articleId || !userCollections || userCollections.length === 0) return false;
+    return userCollections.some(collection => collection.postIds?.includes(articleId));
+  }, [articleId, userCollections]);
+
+  const handleCollectionUpdate = useCallback(() => {
+    if (user) {
+      queryClient.invalidateQueries({ queryKey: ['userCollections', user.uid] });
+    }
+  }, [user, queryClient]);
+
+
   const isEditingAllowed = useMemo(() => {
-    return user?.uid === article?.userId; // Owner can always edit
+    return user?.uid === article?.userId;
   }, [article, user]);
 
-  // Effect to fetch article data
   useEffect(() => {
     if (articleId) {
       setIsLoadingArticle(true);
@@ -104,6 +128,17 @@ const ArticlePage = () => {
         .then((fetchedArticle) => {
           if (fetchedArticle) {
             setArticle(fetchedArticle);
+            if (user?.uid === fetchedArticle.userId) { 
+              setTitle(fetchedArticle.title);
+              setCategory(fetchedArticle.category);
+              const initialContent = fetchedArticle.content || "<p><br></p>";
+              setStoryContent(initialContent);
+              if (contentEditableRef.current) { 
+                contentEditableRef.current.innerHTML = initialContent;
+              }
+              setCoverImagePreview(fetchedArticle.coverImageUrl || null);
+              setCurrentCoverImageUrl(fetchedArticle.coverImageUrl || null);
+            }
           } else {
             setErrorLoadingArticle("Article not found.");
           }
@@ -111,22 +146,7 @@ const ArticlePage = () => {
         .catch((err) => setErrorLoadingArticle(err.message || "Failed to load article."))
         .finally(() => setIsLoadingArticle(false));
     }
-  }, [articleId]);
-
-  // Effect to populate editor form when article data is available and editing is allowed
-  useEffect(() => {
-    if (article && isEditingAllowed) {
-      setTitle(article.title);
-      setCategory(article.category);
-      const initialContent = article.content || "<p><br></p>";
-      setStoryContent(initialContent);
-      if (contentEditableRef.current) {
-        contentEditableRef.current.innerHTML = initialContent;
-      }
-      setCoverImagePreview(article.coverImageUrl || null);
-      setCurrentCoverImageUrl(article.coverImageUrl || null);
-    }
-  }, [article, isEditingAllowed]);
+  }, [articleId, user?.uid]);
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
 
@@ -331,7 +351,6 @@ const ArticlePage = () => {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
-        // This means the user clicked "Remove Avatar" for an existing cover image
         newCoverImageUrl = null; 
       }
       
@@ -341,7 +360,6 @@ const ArticlePage = () => {
         content: storyContent,
         status: newStatus,
         ...(newCoverImageUrl !== undefined && { coverImageUrl: newCoverImageUrl }),
-        // `publishedAt` is handled by the service based on status transitions
       };
 
       await updateNewsArticle(articleId, articleUpdateData);
@@ -356,18 +374,25 @@ const ArticlePage = () => {
       setPublishAttempted(false); setTitleError(""); setCategoryError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
       
-      // Refetch article to update local state and UI
-      getNewsArticleById(articleId).then(fetchedUpdatedArticle => {
-        if (fetchedUpdatedArticle) {
-          setArticle(fetchedUpdatedArticle); 
-          // Editor fields will be repopulated by the useEffect that depends on `article` and `isEditingAllowed`
-          setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-          setCoverImageFile(null); // Clear selected file after successful update
+      const fetchedUpdatedArticle = await getNewsArticleById(articleId);
+      if (fetchedUpdatedArticle) {
+        setArticle(fetchedUpdatedArticle); 
+        setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
+        setCoverImageFile(null);
+        if (user?.uid === fetchedUpdatedArticle.userId) {
+            setTitle(fetchedUpdatedArticle.title);
+            setCategory(fetchedUpdatedArticle.category);
+            const newContent = fetchedUpdatedArticle.content || "<p><br></p>";
+            setStoryContent(newContent);
+            if (contentEditableRef.current) {
+              contentEditableRef.current.innerHTML = newContent;
+            }
+            setCoverImagePreview(fetchedUpdatedArticle.coverImageUrl || null);
         }
-      });
+      }
       
       if (newStatus === 'published' && article.status === 'draft') {
-         router.push('/news'); // Redirect only when publishing a draft for the first time
+         router.push('/news');
       }
 
     } catch (error: any) {
@@ -488,17 +513,42 @@ const ArticlePage = () => {
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
   if (!article) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-foreground">Article Not Found</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
 
-  // Read-only View for non-owners of drafts OR published articles (if not editing)
-  if (!isEditingAllowed) {
+  if (!isEditingAllowed && article.status === 'draft') {
+    return (
+      <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center">
+        <AlertTriangle className="h-10 w-10 text-destructive mb-3" />
+        <p className="text-lg font-semibold text-foreground">Access Denied</p>
+        <p className="text-muted-foreground">You do not have permission to view this draft.</p>
+        <Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button>
+      </div>
+    );
+  }
+  
+  if (!isEditingAllowed && article.status === 'published') {
     const publishedDateStr = article.publishedAt ? format(new Date(article.publishedAt), 'PPP') : 'Not published';
     const lastEditedDateStr = article.updatedAt ? format(new Date(article.updatedAt), 'PPp') : '';
-    const showLastEdited = article.status === 'published' && article.publishedAt && article.updatedAt && (article.updatedAt > (article.publishedAt + 60000)); // show if edited > 1 min after publish
+    const showLastEdited = article.status === 'published' && article.publishedAt && article.updatedAt && (article.updatedAt > (article.publishedAt + 60000));
 
     return (
+      <>
       <div className="container mx-auto py-8 px-4 md:px-6">
-        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="mb-6 text-xs">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
-        </Button>
+        <div className="flex items-center justify-between mb-6">
+          <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
+          </Button>
+          {user && articleId && article && (
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 p-1" 
+                title={isArticleSaved ? "Unsave Article" : "Save Article"}
+                onClick={(e) => {e.stopPropagation(); setIsSaveToCollectionDialogOpen(true);}}
+                aria-pressed={isArticleSaved}
+            >
+              <Bookmark className={cn("h-5 w-5", isArticleSaved ? "fill-primary text-primary" : "text-muted-foreground")} />
+            </Button>
+          )}
+        </div>
         <article className="max-w-3xl mx-auto">
           <header className="mb-8">
             <p className="text-sm text-primary font-semibold mb-1">{article.category}</p>
@@ -521,19 +571,44 @@ const ArticlePage = () => {
           />
         </article>
       </div>
+      {user && article && articleId && (
+          <SaveToCollectionDialog
+            isOpen={isSaveToCollectionDialogOpen}
+            onOpenChange={(open) => {
+              setIsSaveToCollectionDialogOpen(open);
+              if (!open) handleCollectionUpdate();
+            }}
+            postId={articleId}
+            postTitle={article.title}
+          />
+        )}
+      </>
     );
   }
 
-  // Editor UI (Draft or Published & Owner)
   const buttonSaveText = article.status === 'draft' ? 'Save Draft' : 'Save Changes';
   const buttonPublishText = article.status === 'draft' ? 'Publish' : 'Update Published Article';
 
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6">
-      <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="mb-4 text-xs">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
-      </Button>
+      <div className="flex items-center justify-between mb-4">
+        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs">
+            <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
+        </Button>
+         {user && articleId && article && (
+            <Button 
+                variant="ghost" 
+                size="icon" 
+                className="h-8 w-8 p-1" 
+                title={isArticleSaved ? "Unsave Article" : "Save Article"}
+                onClick={(e) => {e.stopPropagation(); setIsSaveToCollectionDialogOpen(true);}}
+                aria-pressed={isArticleSaved}
+            >
+              <Bookmark className={cn("h-5 w-5", isArticleSaved ? "fill-primary text-primary" : "text-muted-foreground")} />
+            </Button>
+          )}
+      </div>
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
          {showContextualUI && isEditingAllowed && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}>
@@ -615,6 +690,17 @@ const ArticlePage = () => {
           <DialogFooter><Button type="button" variant="outline" onClick={() => {setIsEmbedDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleEmbedDialogSubmit}>Embed Content</Button></DialogFooter>
         </DialogContent>
     </Dialog>
+    {user && article && articleId && (
+      <SaveToCollectionDialog
+        isOpen={isSaveToCollectionDialogOpen}
+        onOpenChange={(open) => {
+            setIsSaveToCollectionDialogOpen(open);
+            if (!open) handleCollectionUpdate();
+        }}
+        postId={articleId}
+        postTitle={article.title}
+      />
+    )}
     </>
   );
 };

@@ -3,54 +3,72 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, ChevronRight } from 'lucide-react'; // Added Filter, Search, ChevronRight
+import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, ChevronRight, Landmark, TrendingUp, CalendarDays, Bookmark } from 'lucide-react'; // Added Bookmark
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
-import { useQuery } from '@tanstack/react-query';
-import { getPublishedNewsArticles, getNewsArticlesByUserId } from '@/services/newsService'; // Added getNewsArticlesByUserId
+import { useQuery, useQueryClient } from '@tanstack/react-query'; // Added useQueryClient
+import { getPublishedNewsArticles, getNewsArticlesByUserId } from '@/services/newsService';
 import type { ClientNewsArticle } from '@/types/news';
 import { cn } from '@/lib/utils';
-import { ArticleListItem } from '@/components/news/ArticleListItem'; // New component
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"; // For filter bar
+import { ArticleListItem } from '@/components/news/ArticleListItem';
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
-
+import { getUserCollections } from '@/services/collectionService'; // Import collection service
+import type { ClientCollection } from '@/types/collection'; // Import collection type
 
 const newsCategoriesForFilter = [
   { id: 'for_you', title: 'For you' },
-  { id: 'following', title: 'Following' }, // Placeholder
-  { id: 'featured', title: 'Featured', isNew: true }, // Placeholder
+  { id: 'following', title: 'Following' },
+  { id: 'featured', title: 'Featured', isNew: true },
   { id: 'collaborative_ventures', title: 'Collaborative Ventures' },
   { id: 'financial_insights', title: 'Financial Insights' },
-  { id: 'political_regulatory', title: 'Political & Regulatory' },
-  { id: 'new_opportunities', title: 'New Opportunities' },
-  { id: 'events', title: 'Events' },
-  { id: 'platform_updates', title: 'Platform Updates' },
-  { id: 'industry_analysis', title: 'Industry Analysis' },
-  { id: 'case_studies', title: 'Case Studies' },
-  // Add more relevant categories if needed, matching your article categories
+  { id: 'political_regulatory', title: 'Political & Regulatory Landscape' },
+  { id: 'new_opportunities', title: 'Emerging Opportunities & Trends' },
+  { id: "events", title: "Upcoming Events & Conferences", icon: CalendarDays },
+  { id: 'platform_updates', title: 'AnonyCollab Platform Updates', icon: Newspaper },
+  { id: 'industry_analysis', title: 'In-depth Industry Analysis', icon: Newspaper },
+  { id: 'case_studies', title: 'Success Stories & Case Studies', icon: Newspaper },
 ];
 
 
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
-  const [selectedFilter, setSelectedFilter] = useState<string>('for_you'); // Default filter
+  const queryClient = useQueryClient(); // Get query client
+  const [selectedFilter, setSelectedFilter] = useState<string>('for_you');
   const [searchTerm, setSearchTerm] = useState('');
 
-  // Fetch all published articles initially
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
-     queryKey: ['publishedNewsArticlesAll'], // Different key to not interfere with original limited query if used elsewhere
-     queryFn: () => getPublishedNewsArticles(100), // Fetch a larger number for client-side filtering
-     staleTime: 1000 * 60 * 5, // 5 minutes
+     queryKey: ['publishedNewsArticlesAll'],
+     queryFn: () => getPublishedNewsArticles(100),
+     staleTime: 1000 * 60 * 5,
   });
   
-  // Fetch user's own articles (drafts and published)
   const { data: userArticles = [], isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
     queryKey: ['userNewsArticlesAllStatuses', user?.uid],
     queryFn: () => user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]),
     enabled: !!user,
   });
+
+  // Fetch user collections for bookmark status
+  const { data: userCollections = [] } = useQuery<ClientCollection[]>({
+    queryKey: ['userCollections', user?.uid],
+    queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
+    enabled: !!user,
+    staleTime: 1000 * 60 * 2, // Cache for 2 minutes
+  });
+
+  const savedItemIds = useMemo(() => {
+    if (!userCollections || userCollections.length === 0) {
+      return new Set<string>();
+    }
+    const ids = new Set<string>();
+    userCollections.forEach(collection => {
+      collection.postIds?.forEach(id => ids.add(id));
+    });
+    return ids;
+  }, [userCollections]);
 
   const filteredArticles = useMemo(() => {
     let articlesToDisplay = allPublishedArticles;
@@ -62,12 +80,10 @@ const NewsPage = () => {
         article => article.category.toLowerCase() === selectedFilter.toLowerCase()
       );
     } else if (selectedFilter === 'for_you') {
-      // "For you" could be all published, or personalized in the future
       articlesToDisplay = allPublishedArticles;
     }
-    // Placeholders for following/featured
     else if (selectedFilter === 'following') articlesToDisplay = []; 
-    else if (selectedFilter === 'featured') articlesToDisplay = allPublishedArticles.slice(0, 5); // Example: first 5 as featured
+    else if (selectedFilter === 'featured') articlesToDisplay = allPublishedArticles.slice(0, 5); 
 
 
     if (searchTerm.trim() !== '') {
@@ -79,7 +95,7 @@ const NewsPage = () => {
           (article.content && getCleanTextExcerpt(article.content, 200).toLowerCase().includes(lowerSearchTerm))
       );
     }
-    if (selectedFilter !== 'my_articles') { // Don't sort "My Articles" by publishedAt if it includes drafts
+    if (selectedFilter !== 'my_articles') { 
       return articlesToDisplay.sort((a,b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0));
     }
     return articlesToDisplay;
@@ -89,13 +105,11 @@ const NewsPage = () => {
   const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles);
 
 
-  // Function to get a clean text excerpt (moved from old page)
   const getCleanTextExcerpt = useCallback((htmlString: string | null | undefined, maxLength: number = 150): string => {
     if (typeof document === 'undefined' || !htmlString) return '';
     try {
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = htmlString;
-      // Remove non-content elements
       tempDiv.querySelectorAll('pre, figure, hr, img, iframe, div[data-embed-wrapper="true"], h1, h2, h3, h4, h5, h6').forEach(el => el.remove());
       let textContent = tempDiv.textContent || tempDiv.innerText || "";
       textContent = textContent.replace(/\s\s+/g, ' ').trim();
@@ -109,11 +123,16 @@ const NewsPage = () => {
     }
   }, []);
 
+  const handleCollectionUpdate = useCallback(() => {
+    if (user) {
+      queryClient.invalidateQueries({ queryKey: ['userCollections', user.uid] });
+    }
+  }, [user, queryClient]);
+
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      {/* Top Filter Bar */}
-      <div className="mb-6 sticky top-14 (or your header height) z-40 bg-background py-3 border-b">
+      <div className="mb-6 sticky top-14 z-40 bg-background py-3 border-b">
         <div className="flex items-center justify-between">
           <ScrollArea className="w-full whitespace-nowrap">
             <div className="flex items-center gap-1 pb-2">
@@ -130,10 +149,10 @@ const NewsPage = () => {
               {newsCategoriesForFilter.map((cat) => (
                 <Button
                   key={cat.id}
-                  variant={selectedFilter === cat.title.toLowerCase() ? "secondary" : "ghost"}
+                  variant={selectedFilter === cat.id.toLowerCase() ? "secondary" : "ghost"}
                   size="sm"
-                  className={cn("h-8 px-3 text-xs rounded-full shrink-0", selectedFilter === cat.title.toLowerCase() && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-                  onClick={() => setSelectedFilter(cat.title.toLowerCase())}
+                  className={cn("h-8 px-3 text-xs rounded-full shrink-0", selectedFilter === cat.id.toLowerCase() && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                  onClick={() => setSelectedFilter(cat.id.toLowerCase())}
                 >
                   {cat.title}
                   {cat.isNew && <span className="ml-1.5 text-xs px-1.5 py-0.5 bg-green-500 text-white rounded-sm">New</span>}
@@ -142,7 +161,6 @@ const NewsPage = () => {
             </div>
              <span className="pointer-events-none absolute right-0 top-0 h-full w-8 bg-gradient-to-l from-background to-transparent md:hidden" />
           </ScrollArea>
-          {/* Could add a ChevronRight here for mobile if list overflows */}
         </div>
         <div className="mt-3 relative">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -157,8 +175,6 @@ const NewsPage = () => {
         </div>
       </div>
 
-
-      {/* Create Article Button - Prominent for Desktop, perhaps different for mobile */}
        <div className="mb-6 flex justify-end">
           {user && (
             <Button asChild size="sm">
@@ -186,7 +202,7 @@ const NewsPage = () => {
         <div className="text-center py-10">
           <Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" />
           <p className="text-lg font-medium text-muted-foreground">
-            {searchTerm ? `No articles found for "${searchTerm}"` : (selectedFilter === 'for_you' || selectedFilter === 'my_articles') ? "No articles to show right now." : `No articles found in "${selectedFilter.replace(/_/g, ' ')}".`}
+            {searchTerm ? `No articles found for "${searchTerm}"` : (selectedFilter === 'for_you' || selectedFilter === 'my_articles') ? "No articles to show right now." : `No articles found in "${newsCategoriesForFilter.find(c=>c.id === selectedFilter)?.title || selectedFilter}".`}
           </p>
           <p className="text-sm text-muted-foreground mt-1">
             {selectedFilter === 'my_articles' && !userArticlesError && !userArticles.find(a => a.status === 'draft' || a.status === 'published') ? "You haven't created any articles yet." : "Try adjusting your filters or search term."}
@@ -195,9 +211,16 @@ const NewsPage = () => {
       )}
 
       {!isLoading && !allArticlesError && filteredArticles.length > 0 && (
-        <div className="max-w-3xl mx-auto space-y-8"> {/* Changed from grid to single column centered */}
+        <div className="max-w-3xl mx-auto space-y-8">
           {filteredArticles.map((article) => (
-            <ArticleListItem key={article.id} article={article} getCleanTextExcerpt={getCleanTextExcerpt} currentUserId={user?.uid || null} />
+            <ArticleListItem
+              key={article.id}
+              article={article}
+              getCleanTextExcerpt={getCleanTextExcerpt}
+              currentUserId={user?.uid || null}
+              savedItemIds={savedItemIds} // Pass the set of saved item IDs
+              onCollectionUpdate={handleCollectionUpdate} // Pass callback to invalidate collections query
+            />
           ))}
         </div>
       )}
