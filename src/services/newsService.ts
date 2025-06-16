@@ -143,50 +143,43 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
   const constraints: QueryConstraint[] = [];
   constraints.push(where('userId', '==', userId));
 
-  const effectiveLimit = 20; // Renamed from 'count'
-  let orderByField: string | null = null;
-  let orderByDirection: OrderByDirection | undefined = undefined;
+  const effectiveLimit = 20;
+  let orderByFieldForLogging: string | null = null;
+  let orderByDirectionForLogging: OrderByDirection | undefined = undefined;
   let clientSideSortRequired = false;
+  let isOrderByAppliedToServer = false;
 
   if (status) {
     console.log(`%c  [newsService] getNewsArticlesByUserId: Status filter active: '${status}'. Querying by userId and status, orderBy('updatedAt', 'desc').`, "color: dodgerblue;");
     constraints.push(where('status', '==', status));
-    orderByField = 'updatedAt';
-    orderByDirection = 'desc';
-    constraints.push(orderBy(orderByField, orderByDirection));
+    orderByFieldForLogging = 'updatedAt';
+    orderByDirectionForLogging = 'desc';
+    constraints.push(orderBy(orderByFieldForLogging, orderByDirectionForLogging));
+    isOrderByAppliedToServer = true;
   } else {
-    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId only. orderBy removed for this specific case to simplify query for rules. Client-side sort by updatedAt will be applied.`, "color: orange; font-weight:bold;");
+    console.log(`%c  [newsService] getNewsArticlesByUserId: No status filter. Querying by userId only. orderBy NOT applied to server query. Client-side sort by updatedAt will be applied.`, "color: orange; font-weight:bold;");
+    orderByFieldForLogging = 'updatedAt'; // Still relevant for rule simulation log if rule expects it
+    orderByDirectionForLogging = 'desc';
     clientSideSortRequired = true;
-    // No server-side orderBy('updatedAt', 'desc') in this specific case
+    isOrderByAppliedToServer = false; // Explicitly set that orderBy is NOT sent to server
   }
   constraints.push(limit(effectiveLimit));
 
-  const loggedConstraints = constraints.map(c => {
-    const constraintObj = c as any; // Type assertion for internal properties
-    if (constraintObj.type === 'where') {
-      return { type: 'where', field: constraintObj._fieldPath.segments.join('/'), op: constraintObj._op, value: constraintObj._value };
-    }
-    if (constraintObj.type === 'orderBy') {
-      return { type: 'orderBy', field: constraintObj._field.segments.join('/'), direction: constraintObj._direction || 'asc' }; // Default to asc if not specified
-    }
-    if (constraintObj.type === 'limit') {
-      return { type: 'limit', limit: constraintObj._limit, limitType: constraintObj._limitToLast ? 'last' : 'first' };
-    }
-    return { type: 'unknown', details: JSON.stringify(c).substring(0,100) };
-  });
-  console.log(`%c  [newsService] getNewsArticlesByUserId: Final query constraints prepared:`, "color: dodgerblue;", loggedConstraints);
+  const filtersForRulesLog = constraints
+    .filter(c => (c as any)._type === 'where') // More robust way to identify 'where' constraints
+    .map(c => {
+        const cf = (c as any)._query?.filters[0]; // Access internal representation if needed or simplify
+        return cf ? [cf.field.segments.join('/'), cf.op, cf.value.value.stringValue || cf.value.value.integerValue || cf.value.value] : ['unknown_filter_field', 'unknown_op', 'unknown_value'];
+    });
 
-  // Enhanced logging for rules debugging (matches Firestore rules request object structure)
-  const filtersForRulesLog = loggedConstraints.filter(c => c.type === 'where').map(f => [f.field, f.op, f.value]);
-  const orderByForRulesLog = loggedConstraints.find(c => c.type === 'orderBy');
 
   console.log(`%c[newsService DEBUG] For rules evaluation (getNewsArticlesByUserId):
     request.auth.uid:                     '${currentClientAuthUid || 'NULL'}'
     request.query.filters.size():         ${filtersForRulesLog.length}
     request.query.filters:                ${JSON.stringify(filtersForRulesLog)}
-    request.query.orderBy (exists?):      ${!!orderByForRulesLog}
-    string(request.query.orderBy.path):   '${orderByForRulesLog?.field || 'N/A'}'
-    request.query.orderBy.direction:      '${orderByForRulesLog?.direction || 'N/A'}'
+    request.query.orderBy (exists?):      ${isOrderByAppliedToServer} 
+    string(request.query.orderBy.path):   '${isOrderByAppliedToServer ? orderByFieldForLogging : 'N/A'}'
+    request.query.orderBy.direction:      '${isOrderByAppliedToServer ? orderByDirectionForLogging : 'N/A'}'
     request.query.limit:                  ${effectiveLimit}`, "color: magenta; font-weight: bold;"
   );
 
@@ -223,7 +216,7 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
         console.error(`%c  [newsService] PERMISSION DENIED. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
         const effectiveQueryLog = `Query: where('userId', '==', '${userId}')` +
                                   (status ? `, where('status', '==', '${status}')` : '') +
-                                  (orderByField ? `, orderBy('${orderByField}', '${orderByDirection}')` : '') +
+                                  (isOrderByAppliedToServer ? `, orderBy('${orderByFieldForLogging}', '${orderByDirectionForLogging}')` : '') + // Log if orderBy was applied
                                   `, limit(${effectiveLimit})`;
         console.error(`%c  Query was effectively: ${effectiveQueryLog}`, "color: red; font-weight: bold;");
         console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met by request.query.filters.`, "color: red; font-weight: bold;");
@@ -242,20 +235,8 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
     limit(count)
   ];
 
-  const loggedConstraints = constraints.map(c => {
-    const constraintObj = c as any;
-    if (constraintObj.type === 'where') {
-      return { type: 'where', field: constraintObj._fieldPath.segments.join('/'), op: constraintObj._op, value: constraintObj._value };
-    }
-    if (constraintObj.type === 'orderBy') {
-      return { type: 'orderBy', field: constraintObj._field.segments.join('/'), direction: constraintObj._direction || 'asc' };
-    }
-    if (constraintObj.type === 'limit') {
-      return { type: 'limit', limit: constraintObj._limit, limitType: constraintObj._limitToLast ? 'last' : 'first' };
-    }
-    return { type: 'unknown', details: JSON.stringify(c).substring(0,100) };
-  });
-  console.log(`%c  [newsService] getPublishedNewsArticles: Query constraints prepared:`, "color: dodgerblue;", loggedConstraints);
+  // Simplified logging for getPublishedNewsArticles as it's working
+  console.log(`%c  [newsService] getPublishedNewsArticles: Query constraints: where('status','==','published'), orderBy('publishedAt','desc'), limit(${count})`, "color: dodgerblue;");
 
   const q = query(newsArticlesCollectionRef, ...constraints);
 
@@ -281,8 +262,8 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
     console.error(`%c[newsService] Error fetching published news articles:`, "color: red;", error);
      if (error.code === 'permission-denied') {
         console.error(`%c  [newsService] PERMISSION DENIED for getPublishedNewsArticles. This indicates your Firestore security rules are blocking this query.`, "color: red; font-weight: bold;");
-        const queryDesc = loggedConstraints.map(c => `${c.type}(${c.field || ''} ${c.op || c.direction || ''} ${c.value || c.limit || ''})`).join(', ');
-        console.error(`%c  Query was: ${queryDesc}`, "color: red; font-weight: bold;");
+        // Simplified log for working query
+        console.error(`%c  Query was: where('status','==','published'), orderBy('publishedAt','desc'), limit(${count})`, "color: red; font-weight: bold;");
         console.error(`%c  Ensure your rules allow 'list' operations on 'newsArticles' when these conditions are met.`, "color: red; font-weight: bold;");
     }
     throw error;
@@ -311,8 +292,8 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
     if (docSnap.exists()) {
       const data = docSnap.data() as NewsArticle;
       // Ensure publishedAt is handled correctly even if it's null from Firestore
-      const publishedAtMillis = data.publishedAt instanceof Timestamp 
-        ? data.publishedAt.toMillis() 
+      const publishedAtMillis = data.publishedAt instanceof Timestamp
+        ? data.publishedAt.toMillis()
         : (data.publishedAt === null ? null : undefined); // Convert null to null, undefined to undefined
 
       return {

@@ -2,8 +2,8 @@
 // src/app/news/page.tsx
 "use client"; 
 
-import React, { useMemo, useEffect } from 'react';
-import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send, Loader2, AlertTriangle } from 'lucide-react'; // Added AlertTriangle
+import React, { useMemo, useEffect, useState } from 'react'; // Added useState
+import { Newspaper, TrendingUp, Banknote, Landmark, Handshake, CalendarDaysIcon, Edit2, FileText, Send, Loader2, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
@@ -22,7 +22,7 @@ import { getNewsArticlesByUserId, getPublishedNewsArticles } from '@/services/ne
 import type { ClientNewsArticle } from '@/types/news';
 import { formatDistanceToNowStrict } from 'date-fns';
 import { Badge } from '@/components/ui/badge';
-import { useIsMobile } from "@/hooks/use-mobile"; // Corrected import path
+import { useIsMobile } from "@/hooks/use-mobile"; 
 
 interface NewsItem {
   id: string;
@@ -39,6 +39,7 @@ interface NewsItem {
   publishedAt?: number | null;
 }
 
+// This generalMockNewsData is fine as a fallback if the generalPublishedArticles query fails or is loading
 const generalMockNewsData: Omit<NewsItem, 'id' | 'date' | 'link' | 'publishedAt'>[] = [
   { title: 'Market Trends: Q4 Investment Outlook', category: 'Financial Insights', source: 'Finance Globe', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'stock market', excerpt: 'Analysts predict cautious optimism in key sectors.' },
   { title: 'New Data Privacy Laws: What Businesses Need to Know', category: 'Political & Regulatory', source: 'Legal Business Review', imageUrl: 'https://placehold.co/600x400.png', aiHint: 'government law', excerpt: 'Understanding compliance for upcoming GDPR-like regulations.' },
@@ -60,24 +61,24 @@ const newsCategoriesConfig = [
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const isMobile = useIsMobile(); 
+  const [localUserArticles, setLocalUserArticles] = useState<ClientNewsArticle[]>([]);
 
-  const { data: userArticles, isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
+  const { data: userArticlesDataFromQuery, isLoading: isLoadingUserArticles, error: userArticlesError } = useQuery<ClientNewsArticle[]>({
     queryKey: ['userNewsArticles', user?.uid],
     queryFn: () => {
-        // console.log(`%c[NewsPage] Fetching user articles for UID: ${user?.uid}`, "color: teal");
+        console.log(`%c[NewsPage] Fetching user articles for UID: ${user?.uid}`, "color: teal");
         return user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]);
     },
-    enabled: !!user,
+    enabled: !!user && !authLoading, // Ensure auth is not loading before enabling
   });
 
+  // Update local state when query data changes
   useEffect(() => {
-    if (userArticles) {
-        // console.log(`%c[NewsPage] Received userArticles (count: ${userArticles.length}):`, "color: green;", userArticles.slice(0,2));
+    if (userArticlesDataFromQuery) {
+      setLocalUserArticles(userArticlesDataFromQuery);
+      console.log(`%c[NewsPage] userArticlesDataFromQuery updated (count: ${userArticlesDataFromQuery.length}):`, "color: green;", userArticlesDataFromQuery.slice(0,2));
     }
-    if (userArticlesError) {
-        // console.error(`%c[NewsPage] Error fetching userArticles:`, "color: red;", userArticlesError);
-    }
-  }, [userArticles, userArticlesError]);
+  }, [userArticlesDataFromQuery]);
 
 
   const { data: generalPublishedArticles, isLoading: isLoadingGeneralArticles, error: generalArticlesError } = useQuery<ClientNewsArticle[]>({
@@ -87,10 +88,10 @@ const NewsPage = () => {
   
   useEffect(() => {
     if (generalPublishedArticles) {
-        // console.log(`%c[NewsPage] Received generalPublishedArticles (count: ${generalPublishedArticles.length}). First two:`, "color: green;", generalPublishedArticles.slice(0,2));
+        console.log(`%c[NewsPage] Received generalPublishedArticles (count: ${generalPublishedArticles.length}). First two:`, "color: green;", generalPublishedArticles.slice(0,2));
     }
     if (generalArticlesError) {
-        // console.error(`%c[NewsPage] Error fetching generalPublishedArticles:`, "color: red;", generalArticlesError);
+        console.error(`%c[NewsPage] Error fetching generalPublishedArticles:`, "color: red;", generalArticlesError);
     }
   }, [generalPublishedArticles, generalArticlesError]);
   
@@ -109,10 +110,10 @@ const NewsPage = () => {
   });
 
   const categorizedNews = useMemo(() => {
-    // console.log(`%c[NewsPage] Memoizing categorizedNews. Input userArticles (from query):`, "color: blue;", userArticles);
-    const userDrafts: NewsItem[] = userArticles?.filter(a => a.status === 'draft').map(transformToNewsItem) || [];
-    const userPublished: NewsItem[] = userArticles?.filter(a => a.status === 'published').map(transformToNewsItem) || [];
-    // console.log(`%c  [NewsPage] Client-side filtered: Drafts count: ${userDrafts.length}, Published by user count: ${userPublished.length}`, "color: blue;");
+    console.log(`%c[NewsPage] Memoizing categorizedNews. Input localUserArticles:`, "color: blue;", localUserArticles);
+    const userDrafts: NewsItem[] = localUserArticles?.filter(a => a.status === 'draft').map(transformToNewsItem) || [];
+    const userPublished: NewsItem[] = localUserArticles?.filter(a => a.status === 'published').map(transformToNewsItem) || [];
+    console.log(`%c  [NewsPage] Client-side filtered: Drafts count: ${userDrafts.length}, Published by user count: ${userPublished.length}`, "color: blue;");
 
     const generalFeed: { [key: string]: NewsItem[] } = {};
     if (generalPublishedArticles) {
@@ -123,7 +124,7 @@ const NewsPage = () => {
                     .map(transformToNewsItem);
             }
         });
-    } else {
+    } else { // Fallback to mock data if generalPublishedArticles is not yet loaded or fails
         newsCategoriesConfig.forEach(catConfig => {
             if (catConfig.dataKey.startsWith('general')) {
                 generalFeed[catConfig.dataKey] = generalMockNewsData
@@ -132,21 +133,21 @@ const NewsPage = () => {
                     ...item,
                     id: `${catConfig.id}-mock-${index}`,
                     date: item.category === 'Events' ? 'Various Dates' : new Date(Date.now() - index * 24 * 60 * 60 * 1000 * (Math.random()*5 + 1)).toLocaleDateString(),
-                    link: '#',
+                    link: '#', // Mock link
                     publishedAt: Date.now() - index * 24 * 60 * 60 * 1000 * (Math.random()*5 + 1),
                 }));
             }
         });
     }
     
-    // console.log(`%c[NewsPage] Final categorizedNews structure:`, "color: blue;", { userDrafts, userPublished, ...generalFeed });
+    console.log(`%c[NewsPage] Final categorizedNews structure:`, "color: blue;", { userDrafts, userPublished, ...generalFeed });
 
     return {
       userDrafts,
       userPublished,
       ...generalFeed,
     };
-  }, [userArticles, generalPublishedArticles]);
+  }, [localUserArticles, generalPublishedArticles]); // Depend on localUserArticles
 
   const isLoading = authLoading || isLoadingUserArticles || isLoadingGeneralArticles;
 
@@ -167,7 +168,7 @@ const NewsPage = () => {
         )}
       </header>
 
-      {(isLoadingUserArticles && !userArticles) && ( 
+      {(isLoadingUserArticles && !localUserArticles.length) && ( // Show loading if user articles are loading and local state is empty
         <div className="flex justify-center items-center py-10">
           <Loader2 className="h-10 w-10 animate-spin text-primary" />
           <p className="ml-2 text-sm text-muted-foreground">Loading your articles...</p>
@@ -188,11 +189,11 @@ const NewsPage = () => {
           
           if (!user && categoryConfig.dataKey.startsWith('user')) return null;
           
-          const isLoadingSection = categoryConfig.dataKey.startsWith('user') ? (isLoadingUserArticles && !userArticles) : (isLoadingGeneralArticles && !generalPublishedArticles);
+          const isLoadingThisSection = categoryConfig.dataKey.startsWith('user') ? (isLoadingUserArticles && !localUserArticles.length) : (isLoadingGeneralArticles && !generalPublishedArticles);
           const sectionHasError = categoryConfig.dataKey.startsWith('user') ? !!userArticlesError : !!generalArticlesError;
 
 
-          if (items.length === 0 && !categoryConfig.showIfEmpty && !categoryConfig.dataKey.startsWith('user') && !isLoadingSection && !sectionHasError) return null;
+          if (items.length === 0 && !categoryConfig.showIfEmpty && !categoryConfig.dataKey.startsWith('user') && !isLoadingThisSection && !sectionHasError) return null;
 
           return (
             <section key={categoryConfig.id} aria-labelledby={`category-title-${categoryConfig.id}`}>
@@ -202,7 +203,7 @@ const NewsPage = () => {
                   {categoryConfig.title}
                 </h2>
               </div>
-              {isLoadingSection && items.length === 0 ? (
+              {isLoadingThisSection && items.length === 0 ? (
                   <div className="flex justify-center items-center py-6"><Loader2 className="h-6 w-6 animate-spin text-primary"/> <span className="ml-2 text-muted-foreground text-sm">Loading...</span></div>
               ) : sectionHasError && items.length === 0 ? (
                   <p className="text-sm text-destructive text-center py-4">Could not load articles for this section.</p>
