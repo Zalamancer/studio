@@ -13,7 +13,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search as SearchIcon } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -78,6 +78,7 @@ const ArticlePage = () => {
   const coverImageInputRef = useRef<HTMLInputElement>(null);
   const inlineImageInputRef = useRef<HTMLInputElement>(null);
   const toolbarWrapperRef = useRef<HTMLDivElement>(null);
+  const headerSearchInputRef = useRef<HTMLInputElement>(null);
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
   const [selectionNonce, setSelectionNonce] = useState(0);
@@ -94,6 +95,8 @@ const ArticlePage = () => {
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
 
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
@@ -182,11 +185,8 @@ const ArticlePage = () => {
     }
   }, [article, isEditingAllowed, toast]);
 
-
   const updateSelectionNonce = useCallback(() => {
-    requestAnimationFrame(() => {
-        setSelectionNonce(n => n + 1);
-    });
+    setSelectionNonce(n => n + 1);
   }, []);
 
   const getCurrentBlockElement = useCallback((): HTMLElement | null => {
@@ -227,7 +227,7 @@ const ArticlePage = () => {
         if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT';
         return currentBlock.textContent?.trim() || "";
       }
-      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>") return "EDITOR_IS_EMPTY";
+      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>" || contentEl.innerHTML.trim() === "<p><br></p>" || contentEl.innerHTML.trim() === "<p></p>") return "EDITOR_IS_EMPTY";
       return "NO_CURRENT_BLOCK_FOUND";
     }
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
@@ -285,6 +285,7 @@ const ArticlePage = () => {
         let referenceElementRect: DOMRect | undefined;
         if (focusedField === 'title' && titleWrapperRef.current) referenceElementRect = titleWrapperRef.current.getBoundingClientRect();
         else if (focusedField === 'content' && contentWrapperRef.current) referenceElementRect = contentWrapperRef.current.getBoundingClientRect();
+        
         if (referenceElementRect && formWrapperRef.current) {
           const formRect = formWrapperRef.current.getBoundingClientRect();
           const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
@@ -298,34 +299,37 @@ const ArticlePage = () => {
       }
     }
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
-  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
+  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleWrapperRef, contentWrapperRef, formWrapperRef]);
+
 
   useEffect(() => {
-    if (isEditingAllowed) calculateAndUpdateToolbarStyle();
-  }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed, title, storyContent]);
-
+    if (isEditingAllowed) {
+      calculateAndUpdateToolbarStyle();
+    }
+  }, [focusedField, selectionNonce, isEditingAllowed, calculateAndUpdateToolbarStyle]);
+  
   useEffect(() => {
-    const handleInteraction = () => {
-      requestAnimationFrame(() => {
-        if (isEditingAllowed && (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current))) {
-            updateSelectionNonce();
-        }
-      });
+    const handleSelectionChange = () => {
+      if (isEditingAllowed && (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current))) {
+        requestAnimationFrame(updateSelectionNonce);
+      }
     };
     if (isEditingAllowed) {
-        document.addEventListener('selectionchange', handleInteraction);
-        document.addEventListener('keyup', handleInteraction);
-        document.addEventListener('click', handleInteraction);
+      document.addEventListener('selectionchange', handleSelectionChange);
     }
     return () => {
-        document.removeEventListener('selectionchange', handleInteraction);
-        document.removeEventListener('keyup', handleInteraction);
-        document.removeEventListener('click', handleInteraction);
+      document.removeEventListener('selectionchange', handleSelectionChange);
     };
-  }, [updateSelectionNonce, isEditingAllowed, contentEditableRef, titleInputRef]);
+  }, [isEditingAllowed, updateSelectionNonce, contentEditableRef, titleInputRef]);
 
 
-  const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) setFocusedField(field); }, [isEditingAllowed]);
+  const handleFocus = useCallback((field: 'title' | 'content') => {
+    if (isEditingAllowed) {
+      setFocusedField(field);
+      requestAnimationFrame(updateSelectionNonce);
+    }
+  }, [isEditingAllowed, updateSelectionNonce]);
+
   const handleBlur = useCallback(() => {
     if (!isEditingAllowed) return;
     queueMicrotask(() => {
@@ -338,7 +342,7 @@ const ArticlePage = () => {
 
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
-    const currentHTML = event.currentTarget.innerHTML;
+    let currentHTML = event.currentTarget.innerHTML;
     const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>";
     
     const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML;
@@ -346,15 +350,15 @@ const ArticlePage = () => {
 
     if (isEmptyContent && finalHTML === "<p><br></p>") {
       if (event.currentTarget.innerHTML !== finalHTML) {
-          event.currentTarget.innerHTML = finalHTML;
+        event.currentTarget.innerHTML = finalHTML;
       }
       queueMicrotask(() => {
         if (contentEditableRef.current) {
           const pTag = contentEditableRef.current.querySelector('p');
-          if(pTag) {
+          if (pTag) {
             const range = document.createRange();
             const sel = window.getSelection();
-            try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {/*ignore*/}
+            try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch (e) { /*ignore*/ }
           }
         }
       });
@@ -368,7 +372,7 @@ const ArticlePage = () => {
         setStoryError("Story content is required.");
       }
     }
-    updateSelectionNonce();
+    requestAnimationFrame(updateSelectionNonce);
   }, [isEditingAllowed, publishAttempted, setStoryError, updateSelectionNonce, setStoryContent]);
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
@@ -376,12 +380,14 @@ const ArticlePage = () => {
     const editorEl = contentEditableRef.current; if (!editorEl) return;
     const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
+    
     if (event.key === 'Enter') {
-        event.preventDefault(); document.execCommand('insertParagraph', false, undefined);
-        if (editorEl) setStoryContent(editorEl.innerHTML);
-        setTimeout(() => { if (contentEditableRef.current) { updateSelectionNonce();}}, 0);
-        return;
+      event.preventDefault(); document.execCommand('insertParagraph', false, undefined);
+      if (editorEl) setStoryContent(editorEl.innerHTML);
+      requestAnimationFrame(updateSelectionNonce);
+      return;
     }
+    
     if (event.key === 'Backspace' || event.key === 'Delete') {
       if (range.collapsed && currentBlock) {
         const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false;
@@ -391,7 +397,7 @@ const ArticlePage = () => {
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
             event.preventDefault(); prevElement.remove();
             if (editorEl) setStoryContent(editorEl.innerHTML);
-            updateSelectionNonce(); return;
+            requestAnimationFrame(updateSelectionNonce); return;
           }
         } else { 
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
@@ -399,16 +405,18 @@ const ArticlePage = () => {
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
             event.preventDefault(); nextElement.remove();
             if (editorEl) setStoryContent(editorEl.innerHTML);
-            updateSelectionNonce(); return;
+            requestAnimationFrame(updateSelectionNonce); return;
           }
         }
       }
     }
+    // For other keys, defer storyContent update and nonce update slightly.
     setTimeout(() => {
         if (editorEl) setStoryContent(editorEl.innerHTML);
-        updateSelectionNonce();
+        requestAnimationFrame(updateSelectionNonce);
     },0);
-  }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed, setStoryContent]);
+  }, [getCurrentBlockElement, isEditingAllowed, setStoryContent, updateSelectionNonce]);
+
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -418,7 +426,7 @@ const ArticlePage = () => {
     const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentEditorHTML)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags, setTagsError]);
+  }, [title, tags]);
 
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
@@ -467,7 +475,6 @@ const ArticlePage = () => {
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         tags: tags,
-        status: newStatus,
       };
 
       if (newCoverImageUrl !== undefined) {
@@ -486,17 +493,19 @@ const ArticlePage = () => {
       if (isSavingDraftOfPublishedArticleFlag && article.status === 'published') {
         articleUpdateData.draftContent = finalContentForService;
         articleUpdateData.hasUnpublishedChanges = true;
-        articleUpdateData.status = 'published'; // Ensure status remains published
+        articleUpdateData.status = 'published'; 
       } else if (newStatus === 'published') {
         articleUpdateData.content = finalContentForService;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
+        articleUpdateData.status = 'published';
       } else if (newStatus === 'draft') {
         articleUpdateData.content = finalContentForService;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
+        articleUpdateData.status = 'draft';
         articleUpdateData.publishedAt = null;
-      } else if (contentValueFromUpdate !== undefined) { 
+      } else if (contentToSaveParam !== undefined) { 
          articleUpdateData.content = finalContentForService;
          if (article.status === 'published') { 
              articleUpdateData.draftContent = null;
@@ -583,7 +592,7 @@ const ArticlePage = () => {
       setStoryContent(editorEl.innerHTML || "<p><br></p>");
       
       setIsToolbarExpanded(false);
-      queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); });
+      queueMicrotask(() => { editorEl.focus(); requestAnimationFrame(updateSelectionNonce); });
     });
   }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setIsToolbarExpanded, savedRange, isEditingAllowed, setStoryContent]);
 
@@ -663,6 +672,18 @@ const ArticlePage = () => {
       setCoverImagePreview(currentCoverImageUrl);
     }
   };
+
+  const toggleHeaderSearch = useCallback(() => {
+    setIsHeaderSearchActive(prev => {
+        const nextState = !prev;
+        if (nextState) { // If search is becoming active
+            setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+        } else {
+            setHeaderSearchTerm(''); // Clear search term when hiding
+        }
+        return nextState;
+    });
+  }, []);
 
   if (authLoading || isLoadingArticle) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
@@ -755,16 +776,33 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        <TagsInput
-            value={tags}
-            onChange={setTags}
-            placeholder="Add up to 5 tags..."
-            disabled={isSubmitting || !isEditingAllowed}
-            error={publishAttempted && tagsError ? tagsError : null}
-            onPublishAttempt={publishAttempted}
-            className="flex-grow text-xs min-w-0" // Added min-w-0
-            maxTags={5}
-        />
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-grow min-w-0">
+          <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className="h-9 w-9 p-1.5 flex-shrink-0" aria-label={isHeaderSearchActive ? "Close search" : "Open search"}>
+             <SearchIcon className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-90")} />
+          </Button>
+          {isHeaderSearchActive ? (
+             <Input
+                ref={headerSearchInputRef}
+                type="search"
+                placeholder="Search all tags to add..."
+                value={headerSearchTerm}
+                onChange={(e) => setHeaderSearchTerm(e.target.value)}
+                className="flex-grow text-xs min-w-0 h-9"
+                disabled={isSubmitting}
+             />
+           ) : (
+             <TagsInput
+                value={tags}
+                onChange={setTags}
+                placeholder="Add up to 5 tags..."
+                disabled={isSubmitting || !isEditingAllowed}
+                error={publishAttempted && tagsError ? tagsError : null}
+                onPublishAttempt={publishAttempted}
+                className="flex-grow text-xs min-w-0"
+                maxTags={5}
+             />
+           )}
+        </div>
         
         <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           {user && articleId && article && (
@@ -862,26 +900,36 @@ const ArticlePage = () => {
                   if (contentEditableRef.current && article.content) {
                       setStoryContent(article.content); 
                       contentEditableRef.current.innerHTML = article.content; 
+                      requestAnimationFrame(updateSelectionNonce);
                   }
                   toast({title: "Viewing Live Content", description: "Editor now shows the live published content. Any unsaved draft changes were not applied."});
               }}>View live content</Button>
             </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
+          <Input
+             ref={titleInputRef}
+             placeholder="Title"
+             value={title}
+             onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } requestAnimationFrame(updateSelectionNonce); }}
+             onFocus={() => handleFocus('title')}
+             onBlur={handleBlur}
+             className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
+             autoComplete="off"
+             disabled={isSubmitting || !isEditingAllowed}
+          />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
-            key={articleId}
+            key={articleId} // Ensures re-mount if articleId changes (though not typical here)
             ref={contentEditableRef}
             contentEditable={isEditingAllowed && !isSubmitting}
             onInput={handleContentEditableInput}
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
-            onClick={updateSelectionNonce}
-            onKeyUp={updateSelectionNonce}
+            // onClick removed for caret stability
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
@@ -898,7 +946,7 @@ const ArticlePage = () => {
             aria-multiline="true"
             aria-label="News article content"
             suppressContentEditableWarning={true}
-            dir="ltr"
+            dir="ltr" // Overall direction for the editor content
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
