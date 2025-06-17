@@ -1,3 +1,4 @@
+
 // src/app/news/create/page.tsx
 "use client";
 
@@ -195,16 +196,16 @@ const CreateNewsArticlePage = () => {
   useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
   
   useEffect(() => {
-    const handleSelectionChange = () => {
-        if (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current)) {
-            requestAnimationFrame(updateSelectionNonce);
-        }
+    const handleDocSelectionChange = () => {
+      if (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current)) {
+        requestAnimationFrame(updateSelectionNonce);
+      }
     };
-    document.addEventListener('selectionchange', handleSelectionChange);
+    document.addEventListener('selectionchange', handleDocSelectionChange);
     return () => {
-        document.removeEventListener('selectionchange', handleSelectionChange);
+      document.removeEventListener('selectionchange', handleDocSelectionChange);
     };
-  }, [updateSelectionNonce, contentEditableRef, titleInputRef]);
+  }, [updateSelectionNonce]);
 
 
   const handleFocus = useCallback((field: 'title' | 'content') => setFocusedField(field), []);
@@ -220,7 +221,7 @@ const CreateNewsArticlePage = () => {
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     const currentHTML = event.currentTarget.innerHTML;
     setStoryContent(currentHTML); 
-    requestAnimationFrame(updateSelectionNonce);
+    // Removed requestAnimationFrame(updateSelectionNonce);
 
     if (publishAttempted) {
       const currentText = event.currentTarget.textContent || "";
@@ -230,13 +231,19 @@ const CreateNewsArticlePage = () => {
         setStoryError("Story content is required.");
       }
     }
-  }, [publishAttempted, setStoryContent, setStoryError, updateSelectionNonce]);
+  }, [publishAttempted, setStoryError]);
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const editorEl = contentEditableRef.current; if (!editorEl) return;
     const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
-    if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); if (editorEl) setStoryContent(editorEl.innerHTML); requestAnimationFrame(updateSelectionNonce); return; } 
+    if (event.key === 'Enter') { 
+        event.preventDefault(); 
+        document.execCommand('insertParagraph', false, undefined); 
+        if (editorEl) setStoryContent(editorEl.innerHTML); 
+        // Removed requestAnimationFrame(updateSelectionNonce);
+        return; 
+    } 
     if (event.key === 'Backspace' || event.key === 'Delete') {
       if (range.collapsed && currentBlock) {
         const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false;
@@ -244,19 +251,28 @@ const CreateNewsArticlePage = () => {
           if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
-            event.preventDefault(); prevElement.remove(); if (editorEl) setStoryContent(editorEl.innerHTML); requestAnimationFrame(updateSelectionNonce); return; 
+            event.preventDefault(); prevElement.remove(); 
+            if (editorEl) setStoryContent(editorEl.innerHTML); 
+            // Removed requestAnimationFrame(updateSelectionNonce);
+            return; 
           }
         } else { 
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
-            event.preventDefault(); nextElement.remove(); if (editorEl) setStoryContent(editorEl.innerHTML); requestAnimationFrame(updateSelectionNonce); return; 
+            event.preventDefault(); nextElement.remove(); 
+            if (editorEl) setStoryContent(editorEl.innerHTML); 
+            // Removed requestAnimationFrame(updateSelectionNonce);
+            return; 
           }
         }
       }
     }
-    setTimeout(() => { if (editorEl) setStoryContent(editorEl.innerHTML); requestAnimationFrame(updateSelectionNonce); },0); 
-  }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce]);
+    setTimeout(() => { 
+        if (editorEl) setStoryContent(editorEl.innerHTML); 
+        // Removed requestAnimationFrame(updateSelectionNonce);
+    },0); 
+  }, [getCurrentBlockElement, setStoryContent]);
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -266,7 +282,7 @@ const CreateNewsArticlePage = () => {
     const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentEditorHTML)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags]);
+  }, [title, tags, contentEditableRef]); // Added contentEditableRef to dependencies
 
   const handleFormSubmission = async (status: NewsArticleStatus) => {
     if (!user) { toast({ variant: "destructive", title: "Error", description: "You must be logged in." }); return; }
@@ -505,7 +521,21 @@ const CreateNewsArticlePage = () => {
           </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } requestAnimationFrame(updateSelectionNonce); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting} />
+          <Input 
+            ref={titleInputRef} 
+            placeholder="Title" 
+            value={title} 
+            onChange={(e) => { 
+              setTitle(e.target.value); 
+              if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } 
+              // Removed requestAnimationFrame(updateSelectionNonce);
+            }} 
+            onFocus={() => handleFocus('title')} 
+            onBlur={handleBlur} 
+            className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" 
+            autoComplete="off" 
+            disabled={isSubmitting} 
+          />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">

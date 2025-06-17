@@ -1,3 +1,4 @@
+
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -304,20 +305,17 @@ const ArticlePage = () => {
   }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
 
   useEffect(() => {
-    const handleSelectionChange = () => {
-        if (isEditingAllowed && (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current))) {
-            requestAnimationFrame(updateSelectionNonce);
-        }
+    if (!isEditingAllowed) return;
+    const handleDocSelectionChange = () => {
+      if (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current)) {
+        requestAnimationFrame(updateSelectionNonce);
+      }
     };
-    if (isEditingAllowed) {
-        document.addEventListener('selectionchange', handleSelectionChange);
-    }
+    document.addEventListener('selectionchange', handleDocSelectionChange);
     return () => {
-        if (isEditingAllowed) {
-            document.removeEventListener('selectionchange', handleSelectionChange);
-        }
+      document.removeEventListener('selectionchange', handleDocSelectionChange);
     };
-  }, [isEditingAllowed, updateSelectionNonce, contentEditableRef, titleInputRef]);
+  }, [isEditingAllowed, updateSelectionNonce]);
 
 
   const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) setFocusedField(field); }, [isEditingAllowed]);
@@ -335,7 +333,7 @@ const ArticlePage = () => {
     if (!isEditingAllowed) return;
     const currentHTML = event.currentTarget.innerHTML;
     setStoryContent(currentHTML);
-    requestAnimationFrame(updateSelectionNonce);
+    // Removed requestAnimationFrame(updateSelectionNonce);
 
     if (publishAttempted) {
       const currentText = event.currentTarget.textContent || "";
@@ -345,7 +343,7 @@ const ArticlePage = () => {
         setStoryError("Story content is required.");
       }
     }
-  }, [isEditingAllowed, publishAttempted, setStoryContent, setStoryError, updateSelectionNonce]);
+  }, [isEditingAllowed, publishAttempted, setStoryError]);
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
@@ -354,8 +352,8 @@ const ArticlePage = () => {
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
     if (event.key === 'Enter') {
         event.preventDefault(); document.execCommand('insertParagraph', false, undefined);
-        if (editorEl) setStoryContent(editorEl.innerHTML); // update state
-        requestAnimationFrame(updateSelectionNonce);
+        if (editorEl) setStoryContent(editorEl.innerHTML); 
+        // Removed requestAnimationFrame(updateSelectionNonce);
         return;
     }
     if (event.key === 'Backspace' || event.key === 'Delete') {
@@ -366,16 +364,18 @@ const ArticlePage = () => {
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
             event.preventDefault(); prevElement.remove();
-            if (editorEl) setStoryContent(editorEl.innerHTML); // update state
-            requestAnimationFrame(updateSelectionNonce); return;
+            if (editorEl) setStoryContent(editorEl.innerHTML); 
+            // Removed requestAnimationFrame(updateSelectionNonce); 
+            return;
           }
         } else { 
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
             event.preventDefault(); nextElement.remove();
-            if (editorEl) setStoryContent(editorEl.innerHTML); // update state
-            requestAnimationFrame(updateSelectionNonce); return;
+            if (editorEl) setStoryContent(editorEl.innerHTML);
+            // Removed requestAnimationFrame(updateSelectionNonce);
+             return;
           }
         }
       }
@@ -383,9 +383,9 @@ const ArticlePage = () => {
     // Defer state update for other keys as well to allow browser to handle first
     setTimeout(() => {
         if (editorEl) setStoryContent(editorEl.innerHTML);
-        requestAnimationFrame(updateSelectionNonce);
+        // Removed requestAnimationFrame(updateSelectionNonce);
     },0);
-  }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed, setStoryContent]);
+  }, [getCurrentBlockElement, isEditingAllowed]);
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -395,7 +395,7 @@ const ArticlePage = () => {
     const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentEditorHTML)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags, setTagsError]);
+  }, [title, tags, contentEditableRef]); // Added contentEditableRef to dependencies
 
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
@@ -444,26 +444,19 @@ const ArticlePage = () => {
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         tags: tags,
-        status: newStatus,
+        status: newStatus, // Defaulted to article.status if not changing, but newStatus is always passed.
       };
 
       if (newCoverImageUrl !== undefined) {
         articleUpdateData.coverImageUrl = newCoverImageUrl;
       }
-
-      const normalizeContent = (content: string | null | undefined): string | null => {
-        if (content === undefined || content === null || content.trim() === "" || content.trim() === "<p><br></p>") {
-          return null;
-        }
-        return content;
-      };
       
-      const finalContentForService = normalizeContent(contentForThisSaveOperation);
+      const finalContentForService = (typeof contentForThisSaveOperation === 'string' && (contentForThisSaveOperation.trim() === "" || contentForThisSaveOperation.trim() === "<p><br></p>")) ? null : contentForThisSaveOperation;
 
       if (isSavingDraftOfPublishedArticleFlag && article.status === 'published') {
         articleUpdateData.draftContent = finalContentForService;
         articleUpdateData.hasUnpublishedChanges = true;
-        articleUpdateData.status = 'published'; // Status remains published
+        articleUpdateData.status = 'published'; 
       } else if (newStatus === 'published') {
         articleUpdateData.content = finalContentForService;
         articleUpdateData.draftContent = null;
@@ -473,9 +466,9 @@ const ArticlePage = () => {
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
         articleUpdateData.publishedAt = null;
-      } else if (contentValueFromUpdate !== undefined) {
+      } else if (contentForThisSaveOperation !== undefined) { 
          articleUpdateData.content = finalContentForService;
-         if (article.status === 'published') {
+         if (article.status === 'published') { 
              articleUpdateData.draftContent = null;
              articleUpdateData.hasUnpublishedChanges = false;
          }
@@ -873,7 +866,20 @@ const ArticlePage = () => {
             </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } requestAnimationFrame(updateSelectionNonce); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
+          <Input 
+            ref={titleInputRef} 
+            placeholder="Title" 
+            value={title} 
+            onChange={(e) => { 
+              setTitle(e.target.value); 
+              if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); }
+            }} 
+            onFocus={() => handleFocus('title')} 
+            onBlur={handleBlur} 
+            className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" 
+            autoComplete="off" 
+            disabled={isSubmitting || !isEditingAllowed} 
+          />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
