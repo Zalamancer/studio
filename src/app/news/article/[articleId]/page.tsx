@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -13,7 +12,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Tag } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Tag, Search } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -38,7 +37,7 @@ import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectio
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
-import { TagsInput } from '@/components/TagsInput'; // Updated import path
+import { TagsInput } from '@/components/TagsInput';
 import { Badge } from '@/components/ui/badge';
 
 const TOOLBAR_HEIGHT = 36;
@@ -58,7 +57,7 @@ const ArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [storyContent, setStoryContent] = useState("<p><br></p>");
+  const [storyContent, setStoryContent] = useState("<p dir=\"ltr\"><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string | null>(null);
@@ -67,7 +66,7 @@ const ArticlePage = () => {
   const [isSavingDraftOfPublished, setIsSavingDraftOfPublished] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState(""); // For TagsInput component
+  const [tagsError, setTagsError] = useState("");
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -94,10 +93,13 @@ const ArticlePage = () => {
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
+
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
-    queryKey: ['userCollections', user?.uid, articleId], // Add articleId to key if specific to article
+    queryKey: ['userCollections', user?.uid, articleId],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
-    enabled: !!user && !!articleId, // Enable only when user and article are present
+    enabled: !!user && !!articleId,
   });
 
   const isArticleSaved = useMemo(() => {
@@ -119,7 +121,7 @@ const ArticlePage = () => {
     if (articleId) {
       setIsLoadingArticle(true);
       setErrorLoadingArticle(null);
-      setArticle(null); // Reset article state when ID changes
+      setArticle(null);
       getNewsArticleById(articleId)
         .then((fetchedArticle) => {
           if (fetchedArticle) {
@@ -131,13 +133,12 @@ const ArticlePage = () => {
         .catch((err) => setErrorLoadingArticle(err.message || "Failed to load article."))
         .finally(() => setIsLoadingArticle(false));
     } else {
-      // If no articleId, reset states
       setArticle(null);
       setIsLoadingArticle(false);
       setErrorLoadingArticle(null);
       setTitle("");
       setTags([]);
-      setStoryContent("<p><br></p>");
+      setStoryContent("<p dir=\"ltr\"><br></p>");
       setCoverImagePreview(null);
       setCurrentCoverImageUrl(null);
     }
@@ -146,25 +147,23 @@ const ArticlePage = () => {
   useEffect(() => {
     if (article) {
       setTitle(article.title || "");
-      setTags(article.tags || []); // Use tags
-      let contentToLoadInEditor = "<p><br></p>";
+      setTags(article.tags || []);
+      let contentToLoadInEditor = "<p dir=\"ltr\"><br></p>";
+
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
-          contentToLoadInEditor = article.draftContent;
+          contentToLoadInEditor = article.draftContent || "<p dir=\"ltr\"><br></p>";
           toast({ title: "Draft Loaded", description: "You are editing a saved draft of this published article.", duration: 4000 });
         } else {
-          contentToLoadInEditor = article.content || "<p><br></p>";
+          contentToLoadInEditor = article.content || "<p dir=\"ltr\"><br></p>";
         }
       } else if (article.status === 'published') {
-        contentToLoadInEditor = article.content || "<p><br></p>";
+        contentToLoadInEditor = article.content || "<p dir=\"ltr\"><br></p>";
       } else if (article.status === 'draft' && !isEditingAllowed) {
-        contentToLoadInEditor = "<p>Draft content not available for viewing.</p>";
+        contentToLoadInEditor = "<p dir=\"ltr\">Draft content not available for viewing.</p>";
       }
-
+      
       setStoryContent(contentToLoadInEditor);
-      if (contentEditableRef.current && contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
-        contentEditableRef.current.innerHTML = contentToLoadInEditor;
-      }
 
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
@@ -174,7 +173,6 @@ const ArticlePage = () => {
       setStoryError("");
     }
   }, [article, isEditingAllowed, toast]);
-
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
 
@@ -202,7 +200,7 @@ const ArticlePage = () => {
       node = node.parentNode;
     }
     return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl;
-  }, [contentEditableRef]);
+  }, []);
 
   const getCurrentLineText = useCallback((): string => {
     const contentEl = contentEditableRef.current;
@@ -220,7 +218,7 @@ const ArticlePage = () => {
       return "NO_CURRENT_BLOCK_FOUND";
     }
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
-  }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
+  }, [focusedField, getCurrentBlockElement, titleInputRef]);
 
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
@@ -287,16 +285,30 @@ const ArticlePage = () => {
       }
     }
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
-  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
+  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef]);
 
-  useEffect(() => { if (isEditingAllowed) calculateAndUpdateToolbarStyle(); }, [focusedField, title, storyContent, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
+  useEffect(() => { if (isEditingAllowed) calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
+  
   useEffect(() => {
-    const handleSelectionOrKey = () => { if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) updateSelectionNonce(); };
+    const handleInteraction = () => {
+      if (contentEditableRef.current && (document.activeElement === contentEditableRef.current || 
+          (titleInputRef.current && document.activeElement === titleInputRef.current))) {
+        requestAnimationFrame(() => {
+          updateSelectionNonce();
+        });
+      }
+    };
+
     if (isEditingAllowed) {
-        document.addEventListener('selectionchange', handleSelectionOrKey); document.addEventListener('keyup', handleSelectionOrKey); document.addEventListener('click', handleSelectionOrKey);
+      document.addEventListener('selectionchange', handleInteraction);
+      document.addEventListener('keyup', handleInteraction);
     }
-    return () => { document.removeEventListener('selectionchange', handleSelectionOrKey); document.removeEventListener('keyup', handleSelectionOrKey); document.removeEventListener('click', handleSelectionOrKey); };
-  }, [updateSelectionNonce, isEditingAllowed]);
+    return () => {
+      document.removeEventListener('selectionchange', handleInteraction);
+      document.removeEventListener('keyup', handleInteraction);
+    };
+  }, [updateSelectionNonce, isEditingAllowed, contentEditableRef, titleInputRef]);
+
 
   const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) setFocusedField(field); }, [isEditingAllowed]);
   const handleBlur = useCallback(() => {
@@ -312,26 +324,51 @@ const ArticlePage = () => {
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
     const currentHTML = event.currentTarget.innerHTML;
-    if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") {
-      setStoryContent("<p><br></p>");
-      if (event.currentTarget.innerHTML !== "<p><br></p>") { event.currentTarget.innerHTML = "<p><br></p>";
-        const pTag = event.currentTarget.querySelector('p');
-        if(pTag) { const range = document.createRange(); const sel = window.getSelection(); try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {}}
-      }
-    } else setStoryContent(currentHTML);
+    const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>" || currentHTML.trim() === "<p dir=\"ltr\"><br></p>" || currentHTML.trim() === "<p dir=\"ltr\"></p>";
+    
+    const finalHTML = isEmptyContent ? "<p dir=\"ltr\"><br></p>" : currentHTML;
+    setStoryContent(finalHTML); 
+
+    if (isEmptyContent && finalHTML === "<p dir=\"ltr\"><br></p>") {
+      queueMicrotask(() => {
+        if (contentEditableRef.current) {
+          const pTag = contentEditableRef.current.querySelector('p[dir="ltr"]');
+          if (pTag) {
+            const range = document.createRange();
+            const sel = window.getSelection();
+            try {
+              range.setStart(pTag, 0);
+              range.collapse(true);
+              sel?.removeAllRanges();
+              sel?.addRange(range);
+            } catch (e) {}
+          }
+        }
+      });
+    }
+
     if (publishAttempted) {
       const currentText = event.currentTarget.textContent || "";
-      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) setStoryError(""); else setStoryError("Story content is required.");
+      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(finalHTML)) {
+        setStoryError("");
+      } else {
+        setStoryError("Story content is required.");
+      }
     }
     updateSelectionNonce();
-  }, [publishAttempted, setStoryError, updateSelectionNonce, isEditingAllowed]);
+  }, [isEditingAllowed, publishAttempted, setStoryContent, setStoryError, updateSelectionNonce]);
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
     const editorEl = contentEditableRef.current; if (!editorEl) return;
     const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
-    if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); setTimeout(() => { if (contentEditableRef.current) { setStoryContent(contentEditableRef.current.innerHTML); updateSelectionNonce();}}, 0); return; }
+    if (event.key === 'Enter') {
+        event.preventDefault(); document.execCommand('insertParagraph', false, undefined);
+        if (editorEl) setStoryContent(editorEl.innerHTML); 
+        setTimeout(() => { if (contentEditableRef.current) { updateSelectionNonce();}}, 0);
+        return;
+    }
     if (event.key === 'Backspace' || event.key === 'Delete') {
       if (range.collapsed && currentBlock) {
         const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false;
@@ -339,44 +376,67 @@ const ArticlePage = () => {
           if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
-            event.preventDefault(); prevElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); updateSelectionNonce(); return;
+            event.preventDefault(); prevElement.remove();
+            if (editorEl) setStoryContent(editorEl.innerHTML); 
+            updateSelectionNonce(); return;
           }
-        } else {
+        } else { 
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
-            event.preventDefault(); nextElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); updateSelectionNonce(); return;
+            event.preventDefault(); nextElement.remove();
+            if (editorEl) setStoryContent(editorEl.innerHTML); 
+            updateSelectionNonce(); return;
           }
         }
       }
     }
-  }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce, isEditingAllowed]);
+    setTimeout(() => {
+        if (editorEl) setStoryContent(editorEl.innerHTML);
+        updateSelectionNonce();
+    },0);
+  }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed, setStoryContent]);
 
   const validateFields = useCallback(() => {
     let isValid = true;
     if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); }
     if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); }
-    const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || "";
-    if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
+    const currentEditorHTML = contentEditableRef.current?.innerHTML || "<p dir=\"ltr\"><br></p>";
+    const currentTextContent = contentEditableRef.current?.textContent || "";
+    if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentEditorHTML)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags, setTagsError]); // Removed category from dependencies
+  }, [title, tags]);
 
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
-    contentToSaveParam?: string | null, // Optional: For saving specific content (e.g., original live content when unpublishing)
+    contentToSaveParam?: string | null,
     isSavingDraftOfPublishedArticleFlag: boolean = false
   ) => {
     if (!user || !articleId || !article || !isEditingAllowed) {
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." });
       return;
     }
-    if (newStatus === 'published' || isSavingDraftOfPublishedArticleFlag) { // Validate fields if publishing OR saving a draft of a published article that needs title/tags
+    const latestEditorHTML = contentEditableRef.current?.innerHTML || "<p dir=\"ltr\"><br></p>";
+    const contentForThisSaveOperation = contentToSaveParam !== undefined ? contentToSaveParam : latestEditorHTML;
+    
+    if ((newStatus === 'published' && !isSavingDraftOfPublishedArticleFlag) || (article.status === 'published' && !isSavingDraftOfPublishedArticleFlag) ) {
       setPublishAttempted(true);
-      if (!validateFields()) {
+      if (!validateFields()) { 
         if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
         else if (tags.length === 0) { /* Error for tags will be shown by TagsInput */ }
         else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
         return;
+      }
+    } else if (newStatus === 'draft' || isSavingDraftOfPublishedArticleFlag) { 
+      if (!title.trim() || tags.length === 0) {
+        setPublishAttempted(true); 
+        let validationPassedForDraft = true;
+        if (!title.trim()) { setTitleError("Title is required to save a draft."); validationPassedForDraft = false;} else { setTitleError("");}
+        if (tags.length === 0) {setTagsError("At least one tag is required to save a draft."); validationPassedForDraft = false;} else {setTagsError("");}
+        if (!validationPassedForDraft) {
+          toast({variant: "destructive", title: "Cannot Save Draft", description: "Please provide a title and at least one tag."});
+          return;
+        }
       }
     }
 
@@ -388,27 +448,23 @@ const ArticlePage = () => {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
-        // This means the user explicitly removed the cover image
         newCoverImageUrl = null;
       }
 
-      // Determine which content to save based on action
-      const mainContentForService = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
-
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
-        tags: tags, // Changed from category to tags
+        tags: tags,
         status: newStatus,
-        // Content field assignment logic is now inside the service for clarity with draftContent
-        content: mainContentForService, // This will be interpreted by the service
+        content: contentForThisSaveOperation,
       };
 
-      if (newCoverImageUrl !== undefined) { // Only include if it changed or was explicitly set to null
+      if (newCoverImageUrl !== undefined) {
         articleUpdateData.coverImageUrl = newCoverImageUrl;
       }
 
-      // The newsService.updateNewsArticle will handle draftContent and hasUnpublishedChanges based on isSavingDraftOfPublishedArticleFlag
       await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticleFlag);
+      
+      setStoryContent(contentForThisSaveOperation); 
 
       let successTitle = "Update Successful";
       let successDescription = `Article "${title.trim()}" updated.`;
@@ -417,10 +473,10 @@ const ArticlePage = () => {
         successTitle = "Draft Saved!";
         successDescription = `Your changes to "${title.trim()}" have been saved as a draft. The live article remains unchanged.`;
       } else if (newStatus === 'published') {
-        if (article.status !== 'published' || article.hasUnpublishedChanges) { // If publishing draft or draft changes
+        if (article.status !== 'published' || article.hasUnpublishedChanges) {
           successTitle = "Article Published!";
           successDescription = `Changes to "${title.trim()}" are now live.`;
-        } else { // Simple update to already live article
+        } else {
           successTitle = "Live Article Updated!";
           successDescription = `Changes to "${title.trim()}" are now live.`;
         }
@@ -434,19 +490,16 @@ const ArticlePage = () => {
         }
       }
 
-
       toast({ title: successTitle, description: successDescription });
 
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
 
-      // Refetch the article to get the latest state including draftContent and hasUnpublishedChanges
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
       if (fetchedUpdatedArticle) {
-        setArticle(fetchedUpdatedArticle); // This will trigger the useEffect to update form fields
-        // Update cover image related states if it was part of the update
+        setArticle(fetchedUpdatedArticle);
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-        setCoverImageFile(null); // Reset file input state
+        setCoverImageFile(null);
       }
 
     } catch (error: any) {
@@ -468,9 +521,9 @@ const ArticlePage = () => {
       if (selection) { selection.removeAllRanges(); selection.addRange(range); }
       setSavedRange(null);
       const currentBlock = getCurrentBlockElement();
-      if (currentBlock && editorEl.contains(currentBlock) && (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;") && currentBlock.innerHTML.toLowerCase() !== "<p><br></p>") {
+      if (currentBlock && editorEl.contains(currentBlock) && (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;") && currentBlock.innerHTML.toLowerCase() !== "<p dir=\"ltr\"><br></p>") {
         if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) {
-          const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>)$/i);
+          const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>|<p\sdir="ltr"><br\s*\/?><\/p>|<p\sdir="ltr"><\/p>)$/i);
           if (!isEditorAndEmptyOrSinglePBR || (isEditorAndEmptyOrSinglePBR && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) range.selectNodeContents(currentBlock);
         }
       }
@@ -483,10 +536,13 @@ const ArticlePage = () => {
         range.collapse(true);
       } else { range.selectNodeContents(editorEl); range.collapse(false); }
       if (selection) { selection.removeAllRanges(); selection.addRange(range); }
-      setStoryContent(editorEl.innerHTML || "<p><br></p>"); setIsToolbarExpanded(false);
+      
+      setStoryContent(editorEl.innerHTML || "<p dir=\"ltr\"><br></p>");
+      
+      setIsToolbarExpanded(false);
       queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); });
     });
-  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange, isEditingAllowed]);
+  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setIsToolbarExpanded, savedRange, isEditingAllowed, setStoryContent]);
 
   const triggerInlineImageUpload = useCallback(() => {
     if (!isEditingAllowed) return;
@@ -498,7 +554,7 @@ const ArticlePage = () => {
   const handleInlineImageFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (!isEditingAllowed) return;
     const file = event.target.files?.[0];
-    if (file) { const reader = new FileReader(); reader.onloadend = () => { const dataUri = reader.result as string; insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center" contenteditable="false"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p><br></p>`); }; reader.readAsDataURL(file); if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; }
+    if (file) { const reader = new FileReader(); reader.onloadend = () => { const dataUri = reader.result as string; insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center" contenteditable="false"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p dir=\"ltr\"><br></p>`); }; reader.readAsDataURL(file); if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; }
     setSavedRange(null);
   }, [insertHTMLAndFocus, isEditingAllowed]);
 
@@ -512,7 +568,7 @@ const ArticlePage = () => {
   const handleYouTubeDialogSubmit = () => {
     if (youTubeUrlInput) {
       let videoId = ''; try { const urlObj = new URL(youTubeUrlInput); if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.substring(1); else if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v')!; else videoId = youTubeUrlInput; } catch (e) { videoId = youTubeUrlInput; }
-      if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) insertHTMLAndFocus(`<figure class="my-4 relative" contenteditable="false" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p><br></p>`);
+      if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) insertHTMLAndFocus(`<figure class="my-4 relative" contenteditable="false" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p dir=\"ltr\"><br></p>`);
       else toast({ variant: 'destructive', title: 'Invalid YouTube URL/ID', description: 'Please enter a valid YouTube video URL or ID.' });
     }
     setIsYouTubeDialogOpen(false); setSavedRange(null);
@@ -528,7 +584,7 @@ const ArticlePage = () => {
   const handleEmbedDialogSubmit = () => {
     if (embedCodeInput) {
       const sanitizedCode = embedCodeInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-      if (sanitizedCode.trim()) insertHTMLAndFocus(`<div class="my-4 relative" data-embed-wrapper="true" contenteditable="false" style="padding-bottom: 100%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">${sanitizedCode}</div></div><p><br></p>`);
+      if (sanitizedCode.trim()) insertHTMLAndFocus(`<div class="my-4 relative" data-embed-wrapper="true" contenteditable="false" style="padding-bottom: 100%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">${sanitizedCode}</div></div><p dir=\"ltr\"><br></p>`);
       else toast({ variant: 'destructive', title: 'Invalid Embed Code', description: 'Please provide valid embed code (e.g., an iframe).' });
     }
     setIsEmbedDialogOpen(false); setSavedRange(null);
@@ -538,14 +594,14 @@ const ArticlePage = () => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange());
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
-    insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`);
+    insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p dir=\"ltr\"><br></p>`);
   }, [insertHTMLAndFocus, isEditingAllowed]);
   const handleInsertSeparator = useCallback(() => {
     if (!isEditingAllowed) return;
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange());
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
-    insertHTMLAndFocus(`<hr class="my-8 border-border" /><p><br></p>`);
+    insertHTMLAndFocus(`<hr class="my-8 border-border" /><p dir=\"ltr\"><br></p>`);
   }, [insertHTMLAndFocus, isEditingAllowed]);
 
   const handleToggleToolbar = () => { if(isEditingAllowed) setIsToolbarExpanded(prev => { const newState = !prev; if (newState) { if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus(); else if (focusedField === 'content' && contentEditableRef.current) contentEditableRef.current.focus(); } return newState; }); };
@@ -560,9 +616,15 @@ const ArticlePage = () => {
       reader.onloadend = () => setCoverImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     } else {
-      // If no file is selected (e.g., user cancels file dialog), revert to current DB URL or null
       setCoverImageFile(null);
       setCoverImagePreview(currentCoverImageUrl);
+    }
+  };
+
+  const toggleHeaderSearch = () => {
+    setIsHeaderSearchActive(!isHeaderSearchActive);
+    if (isHeaderSearchActive) { // If it was active and is now being closed
+      setHeaderSearchTerm('');
     }
   };
 
@@ -630,7 +692,7 @@ const ArticlePage = () => {
           )}
           <div
             className="prose prose-lg dark:prose-invert max-w-none"
-            dangerouslySetInnerHTML={{ __html: article.content || "" }} // Public always sees live content
+            dangerouslySetInnerHTML={{ __html: article.content || "" }}
           />
         </article>
       </div>
@@ -654,21 +716,48 @@ const ArticlePage = () => {
     <>
     <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}>
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3">
+        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3 flex-shrink-0">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        <TagsInput
-            value={tags}
-            onChange={(newTags) => { setTags(newTags); if (publishAttempted) { if (newTags.length > 0) setTagsError(""); else setTagsError("At least one tag is required."); }}}
-            disabled={isSubmitting || !isEditingAllowed}
-            error={publishAttempted && tagsError ? tagsError : null}
-            onPublishAttempt={publishAttempted}
-            placeholder="Add tags (required)"
-            className="flex-grow min-w-[200px] sm:min-w-[240px] max-w-xs text-xs" // Added className
-        />
+        <div className="flex items-center flex-grow min-w-0 gap-2">
+           <Button 
+              variant="ghost" 
+              size="icon" 
+              onClick={toggleHeaderSearch} 
+              className="h-9 w-9 p-1.5 flex-shrink-0"
+              title={isHeaderSearchActive ? "Close search" : "Search tags"}
+            >
+              <Search className={cn("h-5 w-5 transition-transform duration-200 ease-in-out", isHeaderSearchActive && "rotate-[30deg]")} />
+            </Button>
+
+            {isHeaderSearchActive ? (
+              <div className="relative flex-grow min-w-0">
+                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+                <Input 
+                  type="text" // Changed from "search" to avoid browser default styling/clear buttons if not desired
+                  placeholder="Search or add tags..." 
+                  value={headerSearchTerm}
+                  onChange={(e) => setHeaderSearchTerm(e.target.value)}
+                  className="h-9 pl-9 text-xs w-full"
+                  autoFocus
+                />
+              </div>
+            ) : (
+              <TagsInput
+                  value={tags}
+                  onChange={setTags}
+                  disabled={isSubmitting || !isEditingAllowed}
+                  error={publishAttempted && tagsError ? tagsError : null}
+                  onPublishAttempt={publishAttempted}
+                  className="flex-grow min-w-0 text-xs" // flex-grow will allow it to take space
+                  placeholder="Add up to 5 tags (e.g., AI, SaaS, Funding)..."
+                  maxTags={5}
+              />
+            )}
+        </div>
         
-        <div className="flex items-center gap-1 sm:gap-1.5">
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           {user && articleId && article && (
             <Button
                 variant="ghost"
@@ -677,6 +766,7 @@ const ArticlePage = () => {
                 title={isArticleSaved ? "Unsave Article" : "Save Article"}
                 onClick={(e) => {e.stopPropagation(); setIsSaveToCollectionDialogOpen(true);}}
                 aria-pressed={isArticleSaved}
+                disabled={isSubmitting}
             >
               <Bookmark className={cn("h-5 w-5", isArticleSaved ? "fill-primary text-primary" : "text-muted-foreground")} />
             </Button>
@@ -684,7 +774,7 @@ const ArticlePage = () => {
           {isEditingAllowed && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 p-1.5">
+                <Button variant="ghost" size="icon" className="h-9 w-9 p-1.5" disabled={isSubmitting}>
                   <MoreVertical className="h-5 w-5" />
                   <span className="sr-only">More options</span>
                 </Button>
@@ -697,26 +787,26 @@ const ArticlePage = () => {
                 <DropdownMenuSeparator />
                 {article?.status === 'draft' ? (
                   <>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer">
                       <Save className="mr-2 h-4 w-4" /> Save Draft
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
                       <Send className="mr-2 h-4 w-4" /> Publish
                     </DropdownMenuItem>
                   </>
-                ) : ( // Article is 'published'
+                ) : ( 
                   <>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
                       {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Save Draft of Published Article
+                      Save Draft of Published
                     </DropdownMenuItem>
                     
                     {article.hasUnpublishedChanges && article.draftContent ? (
-                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
                         <CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes
                       </DropdownMenuItem>
                     ) : (
-                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer">
+                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer">
                         <Save className="mr-2 h-4 w-4" /> Update Live Article
                       </DropdownMenuItem>
                     )}
@@ -762,14 +852,14 @@ const ArticlePage = () => {
               <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => {
                   if (contentEditableRef.current && article.content) {
                       setStoryContent(article.content); 
-                      contentEditableRef.current.innerHTML = article.content; 
+                      // No need to directly set innerHTML here if storyContent update triggers re-render
                   }
                   toast({title: "Viewing Live Content", description: "Editor now shows the live published content. Any unsaved draft changes were not applied."});
               }}>View live content</Button>
             </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
+          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
@@ -777,8 +867,9 @@ const ArticlePage = () => {
             key={articleId}
             ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} onClick={updateSelectionNonce} onKeyUp={updateSelectionNonce} data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
-            style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
+            style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
             role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true} dir="ltr"
+            dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
