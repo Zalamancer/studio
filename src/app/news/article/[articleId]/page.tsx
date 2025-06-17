@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -150,7 +149,7 @@ const ArticlePage = () => {
 
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
-          contentToLoadInEditor = article.draftContent;
+          contentToLoadInEditor = article.draftContent || "<p><br></p>";
           toast({ title: "Draft Loaded", description: "You are editing a saved draft of this published article.", duration: 4000 });
         } else {
           contentToLoadInEditor = article.content || "<p><br></p>";
@@ -162,6 +161,8 @@ const ArticlePage = () => {
       }
 
       setStoryContent(contentToLoadInEditor);
+      // Ensure the contentEditable div's innerHTML is updated if it differs from the new storyContent
+      // This is important if storyContent is set from fetched data after initial render.
       if (contentEditableRef.current && contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
         contentEditableRef.current.innerHTML = contentToLoadInEditor;
       }
@@ -174,6 +175,7 @@ const ArticlePage = () => {
       setStoryError("");
     }
   }, [article, isEditingAllowed, toast]);
+
 
   const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
 
@@ -201,7 +203,7 @@ const ArticlePage = () => {
       node = node.parentNode;
     }
     return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl;
-  }, [contentEditableRef]);
+  }, []); // Added contentEditableRef to dependency if it were state, but it's a ref.
 
   const getCurrentLineText = useCallback((): string => {
     const contentEl = contentEditableRef.current;
@@ -219,7 +221,7 @@ const ArticlePage = () => {
       return "NO_CURRENT_BLOCK_FOUND";
     }
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
-  }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
+  }, [focusedField, getCurrentBlockElement, titleInputRef]); // Added contentEditableRef for consistency
 
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
@@ -263,7 +265,7 @@ const ArticlePage = () => {
       return mainDivRect.top + paddingTopMain + (lineHeightMain / 2);
     }
     return null;
-  }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
+  }, [focusedField, getCurrentBlockElement, titleInputRef]);
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
     let shouldShowPlusButton = false; let shouldShowExpandedToolbar = false;
@@ -288,24 +290,29 @@ const ArticlePage = () => {
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
 
-  useEffect(() => { if (isEditingAllowed) calculateAndUpdateToolbarStyle(); }, [focusedField, title, storyContent, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
-  useEffect(() => {
-    const handleSelectionOrKey = () => {
-      requestAnimationFrame(() => { // Defer the update
-        if (contentEditableRef.current && (document.activeElement === contentEditableRef.current || 
-            (titleInputRef.current && document.activeElement === titleInputRef.current))) {
-          updateSelectionNonce();
-        }
-      });
-    };
+  useEffect(() => { 
     if (isEditingAllowed) {
-      document.addEventListener('selectionchange', handleSelectionOrKey);
-      document.addEventListener('keyup', handleSelectionOrKey);
-      // Removed document-level click listener here. Direct click on div will handle it.
+      calculateAndUpdateToolbarStyle();
+    }
+  }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
+  
+  useEffect(() => {
+    const handleInteraction = () => {
+      if (
+        contentEditableRef.current && (document.activeElement === contentEditableRef.current ||
+        (titleInputRef.current && document.activeElement === titleInputRef.current))
+      ) {
+        requestAnimationFrame(updateSelectionNonce);
+      }
+    };
+
+    if (isEditingAllowed) {
+      document.addEventListener('selectionchange', handleInteraction);
+      document.addEventListener('keyup', handleInteraction);
     }
     return () => {
-      document.removeEventListener('selectionchange', handleSelectionOrKey);
-      document.removeEventListener('keyup', handleSelectionOrKey);
+      document.removeEventListener('selectionchange', handleInteraction);
+      document.removeEventListener('keyup', handleInteraction);
     };
   }, [updateSelectionNonce, isEditingAllowed, contentEditableRef, titleInputRef]);
 
@@ -313,10 +320,22 @@ const ArticlePage = () => {
   const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) setFocusedField(field); }, [isEditingAllowed]);
   const handleBlur = useCallback(() => {
     if (!isEditingAllowed) return;
+    // Defer the blur logic to allow click on toolbar buttons to register
     queueMicrotask(() => {
       const activeEl = document.activeElement;
-      if (!((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen)) {
-        setFocusedField(null); setIsToolbarExpanded(false); setShowContextualUI(false); setSavedRange(null);
+      // Check if focus is still within the editor, title input, or any of our dialogs/toolbar
+      if (!(
+        (toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) ||
+        (titleInputRef.current === activeEl) ||
+        (contentEditableRef.current === activeEl) ||
+        isYouTubeDialogOpen || 
+        isEmbedDialogOpen
+        // Add checks for other dialogs if they can steal focus and should keep toolbar alive
+      )) {
+        setFocusedField(null); 
+        setIsToolbarExpanded(false); 
+        setShowContextualUI(false); 
+        setSavedRange(null);
       }
     });
   }, [isYouTubeDialogOpen, isEmbedDialogOpen, isEditingAllowed]);
@@ -324,24 +343,22 @@ const ArticlePage = () => {
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
     const currentHTML = event.currentTarget.innerHTML;
-    const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>";
+    let finalHTML = currentHTML;
+    if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p></p>") {
+      finalHTML = "<p><br></p>";
+    }
     
-    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML; // Keep this simple, `dir="ltr"` will be on parent
     setStoryContent(finalHTML); 
 
-    if (isEmptyContent && finalHTML === "<p><br></p>") {
-      queueMicrotask(() => {
+    if (finalHTML === "<p><br></p>" && event.currentTarget.innerHTML !== finalHTML) {
+      event.currentTarget.innerHTML = finalHTML; // Ensure DOM matches if normalized
+      queueMicrotask(() => { // Place cursor inside the <p> tag
         if (contentEditableRef.current) {
-          const pTag = contentEditableRef.current.querySelector('p'); // No dir selector
-          if (pTag) {
+          const pTag = contentEditableRef.current.querySelector('p');
+          if(pTag) {
             const range = document.createRange();
             const sel = window.getSelection();
-            try {
-              range.setStart(pTag, 0);
-              range.collapse(true);
-              sel?.removeAllRanges();
-              sel?.addRange(range);
-            } catch (e) {}
+            try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {}
           }
         }
       });
@@ -391,6 +408,7 @@ const ArticlePage = () => {
         }
       }
     }
+    // After any keydown that might modify content, ensure storyContent is synced
     setTimeout(() => {
         if (editorEl) setStoryContent(editorEl.innerHTML || "<p><br></p>");
         updateSelectionNonce();
@@ -409,7 +427,7 @@ const ArticlePage = () => {
 
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
-    contentToSaveParam?: string | null,
+    contentToSaveParam?: string | null, // Explicitly allow string or null
     isSavingDraftOfPublishedArticleFlag: boolean = false
   ) => {
     if (!user || !articleId || !article || !isEditingAllowed) {
@@ -417,7 +435,8 @@ const ArticlePage = () => {
       return;
     }
     const latestEditorHTML = contentEditableRef.current?.innerHTML || "<p><br></p>";
-    const contentForThisSaveOperation = contentToSaveParam !== undefined ? contentToSaveParam : latestEditorHTML;
+    // Use contentToSaveParam if provided (e.g., for reverting to live content), otherwise use latest editor HTML
+    const contentForThisSaveOperation = contentToSaveParam !== undefined ? (contentToSaveParam === null ? "<p><br></p>" : contentToSaveParam) : latestEditorHTML;
     
     if ((newStatus === 'published' && !isSavingDraftOfPublishedArticleFlag) || (article.status === 'published' && !isSavingDraftOfPublishedArticleFlag) ) {
       setPublishAttempted(true);
@@ -443,28 +462,58 @@ const ArticlePage = () => {
     setIsSubmitting(true);
     if (isSavingDraftOfPublishedArticleFlag) setIsSavingDraftOfPublished(true);
 
-    let newCoverImageUrl: string | null | undefined = undefined;
+    let newCoverImageUrl: string | null | undefined = undefined; // string | null for Firestore, undefined if not changed
     try {
       if (coverImageFile) {
         newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleId);
       } else if (coverImagePreview === null && currentCoverImageUrl !== null) {
+        // This means the user explicitly removed the cover image
         newCoverImageUrl = null;
       }
+      // If newCoverImageUrl remains undefined, it means the cover image wasn't changed by the user
 
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         tags: tags,
         status: newStatus,
-        content: contentForThisSaveOperation,
+        // content field handled below based on status and flags
       };
 
+      // Conditionally add coverImageUrl to update data ONLY if it changed
       if (newCoverImageUrl !== undefined) {
         articleUpdateData.coverImageUrl = newCoverImageUrl;
       }
+      
+      // Logic for content, draftContent, hasUnpublishedChanges
+      if (isSavingDraftOfPublishedArticleFlag && article.status === 'published') {
+        articleUpdateData.draftContent = contentForThisSaveOperation;
+        articleUpdateData.hasUnpublishedChanges = true;
+        // articleUpdateData.content remains the live content (not changed here)
+        // articleUpdateData.status is already 'published'
+      } else if (newStatus === 'published') {
+        articleUpdateData.content = contentForThisSaveOperation;
+        articleUpdateData.draftContent = null;
+        articleUpdateData.hasUnpublishedChanges = false;
+        // publishedAt is handled by the service if it's a new publish
+      } else if (newStatus === 'draft') {
+        articleUpdateData.content = contentForThisSaveOperation; // Main content becomes the draft
+        articleUpdateData.draftContent = null;
+        articleUpdateData.hasUnpublishedChanges = false;
+        articleUpdateData.publishedAt = null; // Explicitly nullify publishedAt if unpublishing
+      } else if (dataToUpdate.content !== undefined) { 
+        // This case handles if status is not changing but content is (e.g., direct update to live published)
+        // It implies !isSavingDraftOfPublishedArticleFlag
+        articleUpdateData.content = contentForThisSaveOperation;
+        if (article.status === 'published') {
+             articleUpdateData.draftContent = null;
+             articleUpdateData.hasUnpublishedChanges = false;
+        }
+      }
+
 
       await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticleFlag);
       
-      setStoryContent(contentForThisSaveOperation); 
+      setStoryContent(contentForThisSaveOperation); // Sync local React state with what was saved
 
       let successTitle = "Update Successful";
       let successDescription = `Article "${title.trim()}" updated.`;
@@ -495,11 +544,13 @@ const ArticlePage = () => {
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
 
+      // Refetch the article to ensure UI is consistent with DB
       const fetchedUpdatedArticle = await getNewsArticleById(articleId);
       if (fetchedUpdatedArticle) {
         setArticle(fetchedUpdatedArticle);
+        // Update local cover image states based on what was actually saved
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
-        setCoverImageFile(null);
+        setCoverImageFile(null); // Clear the file selection
       }
 
     } catch (error: any) {
@@ -542,7 +593,7 @@ const ArticlePage = () => {
       setIsToolbarExpanded(false);
       queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); });
     });
-  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange, isEditingAllowed]);
+  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setIsToolbarExpanded, savedRange, isEditingAllowed, setStoryContent]);
 
   const triggerInlineImageUpload = useCallback(() => {
     if (!isEditingAllowed) return;
@@ -704,7 +755,6 @@ const ArticlePage = () => {
     );
   }
 
-  // Editing View
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}>
@@ -819,6 +869,8 @@ const ArticlePage = () => {
               <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => {
                   if (contentEditableRef.current && article.content) {
                       setStoryContent(article.content); 
+                      // This line was missing in the original user-provided code, but it's crucial to update the DOM
+                      contentEditableRef.current.innerHTML = article.content; 
                   }
                   toast({title: "Viewing Live Content", description: "Editor now shows the live published content. Any unsaved draft changes were not applied."});
               }}>View live content</Button>
@@ -833,7 +885,7 @@ const ArticlePage = () => {
             key={articleId} 
             ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} onClick={updateSelectionNonce} onKeyUp={updateSelectionNonce} data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
-            style={{ fontFamily: "\"Helvetica Neue\", Helvetica, Arial, sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
+            style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
             role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true} dir="ltr"
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
@@ -878,3 +930,5 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
+
+```
