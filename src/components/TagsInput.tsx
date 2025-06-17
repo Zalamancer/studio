@@ -1,4 +1,3 @@
-
 // src/components/TagsInput.tsx
 "use client";
 
@@ -7,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 // Label import removed as it's not directly used for the input field in this design
-import { X, PlusCircle, Tag, Loader2 } from 'lucide-react'; // Tag icon added
+import { X, PlusCircle, Search, Loader2 } from 'lucide-react'; // Changed Tag to Search
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 // ScrollArea removed as PopoverContent is typically scrollable by default if content overflows
 import { searchTags } from '@/services/tagService';
@@ -164,7 +163,7 @@ export const TagsInput: React.FC<TagsInputProps> = ({
             )}
             onClick={() => inputRef.current?.focus()}
           >
-            <Tag className="h-4 w-4 text-muted-foreground flex-shrink-0 ml-1" />
+            <Search className="h-4 w-4 text-muted-foreground flex-shrink-0 ml-1" /> {/* Changed Tag to Search */}
             {value.map((tag) => (
               <Badge key={tag} variant="secondary" className="py-0.5 text-xs font-normal">
                 {tag}
@@ -226,7 +225,7 @@ export const TagsInput: React.FC<TagsInputProps> = ({
                   onMouseDown={(e) => e.preventDefault()}
                   onMouseEnter={() => setFocusedSuggestionIndex(index)}
                 >
-                  <Tag className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>
+                  <Search className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/> {/* Changed Tag to Search */}
                   {tag.name} <span className="ml-auto text-muted-foreground text-[10px]">({tag.usageCount})</span>
                 </Button>
               ))}
