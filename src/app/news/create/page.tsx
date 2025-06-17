@@ -1,3 +1,4 @@
+
 // src/app/news/create/page.tsx
 "use client";
 
@@ -35,7 +36,7 @@ const CreateNewsArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [storyContent, setStoryContent] = useState("<p dir=\"ltr\"><br></p>");
+  const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
 
@@ -66,7 +67,7 @@ const CreateNewsArticlePage = () => {
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
-  
+
   const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
   const [headerSearchTerm, setHeaderSearchTerm] = useState('');
 
@@ -194,12 +195,11 @@ const CreateNewsArticlePage = () => {
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef]);
 
-  useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
-  
+  useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, title, storyContent, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
+
   useEffect(() => {
     const handleInteraction = () => {
-      if (contentEditableRef.current && (document.activeElement === contentEditableRef.current || 
-          (titleInputRef.current && document.activeElement === titleInputRef.current))) {
+      if (contentEditableRef.current && (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current))) {
         requestAnimationFrame(() => {
           updateSelectionNonce();
         });
@@ -226,44 +226,30 @@ const CreateNewsArticlePage = () => {
 
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     const currentHTML = event.currentTarget.innerHTML;
-    const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>" || currentHTML.trim() === "<p dir=\"ltr\"><br></p>" || currentHTML.trim() === "<p dir=\"ltr\"></p>";
-    const finalHTML = isEmptyContent ? "<p dir=\"ltr\"><br></p>" : currentHTML;
-    
-    setStoryContent(finalHTML);
+    setStoryContent(currentHTML); // Always update storyContent
 
-    if (isEmptyContent && finalHTML === "<p dir=\"ltr\"><br></p>") {
-      queueMicrotask(() => {
-        if (contentEditableRef.current) {
-          const pTag = contentEditableRef.current.querySelector('p[dir="ltr"]');
-          if (pTag) {
-            const range = document.createRange();
-            const sel = window.getSelection();
-            try {
-              range.setStart(pTag, 0);
-              range.collapse(true);
-              sel?.removeAllRanges();
-              sel?.addRange(range);
-            } catch (e) {}
-          }
-        }
-      });
-    }
     if (publishAttempted) {
       const currentText = event.currentTarget.textContent || "";
-      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(finalHTML)) {
+      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) {
         setStoryError("");
       } else {
         setStoryError("Story content is required.");
       }
     }
     updateSelectionNonce();
-  }, [publishAttempted, setStoryContent, setStoryError, updateSelectionNonce]);
+  }, [publishAttempted, setStoryError, updateSelectionNonce]);
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const editorEl = contentEditableRef.current; if (!editorEl) return;
     const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
-    if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); if (editorEl) setStoryContent(editorEl.innerHTML); setTimeout(() => { if (contentEditableRef.current) { updateSelectionNonce();}}, 0); return; }
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      document.execCommand('insertParagraph', false, undefined);
+      if (editorEl) setStoryContent(editorEl.innerHTML); // Sync state
+      setTimeout(() => { if (contentEditableRef.current) { updateSelectionNonce();}}, 0);
+      return;
+    }
     if (event.key === 'Backspace' || event.key === 'Delete') {
       if (range.collapsed && currentBlock) {
         const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false;
@@ -271,25 +257,32 @@ const CreateNewsArticlePage = () => {
           if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
-            event.preventDefault(); prevElement.remove(); if (editorEl) setStoryContent(editorEl.innerHTML); updateSelectionNonce(); return;
+            event.preventDefault(); prevElement.remove();
+            if (editorEl) setStoryContent(editorEl.innerHTML); // Sync state
+            updateSelectionNonce(); return;
           }
-        } else { 
+        } else {
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
-            event.preventDefault(); nextElement.remove(); if (editorEl) setStoryContent(editorEl.innerHTML); updateSelectionNonce(); return;
+            event.preventDefault(); nextElement.remove();
+            if (editorEl) setStoryContent(editorEl.innerHTML); // Sync state
+            updateSelectionNonce(); return;
           }
         }
       }
     }
-    setTimeout(() => { if (editorEl) setStoryContent(editorEl.innerHTML); updateSelectionNonce(); },0);
-  }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce]);
+    setTimeout(() => {
+      if (editorEl) setStoryContent(editorEl.innerHTML); // Sync state
+      updateSelectionNonce();
+    },0);
+  }, [getCurrentBlockElement, updateSelectionNonce]);
 
   const validateFields = useCallback(() => {
     let isValid = true;
     if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); }
     if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); }
-    const currentEditorHTML = contentEditableRef.current?.innerHTML || "<p dir=\"ltr\"><br></p>";
+    const currentEditorHTML = contentEditableRef.current?.innerHTML || "<p><br></p>";
     const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentEditorHTML)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
@@ -306,7 +299,7 @@ const CreateNewsArticlePage = () => {
     }
     setIsSubmitting(true);
     let coverImageUrl: string | undefined = undefined;
-    const finalStoryContent = contentEditableRef.current?.innerHTML || "<p dir=\"ltr\"><br></p>";
+    const finalStoryContent = contentEditableRef.current?.innerHTML || "<p><br></p>";
     try {
       if (coverImageFile) {
         coverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, 'new_article_placeholder');
@@ -316,9 +309,9 @@ const CreateNewsArticlePage = () => {
       };
       const newArticleId = await createNewsArticle(articleData);
       toast({ title: status === 'published' ? "Article Published!" : "Draft Saved!", description: `"${title.trim()}" has been successfully ${status}.` });
-      
-      setTitle(""); setTags([]); setStoryContent("<p dir=\"ltr\"><br></p>"); setCoverImageFile(null); setCoverImagePreview(null);
-      
+
+      setTitle(""); setTags([]); setStoryContent("<p><br></p>"); setCoverImageFile(null); setCoverImagePreview(null);
+
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
       updateSelectionNonce();
@@ -358,9 +351,9 @@ const CreateNewsArticlePage = () => {
       if (selection) { selection.removeAllRanges(); selection.addRange(range); }
       setSavedRange(null);
       const currentBlock = getCurrentBlockElement();
-      if (currentBlock && editorEl.contains(currentBlock) && (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;") && currentBlock.innerHTML.toLowerCase() !== "<p dir=\"ltr\"><br></p>") {
+      if (currentBlock && editorEl.contains(currentBlock) && (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;") && currentBlock.innerHTML.toLowerCase() !== "<p><br></p>") {
         if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) {
-          const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>|<p\sdir="ltr"><br\s*\/?><\/p>|<p\sdir="ltr"><\/p>)$/i);
+          const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>)$/i);
           if (!isEditorAndEmptyOrSinglePBR || (isEditorAndEmptyOrSinglePBR && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) range.selectNodeContents(currentBlock);
         }
       }
@@ -373,7 +366,7 @@ const CreateNewsArticlePage = () => {
         range.collapse(true);
       } else { range.selectNodeContents(editorEl); range.collapse(false); }
       if (selection) { selection.removeAllRanges(); selection.addRange(range); }
-      setStoryContent(editorEl.innerHTML || "<p dir=\"ltr\"><br></p>"); setIsToolbarExpanded(false);
+      setStoryContent(editorEl.innerHTML || "<p><br></p>"); setIsToolbarExpanded(false);
       queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); });
     });
   }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange]);
@@ -386,7 +379,7 @@ const CreateNewsArticlePage = () => {
   }, []);
   const handleInlineImageFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
-    if (file) { const reader = new FileReader(); reader.onloadend = () => { const dataUri = reader.result as string; insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center" contenteditable="false"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p dir=\"ltr\"><br></p>`); }; reader.readAsDataURL(file); if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; }
+    if (file) { const reader = new FileReader(); reader.onloadend = () => { const dataUri = reader.result as string; insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center" contenteditable="false"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p><br></p>`); }; reader.readAsDataURL(file); if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; }
     setSavedRange(null);
   }, [insertHTMLAndFocus]);
 
@@ -399,7 +392,7 @@ const CreateNewsArticlePage = () => {
   const handleYouTubeDialogSubmit = () => {
     if (youTubeUrlInput) {
       let videoId = ''; try { const urlObj = new URL(youTubeUrlInput); if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.substring(1); else if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v')!; else videoId = youTubeUrlInput; } catch (e) { videoId = youTubeUrlInput; }
-      if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) insertHTMLAndFocus(`<figure class="my-4 relative" contenteditable="false" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p dir=\"ltr\"><br></p>`);
+      if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) insertHTMLAndFocus(`<figure class="my-4 relative" contenteditable="false" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p><br></p>`);
       else toast({ variant: 'destructive', title: 'Invalid YouTube URL/ID', description: 'Please enter a valid YouTube video URL or ID.' });
     }
     setIsYouTubeDialogOpen(false); setSavedRange(null);
@@ -414,7 +407,7 @@ const CreateNewsArticlePage = () => {
   const handleEmbedDialogSubmit = () => {
     if (embedCodeInput) {
       const sanitizedCode = embedCodeInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-      if (sanitizedCode.trim()) insertHTMLAndFocus(`<div class="my-4 relative" data-embed-wrapper="true" contenteditable="false" style="padding-bottom: 100%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">${sanitizedCode}</div></div><p dir=\"ltr\"><br></p>`);
+      if (sanitizedCode.trim()) insertHTMLAndFocus(`<div class="my-4 relative" data-embed-wrapper="true" contenteditable="false" style="padding-bottom: 100%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">${sanitizedCode}</div></div><p><br></p>`);
       else toast({ variant: 'destructive', title: 'Invalid Embed Code', description: 'Please provide valid embed code (e.g., an iframe).' });
     }
     setIsEmbedDialogOpen(false); setSavedRange(null);
@@ -423,13 +416,13 @@ const CreateNewsArticlePage = () => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange());
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
-    insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p dir=\"ltr\"><br></p>`);
+    insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`);
   }, [insertHTMLAndFocus]);
   const handleInsertSeparator = useCallback(() => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange());
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
-    insertHTMLAndFocus(`<hr class="my-8 border-border" /><p dir=\"ltr\"><br></p>`);
+    insertHTMLAndFocus(`<hr class="my-8 border-border" /><p><br></p>`);
   }, [insertHTMLAndFocus]);
 
   const handleToggleToolbar = () => { setIsToolbarExpanded(prev => { const newState = !prev; if (newState) { if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus(); else if (focusedField === 'content' && contentEditableRef.current) contentEditableRef.current.focus(); } return newState; }); };
@@ -449,7 +442,7 @@ const CreateNewsArticlePage = () => {
 
   const toggleHeaderSearch = () => {
     setIsHeaderSearchActive(!isHeaderSearchActive);
-    if (isHeaderSearchActive) { // If it was active and is now being closed
+    if (isHeaderSearchActive) {
       setHeaderSearchTerm('');
     }
   };
@@ -464,12 +457,12 @@ const CreateNewsArticlePage = () => {
         <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3 flex-shrink-0">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
-        
+
         <div className="flex items-center flex-grow min-w-0 gap-2">
-           <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={toggleHeaderSearch} 
+           <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleHeaderSearch}
               className="h-9 w-9 p-1.5 flex-shrink-0"
               title={isHeaderSearchActive ? "Close search" : "Search tags"}
             >
@@ -479,9 +472,9 @@ const CreateNewsArticlePage = () => {
             {isHeaderSearchActive ? (
               <div className="relative flex-grow min-w-0">
                 <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                <Input 
+                <Input
                   type="text"
-                  placeholder="Search or add tags..." 
+                  placeholder="Search or add tags..."
                   value={headerSearchTerm}
                   onChange={(e) => setHeaderSearchTerm(e.target.value)}
                   className="h-9 pl-9 text-xs w-full"
@@ -496,12 +489,12 @@ const CreateNewsArticlePage = () => {
                   disabled={isSubmitting}
                   error={publishAttempted && tagsError ? tagsError : null}
                   onPublishAttempt={publishAttempted}
-                  className="flex-grow min-w-0 text-xs" // flex-grow will allow it to take space
+                  className="flex-grow min-w-0 text-xs"
                   maxTags={5}
               />
             )}
         </div>
-        
+
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
             <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
@@ -524,7 +517,7 @@ const CreateNewsArticlePage = () => {
                 <button onClick={handleInsertSeparator} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert line separator" title="Insert line separator"><MinusIcon className={iconClass} /></button>
               </div>)}
           </div>)}
-        
+
         <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting} />
         <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting} />
 
@@ -575,3 +568,4 @@ const CreateNewsArticlePage = () => {
   );
 };
 export default CreateNewsArticlePage;
+```

@@ -37,31 +37,7 @@
     *   Auto-accepting bot connection requests.
 
 ## REMOVED FEATURES
-*   User Collections for Posts (Create, Add/Remove Posts, View) - Removed due to Firestore rule complexities.
 
 ## WORKING
-*   Refining UI/UX across the application (ongoing).
-*   Ensuring robustness and error handling in all services and components (ongoing).
-*   Optimizing data fetching and state management (ongoing).
-*   Further development of AI features with Genkit.
 
 ## NEXT
-*   **Full AI Integration**:
-    *   Implement `connection-suggestions.ts` into the UI (e.g., in user profiles - *clarification needed on exact use case as it's similar to current post suggestions*).
-    *   Explore other AI-driven features (e.g., content summarization, trend analysis).
-*   **Enhanced Collaboration Plan Features**:
-    *   More sophisticated node types or properties.
-    *   Real-time collaboration on plans (if feasible).
-    *   Permissions and sharing for plans.
-*   **Profile Enhancements**:
-    *   Implement business verification flow (`/settings/verification`).
-    *   More detailed profile sections (e.g., portfolio, case studies).
-*   **Search & Discovery**:
-    *   Implement global search functionality.
-    *   Advanced filtering options for posts and user discovery.
-*   **Notifications**:
-    *   Integrate in-app notifications more deeply.
-    *   Refine email notification templates and triggers.
-*   **Admin/Moderation Tools**: (If applicable for platform management)
-*   **Testing**: More comprehensive unit and integration tests.
-*   **Deployment & Hosting**: Prepare for deployment on Firebase Hosting or similar.
