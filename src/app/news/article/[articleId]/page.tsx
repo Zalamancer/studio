@@ -94,6 +94,12 @@ const ArticlePage = () => {
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
+  useEffect(() => {
+    if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
+      contentEditableRef.current.innerHTML = storyContent;
+    }
+  }, [storyContent]);
+
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid, articleId],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
@@ -847,11 +853,31 @@ const ArticlePage = () => {
         <div ref={contentWrapperRef} className="relative">
           <div
             key={articleId}
-            ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} onClick={updateSelectionNonce} onKeyUp={updateSelectionNonce} data-placeholder="Tell your story..."
-            className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
-            style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))" }}
-            role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true} dir="ltr"
-            dangerouslySetInnerHTML={{ __html: storyContent }}
+            ref={contentEditableRef}
+            contentEditable={isEditingAllowed && !isSubmitting}
+            onInput={handleContentEditableInput}
+            onFocus={() => handleFocus('content')}
+            onBlur={handleBlur}
+            onKeyDown={handleContentKeyDown}
+            onClick={updateSelectionNonce}
+            onKeyUp={updateSelectionNonce}
+            data-placeholder="Tell your story..."
+            className={cn(
+              "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
+              "focus:outline-none min-h-[150px]"
+            )}
+            style={{
+              fontFamily:
+                "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
+              fontSize: "20px",
+              lineHeight: "1.6",
+              color: "hsl(var(--foreground))"
+            }}
+            role="textbox"
+            aria-multiline="true"
+            aria-label="News article content"
+            suppressContentEditableWarning={true}
+            dir="ltr"
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
