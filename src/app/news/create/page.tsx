@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Tag, Search } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Search } from 'lucide-react'; // Added Search
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -36,7 +36,7 @@ const CreateNewsArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [storyContent, setStoryContent] = useState("<p><br></p>");
+  const [storyContent, setStoryContent] = useState("<p><br></p>"); // Default for new
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
 
@@ -72,7 +72,6 @@ const CreateNewsArticlePage = () => {
   const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
   const [headerSearchTerm, setHeaderSearchTerm] = useState('');
   const headerSearchInputRef = useRef<HTMLInputElement>(null);
-
 
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
@@ -207,7 +206,8 @@ const CreateNewsArticlePage = () => {
       }
     };
     document.addEventListener('selectionchange', handleInteraction);
-    document.addEventListener('keyup', handleInteraction); 
+    document.addEventListener('keyup', handleInteraction);
+    // Document-level click listener removed to let editor's own click handler manage its caret
     return () => {
       document.removeEventListener('selectionchange', handleInteraction);
       document.removeEventListener('keyup', handleInteraction);
@@ -236,6 +236,7 @@ const CreateNewsArticlePage = () => {
       if (event.currentTarget.innerHTML !== finalHTML) {
           event.currentTarget.innerHTML = finalHTML;
       }
+      // Ensure caret is placed inside the <p> tag correctly.
       queueMicrotask(() => {
         if (contentEditableRef.current) {
           const pTag = contentEditableRef.current.querySelector('p');
@@ -247,7 +248,7 @@ const CreateNewsArticlePage = () => {
               range.collapse(true);
               sel?.removeAllRanges();
               sel?.addRange(range);
-            } catch (e) {}
+            } catch (e) {/*ignore*/}
           }
         }
       });
@@ -330,7 +331,7 @@ const CreateNewsArticlePage = () => {
       if (status === 'published') {
         router.push(`/news/article/${newArticleId}`);
       } else {
-        router.push('/news');
+        router.push('/news'); // Or perhaps a "My Drafts" page if that exists
       }
 
     } catch (error: any) {
@@ -343,7 +344,7 @@ const CreateNewsArticlePage = () => {
   const handlePublish = () => handleFormSubmission('published');
   const handleSaveDraft = () => {
     if (!title.trim() || tags.length === 0) {
-        setPublishAttempted(true);
+        setPublishAttempted(true); // To show validation errors
         if (!title.trim()) setTitleError("Title is required to save a draft."); else setTitleError("");
         if (tags.length === 0) setTagsError("At least one tag is required to save a draft."); else setTagsError("");
         toast({variant: "destructive", title: "Cannot Save Draft", description: "Please provide a title and at least one tag."});
@@ -453,9 +454,13 @@ const CreateNewsArticlePage = () => {
   
   const toggleHeaderSearch = useCallback(() => {
     setIsHeaderSearchActive(prev => {
-      if (prev) setHeaderSearchTerm(''); // Clear search term when closing
-      else setTimeout(() => headerSearchInputRef.current?.focus(), 0); // Focus when opening
-      return !prev;
+      const nextState = !prev;
+      if (!nextState) {
+        setHeaderSearchTerm('');
+      } else {
+        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+      }
+      return nextState;
     });
   }, []);
 
@@ -471,11 +476,12 @@ const CreateNewsArticlePage = () => {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        {/* Toggleable Search / Tags Input */}
+        {/* Start of Search Icon + Toggling Area */}
         <div className="flex items-center gap-2 flex-grow min-w-0">
           <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className={cn("h-9 w-9 p-1.5 flex-shrink-0", isHeaderSearchActive && "bg-muted")}>
             <Search className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-[30deg]")} />
           </Button>
+
           {isHeaderSearchActive ? (
             <Input
               ref={headerSearchInputRef}
@@ -483,7 +489,7 @@ const CreateNewsArticlePage = () => {
               placeholder="Search all tags..."
               value={headerSearchTerm}
               onChange={(e) => setHeaderSearchTerm(e.target.value)}
-              className="h-9 text-xs flex-grow bg-muted/50"
+              className="h-9 text-xs flex-grow bg-muted/50 border-input focus:ring-1 focus:ring-primary"
             />
           ) : (
             <TagsInput
@@ -498,6 +504,7 @@ const CreateNewsArticlePage = () => {
             />
           )}
         </div>
+        {/* End of Search Icon + Toggling Area */}
         
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
@@ -532,18 +539,36 @@ const CreateNewsArticlePage = () => {
           </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting} />
+          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting} />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
-            ref={contentEditableRef} contentEditable={!isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} 
-            onClick={updateSelectionNonce} // Restored from "working" caret version
-            onKeyUp={updateSelectionNonce}  // Restored from "working" caret version
+            ref={contentEditableRef}
+            contentEditable={!isSubmitting}
+            onInput={handleContentEditableInput}
+            onFocus={() => handleFocus('content')}
+            onBlur={handleBlur}
+            onKeyDown={handleContentKeyDown} 
+            onClick={updateSelectionNonce} 
+            onKeyUp={updateSelectionNonce}  
             data-placeholder="Tell your story..."
-            className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
-            style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))" }}
-            role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true}
+            className={cn(
+              "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
+              "focus:outline-none min-h-[150px]"
+            )}
+            style={{
+              fontFamily:
+                "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
+              fontSize: "20px",
+              lineHeight: "1.6",
+              color: "hsl(var(--foreground))"
+            }}
+            role="textbox"
+            aria-multiline="true"
+            aria-label="News article content"
+            suppressContentEditableWarning={true}
+            dir="ltr" // Ensure LTR direction for the editor content
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
@@ -575,8 +600,3 @@ const CreateNewsArticlePage = () => {
   );
 };
 export default CreateNewsArticlePage;
-    
-    
-
-
-    

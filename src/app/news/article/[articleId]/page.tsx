@@ -13,7 +13,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Tag, Search } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search } from 'lucide-react'; // Added Search
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -99,6 +99,11 @@ const ArticlePage = () => {
   const [headerSearchTerm, setHeaderSearchTerm] = useState('');
   const headerSearchInputRef = useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
+      contentEditableRef.current.innerHTML = storyContent;
+    }
+  }, [storyContent]);
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid, articleId],
@@ -142,7 +147,7 @@ const ArticlePage = () => {
       setErrorLoadingArticle(null);
       setTitle("");
       setTags([]);
-      setStoryContent("<p><br></p>");
+      setStoryContent("<p><br></p>"); // Default for new or non-existent
       setCoverImagePreview(null);
       setCurrentCoverImageUrl(null);
     }
@@ -156,17 +161,16 @@ const ArticlePage = () => {
 
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
-          contentToLoadInEditor = article.draftContent;
+          contentToLoadInEditor = article.draftContent || "<p><br></p>";
           toast({ title: "Draft Loaded", description: "You are editing a saved draft of this published article.", duration: 4000 });
         } else {
           contentToLoadInEditor = article.content || "<p><br></p>";
         }
-      } else if (article.status === 'published') { // Public view of a published article
-        contentToLoadInEditor = article.content || "<p><br></p>"; // Always show live content
+      } else if (article.status === 'published') {
+        contentToLoadInEditor = article.content || "<p><br></p>";
       } else if (article.status === 'draft' && !isEditingAllowed) {
         contentToLoadInEditor = "<p>Draft content not available for viewing.</p>";
       }
-
 
       setStoryContent(contentToLoadInEditor);
       if (contentEditableRef.current && contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
@@ -300,26 +304,26 @@ const ArticlePage = () => {
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
 
-  useEffect(() => { if (isEditingAllowed) calculateAndUpdateToolbarStyle(); }, [focusedField, title, storyContent, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
-  
+  useEffect(() => {
+    if (isEditingAllowed) calculateAndUpdateToolbarStyle();
+  }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
+
   useEffect(() => {
     const handleInteraction = () => {
-      if (contentEditableRef.current && (document.activeElement === contentEditableRef.current || 
-          (titleInputRef.current && document.activeElement === titleInputRef.current))) {
-        requestAnimationFrame(updateSelectionNonce);
-      }
+        if (isEditingAllowed && (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current))) {
+            requestAnimationFrame(updateSelectionNonce);
+        }
     };
     if (isEditingAllowed) {
-      document.addEventListener('selectionchange', handleInteraction);
-      document.addEventListener('keyup', handleInteraction);
-      // No document-level click for updateSelectionNonce here based on prior logic
+        document.addEventListener('selectionchange', handleInteraction);
+        document.addEventListener('keyup', handleInteraction);
+        // Document-level click listener removed to let editor's own click handler manage its caret
     }
     return () => {
-      document.removeEventListener('selectionchange', handleInteraction);
-      document.removeEventListener('keyup', handleInteraction);
+        document.removeEventListener('selectionchange', handleInteraction);
+        document.removeEventListener('keyup', handleInteraction);
     };
   }, [updateSelectionNonce, isEditingAllowed, contentEditableRef, titleInputRef]);
-
 
   const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) setFocusedField(field); }, [isEditingAllowed]);
   const handleBlur = useCallback(() => {
@@ -336,30 +340,27 @@ const ArticlePage = () => {
     if (!isEditingAllowed) return;
     const currentHTML = event.currentTarget.innerHTML;
     const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>";
-    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML; // No dir="ltr" here
     
+    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML; // No dir="ltr" here
     setStoryContent(finalHTML); 
 
     if (isEmptyContent && finalHTML === "<p><br></p>") {
       if (event.currentTarget.innerHTML !== finalHTML) {
           event.currentTarget.innerHTML = finalHTML;
       }
+      // Ensure caret is placed inside the <p> tag correctly.
       queueMicrotask(() => {
         if (contentEditableRef.current) {
           const pTag = contentEditableRef.current.querySelector('p');
-          if (pTag) {
+          if(pTag) {
             const range = document.createRange();
             const sel = window.getSelection();
-            try {
-              range.setStart(pTag, 0);
-              range.collapse(true);
-              sel?.removeAllRanges();
-              sel?.addRange(range);
-            } catch (e) {}
+            try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {/*ignore*/}
           }
         }
       });
     }
+
     if (publishAttempted) {
       const currentText = event.currentTarget.textContent || "";
       if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(finalHTML)) {
@@ -376,7 +377,12 @@ const ArticlePage = () => {
     const editorEl = contentEditableRef.current; if (!editorEl) return;
     const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
-    if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); if (editorEl) setStoryContent(editorEl.innerHTML); setTimeout(() => { if (contentEditableRef.current) { updateSelectionNonce();}}, 0); return; } 
+    if (event.key === 'Enter') {
+        event.preventDefault(); document.execCommand('insertParagraph', false, undefined);
+        if (editorEl) setStoryContent(editorEl.innerHTML); // update state
+        setTimeout(() => { if (contentEditableRef.current) { updateSelectionNonce();}}, 0);
+        return;
+    }
     if (event.key === 'Backspace' || event.key === 'Delete') {
       if (range.collapsed && currentBlock) {
         const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false;
@@ -384,19 +390,27 @@ const ArticlePage = () => {
           if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
-            event.preventDefault(); prevElement.remove(); if (editorEl) setStoryContent(editorEl.innerHTML); updateSelectionNonce(); return; 
+            event.preventDefault(); prevElement.remove();
+            if (editorEl) setStoryContent(editorEl.innerHTML); // update state
+            updateSelectionNonce(); return;
           }
         } else { 
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
-            event.preventDefault(); nextElement.remove(); if (editorEl) setStoryContent(editorEl.innerHTML); updateSelectionNonce(); return; 
+            event.preventDefault(); nextElement.remove();
+            if (editorEl) setStoryContent(editorEl.innerHTML); // update state
+            updateSelectionNonce(); return;
           }
         }
       }
     }
-    setTimeout(() => { if (editorEl) setStoryContent(editorEl.innerHTML); updateSelectionNonce(); },0); 
-  }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce, isEditingAllowed]);
+    // Defer state update for other keys as well to allow browser to handle first
+    setTimeout(() => {
+        if (editorEl) setStoryContent(editorEl.innerHTML);
+        updateSelectionNonce();
+    },0);
+  }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed, setStoryContent]);
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -462,40 +476,41 @@ const ArticlePage = () => {
         articleUpdateData.coverImageUrl = newCoverImageUrl;
       }
 
+      // Ensure content fields are null if undefined/empty, not undefined itself
+      const normalizeContent = (content: string | null | undefined): string | null => {
+        if (content === undefined || content === null || content.trim() === "" || content.trim() === "<p><br></p>") {
+          return null;
+        }
+        return content;
+      };
+      
+      const finalContentForService = normalizeContent(contentForThisSaveOperation);
+
       if (isSavingDraftOfPublishedArticleFlag && article.status === 'published') {
-        articleUpdateData.draftContent = contentForThisSaveOperation === "<p><br></p>" ? null : contentForThisSaveOperation;
+        articleUpdateData.draftContent = finalContentForService;
         articleUpdateData.hasUnpublishedChanges = true;
-        // Do not change main content or status here if only saving draft
-        delete articleUpdateData.content; // Ensure main content is not touched
-        delete articleUpdateData.status; // Status remains 'published'
+        // Status remains 'published'
       } else if (newStatus === 'published') {
-        articleUpdateData.content = contentForThisSaveOperation === "<p><br></p>" ? null : contentForThisSaveOperation;
+        articleUpdateData.content = finalContentForService;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
-        // status is already set
       } else if (newStatus === 'draft') {
-        articleUpdateData.content = contentForThisSaveOperation === "<p><br></p>" ? null : contentForThisSaveOperation;
+        articleUpdateData.content = finalContentForService; // Draft content goes to main content field when status is draft
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
         articleUpdateData.publishedAt = null;
-        // status is already set
-      } else if (dataToUpdate.content !== undefined && !isSavingDraftOfPublishedArticleFlag) { // This line's condition seems complex/possibly redundant given other branches
-        articleUpdateData.content = contentForThisSaveOperation === "<p><br></p>" ? null : contentForThisSaveOperation;
-        if (article.status === 'published') { // if editing live published, ensure draft fields are cleared
+      } else if (dataToUpdate.content !== undefined) { // dataToUpdate is not defined here. Meant to check if contentValueFromUpdate was passed
+         articleUpdateData.content = finalContentForService;
+         if (article.status === 'published') { // If already published and just updating content (not saving draft)
              articleUpdateData.draftContent = null;
              articleUpdateData.hasUnpublishedChanges = false;
-        }
+         }
       }
 
 
       await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticleFlag);
-      
-      if (isSavingDraftOfPublishedArticleFlag) {
-         if (contentEditableRef.current) contentEditableRef.current.innerHTML = contentForThisSaveOperation;
-         setStoryContent(contentForThisSaveOperation);
-      } else {
-         setStoryContent(contentForThisSaveOperation);
-      }
+      setStoryContent(finalContentForService === null ? "<p><br></p>" : finalContentForService);
+
 
       let successTitle = "Update Successful";
       let successDescription = `Article "${title.trim()}" updated.`;
@@ -651,12 +666,16 @@ const ArticlePage = () => {
       setCoverImagePreview(currentCoverImageUrl);
     }
   };
-  
+
   const toggleHeaderSearch = useCallback(() => {
     setIsHeaderSearchActive(prev => {
-      if (prev) setHeaderSearchTerm(''); // Clear search term when closing
-      else setTimeout(() => headerSearchInputRef.current?.focus(), 0); // Focus when opening
-      return !prev;
+      const nextState = !prev;
+      if (!nextState) {
+        setHeaderSearchTerm('');
+      } else {
+        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+      }
+      return nextState;
     });
   }, []);
 
@@ -752,11 +771,12 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        {/* Toggleable Search / Tags Input */}
+        {/* Start of Search Icon + Toggling Area */}
         <div className="flex items-center gap-2 flex-grow min-w-0">
           <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className={cn("h-9 w-9 p-1.5 flex-shrink-0", isHeaderSearchActive && "bg-muted")}>
             <Search className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-[30deg]")} />
           </Button>
+
           {isHeaderSearchActive ? (
             <Input
               ref={headerSearchInputRef}
@@ -764,7 +784,7 @@ const ArticlePage = () => {
               placeholder="Search all tags..."
               value={headerSearchTerm}
               onChange={(e) => setHeaderSearchTerm(e.target.value)}
-              className="h-9 text-xs flex-grow bg-muted/50"
+              className="h-9 text-xs flex-grow bg-muted/50 border-input focus:ring-1 focus:ring-primary"
             />
           ) : (
             <TagsInput
@@ -779,8 +799,9 @@ const ArticlePage = () => {
             />
           )}
         </div>
+        {/* End of Search Icon + Toggling Area */}
         
-        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           {user && articleId && article && (
             <Button
                 variant="ghost"
@@ -810,26 +831,26 @@ const ArticlePage = () => {
                 <DropdownMenuSeparator />
                 {article?.status === 'draft' ? (
                   <>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer">
                       <Save className="mr-2 h-4 w-4" /> Save Draft
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
                       <Send className="mr-2 h-4 w-4" /> Publish
                     </DropdownMenuItem>
                   </>
                 ) : ( 
                   <>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
                       {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Save Draft of Published Article
                     </DropdownMenuItem>
                     
                     {article.hasUnpublishedChanges && article.draftContent ? (
-                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
                         <CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes
                       </DropdownMenuItem>
                     ) : (
-                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer">
+                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer">
                         <Save className="mr-2 h-4 w-4" /> Update Live Article
                       </DropdownMenuItem>
                     )}
@@ -882,19 +903,37 @@ const ArticlePage = () => {
             </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
+          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
-            key={articleId}
-            ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} 
-            onClick={updateSelectionNonce} // Restored from "working" caret version
-            onKeyUp={updateSelectionNonce}  // Restored from "working" caret version
+            key={articleId} // Ensures re-mount with fresh innerHTML on article change if not editing
+            ref={contentEditableRef}
+            contentEditable={isEditingAllowed && !isSubmitting}
+            onInput={handleContentEditableInput}
+            onFocus={() => handleFocus('content')}
+            onBlur={handleBlur}
+            onKeyDown={handleContentKeyDown}
+            onClick={updateSelectionNonce} // Let document listener handle for toolbar, direct for content updates
+            onKeyUp={updateSelectionNonce}  // Let document listener handle for toolbar, direct for content updates
             data-placeholder="Tell your story..."
-            className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
-            style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))" }}
-            role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true}
+            className={cn(
+              "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
+              "focus:outline-none min-h-[150px]"
+            )}
+            style={{
+              fontFamily:
+                "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif",
+              fontSize: "20px",
+              lineHeight: "1.6",
+              color: "hsl(var(--foreground))"
+            }}
+            role="textbox"
+            aria-multiline="true"
+            aria-label="News article content"
+            suppressContentEditableWarning={true}
+            dir="ltr" // Ensure LTR direction for the editor content
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
@@ -936,8 +975,4 @@ const ArticlePage = () => {
     </>
   );
 };
-
 export default ArticlePage;
-
-
-    
