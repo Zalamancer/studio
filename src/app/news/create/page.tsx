@@ -68,8 +68,6 @@ const CreateNewsArticlePage = () => {
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
   
-  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
-  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
 
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
@@ -79,7 +77,9 @@ const CreateNewsArticlePage = () => {
 
 
   const updateSelectionNonce = useCallback(() => {
-    setSelectionNonce(n => n + 1);
+    requestAnimationFrame(() => {
+        setSelectionNonce(n => n + 1);
+    });
   }, []);
 
   const getCurrentBlockElement = useCallback((): HTMLElement | null => {
@@ -194,22 +194,20 @@ const CreateNewsArticlePage = () => {
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef]);
 
-  useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, title, storyContent, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
+  useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
   
   useEffect(() => {
     const handleInteraction = () => {
       if (contentEditableRef.current && (document.activeElement === contentEditableRef.current || 
           (titleInputRef.current && document.activeElement === titleInputRef.current))) {
-        updateSelectionNonce();
+        requestAnimationFrame(updateSelectionNonce);
       }
     };
     document.addEventListener('selectionchange', handleInteraction);
-    document.addEventListener('keyup', handleInteraction);
-    document.addEventListener('click', handleInteraction); 
+    document.addEventListener('keyup', handleInteraction); 
     return () => {
       document.removeEventListener('selectionchange', handleInteraction);
       document.removeEventListener('keyup', handleInteraction);
-      document.removeEventListener('click', handleInteraction); 
     };
   }, [updateSelectionNonce, contentEditableRef, titleInputRef]);
 
@@ -450,13 +448,6 @@ const CreateNewsArticlePage = () => {
     }
   };
 
-  const toggleHeaderSearch = () => {
-    setIsHeaderSearchActive(!isHeaderSearchActive);
-    if (isHeaderSearchActive) { 
-      setHeaderSearchTerm('');
-    }
-  };
-
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
 
@@ -468,42 +459,16 @@ const CreateNewsArticlePage = () => {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        <div className="flex items-center flex-grow min-w-0 gap-2">
-           <Button 
-              variant="ghost" 
-              size="icon" 
-              onClick={toggleHeaderSearch} 
-              className="h-9 w-9 p-1.5 flex-shrink-0"
-              title={isHeaderSearchActive ? "Close search" : "Search tags"}
-            >
-              <Search className={cn("h-5 w-5 transition-transform duration-200 ease-in-out", isHeaderSearchActive && "rotate-[30deg]")} />
-            </Button>
-
-            {isHeaderSearchActive ? (
-              <div className="relative flex-grow min-w-0">
-                <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-                <Input 
-                  type="text"
-                  placeholder="Search or add tags..." 
-                  value={headerSearchTerm}
-                  onChange={(e) => setHeaderSearchTerm(e.target.value)}
-                  className="h-9 pl-9 text-xs w-full"
-                  autoFocus
-                />
-              </div>
-            ) : (
-              <TagsInput
-                  value={tags}
-                  onChange={setTags}
-                  placeholder="Add up to 5 tags (e.g., AI, SaaS, Funding)..."
-                  disabled={isSubmitting}
-                  error={publishAttempted && tagsError ? tagsError : null}
-                  onPublishAttempt={publishAttempted}
-                  className="flex-grow min-w-0 text-xs"
-                  maxTags={5}
-              />
-            )}
-        </div>
+        <TagsInput
+            value={tags}
+            onChange={setTags}
+            placeholder="Add up to 5 tags (e.g., AI, SaaS, Funding)..."
+            disabled={isSubmitting}
+            error={publishAttempted && tagsError ? tagsError : null}
+            onPublishAttempt={publishAttempted}
+            className="flex-grow min-w-0 text-xs"
+            maxTags={5}
+        />
         
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
@@ -538,7 +503,7 @@ const CreateNewsArticlePage = () => {
           </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting} />
+          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting} />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
