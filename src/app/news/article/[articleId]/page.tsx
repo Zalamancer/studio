@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -58,7 +57,7 @@ const ArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [storyContent, setStoryContent] = useState("<p dir=\"ltr\"><br></p>");
+  const [storyContent, setStoryContent] = useState("<p><br></p>"); // Reverted from <p dir="ltr"><br></p>
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
   const [currentCoverImageUrl, setCurrentCoverImageUrl] = useState<string | null>(null);
@@ -136,7 +135,7 @@ const ArticlePage = () => {
       setErrorLoadingArticle(null);
       setTitle("");
       setTags([]);
-      setStoryContent("<p dir=\"ltr\"><br></p>");
+      setStoryContent("<p><br></p>"); // Reverted default
       setCoverImagePreview(null);
       setCurrentCoverImageUrl(null);
     }
@@ -146,28 +145,23 @@ const ArticlePage = () => {
     if (article) {
       setTitle(article.title || "");
       setTags(article.tags || []);
-      let contentToLoadInEditor = "<p dir=\"ltr\"><br></p>";
+      let contentToLoadInEditor = "<p><br></p>"; // Reverted default
 
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
-          contentToLoadInEditor = article.draftContent;
+          contentToLoadInEditor = article.draftContent || "<p><br></p>"; // Reverted default
           toast({ title: "Draft Loaded", description: "You are editing a saved draft of this published article.", duration: 4000 });
         } else {
-          contentToLoadInEditor = article.content || "<p dir=\"ltr\"><br></p>";
+          contentToLoadInEditor = article.content || "<p><br></p>"; // Reverted default
         }
       } else if (article.status === 'published') {
-        contentToLoadInEditor = article.content || "<p dir=\"ltr\"><br></p>";
+        contentToLoadInEditor = article.content || "<p><br></p>"; // Reverted default
       } else if (article.status === 'draft' && !isEditingAllowed) {
-        contentToLoadInEditor = "<p dir=\"ltr\">Draft content not available for viewing.</p>";
+        contentToLoadInEditor = "<p>Draft content not available for viewing.</p>"; // No dir="ltr" here as it's not empty
       }
 
       setStoryContent(contentToLoadInEditor);
-      // This direct DOM manipulation might be problematic with React's rendering.
-      // It's generally better to let React handle DOM updates via state and props.
-      // If `dangerouslySetInnerHTML={{ __html: storyContent }}` is used, this should not be necessary.
-      if (contentEditableRef.current && contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
-        contentEditableRef.current.innerHTML = contentToLoadInEditor;
-      }
+      // Direct DOM manipulation removed as dangerouslySetInnerHTML handles it via storyContent state.
 
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
@@ -205,7 +199,7 @@ const ArticlePage = () => {
       node = node.parentNode;
     }
     return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl;
-  }, []);
+  }, [contentEditableRef]);
 
   const getCurrentLineText = useCallback((): string => {
     const contentEl = contentEditableRef.current;
@@ -219,11 +213,11 @@ const ArticlePage = () => {
         if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT';
         return currentBlock.textContent?.trim() || "";
       }
-      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>") return "EDITOR_IS_EMPTY";
+      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>" || contentEl.innerHTML.trim() === "<p><br></p>") return "EDITOR_IS_EMPTY"; // Check user's empty state
       return "NO_CURRENT_BLOCK_FOUND";
     }
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
-  }, [focusedField, getCurrentBlockElement, titleInputRef]);
+  }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
 
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
@@ -267,7 +261,7 @@ const ArticlePage = () => {
       return mainDivRect.top + paddingTopMain + (lineHeightMain / 2);
     }
     return null;
-  }, [focusedField, getCurrentBlockElement, titleInputRef]);
+  }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
     let shouldShowPlusButton = false; let shouldShowExpandedToolbar = false;
@@ -292,27 +286,29 @@ const ArticlePage = () => {
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
 
-  useEffect(() => { if (isEditingAllowed) calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
+  // Toolbar update logic based on "working" version's dependencies
+  useEffect(() => { 
+    if (isEditingAllowed) calculateAndUpdateToolbarStyle(); 
+  }, [focusedField, title, storyContent, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
   
+  // Document event listeners based on "working" version
   useEffect(() => {
-    const handleSelectionOrKey = () => {
-      if (isEditingAllowed && (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current))) {
-        requestAnimationFrame(() => { // Defer the update
-          updateSelectionNonce();
-        });
+    const handleSelectionOrKey = () => { 
+      if (contentEditableRef.current && titleInputRef.current && (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current)) {
+        updateSelectionNonce(); 
       }
     };
-
     if (isEditingAllowed) {
-      document.addEventListener('selectionchange', handleSelectionOrKey);
-      document.addEventListener('keyup', handleSelectionOrKey);
+        document.addEventListener('selectionchange', handleSelectionOrKey); 
+        document.addEventListener('keyup', handleSelectionOrKey); 
+        document.addEventListener('click', handleSelectionOrKey); // Added click listener
     }
-    return () => {
-      document.removeEventListener('selectionchange', handleSelectionOrKey);
-      document.removeEventListener('keyup', handleSelectionOrKey);
+    return () => { 
+        document.removeEventListener('selectionchange', handleSelectionOrKey); 
+        document.removeEventListener('keyup', handleSelectionOrKey); 
+        document.removeEventListener('click', handleSelectionOrKey); // Remove click listener
     };
-  }, [updateSelectionNonce, isEditingAllowed, contentEditableRef, titleInputRef]);
-
+  }, [updateSelectionNonce, isEditingAllowed, contentEditableRef, titleInputRef]); // Added refs to dep array
 
   const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) setFocusedField(field); }, [isEditingAllowed]);
   const handleBlur = useCallback(() => {
@@ -328,32 +324,30 @@ const ArticlePage = () => {
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
     const currentHTML = event.currentTarget.innerHTML;
-    const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>" || currentHTML.trim() === "<p dir=\"ltr\"><br></p>" || currentHTML.trim() === "<p dir=\"ltr\"></p>";
-    
-    const finalHTML = isEmptyContent ? "<p dir=\"ltr\"><br></p>" : currentHTML;
-    setStoryContent(finalHTML); // Always update state to make it controlled
-
-    if (isEmptyContent && finalHTML === "<p dir=\"ltr\"><br></p>") {
-      queueMicrotask(() => { // Defer DOM manipulation
-        if (contentEditableRef.current) {
-          const pTag = contentEditableRef.current.querySelector('p[dir="ltr"]');
-          if (pTag) {
-            const range = document.createRange();
-            const sel = window.getSelection();
-            try {
-              range.setStart(pTag, 0);
-              range.collapse(true);
-              sel?.removeAllRanges();
-              sel?.addRange(range);
-            } catch (e) {}
-          }
+    // Using user's empty check logic but keeping dir="ltr" for normalized empty state
+    if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") {
+      setStoryContent("<p><br></p>"); // Reverted to user's preferred empty state
+      if (contentEditableRef.current && contentEditableRef.current.innerHTML !== "<p><br></p>") { 
+        contentEditableRef.current.innerHTML = "<p><br></p>";
+        const pTag = contentEditableRef.current.querySelector('p');
+        if(pTag) { 
+          const range = document.createRange(); 
+          const sel = window.getSelection(); 
+          try { 
+            range.setStart(pTag, 0); 
+            range.collapse(true); 
+            sel?.removeAllRanges(); 
+            sel?.addRange(range); 
+          } catch(e) {}
         }
-      });
+      }
+    } else {
+      setStoryContent(currentHTML);
     }
 
     if (publishAttempted) {
       const currentText = event.currentTarget.textContent || "";
-      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(finalHTML)) {
+      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) {
         setStoryError("");
       } else {
         setStoryError("Story content is required.");
@@ -369,7 +363,7 @@ const ArticlePage = () => {
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
     if (event.key === 'Enter') {
         event.preventDefault(); document.execCommand('insertParagraph', false, undefined);
-        if (editorEl) setStoryContent(editorEl.innerHTML); // Sync state
+        if (editorEl) setStoryContent(editorEl.innerHTML); 
         setTimeout(() => { if (contentEditableRef.current) { updateSelectionNonce();}}, 0);
         return;
     }
@@ -381,7 +375,7 @@ const ArticlePage = () => {
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
             event.preventDefault(); prevElement.remove();
-            if (editorEl) setStoryContent(editorEl.innerHTML); // Sync state
+            if (editorEl) setStoryContent(editorEl.innerHTML || "<p><br></p>"); // Ensure empty state
             updateSelectionNonce(); return;
           }
         } else { 
@@ -389,15 +383,15 @@ const ArticlePage = () => {
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
             event.preventDefault(); nextElement.remove();
-            if (editorEl) setStoryContent(editorEl.innerHTML); // Sync state
+            if (editorEl) setStoryContent(editorEl.innerHTML || "<p><br></p>"); // Ensure empty state
             updateSelectionNonce(); return;
           }
         }
       }
     }
-    // Defer state update and nonce update after keydown allows browser default actions
+    // Unconditional state update after keydown, like "working" version
     setTimeout(() => {
-        if (editorEl) setStoryContent(editorEl.innerHTML);
+        if (editorEl) setStoryContent(editorEl.innerHTML || "<p><br></p>"); // Ensure empty state
         updateSelectionNonce();
     },0);
   }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed, setStoryContent]);
@@ -406,7 +400,7 @@ const ArticlePage = () => {
     let isValid = true;
     if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); }
     if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); }
-    const currentEditorHTML = contentEditableRef.current?.innerHTML || "<p dir=\"ltr\"><br></p>";
+    const currentEditorHTML = contentEditableRef.current?.innerHTML || "<p><br></p>"; // Reverted
     const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentEditorHTML)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
@@ -421,8 +415,8 @@ const ArticlePage = () => {
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." });
       return;
     }
-    // Always read the latest from the DOM for saving
-    const latestEditorHTML = contentEditableRef.current?.innerHTML || "<p dir=\"ltr\"><br></p>";
+    // Always read the latest from the DOM for saving, like "working" version
+    const latestEditorHTML = contentEditableRef.current?.innerHTML || "<p><br></p>"; // Reverted
     const contentForThisSaveOperation = contentToSaveParam !== undefined ? contentToSaveParam : latestEditorHTML;
     
     if ((newStatus === 'published' && !isSavingDraftOfPublishedArticleFlag) || (article.status === 'published' && !isSavingDraftOfPublishedArticleFlag) ) {
@@ -528,9 +522,9 @@ const ArticlePage = () => {
       if (selection) { selection.removeAllRanges(); selection.addRange(range); }
       setSavedRange(null);
       const currentBlock = getCurrentBlockElement();
-      if (currentBlock && editorEl.contains(currentBlock) && (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;") && currentBlock.innerHTML.toLowerCase() !== "<p dir=\"ltr\"><br></p>") {
+      if (currentBlock && editorEl.contains(currentBlock) && (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;") && currentBlock.innerHTML.toLowerCase() !== "<p><br></p>") { // Reverted empty state
         if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) {
-          const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>|<p\sdir="ltr"><br\s*\/?><\/p>|<p\sdir="ltr"><\/p>)$/i);
+          const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>)$/i); // Reverted regex
           if (!isEditorAndEmptyOrSinglePBR || (isEditorAndEmptyOrSinglePBR && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) range.selectNodeContents(currentBlock);
         }
       }
@@ -544,7 +538,7 @@ const ArticlePage = () => {
       } else { range.selectNodeContents(editorEl); range.collapse(false); }
       if (selection) { selection.removeAllRanges(); selection.addRange(range); }
       
-      setStoryContent(editorEl.innerHTML || "<p dir=\"ltr\"><br></p>"); // Sync React state after DOM update
+      setStoryContent(editorEl.innerHTML || "<p><br></p>"); // Reverted to user's empty state
       
       setIsToolbarExpanded(false);
       queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); });
@@ -561,7 +555,7 @@ const ArticlePage = () => {
   const handleInlineImageFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (!isEditingAllowed) return;
     const file = event.target.files?.[0];
-    if (file) { const reader = new FileReader(); reader.onloadend = () => { const dataUri = reader.result as string; insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center" contenteditable="false"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p dir=\"ltr\"><br></p>`); }; reader.readAsDataURL(file); if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; }
+    if (file) { const reader = new FileReader(); reader.onloadend = () => { const dataUri = reader.result as string; insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center" contenteditable="false"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p><br></p>`); }; reader.readAsDataURL(file); if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; } // Reverted empty paragraph
     setSavedRange(null);
   }, [insertHTMLAndFocus, isEditingAllowed]);
 
@@ -575,7 +569,7 @@ const ArticlePage = () => {
   const handleYouTubeDialogSubmit = () => {
     if (youTubeUrlInput) {
       let videoId = ''; try { const urlObj = new URL(youTubeUrlInput); if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.substring(1); else if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v')!; else videoId = youTubeUrlInput; } catch (e) { videoId = youTubeUrlInput; }
-      if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) insertHTMLAndFocus(`<figure class="my-4 relative" contenteditable="false" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p dir=\"ltr\"><br></p>`);
+      if (videoId.match(/^[a-zA-Z0-9_-]{11}$/)) insertHTMLAndFocus(`<figure class="my-4 relative" contenteditable="false" style="padding-bottom: 56.25%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><iframe style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; border:0;" src="https://www.youtube.com/embed/${videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe></figure><p><br></p>`); // Reverted empty paragraph
       else toast({ variant: 'destructive', title: 'Invalid YouTube URL/ID', description: 'Please enter a valid YouTube video URL or ID.' });
     }
     setIsYouTubeDialogOpen(false); setSavedRange(null);
@@ -591,7 +585,7 @@ const ArticlePage = () => {
   const handleEmbedDialogSubmit = () => {
     if (embedCodeInput) {
       const sanitizedCode = embedCodeInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
-      if (sanitizedCode.trim()) insertHTMLAndFocus(`<div class="my-4 relative" data-embed-wrapper="true" contenteditable="false" style="padding-bottom: 100%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">${sanitizedCode}</div></div><p dir=\"ltr\"><br></p>`);
+      if (sanitizedCode.trim()) insertHTMLAndFocus(`<div class="my-4 relative" data-embed-wrapper="true" contenteditable="false" style="padding-bottom: 100%; height: 0; overflow: hidden; max-width: 100%; border-radius: 0.25rem;"><div style="position: absolute; top: 0; left: 0; width: 100%; height: 100%;">${sanitizedCode}</div></div><p><br></p>`); // Reverted empty paragraph
       else toast({ variant: 'destructive', title: 'Invalid Embed Code', description: 'Please provide valid embed code (e.g., an iframe).' });
     }
     setIsEmbedDialogOpen(false); setSavedRange(null);
@@ -601,14 +595,14 @@ const ArticlePage = () => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange());
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
-    insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p dir=\"ltr\"><br></p>`);
+    insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`); // Reverted empty paragraph
   }, [insertHTMLAndFocus, isEditingAllowed]);
   const handleInsertSeparator = useCallback(() => {
     if (!isEditingAllowed) return;
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange());
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
-    insertHTMLAndFocus(`<hr class="my-8 border-border" /><p dir=\"ltr\"><br></p>`);
+    insertHTMLAndFocus(`<hr class="my-8 border-border" /><p><br></p>`); // Reverted empty paragraph
   }, [insertHTMLAndFocus, isEditingAllowed]);
 
   const handleToggleToolbar = () => { if(isEditingAllowed) setIsToolbarExpanded(prev => { const newState = !prev; if (newState) { if (focusedField === 'title' && titleInputRef.current) titleInputRef.current.focus(); else if (focusedField === 'content' && contentEditableRef.current) contentEditableRef.current.focus(); } return newState; }); };
@@ -761,26 +755,26 @@ const ArticlePage = () => {
                 <DropdownMenuSeparator />
                 {article?.status === 'draft' ? (
                   <>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer">
                       <Save className="mr-2 h-4 w-4" /> Save Draft
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
                       <Send className="mr-2 h-4 w-4" /> Publish
                     </DropdownMenuItem>
                   </>
                 ) : ( 
                   <>
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
                       {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Save Draft of Published
                     </DropdownMenuItem>
                     
                     {article.hasUnpublishedChanges && article.draftContent ? (
-                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
                         <CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes
                       </DropdownMenuItem>
                     ) : (
-                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', contentEditableRef.current?.innerHTML, false)} disabled={isSubmitting} className="cursor-pointer">
+                      <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer">
                         <Save className="mr-2 h-4 w-4" /> Update Live Article
                       </DropdownMenuItem>
                     )}
@@ -826,7 +820,7 @@ const ArticlePage = () => {
               <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => {
                   if (contentEditableRef.current && article.content) {
                       setStoryContent(article.content); 
-                      contentEditableRef.current.innerHTML = article.content; 
+                      // No direct DOM manipulation: contentEditableRef.current.innerHTML = article.content; 
                   }
                   toast({title: "Viewing Live Content", description: "Editor now shows the live published content. Any unsaved draft changes were not applied."});
               }}>View live content</Button>
@@ -841,7 +835,7 @@ const ArticlePage = () => {
             key={articleId} 
             ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} onClick={updateSelectionNonce} onKeyUp={updateSelectionNonce} data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
-            style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
+            style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))", direction: 'ltr' }}
             role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true} dir="ltr"
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
@@ -886,3 +880,4 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
+```
