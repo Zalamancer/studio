@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Search } from 'lucide-react'; // Added Search
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -36,7 +36,7 @@ const CreateNewsArticlePage = () => {
 
   const [title, setTitle] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [storyContent, setStoryContent] = useState("<p><br></p>"); // Default for new
+  const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
 
@@ -68,10 +68,6 @@ const CreateNewsArticlePage = () => {
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
   
-  // State for header search
-  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
-  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
-  const headerSearchInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
@@ -196,21 +192,24 @@ const CreateNewsArticlePage = () => {
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef]);
 
-  useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
+  useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, title, storyContent]);
   
   useEffect(() => {
     const handleInteraction = () => {
-      if (contentEditableRef.current && (document.activeElement === contentEditableRef.current || 
-          (titleInputRef.current && document.activeElement === titleInputRef.current))) {
-        requestAnimationFrame(updateSelectionNonce);
-      }
+      requestAnimationFrame(() => {
+        if (document.activeElement === contentEditableRef.current || 
+            (titleInputRef.current && document.activeElement === titleInputRef.current)) {
+          updateSelectionNonce();
+        }
+      });
     };
     document.addEventListener('selectionchange', handleInteraction);
     document.addEventListener('keyup', handleInteraction);
-    // Document-level click listener removed to let editor's own click handler manage its caret
+    document.addEventListener('click', handleInteraction);
     return () => {
       document.removeEventListener('selectionchange', handleInteraction);
       document.removeEventListener('keyup', handleInteraction);
+      document.removeEventListener('click', handleInteraction);
     };
   }, [updateSelectionNonce, contentEditableRef, titleInputRef]);
 
@@ -228,15 +227,14 @@ const CreateNewsArticlePage = () => {
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     const currentHTML = event.currentTarget.innerHTML;
     const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>";
-    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML; // No dir="ltr" here
+    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML;
     
-    setStoryContent(finalHTML); 
+    setStoryContent(finalHTML);
 
     if (isEmptyContent && finalHTML === "<p><br></p>") {
       if (event.currentTarget.innerHTML !== finalHTML) {
           event.currentTarget.innerHTML = finalHTML;
       }
-      // Ensure caret is placed inside the <p> tag correctly.
       queueMicrotask(() => {
         if (contentEditableRef.current) {
           const pTag = contentEditableRef.current.querySelector('p');
@@ -331,7 +329,7 @@ const CreateNewsArticlePage = () => {
       if (status === 'published') {
         router.push(`/news/article/${newArticleId}`);
       } else {
-        router.push('/news'); // Or perhaps a "My Drafts" page if that exists
+        router.push('/news');
       }
 
     } catch (error: any) {
@@ -344,7 +342,7 @@ const CreateNewsArticlePage = () => {
   const handlePublish = () => handleFormSubmission('published');
   const handleSaveDraft = () => {
     if (!title.trim() || tags.length === 0) {
-        setPublishAttempted(true); // To show validation errors
+        setPublishAttempted(true);
         if (!title.trim()) setTitleError("Title is required to save a draft."); else setTitleError("");
         if (tags.length === 0) setTagsError("At least one tag is required to save a draft."); else setTagsError("");
         toast({variant: "destructive", title: "Cannot Save Draft", description: "Please provide a title and at least one tag."});
@@ -452,18 +450,6 @@ const CreateNewsArticlePage = () => {
     }
   };
   
-  const toggleHeaderSearch = useCallback(() => {
-    setIsHeaderSearchActive(prev => {
-      const nextState = !prev;
-      if (!nextState) {
-        setHeaderSearchTerm('');
-      } else {
-        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
-      }
-      return nextState;
-    });
-  }, []);
-
 
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
@@ -476,35 +462,16 @@ const CreateNewsArticlePage = () => {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        {/* Start of Search Icon + Toggling Area */}
-        <div className="flex items-center gap-2 flex-grow min-w-0">
-          <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className={cn("h-9 w-9 p-1.5 flex-shrink-0", isHeaderSearchActive && "bg-muted")}>
-            <Search className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-[30deg]")} />
-          </Button>
-
-          {isHeaderSearchActive ? (
-            <Input
-              ref={headerSearchInputRef}
-              type="search"
-              placeholder="Search all tags..."
-              value={headerSearchTerm}
-              onChange={(e) => setHeaderSearchTerm(e.target.value)}
-              className="h-9 text-xs flex-grow bg-muted/50 border-input focus:ring-1 focus:ring-primary"
-            />
-          ) : (
-            <TagsInput
-                value={tags}
-                onChange={setTags}
-                placeholder="Add up to 5 tags..."
-                disabled={isSubmitting}
-                error={publishAttempted && tagsError ? tagsError : null}
-                onPublishAttempt={publishAttempted}
-                className="flex-grow text-xs"
-                maxTags={5}
-            />
-          )}
-        </div>
-        {/* End of Search Icon + Toggling Area */}
+        <TagsInput
+            value={tags}
+            onChange={setTags}
+            placeholder="Add up to 5 tags..."
+            disabled={isSubmitting}
+            error={publishAttempted && tagsError ? tagsError : null}
+            onPublishAttempt={publishAttempted}
+            className="flex-grow text-xs min-w-0"
+            maxTags={5}
+        />
         
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
@@ -568,7 +535,7 @@ const CreateNewsArticlePage = () => {
             aria-multiline="true"
             aria-label="News article content"
             suppressContentEditableWarning={true}
-            dir="ltr" // Ensure LTR direction for the editor content
+            dir="ltr"
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
