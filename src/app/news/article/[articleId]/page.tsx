@@ -13,7 +13,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Tag } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Tag, Search } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -93,6 +93,12 @@ const ArticlePage = () => {
   const [embedCodeInput, setEmbedCodeInput] = useState("");
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
+
+  // State for header search
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
+  const headerSearchInputRef = useRef<HTMLInputElement>(null);
+
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid, articleId],
@@ -177,7 +183,11 @@ const ArticlePage = () => {
   }, [article, isEditingAllowed, toast]);
 
 
-  const updateSelectionNonce = useCallback(() => setSelectionNonce(n => n + 1), []);
+  const updateSelectionNonce = useCallback(() => {
+    requestAnimationFrame(() => {
+        setSelectionNonce(n => n + 1);
+    });
+  }, []);
 
   const getCurrentBlockElement = useCallback((): HTMLElement | null => {
     const contentEl = contentEditableRef.current;
@@ -296,18 +306,17 @@ const ArticlePage = () => {
     const handleInteraction = () => {
       if (contentEditableRef.current && (document.activeElement === contentEditableRef.current || 
           (titleInputRef.current && document.activeElement === titleInputRef.current))) {
-        updateSelectionNonce();
+        requestAnimationFrame(updateSelectionNonce);
       }
     };
     if (isEditingAllowed) {
       document.addEventListener('selectionchange', handleInteraction);
       document.addEventListener('keyup', handleInteraction);
-      document.addEventListener('click', handleInteraction); 
+      // No document-level click for updateSelectionNonce here based on prior logic
     }
     return () => {
       document.removeEventListener('selectionchange', handleInteraction);
       document.removeEventListener('keyup', handleInteraction);
-      document.removeEventListener('click', handleInteraction); 
     };
   }, [updateSelectionNonce, isEditingAllowed, contentEditableRef, titleInputRef]);
 
@@ -327,7 +336,7 @@ const ArticlePage = () => {
     if (!isEditingAllowed) return;
     const currentHTML = event.currentTarget.innerHTML;
     const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>";
-    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML;
+    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML; // No dir="ltr" here
     
     setStoryContent(finalHTML); 
 
@@ -454,28 +463,39 @@ const ArticlePage = () => {
       }
 
       if (isSavingDraftOfPublishedArticleFlag && article.status === 'published') {
-        articleUpdateData.draftContent = contentForThisSaveOperation;
+        articleUpdateData.draftContent = contentForThisSaveOperation === "<p><br></p>" ? null : contentForThisSaveOperation;
         articleUpdateData.hasUnpublishedChanges = true;
+        // Do not change main content or status here if only saving draft
+        delete articleUpdateData.content; // Ensure main content is not touched
+        delete articleUpdateData.status; // Status remains 'published'
       } else if (newStatus === 'published') {
-        articleUpdateData.content = contentForThisSaveOperation;
+        articleUpdateData.content = contentForThisSaveOperation === "<p><br></p>" ? null : contentForThisSaveOperation;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
+        // status is already set
       } else if (newStatus === 'draft') {
-        articleUpdateData.content = contentForThisSaveOperation;
+        articleUpdateData.content = contentForThisSaveOperation === "<p><br></p>" ? null : contentForThisSaveOperation;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
         articleUpdateData.publishedAt = null;
-      } else if (dataToUpdate.content !== undefined) { // This 'dataToUpdate' is not defined in this scope. Should refer to 'articleUpdateData' or context.
-        articleUpdateData.content = contentForThisSaveOperation;
-        if (article.status === 'published') {
+        // status is already set
+      } else if (dataToUpdate.content !== undefined && !isSavingDraftOfPublishedArticleFlag) { // This line's condition seems complex/possibly redundant given other branches
+        articleUpdateData.content = contentForThisSaveOperation === "<p><br></p>" ? null : contentForThisSaveOperation;
+        if (article.status === 'published') { // if editing live published, ensure draft fields are cleared
              articleUpdateData.draftContent = null;
              articleUpdateData.hasUnpublishedChanges = false;
         }
       }
 
-      await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticleFlag);
 
-      setStoryContent(contentForThisSaveOperation);
+      await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticleFlag);
+      
+      if (isSavingDraftOfPublishedArticleFlag) {
+         if (contentEditableRef.current) contentEditableRef.current.innerHTML = contentForThisSaveOperation;
+         setStoryContent(contentForThisSaveOperation);
+      } else {
+         setStoryContent(contentForThisSaveOperation);
+      }
 
       let successTitle = "Update Successful";
       let successDescription = `Article "${title.trim()}" updated.`;
@@ -631,6 +651,15 @@ const ArticlePage = () => {
       setCoverImagePreview(currentCoverImageUrl);
     }
   };
+  
+  const toggleHeaderSearch = useCallback(() => {
+    setIsHeaderSearchActive(prev => {
+      if (prev) setHeaderSearchTerm(''); // Clear search term when closing
+      else setTimeout(() => headerSearchInputRef.current?.focus(), 0); // Focus when opening
+      return !prev;
+    });
+  }, []);
+
 
   if (authLoading || isLoadingArticle) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
@@ -723,16 +752,33 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        <TagsInput
-            value={tags}
-            onChange={setTags}
-            placeholder="Add up to 5 tags (e.g., AI, SaaS, Funding)..."
-            disabled={isSubmitting || !isEditingAllowed}
-            error={publishAttempted && tagsError ? tagsError : null}
-            onPublishAttempt={publishAttempted}
-            className="flex-grow min-w-0 text-xs" 
-            maxTags={5}
-        />
+        {/* Toggleable Search / Tags Input */}
+        <div className="flex items-center gap-2 flex-grow min-w-0">
+          <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className={cn("h-9 w-9 p-1.5 flex-shrink-0", isHeaderSearchActive && "bg-muted")}>
+            <Search className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-[30deg]")} />
+          </Button>
+          {isHeaderSearchActive ? (
+            <Input
+              ref={headerSearchInputRef}
+              type="search"
+              placeholder="Search all tags..."
+              value={headerSearchTerm}
+              onChange={(e) => setHeaderSearchTerm(e.target.value)}
+              className="h-9 text-xs flex-grow bg-muted/50"
+            />
+          ) : (
+            <TagsInput
+                value={tags}
+                onChange={setTags}
+                placeholder="Add up to 5 tags..."
+                disabled={isSubmitting || !isEditingAllowed}
+                error={publishAttempted && tagsError ? tagsError : null}
+                onPublishAttempt={publishAttempted}
+                className="flex-grow text-xs"
+                maxTags={5}
+            />
+          )}
+        </div>
         
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           {user && articleId && article && (
@@ -836,16 +882,19 @@ const ArticlePage = () => {
             </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
+          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
             key={articleId}
-            ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} onClick={updateSelectionNonce} onKeyUp={updateSelectionNonce} data-placeholder="Tell your story..."
+            ref={contentEditableRef} contentEditable={isEditingAllowed && !isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} 
+            onClick={updateSelectionNonce} // Restored from "working" caret version
+            onKeyUp={updateSelectionNonce}  // Restored from "working" caret version
+            data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
             style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))" }}
-            role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true} dir="ltr"
+            role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true}
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
@@ -889,3 +938,6 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
+
+
+    

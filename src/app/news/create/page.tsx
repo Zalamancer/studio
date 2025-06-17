@@ -68,13 +68,17 @@ const CreateNewsArticlePage = () => {
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
   
+  // State for header search
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
+  const headerSearchInputRef = useRef<HTMLInputElement>(null);
+
 
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
        contentEditableRef.current.innerHTML = storyContent;
     }
   }, [storyContent]);
-
 
   const updateSelectionNonce = useCallback(() => {
     requestAnimationFrame(() => {
@@ -107,7 +111,6 @@ const CreateNewsArticlePage = () => {
     }
     return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl;
   }, []);
-
 
   const getCurrentLineText = useCallback((): string => {
     const contentEl = contentEditableRef.current;
@@ -225,7 +228,7 @@ const CreateNewsArticlePage = () => {
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     const currentHTML = event.currentTarget.innerHTML;
     const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>";
-    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML;
+    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML; // No dir="ltr" here
     
     setStoryContent(finalHTML); 
 
@@ -447,6 +450,15 @@ const CreateNewsArticlePage = () => {
       setCoverImageFile(null); setCoverImagePreview(null);
     }
   };
+  
+  const toggleHeaderSearch = useCallback(() => {
+    setIsHeaderSearchActive(prev => {
+      if (prev) setHeaderSearchTerm(''); // Clear search term when closing
+      else setTimeout(() => headerSearchInputRef.current?.focus(), 0); // Focus when opening
+      return !prev;
+    });
+  }, []);
+
 
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
@@ -459,16 +471,33 @@ const CreateNewsArticlePage = () => {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        <TagsInput
-            value={tags}
-            onChange={setTags}
-            placeholder="Add up to 5 tags (e.g., AI, SaaS, Funding)..."
-            disabled={isSubmitting}
-            error={publishAttempted && tagsError ? tagsError : null}
-            onPublishAttempt={publishAttempted}
-            className="flex-grow min-w-0 text-xs"
-            maxTags={5}
-        />
+        {/* Toggleable Search / Tags Input */}
+        <div className="flex items-center gap-2 flex-grow min-w-0">
+          <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className={cn("h-9 w-9 p-1.5 flex-shrink-0", isHeaderSearchActive && "bg-muted")}>
+            <Search className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-[30deg]")} />
+          </Button>
+          {isHeaderSearchActive ? (
+            <Input
+              ref={headerSearchInputRef}
+              type="search"
+              placeholder="Search all tags..."
+              value={headerSearchTerm}
+              onChange={(e) => setHeaderSearchTerm(e.target.value)}
+              className="h-9 text-xs flex-grow bg-muted/50"
+            />
+          ) : (
+            <TagsInput
+                value={tags}
+                onChange={setTags}
+                placeholder="Add up to 5 tags..."
+                disabled={isSubmitting}
+                error={publishAttempted && tagsError ? tagsError : null}
+                onPublishAttempt={publishAttempted}
+                className="flex-grow text-xs"
+                maxTags={5}
+            />
+          )}
+        </div>
         
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
@@ -509,12 +538,12 @@ const CreateNewsArticlePage = () => {
         <div ref={contentWrapperRef} className="relative">
           <div
             ref={contentEditableRef} contentEditable={!isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} 
-            onClick={updateSelectionNonce}
-            onKeyUp={updateSelectionNonce}
+            onClick={updateSelectionNonce} // Restored from "working" caret version
+            onKeyUp={updateSelectionNonce}  // Restored from "working" caret version
             data-placeholder="Tell your story..."
             className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")}
             style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))" }}
-            role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true} dir="ltr"
+            role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true}
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
@@ -547,4 +576,7 @@ const CreateNewsArticlePage = () => {
 };
 export default CreateNewsArticlePage;
     
+    
+
+
     
