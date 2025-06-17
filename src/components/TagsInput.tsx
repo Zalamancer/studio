@@ -2,7 +2,6 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 // Label import removed as it's not directly used for the input field in this design
@@ -163,7 +162,6 @@ export const TagsInput: React.FC<TagsInputProps> = ({
             )}
             onClick={() => inputRef.current?.focus()}
           >
-            <Search className="h-4 w-4 text-muted-foreground flex-shrink-0 ml-1" /> {/* Changed Tag to Search */}
             {value.map((tag) => (
               <Badge key={tag} variant="secondary" className="py-0.5 text-xs font-normal">
                 {tag}
@@ -179,24 +177,6 @@ export const TagsInput: React.FC<TagsInputProps> = ({
                 )}
               </Badge>
             ))}
-            <Input
-              ref={inputRef}
-              id="tags-input-field"
-              type="text"
-              placeholder={value.length > 0 ? "" : placeholder}
-              value={inputValue}
-              onChange={handleInputChange}
-              onKeyDown={handleInputKeyDown}
-              onFocus={() => { if (inputValue.trim().length > 0 || suggestions.length > 0 || (inputValue.trim() && !isLoadingSuggestions)) setIsPopoverOpen(true); }}
-              disabled={disabled || (maxTags !== undefined && value.length >= maxTags)}
-              className={cn(
-                "flex-grow h-auto p-0 border-0 shadow-none focus-visible:ring-0 bg-transparent text-xs min-w-[100px]",
-                value.length > 0 ? "ml-1" : "ml-0"
-              )}
-              aria-autocomplete="list"
-              aria-expanded={isPopoverOpen && hasSuggestionsOrCanCreate}
-              role="combobox"
-            />
           </div>
         </PopoverTrigger>
         <PopoverContent
