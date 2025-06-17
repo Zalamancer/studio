@@ -130,17 +130,16 @@ export const TagsInput: React.FC<TagsInputProps> = ({
   };
 
   useEffect(() => {
-    const handleClickOutside = (event: MouseEvent) => {
-      if (
-        isPopoverOpen &&
-        popoverContentRef.current &&
-        !popoverContentRef.current.contains(event.target as Node) &&
-        inputRef.current &&
-        !inputRef.current.contains(event.target as Node)
-      ) {
-        setIsPopoverOpen(false);
-      }
-    };
+  const handleClickOutside = (event: MouseEvent) => {
+    if (
+      isPopoverOpen &&
+      popoverContentRef.current &&
+      !popoverContentRef.current.contains(event.target as Node) &&
+      (!inputRef.current || !inputRef.current.contains(event.target as Node))
+    ) {
+      setIsPopoverOpen(false);
+    }
+  };
     if (isPopoverOpen) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [isPopoverOpen]);
@@ -160,7 +159,6 @@ export const TagsInput: React.FC<TagsInputProps> = ({
               disabled && "cursor-not-allowed opacity-50",
               (onPublishAttempt && error) && "border-destructive ring-1 ring-destructive"
             )}
-            onClick={() => inputRef.current?.focus()}
           >
             {value.map((tag) => (
               <Badge key={tag} variant="secondary" className="py-0.5 text-xs font-normal">
