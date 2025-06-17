@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -13,7 +12,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search } from 'lucide-react'; // Added Search
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -94,7 +93,6 @@ const ArticlePage = () => {
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
-  // State for header search
   const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
   const [headerSearchTerm, setHeaderSearchTerm] = useState('');
   const headerSearchInputRef = useRef<HTMLInputElement>(null);
@@ -147,7 +145,7 @@ const ArticlePage = () => {
       setErrorLoadingArticle(null);
       setTitle("");
       setTags([]);
-      setStoryContent("<p><br></p>"); // Default for new or non-existent
+      setStoryContent("<p><br></p>");
       setCoverImagePreview(null);
       setCurrentCoverImageUrl(null);
     }
@@ -186,11 +184,8 @@ const ArticlePage = () => {
     }
   }, [article, isEditingAllowed, toast]);
 
-
   const updateSelectionNonce = useCallback(() => {
-    requestAnimationFrame(() => {
-        setSelectionNonce(n => n + 1);
-    });
+    setSelectionNonce(n => n + 1);
   }, []);
 
   const getCurrentBlockElement = useCallback((): HTMLElement | null => {
@@ -231,7 +226,7 @@ const ArticlePage = () => {
         if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT';
         return currentBlock.textContent?.trim() || "";
       }
-      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>") return "EDITOR_IS_EMPTY";
+      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>" || contentEl.innerHTML.trim() === "<p><br></p>") return "EDITOR_IS_EMPTY";
       return "NO_CURRENT_BLOCK_FOUND";
     }
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
@@ -309,21 +304,21 @@ const ArticlePage = () => {
   }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
 
   useEffect(() => {
-    const handleInteraction = () => {
+    const handleSelectionChange = () => {
         if (isEditingAllowed && (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current))) {
             requestAnimationFrame(updateSelectionNonce);
         }
     };
     if (isEditingAllowed) {
-        document.addEventListener('selectionchange', handleInteraction);
-        document.addEventListener('keyup', handleInteraction);
-        // Document-level click listener removed to let editor's own click handler manage its caret
+        document.addEventListener('selectionchange', handleSelectionChange);
     }
     return () => {
-        document.removeEventListener('selectionchange', handleInteraction);
-        document.removeEventListener('keyup', handleInteraction);
+        if (isEditingAllowed) {
+            document.removeEventListener('selectionchange', handleSelectionChange);
+        }
     };
-  }, [updateSelectionNonce, isEditingAllowed, contentEditableRef, titleInputRef]);
+  }, [isEditingAllowed, updateSelectionNonce, contentEditableRef, titleInputRef]);
+
 
   const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) setFocusedField(field); }, [isEditingAllowed]);
   const handleBlur = useCallback(() => {
@@ -339,38 +334,18 @@ const ArticlePage = () => {
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
     const currentHTML = event.currentTarget.innerHTML;
-    const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>";
-    
-    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML; // No dir="ltr" here
-    setStoryContent(finalHTML); 
-
-    if (isEmptyContent && finalHTML === "<p><br></p>") {
-      if (event.currentTarget.innerHTML !== finalHTML) {
-          event.currentTarget.innerHTML = finalHTML;
-      }
-      // Ensure caret is placed inside the <p> tag correctly.
-      queueMicrotask(() => {
-        if (contentEditableRef.current) {
-          const pTag = contentEditableRef.current.querySelector('p');
-          if(pTag) {
-            const range = document.createRange();
-            const sel = window.getSelection();
-            try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {/*ignore*/}
-          }
-        }
-      });
-    }
+    setStoryContent(currentHTML);
+    requestAnimationFrame(updateSelectionNonce);
 
     if (publishAttempted) {
       const currentText = event.currentTarget.textContent || "";
-      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(finalHTML)) {
+      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) {
         setStoryError("");
       } else {
         setStoryError("Story content is required.");
       }
     }
-    updateSelectionNonce();
-  }, [isEditingAllowed, publishAttempted, setStoryError, updateSelectionNonce, setStoryContent]);
+  }, [isEditingAllowed, publishAttempted, setStoryContent, setStoryError, updateSelectionNonce]);
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
@@ -380,7 +355,7 @@ const ArticlePage = () => {
     if (event.key === 'Enter') {
         event.preventDefault(); document.execCommand('insertParagraph', false, undefined);
         if (editorEl) setStoryContent(editorEl.innerHTML); // update state
-        setTimeout(() => { if (contentEditableRef.current) { updateSelectionNonce();}}, 0);
+        requestAnimationFrame(updateSelectionNonce);
         return;
     }
     if (event.key === 'Backspace' || event.key === 'Delete') {
@@ -392,7 +367,7 @@ const ArticlePage = () => {
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
             event.preventDefault(); prevElement.remove();
             if (editorEl) setStoryContent(editorEl.innerHTML); // update state
-            updateSelectionNonce(); return;
+            requestAnimationFrame(updateSelectionNonce); return;
           }
         } else { 
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
@@ -400,7 +375,7 @@ const ArticlePage = () => {
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
             event.preventDefault(); nextElement.remove();
             if (editorEl) setStoryContent(editorEl.innerHTML); // update state
-            updateSelectionNonce(); return;
+            requestAnimationFrame(updateSelectionNonce); return;
           }
         }
       }
@@ -408,7 +383,7 @@ const ArticlePage = () => {
     // Defer state update for other keys as well to allow browser to handle first
     setTimeout(() => {
         if (editorEl) setStoryContent(editorEl.innerHTML);
-        updateSelectionNonce();
+        requestAnimationFrame(updateSelectionNonce);
     },0);
   }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed, setStoryContent]);
 
@@ -476,7 +451,6 @@ const ArticlePage = () => {
         articleUpdateData.coverImageUrl = newCoverImageUrl;
       }
 
-      // Ensure content fields are null if undefined/empty, not undefined itself
       const normalizeContent = (content: string | null | undefined): string | null => {
         if (content === undefined || content === null || content.trim() === "" || content.trim() === "<p><br></p>") {
           return null;
@@ -489,28 +463,26 @@ const ArticlePage = () => {
       if (isSavingDraftOfPublishedArticleFlag && article.status === 'published') {
         articleUpdateData.draftContent = finalContentForService;
         articleUpdateData.hasUnpublishedChanges = true;
-        // Status remains 'published'
+        articleUpdateData.status = 'published'; // Status remains published
       } else if (newStatus === 'published') {
         articleUpdateData.content = finalContentForService;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
       } else if (newStatus === 'draft') {
-        articleUpdateData.content = finalContentForService; // Draft content goes to main content field when status is draft
+        articleUpdateData.content = finalContentForService;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
         articleUpdateData.publishedAt = null;
-      } else if (dataToUpdate.content !== undefined) { // dataToUpdate is not defined here. Meant to check if contentValueFromUpdate was passed
+      } else if (contentValueFromUpdate !== undefined) {
          articleUpdateData.content = finalContentForService;
-         if (article.status === 'published') { // If already published and just updating content (not saving draft)
+         if (article.status === 'published') {
              articleUpdateData.draftContent = null;
              articleUpdateData.hasUnpublishedChanges = false;
          }
       }
 
-
       await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticleFlag);
       setStoryContent(finalContentForService === null ? "<p><br></p>" : finalContentForService);
-
 
       let successTitle = "Update Successful";
       let successDescription = `Article "${title.trim()}" updated.`;
@@ -586,7 +558,7 @@ const ArticlePage = () => {
       setStoryContent(editorEl.innerHTML || "<p><br></p>");
       
       setIsToolbarExpanded(false);
-      queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); });
+      queueMicrotask(() => { editorEl.focus(); requestAnimationFrame(updateSelectionNonce); });
     });
   }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setIsToolbarExpanded, savedRange, isEditingAllowed, setStoryContent]);
 
@@ -771,7 +743,6 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        {/* Start of Search Icon + Toggling Area */}
         <div className="flex items-center gap-2 flex-grow min-w-0">
           <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className={cn("h-9 w-9 p-1.5 flex-shrink-0", isHeaderSearchActive && "bg-muted")}>
             <Search className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-[30deg]")} />
@@ -799,7 +770,6 @@ const ArticlePage = () => {
             />
           )}
         </div>
-        {/* End of Search Icon + Toggling Area */}
         
         <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
           {user && articleId && article && (
@@ -903,20 +873,18 @@ const ArticlePage = () => {
             </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } updateSelectionNonce(); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} onKeyUp={updateSelectionNonce} onClick={updateSelectionNonce} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
+          <Input ref={titleInputRef} placeholder="Title" value={title} onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } requestAnimationFrame(updateSelectionNonce); }} onFocus={() => handleFocus('title')} onBlur={handleBlur} className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" autoComplete="off" disabled={isSubmitting || !isEditingAllowed} />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
-            key={articleId} // Ensures re-mount with fresh innerHTML on article change if not editing
+            key={articleId} 
             ref={contentEditableRef}
             contentEditable={isEditingAllowed && !isSubmitting}
             onInput={handleContentEditableInput}
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
-            onClick={updateSelectionNonce} // Let document listener handle for toolbar, direct for content updates
-            onKeyUp={updateSelectionNonce}  // Let document listener handle for toolbar, direct for content updates
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
@@ -933,7 +901,7 @@ const ArticlePage = () => {
             aria-multiline="true"
             aria-label="News article content"
             suppressContentEditableWarning={true}
-            dir="ltr" // Ensure LTR direction for the editor content
+            dir="ltr"
             dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
