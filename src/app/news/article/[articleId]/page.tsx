@@ -9,11 +9,10 @@ import { useToast } from '@/hooks/use-toast';
 import { getNewsArticleById, updateNewsArticle } from '@/services/newsService';
 import { uploadNewsCoverImage } from '@/services/storageService';
 import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from '@/types/news';
-
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search as SearchIcon } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, Tag } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -23,6 +22,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogClose,
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -33,13 +33,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from '@/components/ui/textarea';
 import { format, formatDistanceToNowStrict } from 'date-fns';
-import { serverTimestamp } from 'firebase/firestore';
 import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
 import { TagsInput } from '@/components/TagsInput';
-import { Badge } from '@/components/ui/badge';
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -57,7 +55,7 @@ const ArticlePage = () => {
   const [errorLoadingArticle, setErrorLoadingArticle] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]); // For TagsInput
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -67,7 +65,7 @@ const ArticlePage = () => {
   const [isSavingDraftOfPublished, setIsSavingDraftOfPublished] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState("");
+  const [tagsError, setTagsError] = useState(""); // For TagsInput
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -78,7 +76,6 @@ const ArticlePage = () => {
   const coverImageInputRef = useRef<HTMLInputElement>(null);
   const inlineImageInputRef = useRef<HTMLInputElement>(null);
   const toolbarWrapperRef = useRef<HTMLDivElement>(null);
-  const headerSearchInputRef = useRef<HTMLInputElement>(null);
 
   const [focusedField, setFocusedField] = useState<'title' | 'content' | null>(null);
   const [selectionNonce, setSelectionNonce] = useState(0);
@@ -95,17 +92,8 @@ const ArticlePage = () => {
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
-  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
-  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
-
-  useEffect(() => {
-    if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
-      contentEditableRef.current.innerHTML = storyContent;
-    }
-  }, [storyContent]);
-
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
-    queryKey: ['userCollections', user?.uid, articleId],
+    queryKey: ['userCollections', user?.uid],
     queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
     enabled: !!user && !!articleId,
   });
@@ -117,9 +105,9 @@ const ArticlePage = () => {
 
   const handleCollectionUpdate = useCallback(() => {
     if (user) {
-      queryClient.invalidateQueries({ queryKey: ['userCollections', user.uid, articleId] });
+      queryClient.invalidateQueries({ queryKey: ['userCollections', user.uid] });
     }
-  }, [user, queryClient, articleId]);
+  }, [user, queryClient]);
 
   const isEditingAllowed = useMemo(() => {
     return !!user && !!article && user.uid === article.userId;
@@ -144,11 +132,6 @@ const ArticlePage = () => {
       setArticle(null);
       setIsLoadingArticle(false);
       setErrorLoadingArticle(null);
-      setTitle("");
-      setTags([]);
-      setStoryContent("<p><br></p>");
-      setCoverImagePreview(null);
-      setCurrentCoverImageUrl(null);
     }
   }, [articleId]);
 
@@ -156,19 +139,17 @@ const ArticlePage = () => {
     if (article) {
       setTitle(article.title || "");
       setTags(article.tags || []);
-      let contentToLoadInEditor = "<p><br></p>";
 
+      let contentToLoadInEditor = "<p><br></p>";
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
-          contentToLoadInEditor = article.draftContent || "<p><br></p>";
+          contentToLoadInEditor = article.draftContent;
           toast({ title: "Draft Loaded", description: "You are editing a saved draft of this published article.", duration: 4000 });
         } else {
           contentToLoadInEditor = article.content || "<p><br></p>";
         }
       } else if (article.status === 'published') {
         contentToLoadInEditor = article.content || "<p><br></p>";
-      } else if (article.status === 'draft' && !isEditingAllowed) {
-        contentToLoadInEditor = "<p>Draft content not available for viewing.</p>";
       }
 
       setStoryContent(contentToLoadInEditor);
@@ -185,9 +166,8 @@ const ArticlePage = () => {
     }
   }, [article, isEditingAllowed, toast]);
 
-  const updateSelectionNonce = useCallback(() => {
-    setSelectionNonce(n => n + 1);
-  }, []);
+
+  const updateSelectionNonce = useCallback(() => requestAnimationFrame(() => setSelectionNonce(n => n + 1)), []);
 
   const getCurrentBlockElement = useCallback((): HTMLElement | null => {
     const contentEl = contentEditableRef.current;
@@ -213,7 +193,7 @@ const ArticlePage = () => {
       node = node.parentNode;
     }
     return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl;
-  }, []);
+  }, [contentEditableRef]);
 
   const getCurrentLineText = useCallback((): string => {
     const contentEl = contentEditableRef.current;
@@ -227,11 +207,11 @@ const ArticlePage = () => {
         if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT';
         return currentBlock.textContent?.trim() || "";
       }
-      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>" || contentEl.innerHTML.trim() === "<p><br></p>" || contentEl.innerHTML.trim() === "<p></p>") return "EDITOR_IS_EMPTY";
+      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>") return "EDITOR_IS_EMPTY";
       return "NO_CURRENT_BLOCK_FOUND";
     }
     return "NO_FOCUS_OR_UNHANDLED_FIELD";
-  }, [focusedField, getCurrentBlockElement, titleInputRef]);
+  }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
 
   const calculateCursorLineYOffset = useCallback((): number | null => {
     const contentEl = contentEditableRef.current;
@@ -285,7 +265,6 @@ const ArticlePage = () => {
         let referenceElementRect: DOMRect | undefined;
         if (focusedField === 'title' && titleWrapperRef.current) referenceElementRect = titleWrapperRef.current.getBoundingClientRect();
         else if (focusedField === 'content' && contentWrapperRef.current) referenceElementRect = contentWrapperRef.current.getBoundingClientRect();
-        
         if (referenceElementRect && formWrapperRef.current) {
           const formRect = formWrapperRef.current.getBoundingClientRect();
           const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
@@ -299,18 +278,13 @@ const ArticlePage = () => {
       }
     }
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
-  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleWrapperRef, contentWrapperRef, formWrapperRef]);
+  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
 
-
-  useEffect(() => {
-    if (isEditingAllowed) {
-      calculateAndUpdateToolbarStyle();
-    }
-  }, [focusedField, selectionNonce, isEditingAllowed, calculateAndUpdateToolbarStyle]);
+  useEffect(() => { if (isEditingAllowed) calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
   
   useEffect(() => {
     const handleSelectionChange = () => {
-      if (isEditingAllowed && (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current))) {
+      if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) {
         requestAnimationFrame(updateSelectionNonce);
       }
     };
@@ -318,18 +292,13 @@ const ArticlePage = () => {
       document.addEventListener('selectionchange', handleSelectionChange);
     }
     return () => {
-      document.removeEventListener('selectionchange', handleSelectionChange);
+      if (isEditingAllowed) {
+        document.removeEventListener('selectionchange', handleSelectionChange);
+      }
     };
-  }, [isEditingAllowed, updateSelectionNonce, contentEditableRef, titleInputRef]);
+  }, [updateSelectionNonce, isEditingAllowed]);
 
-
-  const handleFocus = useCallback((field: 'title' | 'content') => {
-    if (isEditingAllowed) {
-      setFocusedField(field);
-      requestAnimationFrame(updateSelectionNonce);
-    }
-  }, [isEditingAllowed, updateSelectionNonce]);
-
+  const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) { setFocusedField(field); requestAnimationFrame(updateSelectionNonce); } }, [isEditingAllowed, updateSelectionNonce]);
   const handleBlur = useCallback(() => {
     if (!isEditingAllowed) return;
     queueMicrotask(() => {
@@ -342,52 +311,27 @@ const ArticlePage = () => {
 
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
-    let currentHTML = event.currentTarget.innerHTML;
-    const isEmptyContent = currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>";
-    
-    const finalHTML = isEmptyContent ? "<p><br></p>" : currentHTML;
-    setStoryContent(finalHTML);
-
-    if (isEmptyContent && finalHTML === "<p><br></p>") {
-      if (event.currentTarget.innerHTML !== finalHTML) {
-        event.currentTarget.innerHTML = finalHTML;
+    const currentHTML = event.currentTarget.innerHTML;
+    if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") {
+      setStoryContent("<p><br></p>");
+      if (event.currentTarget.innerHTML !== "<p><br></p>") { event.currentTarget.innerHTML = "<p><br></p>";
+        const pTag = event.currentTarget.querySelector('p');
+        if(pTag) { const range = document.createRange(); const sel = window.getSelection(); try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {}}
       }
-      queueMicrotask(() => {
-        if (contentEditableRef.current) {
-          const pTag = contentEditableRef.current.querySelector('p');
-          if (pTag) {
-            const range = document.createRange();
-            const sel = window.getSelection();
-            try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch (e) { /*ignore*/ }
-          }
-        }
-      });
-    }
-
+    } else setStoryContent(currentHTML);
     if (publishAttempted) {
       const currentText = event.currentTarget.textContent || "";
-      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(finalHTML)) {
-        setStoryError("");
-      } else {
-        setStoryError("Story content is required.");
-      }
+      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) setStoryError(""); else setStoryError("Story content is required.");
     }
     requestAnimationFrame(updateSelectionNonce);
-  }, [isEditingAllowed, publishAttempted, setStoryError, updateSelectionNonce, setStoryContent]);
+  }, [publishAttempted, setStoryError, updateSelectionNonce, isEditingAllowed]);
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     if (!isEditingAllowed) return;
     const editorEl = contentEditableRef.current; if (!editorEl) return;
     const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
-    
-    if (event.key === 'Enter') {
-      event.preventDefault(); document.execCommand('insertParagraph', false, undefined);
-      if (editorEl) setStoryContent(editorEl.innerHTML);
-      requestAnimationFrame(updateSelectionNonce);
-      return;
-    }
-    
+    if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); setTimeout(() => { if (contentEditableRef.current) { setStoryContent(contentEditableRef.current.innerHTML); requestAnimationFrame(updateSelectionNonce); }}, 0); return; }
     if (event.key === 'Backspace' || event.key === 'Delete') {
       if (range.collapsed && currentBlock) {
         const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false;
@@ -395,52 +339,38 @@ const ArticlePage = () => {
           if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
-            event.preventDefault(); prevElement.remove();
-            if (editorEl) setStoryContent(editorEl.innerHTML);
-            requestAnimationFrame(updateSelectionNonce); return;
+            event.preventDefault(); prevElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return;
           }
-        } else { 
+        } else {
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
-            event.preventDefault(); nextElement.remove();
-            if (editorEl) setStoryContent(editorEl.innerHTML);
-            requestAnimationFrame(updateSelectionNonce); return;
+            event.preventDefault(); nextElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return;
           }
         }
       }
     }
-    // For other keys, defer storyContent update and nonce update slightly.
-    setTimeout(() => {
-        if (editorEl) setStoryContent(editorEl.innerHTML);
-        requestAnimationFrame(updateSelectionNonce);
-    },0);
-  }, [getCurrentBlockElement, isEditingAllowed, setStoryContent, updateSelectionNonce]);
-
+  }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce, isEditingAllowed]);
 
   const validateFields = useCallback(() => {
     let isValid = true;
     if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); }
     if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); }
-    const currentEditorHTML = contentEditableRef.current?.innerHTML || "<p><br></p>";
-    const currentTextContent = contentEditableRef.current?.textContent || "";
-    if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentEditorHTML)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
+    const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || "";
+    if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
   }, [title, tags]);
 
   const handleUpdateArticle = async (
     newStatus: NewsArticleStatus,
     contentToSaveParam?: string | null,
-    isSavingDraftOfPublishedArticleFlag: boolean = false
+    isSavingDraftOfPublishedArticle: boolean = false
   ) => {
     if (!user || !articleId || !article || !isEditingAllowed) {
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Authorization or data missing." });
       return;
     }
-    const latestEditorHTML = contentEditableRef.current?.innerHTML || "<p><br></p>";
-    const contentForThisSaveOperation = contentToSaveParam !== undefined ? (contentToSaveParam === null ? "<p><br></p>" : contentToSaveParam) : latestEditorHTML;
-
-    if ((newStatus === 'published' && !isSavingDraftOfPublishedArticleFlag) || (article.status === 'published' && !isSavingDraftOfPublishedArticleFlag) ) {
+    if (newStatus === 'published' || isSavingDraftOfPublishedArticle) {
       setPublishAttempted(true);
       if (!validateFields()) {
         if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
@@ -448,21 +378,10 @@ const ArticlePage = () => {
         else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
         return;
       }
-    } else if (newStatus === 'draft' || isSavingDraftOfPublishedArticleFlag) {
-      if (!title.trim() || tags.length === 0) {
-        setPublishAttempted(true);
-        let validationPassedForDraft = true;
-        if (!title.trim()) { setTitleError("Title is required to save a draft."); validationPassedForDraft = false;} else { setTitleError("");}
-        if (tags.length === 0) {setTagsError("At least one tag is required to save a draft."); validationPassedForDraft = false;} else {setTagsError("");}
-        if (!validationPassedForDraft) {
-          toast({variant: "destructive", title: "Cannot Save Draft", description: "Please provide a title and at least one tag."});
-          return;
-        }
-      }
     }
 
     setIsSubmitting(true);
-    if (isSavingDraftOfPublishedArticleFlag) setIsSavingDraftOfPublished(true);
+    if (isSavingDraftOfPublishedArticle) setIsSavingDraftOfPublished(true);
 
     let newCoverImageUrl: string | null | undefined = undefined;
     try {
@@ -472,62 +391,31 @@ const ArticlePage = () => {
         newCoverImageUrl = null;
       }
 
+      const mainContentForService = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
+
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         tags: tags,
+        status: newStatus,
+        content: mainContentForService || null, // Ensure content is null if empty, not undefined
       };
 
       if (newCoverImageUrl !== undefined) {
         articleUpdateData.coverImageUrl = newCoverImageUrl;
       }
 
-      const normalizeContent = (content: string | null | undefined): string | null => {
-        if (content === undefined || content === null || content.trim() === "" || content.trim() === "<p><br></p>") {
-          return null;
-        }
-        return content;
-      };
-      
-      const finalContentForService = normalizeContent(contentForThisSaveOperation);
-
-      if (isSavingDraftOfPublishedArticleFlag && article.status === 'published') {
-        articleUpdateData.draftContent = finalContentForService;
-        articleUpdateData.hasUnpublishedChanges = true;
-        articleUpdateData.status = 'published'; 
-      } else if (newStatus === 'published') {
-        articleUpdateData.content = finalContentForService;
-        articleUpdateData.draftContent = null;
-        articleUpdateData.hasUnpublishedChanges = false;
-        articleUpdateData.status = 'published';
-      } else if (newStatus === 'draft') {
-        articleUpdateData.content = finalContentForService;
-        articleUpdateData.draftContent = null;
-        articleUpdateData.hasUnpublishedChanges = false;
-        articleUpdateData.status = 'draft';
-        articleUpdateData.publishedAt = null;
-      } else if (contentToSaveParam !== undefined) { 
-         articleUpdateData.content = finalContentForService;
-         if (article.status === 'published') { 
-             articleUpdateData.draftContent = null;
-             articleUpdateData.hasUnpublishedChanges = false;
-         }
-      }
-
-
-      await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticleFlag);
-      setStoryContent(finalContentForService === null ? "<p><br></p>" : finalContentForService);
-
+      await updateNewsArticle(articleId, articleUpdateData, isSavingDraftOfPublishedArticle);
 
       let successTitle = "Update Successful";
       let successDescription = `Article "${title.trim()}" updated.`;
 
-      if (isSavingDraftOfPublishedArticleFlag && article.status === 'published') {
+      if (isSavingDraftOfPublishedArticle && article.status === 'published') {
         successTitle = "Draft Saved!";
         successDescription = `Your changes to "${title.trim()}" have been saved as a draft. The live article remains unchanged.`;
       } else if (newStatus === 'published') {
-        if (article.status !== 'published' || article.hasUnpublishedChanges) {
+        if (article.status !== 'published') {
           successTitle = "Article Published!";
-          successDescription = `Changes to "${title.trim()}" are now live.`;
+          successDescription = `"${title.trim()}" is now live.`;
         } else {
           successTitle = "Live Article Updated!";
           successDescription = `Changes to "${title.trim()}" are now live.`;
@@ -588,13 +476,10 @@ const ArticlePage = () => {
         range.collapse(true);
       } else { range.selectNodeContents(editorEl); range.collapse(false); }
       if (selection) { selection.removeAllRanges(); selection.addRange(range); }
-      
-      setStoryContent(editorEl.innerHTML || "<p><br></p>");
-      
-      setIsToolbarExpanded(false);
-      queueMicrotask(() => { editorEl.focus(); requestAnimationFrame(updateSelectionNonce); });
+      setStoryContent(editorEl.innerHTML || "<p><br></p>"); setIsToolbarExpanded(false);
+      queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); });
     });
-  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setIsToolbarExpanded, savedRange, isEditingAllowed, setStoryContent]);
+  }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange, isEditingAllowed]);
 
   const triggerInlineImageUpload = useCallback(() => {
     if (!isEditingAllowed) return;
@@ -668,22 +553,9 @@ const ArticlePage = () => {
       reader.onloadend = () => setCoverImagePreview(reader.result as string);
       reader.readAsDataURL(file);
     } else {
-      setCoverImageFile(null);
-      setCoverImagePreview(currentCoverImageUrl);
+      setCoverImageFile(null); setCoverImagePreview(currentCoverImageUrl);
     }
   };
-
-  const toggleHeaderSearch = useCallback(() => {
-    setIsHeaderSearchActive(prev => {
-        const nextState = !prev;
-        if (nextState) { // If search is becoming active
-            setTimeout(() => headerSearchInputRef.current?.focus(), 0);
-        } else {
-            setHeaderSearchTerm(''); // Clear search term when hiding
-        }
-        return nextState;
-    });
-  }, []);
 
   if (authLoading || isLoadingArticle) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
@@ -730,7 +602,7 @@ const ArticlePage = () => {
             {article.tags && article.tags.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                     {article.tags.map(tag => (
-                        <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                        <Badge key={tag} variant="outline" className="text-xs">{tag}</Badge>
                     ))}
                 </div>
             )}
@@ -768,52 +640,36 @@ const ArticlePage = () => {
     );
   }
 
+  // Editing View
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}>
-      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3 flex-shrink-0">
+      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
         
-        <div className="flex items-center gap-1 sm:gap-1.5 flex-grow min-w-0">
-          <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className="h-9 w-9 p-1.5 flex-shrink-0" aria-label={isHeaderSearchActive ? "Close search" : "Open search"}>
-             <SearchIcon className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-90")} />
-          </Button>
-          {isHeaderSearchActive ? (
-             <Input
-                ref={headerSearchInputRef}
-                type="search"
-                placeholder="Search all tags to add..."
-                value={headerSearchTerm}
-                onChange={(e) => setHeaderSearchTerm(e.target.value)}
-                className="flex-grow text-xs min-w-0 h-9"
-                disabled={isSubmitting}
-             />
-           ) : (
-             <TagsInput
+        <div className="flex-grow min-w-[200px] sm:min-w-[240px] max-w-xs">
+            <TagsInput
                 value={tags}
                 onChange={setTags}
-                placeholder="Add up to 5 tags..."
-                disabled={isSubmitting || !isEditingAllowed}
+                placeholder="Add tags (required)"
+                disabled={isSubmitting}
                 error={publishAttempted && tagsError ? tagsError : null}
                 onPublishAttempt={publishAttempted}
-                className="flex-grow text-xs min-w-0"
-                maxTags={5}
-             />
-           )}
+                className="text-xs" // Make consistent with create page
+            />
         </div>
         
-        <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5">
           {user && articleId && article && (
             <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 p-1.5"
+                className="h-8 w-8 p-1"
                 title={isArticleSaved ? "Unsave Article" : "Save Article"}
                 onClick={(e) => {e.stopPropagation(); setIsSaveToCollectionDialogOpen(true);}}
                 aria-pressed={isArticleSaved}
-                disabled={isSubmitting}
             >
               <Bookmark className={cn("h-5 w-5", isArticleSaved ? "fill-primary text-primary" : "text-muted-foreground")} />
             </Button>
@@ -821,8 +677,8 @@ const ArticlePage = () => {
           {isEditingAllowed && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="icon" className="h-9 w-9 p-1.5" disabled={isSubmitting}>
-                  <MoreVertical className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="h-8 w-8 p-1">
+                  <MoreVertical className="h-4 w-4" />
                   <span className="sr-only">More options</span>
                 </Button>
               </DropdownMenuTrigger>
@@ -841,11 +697,11 @@ const ArticlePage = () => {
                       <Send className="mr-2 h-4 w-4" /> Publish
                     </DropdownMenuItem>
                   </>
-                ) : ( 
+                ) : ( // Article is published
                   <>
                     <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
                       {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                      Save Draft of Published Article
+                      Save Draft
                     </DropdownMenuItem>
                     
                     {article.hasUnpublishedChanges && article.draftContent ? (
@@ -883,6 +739,7 @@ const ArticlePage = () => {
               </div>)}
           </div>)}
         
+        {/* Removed Category Select from here */}
         <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting || !isEditingAllowed} />
         <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting || !isEditingAllowed} />
 
@@ -898,9 +755,8 @@ const ArticlePage = () => {
               You are editing a saved draft. The live article may be different.
               <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => {
                   if (contentEditableRef.current && article.content) {
-                      setStoryContent(article.content); 
-                      contentEditableRef.current.innerHTML = article.content; 
-                      requestAnimationFrame(updateSelectionNonce);
+                      setStoryContent(article.content);
+                      contentEditableRef.current.innerHTML = article.content;
                   }
                   toast({title: "Viewing Live Content", description: "Editor now shows the live published content. Any unsaved draft changes were not applied."});
               }}>View live content</Button>
@@ -908,28 +764,27 @@ const ArticlePage = () => {
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
           <Input
-             ref={titleInputRef}
-             placeholder="Title"
-             value={title}
-             onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } requestAnimationFrame(updateSelectionNonce); }}
-             onFocus={() => handleFocus('title')}
-             onBlur={handleBlur}
-             className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
-             autoComplete="off"
-             disabled={isSubmitting || !isEditingAllowed}
+            ref={titleInputRef}
+            placeholder="Title"
+            value={title}
+            onChange={(e) => { setTitle(e.target.value); if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } requestAnimationFrame(updateSelectionNonce); }}
+            onFocus={() => handleFocus('title')}
+            onBlur={handleBlur}
+            className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
+            autoComplete="off"
+            disabled={isSubmitting || !isEditingAllowed}
           />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
         <div ref={contentWrapperRef} className="relative">
           <div
-            key={articleId} // Ensures re-mount if articleId changes (though not typical here)
+            key={articleId}
             ref={contentEditableRef}
             contentEditable={isEditingAllowed && !isSubmitting}
             onInput={handleContentEditableInput}
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
-            // onClick removed for caret stability
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
@@ -946,8 +801,7 @@ const ArticlePage = () => {
             aria-multiline="true"
             aria-label="News article content"
             suppressContentEditableWarning={true}
-            dir="ltr" // Overall direction for the editor content
-            dangerouslySetInnerHTML={{ __html: storyContent }}
+            dir="ltr"
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
@@ -988,4 +842,5 @@ const ArticlePage = () => {
     </>
   );
 };
+
 export default ArticlePage;

@@ -10,7 +10,7 @@ import { fetchUserProfileBasic } from '@/services/connectionService';
 import type { ClientNewsArticle } from '@/types/news';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import { format } from 'date-fns';
-import { MessageSquareText, Bookmark, MoreHorizontal, Edit3, Tag } from 'lucide-react'; // Added Tag
+import { MessageSquareText, Bookmark, MoreHorizontal, Edit3, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -74,13 +74,12 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
           <div className="flex-grow min-w-0">
             <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
               <span className="font-medium text-foreground">{authorName}</span>
-              {/* Display Tags instead of Category */}
               {article.tags && article.tags.length > 0 && (
                 <>
                   <span className="text-muted-foreground/70">in</span>
                   <span className="flex flex-wrap gap-1">
                     {article.tags.slice(0, 2).map(tag => (
-                       <Badge key={tag} variant="outline" className="text-xs px-1.5 py-0.5 cursor-pointer hover:bg-muted">
+                       <Badge key={tag} variant="outline" className="text-xs px-1.5 py-0.5 cursor-default">
                          #{tag}
                        </Badge>
                     ))}

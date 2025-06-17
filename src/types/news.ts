@@ -1,3 +1,4 @@
+
 // src/types/news.ts
 import type { Timestamp, FieldValue } from 'firebase/firestore';
 
@@ -7,11 +8,10 @@ export interface NewsArticle {
   id: string;
   userId: string;
   title: string;
-  // category: string; // REMOVED
-  tags?: string[] | null; // ADDED: Array of tag names
-  content: string; // Live content if status is 'published'
-  draftContent?: string | null; // Work-in-progress content if status is 'published' and hasUnpublishedChanges is true
-  hasUnpublishedChanges?: boolean; // Flag to indicate if draftContent differs from live content
+  tags?: string[] | null; 
+  content: string; 
+  draftContent?: string | null; 
+  hasUnpublishedChanges?: boolean; 
   coverImageUrl?: string | null;
   status: NewsArticleStatus;
   createdAt: Timestamp | FieldValue;
@@ -34,10 +34,9 @@ export interface NewsArticle {
   sector?: string | null;
   subSector?: string | null;
   industry?: string | null;
-  // `tags` field is already added above, this line was duplicative.
 }
 
-export type NewNewsArticleData = Omit<NewsArticle, 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'draftContent' | 'hasUnpublishedChanges' | 'category'> & {
+export type NewNewsArticleData = Omit<NewsArticle, 'id' | 'createdAt' | 'updatedAt' | 'publishedAt' | 'draftContent' | 'hasUnpublishedChanges'> & {
   createdAt?: FieldValue;
   updatedAt?: FieldValue;
   publishedAt?: FieldValue | null;
@@ -58,12 +57,11 @@ export type NewNewsArticleData = Omit<NewsArticle, 'id' | 'createdAt' | 'updated
   sector?: string | null;
   subSector?: string | null;
   industry?: string | null;
-  tags?: string[] | null; // Ensure tags is here for new data
+  tags?: string[] | null; 
 };
 
-// For updates, only certain fields should be updatable, plus updatedAt and potentially publishedAt
 export type UpdateNewsArticleData = Partial<Pick<NewsArticle,
-  'title' | 'content' | 'status' | 'coverImageUrl' | // Removed 'category'
+  'title' | 'content' | 'status' | 'coverImageUrl' |
   'draftContent' | 'hasUnpublishedChanges' |
   'tags' | 'sector' | 'subSector' | 'industry' | 'naicsCode' | 'requestType' | 'question' |
   'descriptionDetails' | 'descriptionTried' | 'descriptionOutcome' | 'maxBudget' | 'deadline' |
@@ -74,12 +72,12 @@ export type UpdateNewsArticleData = Partial<Pick<NewsArticle,
 };
 
 
-export interface ClientNewsArticle extends Omit<NewsArticle, 'createdAt' | 'updatedAt' | 'publishedAt' | 'deadline' | 'draftContent' | 'hasUnpublishedChanges' | 'category'> {
+export interface ClientNewsArticle extends Omit<NewsArticle, 'createdAt' | 'updatedAt' | 'publishedAt' | 'deadline' | 'draftContent' | 'hasUnpublishedChanges'> {
   createdAt: number; // Milliseconds
   updatedAt: number; // Milliseconds
   publishedAt?: number | null; // Milliseconds
   deadline?: number | null; // Milliseconds
   draftContent?: string | null;
   hasUnpublishedChanges?: boolean;
-  tags?: string[] | null; // Ensure tags is here for client
+  tags?: string[] | null; 
 }

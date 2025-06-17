@@ -38,7 +38,7 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
   const dataToSave: {
     userId: string;
     title: string;
-    tags?: string[] | null; // UPDATED from category
+    tags?: string[] | null;
     content: string;
     draftContent: string | null;
     hasUnpublishedChanges: boolean;
@@ -65,7 +65,7 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
   } = {
     userId: articleData.userId,
     title: articleData.title,
-    tags: Array.isArray(articleData.tags) ? articleData.tags : [], // UPDATED
+    tags: Array.isArray(articleData.tags) ? articleData.tags : [],
     content: articleData.content,
     draftContent: null,
     hasUnpublishedChanges: false,
@@ -101,7 +101,6 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
 
   try {
     const docRef = await addDoc(newsArticlesCollectionRef, dataToSave);
-    // Update tag usage counts
     if (dataToSave.tags && dataToSave.tags.length > 0) {
       await getOrCreateTagsAndUpdateUsage(dataToSave.tags, user.uid, 1);
     }
@@ -129,7 +128,7 @@ export const updateNewsArticle = async (
   }
   const existingData = docSnap.data() as NewsArticle;
 
-  const payload: Partial<Omit<NewsArticle, 'id' | 'userId' | 'createdAt' | 'category'>> & { updatedAt: FieldValue } = {
+  const payload: Partial<Omit<NewsArticle, 'id' | 'userId' | 'createdAt'>> & { updatedAt: FieldValue } = {
     updatedAt: serverTimestamp(),
   };
 
@@ -152,14 +151,14 @@ export const updateNewsArticle = async (
   }
 
   const newStatus = dataToUpdate.status;
-  const contentValueFromUpdate = dataToUpdate.content; // Can be string, null, or undefined
+  const contentValueFromUpdate = dataToUpdate.content;
 
   if (isSavingDraftOfPublishedArticle && existingData.status === 'published') {
-    payload.draftContent = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : null;
+    payload.draftContent = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.draftContent);
     payload.hasUnpublishedChanges = true;
     payload.status = 'published';
   } else if (newStatus === 'published') {
-    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : null;
+    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
     payload.draftContent = null;
     payload.hasUnpublishedChanges = false;
     payload.status = 'published';
@@ -167,22 +166,21 @@ export const updateNewsArticle = async (
       payload.publishedAt = serverTimestamp();
     }
   } else if (newStatus === 'draft') {
-    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : null;
+    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
     payload.draftContent = null;
     payload.hasUnpublishedChanges = false;
     payload.status = 'draft';
     payload.publishedAt = null;
-  } else if (newStatus !== undefined) { // Status is being updated, but not necessarily to draft or published (could be other custom statuses if added)
+  } else if (newStatus !== undefined) {
     payload.status = newStatus;
-    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : null;
+    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
     payload.draftContent = null;
     payload.hasUnpublishedChanges = false;
     if (newStatus !== 'published') {
         payload.publishedAt = null;
     }
   } else if (contentValueFromUpdate !== undefined && !isSavingDraftOfPublishedArticle) {
-    // Only content is updated, and it's not saving a draft of a published article.
-    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : null;
+    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
     if (existingData.status === 'published') {
         payload.draftContent = null;
         payload.hasUnpublishedChanges = false;
@@ -190,12 +188,8 @@ export const updateNewsArticle = async (
   }
 
 
-  // Handle tag updates
   const oldTags = existingData.tags || [];
-  const newTags = dataToUpdate.tags || oldTags; // Use old if not provided in update
-
-  const tagsAdded = newTags.filter(tag => !oldTags.includes(tag));
-  const tagsRemoved = oldTags.filter(tag => !newTags.includes(tag));
+  const newTags = dataToUpdate.tags || oldTags;
 
   payload.tags = newTags;
 
@@ -267,7 +261,7 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
       return {
         ...data,
         id: docSnap.id,
-        draftContent: null,
+        draftContent: null, 
         hasUnpublishedChanges: false,
         createdAt: (data.createdAt as Timestamp).toMillis(),
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
