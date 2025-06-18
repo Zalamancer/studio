@@ -12,7 +12,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, Tag } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from '@/components/ui/textarea';
+import { Badge } from '@/components/ui/badge'; // Added Badge
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
@@ -55,7 +56,7 @@ const ArticlePage = () => {
   const [errorLoadingArticle, setErrorLoadingArticle] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]); // For TagsInput
+  const [tags, setTags] = useState<string[]>([]);
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -65,7 +66,7 @@ const ArticlePage = () => {
   const [isSavingDraftOfPublished, setIsSavingDraftOfPublished] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState(""); // For TagsInput
+  const [tagsError, setTagsError] = useState("");
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -91,6 +92,22 @@ const ArticlePage = () => {
   const [embedCodeInput, setEmbedCodeInput] = useState("");
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
+
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
+  const headerSearchInputRef = useRef<HTMLInputElement>(null);
+
+  const toggleHeaderSearch = useCallback(() => {
+    setIsHeaderSearchActive(prev => {
+      const newState = !prev;
+      if (newState) {
+        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+      } else {
+        setHeaderSearchTerm('');
+      }
+      return newState;
+    });
+  }, []);
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
@@ -281,7 +298,7 @@ const ArticlePage = () => {
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
 
   useEffect(() => { if (isEditingAllowed) calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
-  
+
   useEffect(() => {
     const handleSelectionChange = () => {
       if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) {
@@ -397,7 +414,7 @@ const ArticlePage = () => {
         title: title.trim(),
         tags: tags,
         status: newStatus,
-        content: mainContentForService || null, // Ensure content is null if empty, not undefined
+        content: mainContentForService,
       };
 
       if (newCoverImageUrl !== undefined) {
@@ -644,12 +661,33 @@ const ArticlePage = () => {
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}>
-      <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3">
+      <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
+        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3 flex-shrink-0">
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
-        
-        <div className="flex-grow min-w-[200px] sm:min-w-[240px] max-w-xs">
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleHeaderSearch}
+          className="h-9 w-9 p-2 flex-shrink-0"
+          aria-label={isHeaderSearchActive ? "Close search" : "Open search for tags"}
+        >
+          {isHeaderSearchActive ? <CloseIcon className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+        </Button>
+
+        <div className="flex-grow min-w-[150px] sm:min-w-[200px]">
+          {isHeaderSearchActive ? (
+            <Input
+              ref={headerSearchInputRef}
+              type="search"
+              placeholder="Search all tags (coming soon)..."
+              value={headerSearchTerm}
+              onChange={(e) => setHeaderSearchTerm(e.target.value)}
+              className="h-9 text-xs w-full"
+              disabled={true} // Temporarily disable until search functionality is implemented
+            />
+          ) : (
             <TagsInput
                 value={tags}
                 onChange={setTags}
@@ -657,11 +695,12 @@ const ArticlePage = () => {
                 disabled={isSubmitting}
                 error={publishAttempted && tagsError ? tagsError : null}
                 onPublishAttempt={publishAttempted}
-                className="text-xs" // Make consistent with create page
+                className="text-xs"
             />
+          )}
         </div>
-        
-        <div className="flex items-center gap-1 sm:gap-1.5">
+
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           {user && articleId && article && (
             <Button
                 variant="ghost"
@@ -703,7 +742,7 @@ const ArticlePage = () => {
                       {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                       Save Draft
                     </DropdownMenuItem>
-                    
+
                     {article.hasUnpublishedChanges && article.draftContent ? (
                       <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
                         <CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes
@@ -713,7 +752,7 @@ const ArticlePage = () => {
                         <Save className="mr-2 h-4 w-4" /> Update Live Article
                       </DropdownMenuItem>
                     )}
-                    
+
                     <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting} className="cursor-pointer text-orange-600 focus:text-orange-700">
                       <RotateCcw className="mr-2 h-4 w-4" /> Unpublish
                     </DropdownMenuItem>
@@ -724,7 +763,7 @@ const ArticlePage = () => {
           )}
         </div>
       </div>
-      
+
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
          {showContextualUI && isEditingAllowed && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}>
@@ -738,8 +777,7 @@ const ArticlePage = () => {
                 <button onClick={handleInsertSeparator} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert line separator" title="Insert line separator"><MinusIcon className={iconClass} /></button>
               </div>)}
           </div>)}
-        
-        {/* Removed Category Select from here */}
+
         <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting || !isEditingAllowed} />
         <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting || !isEditingAllowed} />
 

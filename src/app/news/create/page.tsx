@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Tag, Search } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Tag, Search, X as CloseIcon } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -68,11 +68,28 @@ const CreateNewsArticlePage = () => {
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
 
-  useEffect(() => {
-    if (contentEditableRef.current && contentEditableRef.current.innerHTML.trim() === "") {
-      contentEditableRef.current.innerHTML = "<p><br></p>";
-    }
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
+  const headerSearchInputRef = useRef<HTMLInputElement>(null);
+
+  const toggleHeaderSearch = useCallback(() => {
+    setIsHeaderSearchActive(prev => {
+      const newState = !prev;
+      if (newState) {
+        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+      } else {
+        setHeaderSearchTerm('');
+      }
+      return newState;
+    });
   }, []);
+
+
+  useEffect(() => {
+    if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
+      contentEditableRef.current.innerHTML = storyContent;
+    }
+  }, [storyContent]);
 
   const updateSelectionNonce = useCallback(() => requestAnimationFrame(() => setSelectionNonce(n => n + 1)), []);
 
@@ -189,7 +206,7 @@ const CreateNewsArticlePage = () => {
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
 
   useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
-  
+
   useEffect(() => {
     const handleSelectionChange = () => {
       if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) {
@@ -202,7 +219,11 @@ const CreateNewsArticlePage = () => {
     };
   }, [updateSelectionNonce]);
 
-  const handleFocus = useCallback((field: 'title' | 'content') => { setFocusedField(field); requestAnimationFrame(updateSelectionNonce); }, [updateSelectionNonce]);
+  const handleFocus = useCallback((field: 'title' | 'content') => {
+    setFocusedField(field);
+    requestAnimationFrame(updateSelectionNonce);
+  }, [updateSelectionNonce]);
+
   const handleBlur = useCallback(() => {
     queueMicrotask(() => {
       const activeEl = document.activeElement;
@@ -282,10 +303,10 @@ const CreateNewsArticlePage = () => {
       };
       const articleId = await createNewsArticle(articleData);
       toast({ title: status === 'published' ? "Article Published!" : "Draft Saved!", description: `"${title.trim()}" has been successfully ${status}.` });
-      
+
       setTitle(""); setTags([]); setStoryContent("<p><br></p>"); setCoverImageFile(null); setCoverImagePreview(null);
       if (contentEditableRef.current) contentEditableRef.current.innerHTML = "<p><br></p>";
-      
+
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
       updateSelectionNonce();
@@ -421,23 +442,45 @@ const CreateNewsArticlePage = () => {
     <>
     <div className="container mx-auto py-8 px-4 md:px-6">
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3">
+        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3 flex-shrink-0">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
-        
-        <div className="flex-grow min-w-[200px] sm:min-w-[240px] max-w-xs">
-          <TagsInput
-              value={tags}
-              onChange={setTags}
-              placeholder="Add tags (required)"
-              disabled={isSubmitting}
-              error={publishAttempted && tagsError ? tagsError : null}
-              onPublishAttempt={publishAttempted}
-              className="text-xs"
-          />
+
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={toggleHeaderSearch}
+          className="h-9 w-9 p-2 flex-shrink-0"
+          aria-label={isHeaderSearchActive ? "Close search" : "Open search for tags"}
+        >
+          {isHeaderSearchActive ? <CloseIcon className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+        </Button>
+
+        <div className="flex-grow min-w-[150px] sm:min-w-[200px]">
+          {isHeaderSearchActive ? (
+            <Input
+              ref={headerSearchInputRef}
+              type="search"
+              placeholder="Search all tags (coming soon)..."
+              value={headerSearchTerm}
+              onChange={(e) => setHeaderSearchTerm(e.target.value)}
+              className="h-9 text-xs w-full"
+              disabled={true} // Temporarily disable until search functionality is implemented
+            />
+          ) : (
+            <TagsInput
+                value={tags}
+                onChange={setTags}
+                placeholder="Add tags (required)"
+                disabled={isSubmitting}
+                error={publishAttempted && tagsError ? tagsError : null}
+                onPublishAttempt={publishAttempted}
+                className="text-xs"
+            />
+          )}
         </div>
-        
-        <div className="flex items-center gap-1 sm:gap-1.5">
+
+        <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
             <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
           </Button>
@@ -459,7 +502,7 @@ const CreateNewsArticlePage = () => {
                 <button onClick={handleInsertSeparator} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert line separator" title="Insert line separator"><MinusIcon className={iconClass} /></button>
               </div>)}
           </div>)}
-        
+
         <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting} />
         <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting} />
 
