@@ -38,7 +38,7 @@ import {
   PlusCircle,
   X,
   Save,
-  Globe, // Added Globe icon
+  Globe,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
@@ -143,6 +143,21 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       setIsEditSuggestionsOpen(false);
     }
   }, [initialPlanData, isOpen, setViewPermissionsSearch, setEditPermissionsSearch]);
+
+  // Effect to adjust editability if visibility changes
+  useEffect(() => {
+    if (visibility === 'unlisted' && editability === 'everyone') {
+      setEditability('owner_only'); // Or 'collaborators' as default
+      if (isOwnerForUIDisplay && isOpen) { // Only toast if the owner is viewing and dialog is open
+        toast({
+          title: "Editability Adjusted",
+          description: "The 'Everyone' edit option is not available for unlisted plans. Editability set to 'Owner Only'.",
+          duration: 5000,
+        });
+      }
+    }
+  }, [visibility, editability, isOwnerForUIDisplay, isOpen, toast]);
+
 
   useEffect(() => {
     setIsViewSuggestionsOpen(!!viewPermissionsSearch && viewPermissionSuggestions.length > 0);
@@ -365,7 +380,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
             case 'public': displayValue = 'Public (Discoverable)'; break;
             case 'owner_only': displayValue = 'Owner Only'; break;
             case 'collaborators': displayValue = 'Collaborators'; break;
-            case 'everyone': displayValue = 'All Authenticated Users'; break; // Handle 'everyone'
+            case 'everyone': displayValue = 'All Authenticated Users'; break;
             default: displayValue = value.charAt(0).toUpperCase() + value.slice(1);
         }
     }
@@ -452,7 +467,14 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                           <>
                               <div>
                               <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
-                              <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSavingSettings}>
+                              <Select value={visibility} onValueChange={(v) => {
+                                const newVisibility = v as PlanVisibility;
+                                setVisibility(newVisibility);
+                                if (newVisibility === 'unlisted' && editability === 'everyone') {
+                                    setEditability('owner_only');
+                                    toast({title: "Editability Adjusted", description: "The 'Everyone' edit option is not available for unlisted plans. Adjusted to 'Owner Only'.", duration: 5000});
+                                }
+                              }} disabled={isSavingSettings}>
                                   <SelectTrigger id="plan-visibility" className="text-sm h-9 mt-1">
                                   <SelectValue placeholder="Select visibility" />
                                   </SelectTrigger>
@@ -472,7 +494,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                                   <SelectContent>
                                   <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
                                   <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                                  <SelectItem value="everyone"><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
+                                  <SelectItem value="everyone" disabled={visibility === 'unlisted'}><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
                                   </SelectContent>
                               </Select>
                               </div>

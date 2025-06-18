@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion, User, Globe } from 'lucide-react'; // Added Globe icon
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import type { PlanVisibility, PlanEditability } from '@/types/plan';
+import { useToast } from '@/hooks/use-toast'; // Import useToast
 
 const planFormSchema = z.object({
   name: z.string().min(3, "Plan name must be at least 3 characters.").max(100, "Plan name cannot exceed 100 characters."),
@@ -32,7 +33,7 @@ const planFormSchema = z.object({
     required_error: "Please select a visibility option.",
     invalid_type_error: "Invalid visibility option selected.",
   }),
-  editability: z.enum(['owner_only', 'collaborators', 'everyone'], { // Added 'everyone'
+  editability: z.enum(['owner_only', 'collaborators', 'everyone'], {
     required_error: "Please select an editability option.",
     invalid_type_error: "Invalid editability option selected.",
   }),
@@ -62,15 +63,18 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
       sector: "",
       subSector: "",
       industry: "",
-      visibility: 'private', // Default to private
-      editability: 'owner_only', // Default to owner only
+      visibility: 'private',
+      editability: 'owner_only',
     },
   });
+  const { toast } = useToast(); // Initialize toast
 
   const [currentSubSectors, setCurrentSubSectors] = useState<SubSector[]>([]);
   const [currentIndustries, setCurrentIndustries] = useState<Industry[]>([]);
 
   const selectedSectorCode = form.watch("sector");
+  const watchedVisibility = form.watch("visibility"); // Watch visibility field
+
   useEffect(() => {
     if (selectedSectorCode) {
       const selectedMainSector = detailedSectorsData.find(s => s.code === selectedSectorCode);
@@ -94,6 +98,19 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
       setCurrentIndustries([]);
     }
   }, [selectedSubSectorCode, currentSubSectors, form]);
+
+  // Effect to adjust editability if visibility changes to 'unlisted'
+  useEffect(() => {
+    if (watchedVisibility === 'unlisted' && form.getValues("editability") === 'everyone') {
+      form.setValue("editability", 'owner_only');
+      toast({
+        title: "Editability Adjusted",
+        description: "The 'Everyone' edit option is not available for unlisted plans. Editability set to 'Owner Only'.",
+        duration: 5000,
+      });
+    }
+  }, [watchedVisibility, form, toast]);
+
 
   const handleFormSubmit = async (values: z.infer<typeof planFormSchema>) => {
     await onSubmit(values);
@@ -232,13 +249,14 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                   <SelectItem value="collaborators">
                      <div className="flex items-center gap-2"><Users className="h-4 w-4" /> People who you invite (Collaborators)</div>
                   </SelectItem>
-                  <SelectItem value="everyone">
+                  <SelectItem value="everyone" disabled={watchedVisibility === 'unlisted'}>
                      <div className="flex items-center gap-2"><Globe className="h-4 w-4" /> All Authenticated Users</div>
                   </SelectItem>
                 </SelectContent>
               </Select>
               <FormDescription>
                 Determine editing permissions. If 'Collaborators', you can invite specific users to edit. 'All Authenticated Users' allows any logged-in user with view access to edit.
+                {watchedVisibility === 'unlisted' && " (The 'Everyone' option is disabled for unlisted plans.)"}
               </FormDescription>
               <FormMessage />
             </FormItem>
