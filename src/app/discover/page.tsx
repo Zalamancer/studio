@@ -9,7 +9,7 @@ import { getRecentPlans } from '@/services/planService';
 import type { ClientPlan } from '@/types/plan';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Loader2, AlertTriangle, Brain, MapPin, Layers, Users, Filter, FilterX, Tag, PlusCircle, Search, X } from 'lucide-react';
+import { Loader2, AlertTriangle, Brain, MapPin, Layers, Users, Filter, FilterX, Tag, PlusCircle, Search, X, Compass } from 'lucide-react'; // Added Compass
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -273,3 +273,4 @@ const DiscoverPage = () => {
 };
 
 export default DiscoverPage;
+
