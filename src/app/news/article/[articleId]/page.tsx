@@ -11,7 +11,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon, Tag } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -37,6 +37,9 @@ import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectio
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { searchTags } from '@/services/tagService';
+import type { ClientTag } from '@/types/tag';
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -54,7 +57,7 @@ const ArticlePage = () => {
   const [errorLoadingArticle, setErrorLoadingArticle] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]); // Tags are still managed, just not via header input
+  const [tags, setTags] = useState<string[]>([]);
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -64,7 +67,7 @@ const ArticlePage = () => {
   const [isSavingDraftOfPublished, setIsSavingDraftOfPublished] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState(""); // Still needed if tags are validated elsewhere
+  const [tagsError, setTagsError] = useState("");
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -90,6 +93,17 @@ const ArticlePage = () => {
   const [embedCodeInput, setEmbedCodeInput] = useState("");
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
+
+  // Header Search State
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
+  const [tagSuggestions, setTagSuggestions] = useState<ClientTag[]>([]);
+  const [isTagSuggestionsLoading, setIsTagSuggestionsLoading] = useState(false);
+  const [isTagSuggestionsPopoverOpen, setIsTagSuggestionsPopoverOpen] = useState(false);
+  const headerSearchInputRef = useRef<HTMLInputElement>(null);
+  const tagSuggestionsPopoverContentRef = useRef<HTMLDivElement>(null);
+  const [debouncedHeaderSearchTerm, setDebouncedHeaderSearchTerm] = useState('');
+
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
@@ -121,6 +135,8 @@ const ArticlePage = () => {
         .then((fetchedArticle) => {
           if (fetchedArticle) {
             setArticle(fetchedArticle);
+            // Initialize tags state from fetched article
+            setTags(fetchedArticle.tags || []);
           } else {
             setErrorLoadingArticle("Article not found.");
           }
@@ -131,13 +147,14 @@ const ArticlePage = () => {
       setArticle(null);
       setIsLoadingArticle(false);
       setErrorLoadingArticle(null);
+      setTags([]); // Reset tags if no articleId
     }
   }, [articleId]);
 
   useEffect(() => {
     if (article) {
       setTitle(article.title || "");
-      setTags(article.tags || []);
+      // Tags are now set in the fetch useEffect
 
       let contentToLoadInEditor = "<p><br></p>";
       if (isEditingAllowed) {
@@ -372,7 +389,7 @@ const ArticlePage = () => {
       setPublishAttempted(true);
       if (!validateFields()) {
         if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-        // Removed focus logic for TagsInput as it's no longer in the header
+        else if (tags.length === 0 && isHeaderSearchActive && headerSearchInputRef.current) headerSearchInputRef.current.focus();
         else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
         return;
       }
@@ -438,6 +455,8 @@ const ArticlePage = () => {
         setArticle(fetchedUpdatedArticle);
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
         setCoverImageFile(null);
+        // Update local tags state after successful save
+        setTags(fetchedUpdatedArticle.tags || []);
       }
 
     } catch (error: any) {
@@ -560,6 +579,97 @@ const ArticlePage = () => {
     }
   };
 
+  // Header Search Logic
+  const toggleHeaderSearch = () => {
+    setIsHeaderSearchActive(prev => {
+      if (prev) { // Closing search
+        setHeaderSearchTerm('');
+        setIsTagSuggestionsPopoverOpen(false);
+      } else { // Opening search
+        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+      }
+      return !prev;
+    });
+  };
+
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      setDebouncedHeaderSearchTerm(headerSearchTerm);
+    }, 300);
+    return () => clearTimeout(timerId);
+  }, [headerSearchTerm]);
+
+  useEffect(() => {
+    if (debouncedHeaderSearchTerm.trim() && isHeaderSearchActive) {
+      setIsTagSuggestionsLoading(true);
+      searchTags(debouncedHeaderSearchTerm.trim(), 7)
+        .then(fetchedTags => {
+          const currentSelectedLowercase = tags.map(t => t.toLowerCase());
+          setTagSuggestions(fetchedTags.filter(tag => !currentSelectedLowercase.includes(tag.name.toLowerCase())));
+          setIsTagSuggestionsPopoverOpen(true); 
+        })
+        .catch(() => setTagSuggestions([]))
+        .finally(() => setIsTagSuggestionsLoading(false));
+    } else {
+      setTagSuggestions([]);
+      setIsTagSuggestionsPopoverOpen(false);
+    }
+  }, [debouncedHeaderSearchTerm, tags, isHeaderSearchActive]);
+
+  const handleAddTagFromSearch = (tagToAdd: string) => {
+    const trimmedTag = tagToAdd.trim();
+    if (trimmedTag && !tags.map(t => t.toLowerCase()).includes(trimmedTag.toLowerCase())) {
+      if (tags.length < 5) { // Example limit
+        setTags(prev => [...prev, trimmedTag]);
+        if (publishAttempted && (tags.length + 1 > 0)) setTagsError("");
+      } else {
+        toast({ title: "Tag Limit Reached", description: "You can add a maximum of 5 tags.", variant: "default" });
+      }
+    }
+    setHeaderSearchTerm('');
+    setIsTagSuggestionsPopoverOpen(false);
+    // Keep search active for multiple additions: setIsHeaderSearchActive(false); 
+    setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+  };
+
+  const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+        e.preventDefault();
+        if (headerSearchTerm.trim()) {
+            handleAddTagFromSearch(headerSearchTerm.trim());
+        }
+    } else if (e.key === 'Escape') {
+        setIsTagSuggestionsPopoverOpen(false);
+    }
+  };
+
+  const handleRemoveTagFromDisplay = (tagToRemove: string) => {
+    if (!isEditingAllowed) return;
+    setTags(prev => {
+      const newTags = prev.filter(t => t !== tagToRemove);
+      if (publishAttempted && newTags.length === 0) {
+        setTagsError("At least one tag is required.");
+      } else if (publishAttempted && newTags.length > 0) {
+        setTagsError("");
+      }
+      return newTags;
+    });
+  };
+  
+  useEffect(() => {
+    const handleClickOutsidePopover = (event: MouseEvent) => {
+      if (isTagSuggestionsPopoverOpen &&
+          tagSuggestionsPopoverContentRef.current && !tagSuggestionsPopoverContentRef.current.contains(event.target as Node) &&
+          headerSearchInputRef.current && !headerSearchInputRef.current.contains(event.target as Node)
+      ) {
+        setIsTagSuggestionsPopoverOpen(false);
+      }
+    };
+    if (isTagSuggestionsPopoverOpen) document.addEventListener('mousedown', handleClickOutsidePopover);
+    return () => document.removeEventListener('mousedown', handleClickOutsidePopover);
+  }, [isTagSuggestionsPopoverOpen]);
+
+
   if (authLoading || isLoadingArticle) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
   if (!article) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-foreground">Article Not Found</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
@@ -651,15 +761,80 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
 
-        <div className="flex-grow min-w-[150px] sm:min-w-[200px] flex items-center gap-1.5 overflow-x-auto py-1.5 h-9">
-          {tags.length > 0 ? (
-            tags.map((tag, index) => (
-              <Badge key={index} variant="secondary" className="text-xs flex-shrink-0">
-                {tag}
-              </Badge>
-            ))
+        <div className="flex items-center gap-1.5 flex-grow min-w-[150px] sm:min-w-[200px]">
+          {isEditingAllowed && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={toggleHeaderSearch}
+              className="h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0"
+              aria-label={isHeaderSearchActive ? "Close tag search" : "Search and add tags"}
+              disabled={isSubmitting}
+            >
+              {isHeaderSearchActive ? <CloseIcon className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+            </Button>
+          )}
+
+          {isHeaderSearchActive && isEditingAllowed ? (
+            <div className="relative flex-grow">
+              <Popover open={isTagSuggestionsPopoverOpen && (tagSuggestions.length > 0 || (headerSearchTerm.trim() && !isTagSuggestionsLoading))} onOpenChange={setIsTagSuggestionsPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Input
+                    ref={headerSearchInputRef}
+                    type="text"
+                    placeholder="Search or create tags..."
+                    value={headerSearchTerm}
+                    onChange={(e) => {
+                      setHeaderSearchTerm(e.target.value);
+                      if (e.target.value.trim()) setIsTagSuggestionsPopoverOpen(true);
+                      else setIsTagSuggestionsPopoverOpen(false);
+                    }}
+                    onKeyDown={handleHeaderSearchKeyDown}
+                    className="h-9 text-xs flex-grow"
+                    disabled={isSubmitting}
+                  />
+                </PopoverTrigger>
+                <PopoverContent ref={tagSuggestionsPopoverContentRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                  {isTagSuggestionsLoading ? (
+                    <div className="flex items-center justify-center p-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5"/> Loading...</div>
+                  ) : tagSuggestions.length > 0 ? (
+                    tagSuggestions.map(tag => (
+                      <Button key={tag.id} variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2" onClick={() => handleAddTagFromSearch(tag.name)} onMouseDown={(e) => e.preventDefault()}>
+                        <Tag className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>{tag.name} <span className="ml-auto text-muted-foreground text-[10px]">({tag.usageCount})</span>
+                      </Button>
+                    ))
+                  ) : headerSearchTerm.trim() && !isTagSuggestionsLoading ? (
+                     <Button variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2 text-primary" onClick={() => handleAddTagFromSearch(headerSearchTerm.trim())} onMouseDown={(e) => e.preventDefault()}>
+                        <PlusCircle className="h-3.5 w-3.5 mr-1.5"/> Create new tag &quot;{headerSearchTerm.trim()}&quot;
+                    </Button>
+                  ) : null}
+                </PopoverContent>
+              </Popover>
+            </div>
           ) : (
-            <span className="text-xs text-muted-foreground italic">No tags selected</span>
+            <div className="flex-grow flex items-center gap-1.5 overflow-x-auto py-1.5 h-9">
+              {tags.length > 0 ? (
+                tags.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="text-xs flex-shrink-0 group/tagbadge relative pr-5">
+                    {tag}
+                    {isEditingAllowed && (
+                      <button
+                        type="button"
+                        onClick={() => handleRemoveTagFromDisplay(tag)}
+                        className="ml-1 rounded-full outline-none opacity-0 group-hover/tagbadge:opacity-100 focus:opacity-100 absolute right-0.5 top-1/2 transform -translate-y-1/2 p-0.5 hover:bg-destructive/20"
+                        aria-label={`Remove ${tag}`}
+                        disabled={isSubmitting}
+                      >
+                        <CloseIcon className="h-3 w-3 text-destructive/70 hover:text-destructive" />
+                      </button>
+                    )}
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground italic pl-1">No tags selected</span>
+              )}
+            </div>
           )}
         </div>
 
@@ -786,8 +961,6 @@ const ArticlePage = () => {
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
-            onClick={updateSelectionNonce}
-            onKeyUp={updateSelectionNonce}
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
@@ -848,3 +1021,4 @@ const ArticlePage = () => {
 };
 
 export default ArticlePage;
+

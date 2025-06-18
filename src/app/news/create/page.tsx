@@ -5,7 +5,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Search, X as CloseIcon, Tag } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -23,7 +23,10 @@ import { createNewsArticle } from '@/services/newsService';
 import { uploadNewsCoverImage } from '@/services/storageService';
 import type { NewNewsArticleData, NewsArticleStatus } from '@/types/news';
 import Image from 'next/image';
-import { Badge } from '@/components/ui/badge'; // Added Badge for displaying tags
+import { Badge } from '@/components/ui/badge';
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { searchTags } from '@/services/tagService';
+import type { ClientTag } from '@/types/tag';
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -34,7 +37,7 @@ const CreateNewsArticlePage = () => {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]); // Tags are still managed, just not via header input
+  const [tags, setTags] = useState<string[]>([]);
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -42,7 +45,7 @@ const CreateNewsArticlePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState(""); // Still needed if tags are validated elsewhere
+  const [tagsError, setTagsError] = useState("");
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -66,6 +69,17 @@ const CreateNewsArticlePage = () => {
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
+
+  // Header Search State
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
+  const [tagSuggestions, setTagSuggestions] = useState<ClientTag[]>([]);
+  const [isTagSuggestionsLoading, setIsTagSuggestionsLoading] = useState(false);
+  const [isTagSuggestionsPopoverOpen, setIsTagSuggestionsPopoverOpen] = useState(false);
+  const headerSearchInputRef = useRef<HTMLInputElement>(null);
+  const tagSuggestionsPopoverContentRef = useRef<HTMLDivElement>(null);
+  const [debouncedHeaderSearchTerm, setDebouncedHeaderSearchTerm] = useState('');
+
 
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
@@ -195,9 +209,7 @@ const CreateNewsArticlePage = () => {
       }
     };
     document.addEventListener('selectionchange', handleSelectionChange);
-    return () => {
-      document.removeEventListener('selectionchange', handleSelectionChange);
-    };
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, [updateSelectionNonce]);
 
   const handleFocus = useCallback((field: 'title' | 'content') => {
@@ -269,18 +281,18 @@ const CreateNewsArticlePage = () => {
     setPublishAttempted(true);
     if (!validateFields()) {
       if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-      // Removed focus logic for TagsInput as it's no longer in the header
+      else if (tags.length === 0 && isHeaderSearchActive && headerSearchInputRef.current) headerSearchInputRef.current.focus();
       else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
       return;
     }
     setIsSubmitting(true);
-    let coverImageUrl: string | undefined = undefined;
+    let coverImageUrlToSave: string | undefined = undefined;
     try {
       if (coverImageFile) {
-        coverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, 'new_article_placeholder');
+        coverImageUrlToSave = await uploadNewsCoverImage(coverImageFile, user.uid, 'new_article_placeholder');
       }
       const articleData: NewNewsArticleData = {
-        userId: user.uid, title: title.trim(), tags: tags, content: storyContent, status, coverImageUrl,
+        userId: user.uid, title: title.trim(), tags: tags, content: storyContent, status, coverImageUrl: coverImageUrlToSave,
       };
       const articleId = await createNewsArticle(articleData);
       toast({ title: status === 'published' ? "Article Published!" : "Draft Saved!", description: `"${title.trim()}" has been successfully ${status}.` });
@@ -307,7 +319,7 @@ const CreateNewsArticlePage = () => {
 
   const handlePublish = () => handleFormSubmission('published');
   const handleSaveDraft = () => {
-    if (!title.trim() || tags.length === 0) { // Tags validation is simplified, actual input mechanism is TBD by user
+    if (!title.trim() || tags.length === 0) {
         setPublishAttempted(true);
         if (!title.trim()) setTitleError("Title is required to save a draft."); else setTitleError("");
         if (tags.length === 0) setTagsError("At least one tag is required to save a draft."); else setTagsError("");
@@ -421,6 +433,95 @@ const CreateNewsArticlePage = () => {
     }
   };
 
+  // Header Search Logic
+  const toggleHeaderSearch = () => {
+    setIsHeaderSearchActive(prev => {
+      if (prev) {
+        setHeaderSearchTerm('');
+        setIsTagSuggestionsPopoverOpen(false);
+      } else {
+        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+      }
+      return !prev;
+    });
+  };
+
+  useEffect(() => {
+    const timerId = setTimeout(() => {
+      setDebouncedHeaderSearchTerm(headerSearchTerm);
+    }, 300);
+    return () => clearTimeout(timerId);
+  }, [headerSearchTerm]);
+
+  useEffect(() => {
+    if (debouncedHeaderSearchTerm.trim() && isHeaderSearchActive) {
+      setIsTagSuggestionsLoading(true);
+      searchTags(debouncedHeaderSearchTerm.trim(), 7)
+        .then(fetchedTags => {
+          const currentSelectedLowercase = tags.map(t => t.toLowerCase());
+          setTagSuggestions(fetchedTags.filter(tag => !currentSelectedLowercase.includes(tag.name.toLowerCase())));
+          setIsTagSuggestionsPopoverOpen(true);
+        })
+        .catch(() => setTagSuggestions([]))
+        .finally(() => setIsTagSuggestionsLoading(false));
+    } else {
+      setTagSuggestions([]);
+      setIsTagSuggestionsPopoverOpen(false);
+    }
+  }, [debouncedHeaderSearchTerm, tags, isHeaderSearchActive]);
+
+  const handleAddTagFromSearch = (tagToAdd: string) => {
+    const trimmedTag = tagToAdd.trim();
+    if (trimmedTag && !tags.map(t => t.toLowerCase()).includes(trimmedTag.toLowerCase())) {
+      if (tags.length < 5) { // Example limit, adjust as needed
+        setTags(prev => [...prev, trimmedTag]);
+        if (publishAttempted && (tags.length + 1 > 0)) setTagsError("");
+      } else {
+        toast({ title: "Tag Limit Reached", description: "You can add a maximum of 5 tags.", variant: "default" });
+      }
+    }
+    setHeaderSearchTerm('');
+    setIsTagSuggestionsPopoverOpen(false);
+    // Do not close search on add: setIsHeaderSearchActive(false);
+    setTimeout(() => headerSearchInputRef.current?.focus(), 0);
+  };
+  
+  const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === 'Enter') {
+          e.preventDefault();
+          if (headerSearchTerm.trim()) {
+              handleAddTagFromSearch(headerSearchTerm.trim());
+          }
+      } else if (e.key === 'Escape') {
+          setIsTagSuggestionsPopoverOpen(false);
+      }
+  };
+
+  const handleRemoveTagFromDisplay = (tagToRemove: string) => {
+    setTags(prev => {
+      const newTags = prev.filter(t => t !== tagToRemove);
+      if (publishAttempted && newTags.length === 0) {
+        setTagsError("At least one tag is required.");
+      } else if (publishAttempted && newTags.length > 0) {
+        setTagsError("");
+      }
+      return newTags;
+    });
+  };
+
+  useEffect(() => {
+    const handleClickOutsidePopover = (event: MouseEvent) => {
+      if (isTagSuggestionsPopoverOpen &&
+          tagSuggestionsPopoverContentRef.current && !tagSuggestionsPopoverContentRef.current.contains(event.target as Node) &&
+          headerSearchInputRef.current && !headerSearchInputRef.current.contains(event.target as Node)
+      ) {
+        setIsTagSuggestionsPopoverOpen(false);
+      }
+    };
+    if (isTagSuggestionsPopoverOpen) document.addEventListener('mousedown', handleClickOutsidePopover);
+    return () => document.removeEventListener('mousedown', handleClickOutsidePopover);
+  }, [isTagSuggestionsPopoverOpen]);
+
   if (authLoading) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (!user) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><p className="text-lg font-semibold text-foreground">Please log in to create news.</p><Button onClick={() => router.push('/login')} className="mt-4">Log In</Button></div>;
 
@@ -432,23 +533,79 @@ const CreateNewsArticlePage = () => {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
 
-        <div className="flex-grow min-w-[150px] sm:min-w-[200px] flex items-center gap-1.5 overflow-x-auto py-1.5 h-9">
-          {tags.length > 0 ? (
-            tags.map((tag, index) => (
-              <Badge key={index} variant="secondary" className="text-xs flex-shrink-0">
-                {tag}
-                {/* Optionally, add a remove button for tags here if tag management is still part of this form */}
-              </Badge>
-            ))
+        <div className="flex items-center gap-1.5 flex-grow min-w-[150px] sm:min-w-[200px]">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            onClick={toggleHeaderSearch}
+            className="h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0"
+            aria-label={isHeaderSearchActive ? "Close tag search" : "Search and add tags"}
+            disabled={isSubmitting}
+          >
+            {isHeaderSearchActive ? <CloseIcon className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+          </Button>
+
+          {isHeaderSearchActive ? (
+            <div className="relative flex-grow">
+              <Popover open={isTagSuggestionsPopoverOpen && (tagSuggestions.length > 0 || (headerSearchTerm.trim() && !isTagSuggestionsLoading))} onOpenChange={setIsTagSuggestionsPopoverOpen}>
+                <PopoverTrigger asChild>
+                  <Input
+                    ref={headerSearchInputRef}
+                    type="text"
+                    placeholder="Search or create tags..."
+                    value={headerSearchTerm}
+                    onChange={(e) => {
+                      setHeaderSearchTerm(e.target.value);
+                      if (e.target.value.trim()) setIsTagSuggestionsPopoverOpen(true);
+                      else setIsTagSuggestionsPopoverOpen(false);
+                    }}
+                    onKeyDown={handleHeaderSearchKeyDown}
+                    className="h-9 text-xs flex-grow"
+                    disabled={isSubmitting}
+                  />
+                </PopoverTrigger>
+                <PopoverContent ref={tagSuggestionsPopoverContentRef} className="w-[--radix-popover-trigger-width] p-1 mt-1 max-h-48 overflow-y-auto" side="bottom" align="start" onOpenAutoFocus={(e) => e.preventDefault()}>
+                  {isTagSuggestionsLoading ? (
+                    <div className="flex items-center justify-center p-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5"/> Loading...</div>
+                  ) : tagSuggestions.length > 0 ? (
+                    tagSuggestions.map(tag => (
+                      <Button key={tag.id} variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2" onClick={() => handleAddTagFromSearch(tag.name)} onMouseDown={(e) => e.preventDefault()}>
+                        <Tag className="h-3.5 w-3.5 mr-1.5 text-muted-foreground"/>{tag.name} <span className="ml-auto text-muted-foreground text-[10px]">({tag.usageCount})</span>
+                      </Button>
+                    ))
+                  ) : headerSearchTerm.trim() && !isTagSuggestionsLoading ? (
+                     <Button variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2 text-primary" onClick={() => handleAddTagFromSearch(headerSearchTerm.trim())} onMouseDown={(e) => e.preventDefault()}>
+                        <PlusCircle className="h-3.5 w-3.5 mr-1.5"/> Create new tag &quot;{headerSearchTerm.trim()}&quot;
+                    </Button>
+                  ) : null}
+                </PopoverContent>
+              </Popover>
+            </div>
           ) : (
-            <span className="text-xs text-muted-foreground italic">No tags selected</span>
+            <div className="flex-grow flex items-center gap-1.5 overflow-x-auto py-1.5 h-9">
+              {tags.length > 0 ? (
+                tags.map((tag) => (
+                  <Badge key={tag} variant="secondary" className="text-xs flex-shrink-0 group/tagbadge relative pr-5">
+                    {tag}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveTagFromDisplay(tag)}
+                      className="ml-1 rounded-full outline-none opacity-0 group-hover/tagbadge:opacity-100 focus:opacity-100 absolute right-0.5 top-1/2 transform -translate-y-1/2 p-0.5 hover:bg-destructive/20"
+                      aria-label={`Remove ${tag}`}
+                      disabled={isSubmitting}
+                    >
+                      <CloseIcon className="h-3 w-3 text-destructive/70 hover:text-destructive" />
+                    </button>
+                  </Badge>
+                ))
+              ) : (
+                <span className="text-xs text-muted-foreground italic pl-1">No tags selected</span>
+              )}
+            </div>
           )}
         </div>
         
-        {/* Placeholder for where TagsInput was. If you need to add/edit tags, you'll need a new UI element or move TagsInput elsewhere in the form */}
-        {/* Example: <Button variant="outline" size="sm" onClick={() => { /* open tag modal or show TagsInput */ }}>Edit Tags</Button> */}
-
-
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
             <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
@@ -503,8 +660,6 @@ const CreateNewsArticlePage = () => {
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
-            onClick={updateSelectionNonce}
-            onKeyUp={updateSelectionNonce}
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
@@ -525,10 +680,6 @@ const CreateNewsArticlePage = () => {
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
-        {/* Removed TagsInput from main form body, as it's no longer directly placed. 
-            If tags are managed elsewhere (e.g. a modal triggered by an "Edit Tags" button), 
-            that UI would contain the TagsInput. This example assumes `tags` state is updated by some means.
-        */}
         {publishAttempted && tagsError && <p className="text-xs text-destructive mt-2">{tagsError}</p>}
 
         <style jsx global>{`
@@ -558,3 +709,4 @@ const CreateNewsArticlePage = () => {
   );
 };
 export default CreateNewsArticlePage;
+
