@@ -1,3 +1,4 @@
+
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -11,7 +12,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon, Tag } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon, Tag, PlusCircle } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -135,7 +136,6 @@ const ArticlePage = () => {
         .then((fetchedArticle) => {
           if (fetchedArticle) {
             setArticle(fetchedArticle);
-            // Initialize tags state from fetched article
             setTags(fetchedArticle.tags || []);
           } else {
             setErrorLoadingArticle("Article not found.");
@@ -147,14 +147,13 @@ const ArticlePage = () => {
       setArticle(null);
       setIsLoadingArticle(false);
       setErrorLoadingArticle(null);
-      setTags([]); // Reset tags if no articleId
+      setTags([]);
     }
   }, [articleId]);
 
   useEffect(() => {
     if (article) {
       setTitle(article.title || "");
-      // Tags are now set in the fetch useEffect
 
       let contentToLoadInEditor = "<p><br></p>";
       if (isEditingAllowed) {
@@ -318,7 +317,7 @@ const ArticlePage = () => {
     if (!isEditingAllowed) return;
     queueMicrotask(() => {
       const activeEl = document.activeElement;
-      if (!((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen)) {
+      if (!((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen || (tagSuggestionsPopoverContentRef.current && tagSuggestionsPopoverContentRef.current.contains(activeEl)) || (headerSearchInputRef.current === activeEl))) {
         setFocusedField(null); setIsToolbarExpanded(false); setShowContextualUI(false); setSavedRange(null);
       }
     });
@@ -412,8 +411,25 @@ const ArticlePage = () => {
         title: title.trim(),
         tags: tags,
         status: newStatus,
-        content: mainContentForService,
       };
+
+      // Only include content related fields if they are part of this specific update path
+      if (isSavingDraftOfPublishedArticle && article.status === 'published') {
+        articleUpdateData.draftContent = mainContentForService || null; // Ensure draftContent is string or null
+        articleUpdateData.hasUnpublishedChanges = true;
+        // Status remains 'published'
+      } else if (newStatus === 'published') {
+        articleUpdateData.content = mainContentForService || null; // Ensure content is string or null
+        articleUpdateData.draftContent = null;
+        articleUpdateData.hasUnpublishedChanges = false;
+      } else if (newStatus === 'draft') {
+        articleUpdateData.content = mainContentForService || null; // Ensure content is string or null
+        articleUpdateData.draftContent = null;
+        articleUpdateData.hasUnpublishedChanges = false;
+      } else if (contentToSaveParam !== undefined) { // General content update without status change
+         articleUpdateData.content = mainContentForService || null;
+      }
+
 
       if (newCoverImageUrl !== undefined) {
         articleUpdateData.coverImageUrl = newCoverImageUrl;
@@ -455,7 +471,6 @@ const ArticlePage = () => {
         setArticle(fetchedUpdatedArticle);
         setCurrentCoverImageUrl(newCoverImageUrl === undefined ? currentCoverImageUrl : newCoverImageUrl);
         setCoverImageFile(null);
-        // Update local tags state after successful save
         setTags(fetchedUpdatedArticle.tags || []);
       }
 
@@ -768,7 +783,7 @@ const ArticlePage = () => {
               variant="ghost"
               size="icon"
               onClick={toggleHeaderSearch}
-              className="h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0"
+              className={cn("h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0 transition-transform duration-200 ease-in-out", isHeaderSearchActive && "rotate-45")}
               aria-label={isHeaderSearchActive ? "Close tag search" : "Search and add tags"}
               disabled={isSubmitting}
             >
@@ -905,7 +920,7 @@ const ArticlePage = () => {
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
          {showContextualUI && isEditingAllowed && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}>
-              <PlusIcon className={cn("h-5 w-5 text-primary transition-transform duration-200 ease-in-out", isToolbarExpanded && "rotate-45")} />
+              <PlusCircle className={cn("h-5 w-5 text-primary transition-transform duration-200 ease-in-out", isToolbarExpanded && "rotate-45")} />
             </Button>
             {isToolbarExpanded && (<div className="bg-card border p-0.5 rounded-full shadow-lg flex items-center space-x-0.5 ml-1 animate-in fade-in-50 slide-in-from-left-2 duration-200">
                 <button onClick={triggerInlineImageUpload} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert image" title="Upload image"><ImageIcon className={iconClass} /></button>

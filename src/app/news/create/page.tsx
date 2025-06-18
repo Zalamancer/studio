@@ -1,3 +1,4 @@
+
 // src/app/news/create/page.tsx
 "use client";
 
@@ -5,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Search, X as CloseIcon, Tag } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, XIcon, Trash2, ArrowLeft, Search, X as CloseIcon, Tag, PlusCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -220,7 +221,7 @@ const CreateNewsArticlePage = () => {
   const handleBlur = useCallback(() => {
     queueMicrotask(() => {
       const activeEl = document.activeElement;
-      if (!((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen)) {
+      if (!((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen || (tagSuggestionsPopoverContentRef.current && tagSuggestionsPopoverContentRef.current.contains(activeEl)) || (headerSearchInputRef.current === activeEl))) {
         setFocusedField(null); setIsToolbarExpanded(false); setShowContextualUI(false); setSavedRange(null);
       }
     });
@@ -539,7 +540,7 @@ const CreateNewsArticlePage = () => {
             variant="ghost"
             size="icon"
             onClick={toggleHeaderSearch}
-            className="h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0"
+            className={cn("h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0 transition-transform duration-200 ease-in-out", isHeaderSearchActive && "rotate-45")}
             aria-label={isHeaderSearchActive ? "Close tag search" : "Search and add tags"}
             disabled={isSubmitting}
           >
@@ -618,7 +619,7 @@ const CreateNewsArticlePage = () => {
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
         {showContextualUI && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}>
-              <PlusIcon className={cn("h-5 w-5 text-primary transition-transform duration-200 ease-in-out", isToolbarExpanded && "rotate-45")} />
+              <PlusCircle className={cn("h-5 w-5 text-primary transition-transform duration-200 ease-in-out", isToolbarExpanded && "rotate-45")} />
             </Button>
             {isToolbarExpanded && (<div className="bg-card border p-0.5 rounded-full shadow-lg flex items-center space-x-0.5 ml-1 animate-in fade-in-50 slide-in-from-left-2 duration-200">
                 <button onClick={triggerInlineImageUpload} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert image" title="Upload image"><ImageIcon className={iconClass} /></button>
