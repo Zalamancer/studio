@@ -27,6 +27,7 @@ import { createNotification } from './notificationService';
 import type { NewNotificationData } from '@/types/notification';
 import { getPostDetails } from './messagingService';
 import { generateAnonymousName } from '@/lib/pseudonymUtils'; // For fallback names
+import { incrementNewsArticleCommentCount, decrementNewsArticleCommentCount } from './newsService'; // For news article comments
 
 // Helper function to extract mentioned user UIDs from text
 // This assumes mentions are in the format @UID and UIDs are alphanumeric with underscores.
@@ -45,9 +46,9 @@ const extractMentionsFromTextService = (text: string): string[] => {
   return Array.from(userIdentifiers);
 };
 
-// --- Comment Functions ---
+// --- Generic Comment Functions (for 'posts' collection) ---
 
-export const addCommentToPost = async (postId: string, commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
+export const addCommentToPost = async (postId: string, commentData: Omit<NewCommentData, 'likeCount' | 'likedBy' | 'isShadowBanned'>): Promise<string> => {
   console.log(`%c[commentService] addCommentToPost: Called for postId '${postId}' by userId '${commentData.userId}'. Comment text: "${commentData.text?.substring(0,50)}..."`, "color: blue;");
   if (!postId) throw new Error('Post ID is required to add a comment.');
   if (!commentData.userId) throw new Error('User ID is required for the comment.');
@@ -66,6 +67,7 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
       likeCount: 0,
       likedBy: [],
       mentionedUserIds: resolvedMentionedUids,
+      isShadowBanned: false, // Default for regular posts
       timestamp: serverTimestamp() as Timestamp,
       updatedAt: serverTimestamp() as Timestamp,
     };
@@ -74,14 +76,13 @@ export const addCommentToPost = async (postId: string, commentData: Omit<NewComm
     const newCommentId = docRef.id;
     console.log(`%c[commentService] addCommentToPost: Comment added successfully to post ${postId} with ID: ${newCommentId}`, "color: green;");
 
-    // Atomically increment commentCount on the post and update its updatedAt timestamp
     await updateDoc(postDocRef, {
       commentCount: increment(1),
-      updatedAt: serverTimestamp() // Ensure post's updatedAt is also updated
+      updatedAt: serverTimestamp()
     });
     console.log(`%c[commentService] addCommentToPost: Incremented commentCount and updated updatedAt for post ${postId}`, "color: green;");
 
-    const postDetails = await getPostDetails(postId);
+    const postDetails = await getPostDetails(postId); // Re-uses existing messagingService function
 
     if (resolvedMentionedUids.length > 0) {
       console.log(`%c[commentService] addCommentToPost: Processing ${resolvedMentionedUids.length} mentions for notifications using UIDs.`, "color: blue;");
@@ -139,7 +140,7 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
     const userProfilesMap = new Map<string, { displayName: string; avatarUrl?: string }>();
 
     await Promise.all(userIds.map(async (userId) => {
-        const profile = await fetchUserProfileBasic(userId); // CORRECTED USAGE
+        const profile = await fetchUserProfileBasic(userId);
         userProfilesMap.set(userId, {
             displayName: profile?.displayName || generateAnonymousName(userId),
             avatarUrl: profile?.avatarUrl
@@ -160,9 +161,11 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
         timestamp: timestampMillis,
         userName: userProfile?.displayName,
         userAvatar: userProfile?.avatarUrl,
+        mentionName: data.mentionName || userProfile?.displayName || generateAnonymousName(data.userId),
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],
         mentionedUserIds: data.mentionedUserIds || [],
+        isShadowBanned: data.isShadowBanned === true, // For 'posts', this will be false/undefined
       } as ClientComment;
     }).filter((comment): comment is ClientComment => comment !== null);
 
@@ -180,57 +183,31 @@ export const getCommentsForPost = async (postId: string): Promise<ClientComment[
 };
 
 export const toggleLikeComment = async (postId: string, commentId: string, userId: string): Promise<void> => {
-    console.log(`%c[commentService] toggleLikeComment: User '${userId}' on post '${postId}', comment '${commentId}'`, "color: magenta;");
-    if (!postId || !commentId || !userId) {
-        const errorMsg = 'Post ID, Comment ID, and User ID are required to toggle like.';
-        console.error(`%c[commentService] toggleLikeComment: VALIDATION FAILED - ${errorMsg}`, "color: red;");
-        throw new Error(errorMsg);
-    }
     const commentRef = doc(db, 'posts', postId, 'comments', commentId);
-    console.log(`%c[commentService] toggleLikeComment: Document ref: ${commentRef.path}`, "color: magenta;");
-
     try {
         await runTransaction(db, async (transaction) => {
-            console.log(`%c[commentService] toggleLikeComment: Transaction started for comment '${commentId}'. Fetching document...`, "color: magenta;");
             const commentSnap = await transaction.get(commentRef);
-            if (!commentSnap.exists()) {
-                console.error(`%c[commentService] toggleLikeComment: Comment '${commentId}' does not exist!`, "color: red;");
-                throw new Error("Comment does not exist!");
-            }
+            if (!commentSnap.exists()) throw new Error("Comment does not exist!");
             const commentData = commentSnap.data();
-            console.log(`%c[commentService] toggleLikeComment: Comment data fetched:`, "color: magenta;", commentData);
-
             const likedBy: string[] = commentData.likedBy || [];
             const likeCount: number = typeof commentData.likeCount === 'number' ? commentData.likeCount : 0;
             const isLiked = likedBy.includes(userId);
-            console.log(`%c[commentService] toggleLikeComment: User '${userId}' ${isLiked ? 'has liked' : 'has NOT liked'} this comment. Current likeCount: ${likeCount}`, "color: magenta;");
-
             let newLikedBy: string[];
             let newLikeCount: number;
-
             if (isLiked) {
                 newLikedBy = likedBy.filter(uid => uid !== userId);
                 newLikeCount = Math.max(0, likeCount - 1);
-                console.log(`%c[commentService] toggleLikeComment: UNLIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             } else {
                 newLikedBy = [...likedBy, userId];
                 newLikeCount = likeCount + 1;
-                console.log(`%c[commentService] toggleLikeComment: LIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             }
-
             transaction.update(commentRef, {
                 likedBy: newLikedBy,
                 likeCount: newLikeCount,
-                updatedAt: serverTimestamp() // Explicitly update timestamp
+                updatedAt: serverTimestamp()
             });
-            console.log(`%c[commentService] toggleLikeComment: Transaction update prepared for comment '${commentId}'.`, "color: magenta;");
         });
-        console.log(`%c[commentService] toggleLikeComment: Transaction for comment '${commentId}' SUCCEEDED.`, "color: green;");
     } catch (error: any) {
-        console.error(`%c[commentService] toggleLikeComment: Error toggling like for comment ${commentId}:`, "color: red;", error);
-        if (error.code === 'permission-denied') {
-            throw new Error('Permission denied to like/unlike comment. Check Firestore security rules.');
-        }
         throw new Error(`Failed to toggle like: ${error.message}`);
     }
 };
@@ -245,246 +222,327 @@ export const deleteCommentFromPost = async (postId: string, commentId: string): 
 
     await updateDoc(postDocRef, {
       commentCount: increment(-1),
-      updatedAt: serverTimestamp() // Ensure post's updatedAt is also updated
+      updatedAt: serverTimestamp()
     });
-    console.log(`%c[commentService] deleteCommentFromPost: Decremented commentCount and updated updatedAt for post ${postId}`, "color: orange;");
-
     await deleteDoc(commentDocRef);
-    console.log(`%c[commentService] Comment ${commentId} deleted successfully from post ${postId}`, "color: green;");
-
   } catch (error: any) {
-    console.error(`[commentService] Error deleting comment ${commentId} from post ${postId}:`, error);
-    if (error.code === 'permission-denied') {
-      throw new Error('Permission denied deleting comment. Ensure you own the comment or have appropriate permissions, and can update the post.');
-    }
     throw new Error(`Failed to delete comment: ${error.message}`);
   }
 };
 
-// --- SubComment Functions ---
-
-export const addSubCommentToComment = async (postId: string, commentId: string, subCommentData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
-  console.log(`%c[commentService] addSubCommentToComment: Called for postId '${postId}', commentId '${commentId}' by userId '${subCommentData.userId}'. Text: "${subCommentData.text?.substring(0,50)}..."`, "color: blue;");
-  if (!postId || !commentId) throw new Error('Post ID and Comment ID are required to add a subcomment.');
-  if (!subCommentData.userId) throw new Error('User ID is required for the subcomment.');
-  if (!subCommentData.text || subCommentData.text.trim() === '') throw new Error('Subcomment text cannot be empty.');
+export const addSubCommentToComment = async (postId: string, commentId: string, subCommentData: Omit<NewSubCommentData, 'likeCount' | 'likedBy' | 'isShadowBanned'>): Promise<string> => {
+  if (!postId || !commentId) throw new Error('Post ID and Comment ID are required.');
+  if (!subCommentData.userId || !subCommentData.text?.trim()) throw new Error('User ID and text are required.');
 
   try {
     const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
     const subCommentsCollectionRef = collection(commentDocRef, 'subcomments');
-
-    const resolvedMentionedUids = Array.isArray(subCommentData.mentionedUserIds) ? subCommentData.mentionedUserIds : [];
-    console.log(`%c[commentService] addSubCommentToComment: Received resolvedMentionedUids from client:`, "color: blue;", resolvedMentionedUids);
-
-
     const fullSubCommentData: NewSubCommentData & { timestamp: Timestamp; updatedAt: Timestamp; } = {
         ...subCommentData,
         likeCount: 0,
         likedBy: [],
-        mentionedUserIds: resolvedMentionedUids,
+        isShadowBanned: false,
+        mentionedUserIds: subCommentData.mentionedUserIds || [],
         timestamp: serverTimestamp() as Timestamp,
         updatedAt: serverTimestamp() as Timestamp,
     };
-
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
-    const newSubCommentId = docRef.id;
-    console.log(`%c[commentService] addSubCommentToComment: Subcomment added successfully to comment ${commentId} with ID: ${newSubCommentId}`, "color: green;");
-
-    const postDetails = await getPostDetails(postId);
-    const commentSnap = await getDoc(commentDocRef);
-    const originalCommenterId = commentSnap.data()?.userId;
-
-    if (originalCommenterId && originalCommenterId !== subCommentData.userId) {
-        const replyNotificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
-            userId: originalCommenterId,
-            type: 'reply',
-            senderId: subCommentData.userId,
-            postId: postId,
-            postQuestion: postDetails?.question || null,
-            commentId: commentId,
-            subCommentId: newSubCommentId,
-            textSnippet: subCommentData.text.substring(0, 100),
-        };
-        console.log(`%c[commentService] addSubCommentToComment: Attempting to create 'reply' notification for original commenter '${originalCommenterId}'. Payload:`, "color: blue;", replyNotificationPayload);
-        try {
-             await createNotification(replyNotificationPayload);
-             console.log(`%c[commentService] addSubCommentToComment: Reply notification CREATED for original commenter ${originalCommenterId}`, "color: green;");
-        } catch (notifyError: any) {
-             console.error(`%c[commentService] addSubCommentToComment: FAILED to create reply notification for original commenter ${originalCommenterId}. Error:`, "color: red;", notifyError.message, notifyError);
-        }
-    }
-
-    if (resolvedMentionedUids.length > 0) {
-       console.log(`%c[commentService] addSubCommentToComment: Processing ${resolvedMentionedUids.length} mentions for notifications using UIDs.`, "color: blue;");
-       for (const mentionedRecipientUid of resolvedMentionedUids) {
-            if (!mentionedRecipientUid || typeof mentionedRecipientUid !== 'string' || !/^[a-zA-Z0-9]{20,}$/.test(mentionedRecipientUid)) {
-                console.warn(`%c[commentService] addSubCommentToComment: Invalid or non-UID identifier found in resolvedMentionedUids, skipping notification for: '${mentionedRecipientUid}'`, "color: orange;");
-                continue;
-            }
-
-           const isMentioningOriginalCommenter = mentionedRecipientUid === originalCommenterId;
-
-           if (!isMentioningOriginalCommenter || (isMentioningOriginalCommenter && subCommentData.userId === originalCommenterId)) {
-               const mentionNotificationPayload: Omit<NewNotificationData, 'senderName' | 'senderAvatar'> = {
-                   userId: mentionedRecipientUid,
-                   type: 'mention',
-                   senderId: subCommentData.userId,
-                   postId: postId,
-                   postQuestion: postDetails?.question || null,
-                   commentId: commentId,
-                   subCommentId: newSubCommentId,
-                   textSnippet: subCommentData.text.substring(0, 100),
-               };
-               console.log(`%c[commentService] addSubCommentToComment: Attempting to create 'mention' notification for recipient UID '${mentionedRecipientUid}'. Payload:`, "color: blue;", mentionNotificationPayload);
-               try {
-                   await createNotification(mentionNotificationPayload);
-                   console.log(`%c[commentService] addSubCommentToComment: Mention notification CREATED for recipient ${mentionedRecipientUid} regarding subcomment ${newSubCommentId}`, "color: green;");
-               } catch (notifyError: any) {
-                   console.error(`%c[commentService] addSubCommentToComment: FAILED to create mention notification for recipient ${mentionedRecipientUid}. Error:`, "color: red;", notifyError.message, notifyError);
-               }
-           } else {
-                console.log(`%c[commentService] addSubCommentToComment: SKIPPING mention notification for original commenter '${mentionedRecipientUid}' as they already received/will receive a 'reply' notification.`, "color: #FFA500;");
-           }
-       }
-    }
-    return newSubCommentId;
+    return docRef.id;
   } catch (error: any) {
-    console.error(`%c[commentService] addSubCommentToComment: Error adding subcomment to comment ${commentId}:`, "color: red;", error);
-    if (error.code === 'permission-denied') {
-      throw new Error('Permission denied. Check Firestore security rules.');
-    }
     throw new Error(`Failed to add subcomment: ${error.message}`);
   }
 };
 
 export const getSubCommentsForComment = async (postId: string, commentId: string): Promise<ClientSubComment[]> => {
-  if (!postId || !commentId) {
-    console.warn("[commentService] getSubCommentsForComment called with invalid postId or commentId.");
-    return [];
-  }
+  if (!postId || !commentId) return [];
   try {
     const commentDocRef = doc(db, 'posts', postId, 'comments', commentId);
     const subCommentsCollectionRef = collection(commentDocRef, 'subcomments');
-    const q = query(
-      subCommentsCollectionRef,
-      orderBy('timestamp', 'asc'),
-      limit(50)
-    );
-
+    const q = query(subCommentsCollectionRef, orderBy('timestamp', 'asc'), limit(50));
     const querySnapshot = await getDocs(q);
     const userIds = Array.from(new Set(querySnapshot.docs.map(docSnap => docSnap.data().userId).filter(Boolean)));
     const userProfilesMap = new Map<string, { displayName: string; avatarUrl?: string }>();
     await Promise.all(userIds.map(async (userId) => {
-        const profile = await fetchUserProfileBasic(userId); // CORRECTED USAGE
+        const profile = await fetchUserProfileBasic(userId);
         userProfilesMap.set(userId, {
             displayName: profile?.displayName || generateAnonymousName(userId),
             avatarUrl: profile?.avatarUrl
         });
     }));
-
     const subComments = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data();
-      if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) {
-        return null;
-      }
-      const timestampMillis = data.timestamp.toMillis();
+      if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) return null;
       const userProfile = userProfilesMap.get(data.userId);
       return {
         id: docSnap.id,
         userId: data.userId,
         text: data.text,
-        timestamp: timestampMillis,
+        timestamp: data.timestamp.toMillis(),
         userName: userProfile?.displayName,
         userAvatar: userProfile?.avatarUrl,
+        mentionName: data.mentionName || userProfile?.displayName || generateAnonymousName(data.userId),
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],
         mentionedUserIds: data.mentionedUserIds || [],
+        isShadowBanned: data.isShadowBanned === true,
       } as ClientSubComment;
-    }).filter((subComment): subComment is ClientSubComment => subComment !== null);
-
+    }).filter((sc): sc is ClientSubComment => sc !== null);
     return subComments;
   } catch (error: any) {
-    console.error(`[commentService] Error fetching subcomments for comment ${commentId}:`, error);
-    if (error.code === 'permission-denied') {
-      throw new Error('Permission denied fetching subcomments. Check Firestore rules.');
-    }
-     if (error.code === 'failed-precondition' && error.message.includes('index')) {
-        throw new Error("Firestore query requires an index for subcomments. Please create it in the Firebase console.");
-    }
     throw new Error(`Failed to fetch subcomments: ${error.message}`);
   }
 };
 
 export const deleteSubCommentFromComment = async (postId: string, commentId: string, subCommentId: string): Promise<void> => {
-  if (!postId || !commentId || !subCommentId) {
-    throw new Error('Post ID, Comment ID, and SubComment ID are required to delete a subcomment.');
-  }
+  if (!postId || !commentId || !subCommentId) throw new Error('IDs are required.');
   try {
     const subCommentDocRef = doc(db, 'posts', postId, 'comments', commentId, 'subcomments', subCommentId);
     await deleteDoc(subCommentDocRef);
-    // Note: Deleting a sub-comment does not affect the parent Post's commentCount.
   } catch (error: any) {
-    console.error(`[commentService] Error deleting subcomment ${subCommentId} from comment ${commentId}:`, error);
-    if (error.code === 'permission-denied') {
-      throw new Error('Permission denied deleting subcomment. Ensure you own the subcomment or have appropriate permissions.');
-    }
     throw new Error(`Failed to delete subcomment: ${error.message}`);
   }
 };
 
 export const toggleLikeSubComment = async (postId: string, commentId: string, subCommentId: string, userId: string): Promise<void> => {
-    console.log(`%c[commentService] toggleLikeSubComment: User '${userId}' on post '${postId}', comment '${commentId}', subComment '${subCommentId}'`, "color: magenta;");
-    if (!postId || !commentId || !subCommentId || !userId) {
-        const errorMsg = 'Post ID, Comment ID, SubComment ID, and User ID are required to toggle like.';
-        console.error(`%c[commentService] toggleLikeSubComment: VALIDATION FAILED - ${errorMsg}`, "color: red;");
-        throw new Error(errorMsg);
-    }
     const subCommentRef = doc(db, 'posts', postId, 'comments', commentId, 'subcomments', subCommentId);
-    console.log(`%c[commentService] toggleLikeSubComment: Document ref: ${subCommentRef.path}`, "color: magenta;");
-
     try {
         await runTransaction(db, async (transaction) => {
-            console.log(`%c[commentService] toggleLikeSubComment: Transaction started for subComment '${subCommentId}'. Fetching document...`, "color: magenta;");
             const subCommentSnap = await transaction.get(subCommentRef);
-            if (!subCommentSnap.exists()) {
-                console.error(`%c[commentService] toggleLikeSubComment: SubComment '${subCommentId}' does not exist!`, "color: red;");
-                throw new Error("Subcomment does not exist!");
-            }
+            if (!subCommentSnap.exists()) throw new Error("Subcomment does not exist!");
             const subCommentData = subCommentSnap.data();
-            console.log(`%c[commentService] toggleLikeSubComment: SubComment data fetched:`, "color: magenta;", subCommentData);
-
             const likedBy: string[] = subCommentData.likedBy || [];
             const likeCount: number = typeof subCommentData.likeCount === 'number' ? subCommentData.likeCount : 0;
             const isLiked = likedBy.includes(userId);
-            console.log(`%c[commentService] toggleLikeSubComment: User '${userId}' ${isLiked ? 'has liked' : 'has NOT liked'} this subComment. Current likeCount: ${likeCount}`, "color: magenta;");
-
             let newLikedBy: string[];
             let newLikeCount: number;
-
             if (isLiked) {
                 newLikedBy = likedBy.filter(uid => uid !== userId);
                 newLikeCount = Math.max(0, likeCount - 1);
-                console.log(`%c[commentService] toggleLikeSubComment: UNLIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             } else {
                 newLikedBy = [...likedBy, userId];
                 newLikeCount = likeCount + 1;
-                console.log(`%c[commentService] toggleLikeSubComment: LIKING. New likedBy: [${newLikedBy.join(', ')}], new likeCount: ${newLikeCount}`, "color: magenta;");
             }
-
             transaction.update(subCommentRef, {
                 likedBy: newLikedBy,
                 likeCount: newLikeCount,
-                updatedAt: serverTimestamp() // Explicitly update timestamp
+                updatedAt: serverTimestamp()
             });
-            console.log(`%c[commentService] toggleLikeSubComment: Transaction update prepared for subComment '${subCommentId}'.`, "color: magenta;");
         });
-        console.log(`%c[commentService] toggleLikeSubComment: Transaction for subComment '${subCommentId}' SUCCEEDED.`, "color: green;");
     } catch (error: any) {
-        console.error(`%c[commentService] toggleLikeSubComment: Error toggling like for subcomment ${subCommentId}:`, "color: red;", error);
-        if (error.code === 'permission-denied') {
-            throw new Error('Permission denied to like/unlike subcomment. Check Firestore security rules.');
-        }
         throw new Error(`Failed to toggle subcomment like: ${error.message}`);
     }
 };
 
+// --- News Article Comment Functions ---
+const NEWS_COMMENTS_SUBCOLLECTION = 'newsComments';
+const NEWS_SUBCOMMENTS_SUBCOLLECTION = 'newsSubcomments';
+
+export const addNewsCommentToArticle = async (articleId: string, commentData: Omit<NewCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
+  if (!articleId) throw new Error('Article ID is required.');
+  if (!commentData.userId) throw new Error('User ID is required.');
+  if (!commentData.text?.trim()) throw new Error('Comment text cannot be empty.');
+
+  try {
+    const articleDocRef = doc(db, 'newsArticles', articleId);
+    const commentsCollectionRef = collection(articleDocRef, NEWS_COMMENTS_SUBCOLLECTION);
+    const fullCommentData: NewCommentData & { timestamp: Timestamp; updatedAt: Timestamp; } = {
+      ...commentData,
+      likeCount: 0,
+      likedBy: [],
+      isShadowBanned: false, // Default for new comments
+      mentionedUserIds: commentData.mentionedUserIds || [],
+      timestamp: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp,
+    };
+    const docRef = await addDoc(commentsCollectionRef, fullCommentData);
+    await incrementNewsArticleCommentCount(articleId);
+    // Simplified: Notification logic for news comments can be added similarly to post comments if needed
+    return docRef.id;
+  } catch (error: any) {
+    throw new Error(`Failed to add news comment: ${error.message}`);
+  }
+};
+
+export const getNewsCommentsForArticle = async (articleId: string): Promise<ClientComment[]> => {
+  if (!articleId) return [];
+  const articleAuthor = (await getDoc(doc(db, 'newsArticles', articleId))).data()?.userId;
+
+  try {
+    const articleDocRef = doc(db, 'newsArticles', articleId);
+    const commentsCollectionRef = collection(articleDocRef, NEWS_COMMENTS_SUBCOLLECTION);
+    const q = query(commentsCollectionRef, orderBy('timestamp', 'asc'), limit(100));
+    const querySnapshot = await getDocs(q);
+
+    const commentsPromises = querySnapshot.docs.map(async (docSnap) => {
+      const data = docSnap.data();
+      if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) return null;
+      if (data.isShadowBanned === true && auth.currentUser?.uid !== articleAuthor) return null; // Filter for non-authors
+
+      const userProfile = await fetchUserProfileBasic(data.userId);
+      return {
+        id: docSnap.id,
+        userId: data.userId,
+        text: data.text,
+        timestamp: data.timestamp.toMillis(),
+        userName: userProfile?.displayName || generateAnonymousName(data.userId),
+        userAvatar: userProfile?.avatarUrl,
+        mentionName: data.mentionName || userProfile?.displayName || generateAnonymousName(data.userId),
+        likeCount: data.likeCount || 0,
+        likedBy: data.likedBy || [],
+        mentionedUserIds: data.mentionedUserIds || [],
+        isShadowBanned: data.isShadowBanned === true,
+      } as ClientComment;
+    });
+    return (await Promise.all(commentsPromises)).filter((c): c is ClientComment => c !== null);
+  } catch (error: any) {
+    throw new Error(`Failed to fetch news comments: ${error.message}`);
+  }
+};
+
+export const toggleLikeNewsComment = async (articleId: string, commentId: string, userId: string): Promise<void> => {
+  const commentRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const commentSnap = await transaction.get(commentRef);
+      if (!commentSnap.exists()) throw new Error("News comment does not exist!");
+      const commentData = commentSnap.data();
+      const likedBy: string[] = commentData.likedBy || [];
+      const likeCount = commentData.likeCount || 0;
+      const isLiked = likedBy.includes(userId);
+      transaction.update(commentRef, {
+        likedBy: isLiked ? arrayRemove(userId) : arrayUnion(userId),
+        likeCount: increment(isLiked ? -1 : 1),
+        updatedAt: serverTimestamp(),
+      });
+    });
+  } catch (error: any) {
+    throw new Error(`Failed to toggle like on news comment: ${error.message}`);
+  }
+};
+
+export const toggleShadowBanNewsComment = async (articleId: string, commentId: string, newBanStatus: boolean, currentUserId: string): Promise<void> => {
+  const articleRef = doc(db, 'newsArticles', articleId);
+  const articleSnap = await getDoc(articleRef);
+  if (!articleSnap.exists() || articleSnap.data()?.userId !== currentUserId) {
+    throw new Error("Permission denied: Only the article author can shadow ban comments.");
+  }
+  const commentRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId);
+  await updateDoc(commentRef, {
+    isShadowBanned: newBanStatus,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+// --- News Article SubComment Functions ---
+export const addNewsSubCommentToNewsComment = async (articleId: string, commentId: string, subCommentData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'>): Promise<string> => {
+  if (!articleId || !commentId) throw new Error('Article ID and Comment ID are required.');
+  if (!subCommentData.userId || !subCommentData.text?.trim()) throw new Error('User ID and text are required.');
+
+  try {
+    const commentDocRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId);
+    const subCommentsCollectionRef = collection(commentDocRef, NEWS_SUBCOMMENTS_SUBCOLLECTION);
+    const fullSubCommentData: NewSubCommentData & { timestamp: Timestamp; updatedAt: Timestamp; } = {
+      ...subCommentData,
+      likeCount: 0,
+      likedBy: [],
+      isShadowBanned: false, // Default for new subcomments
+      mentionedUserIds: subCommentData.mentionedUserIds || [],
+      timestamp: serverTimestamp() as Timestamp,
+      updatedAt: serverTimestamp() as Timestamp,
+    };
+    const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
+    // Simplified: Notification logic for news subcomments can be added
+    return docRef.id;
+  } catch (error: any) {
+    throw new Error(`Failed to add news subcomment: ${error.message}`);
+  }
+};
+
+export const getNewsSubCommentsForComment = async (articleId: string, commentId: string): Promise<ClientSubComment[]> => {
+  if (!articleId || !commentId) return [];
+  const articleAuthor = (await getDoc(doc(db, 'newsArticles', articleId))).data()?.userId;
+
+  try {
+    const commentDocRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId);
+    const subCommentsCollectionRef = collection(commentDocRef, NEWS_SUBCOMMENTS_SUBCOLLECTION);
+    const q = query(subCommentsCollectionRef, orderBy('timestamp', 'asc'), limit(50));
+    const querySnapshot = await getDocs(q);
+
+    const subCommentsPromises = querySnapshot.docs.map(async (docSnap) => {
+      const data = docSnap.data();
+      if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) return null;
+      if (data.isShadowBanned === true && auth.currentUser?.uid !== articleAuthor) return null;
+
+      const userProfile = await fetchUserProfileBasic(data.userId);
+      return {
+        id: docSnap.id,
+        userId: data.userId,
+        text: data.text,
+        timestamp: data.timestamp.toMillis(),
+        userName: userProfile?.displayName || generateAnonymousName(data.userId),
+        userAvatar: userProfile?.avatarUrl,
+        mentionName: data.mentionName || userProfile?.displayName || generateAnonymousName(data.userId),
+        likeCount: data.likeCount || 0,
+        likedBy: data.likedBy || [],
+        mentionedUserIds: data.mentionedUserIds || [],
+        isShadowBanned: data.isShadowBanned === true,
+      } as ClientSubComment;
+    });
+    return (await Promise.all(subCommentsPromises)).filter((sc): sc is ClientSubComment => sc !== null);
+  } catch (error: any) {
+    throw new Error(`Failed to fetch news subcomments: ${error.message}`);
+  }
+};
+
+export const toggleLikeNewsSubComment = async (articleId: string, commentId: string, subCommentId: string, userId: string): Promise<void> => {
+  const subCommentRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId, NEWS_SUBCOMMENTS_SUBCOLLECTION, subCommentId);
+  try {
+    await runTransaction(db, async (transaction) => {
+      const subCommentSnap = await transaction.get(subCommentRef);
+      if (!subCommentSnap.exists()) throw new Error("News subcomment does not exist!");
+      const subCommentData = subCommentSnap.data();
+      const likedBy: string[] = subCommentData.likedBy || [];
+      const likeCount = subCommentData.likeCount || 0;
+      const isLiked = likedBy.includes(userId);
+      transaction.update(subCommentRef, {
+        likedBy: isLiked ? arrayRemove(userId) : arrayUnion(userId),
+        likeCount: increment(isLiked ? -1 : 1),
+        updatedAt: serverTimestamp(),
+      });
+    });
+  } catch (error: any) {
+    throw new Error(`Failed to toggle like on news subcomment: ${error.message}`);
+  }
+};
+
+export const toggleShadowBanNewsSubComment = async (articleId: string, commentId: string, subCommentId: string, newBanStatus: boolean, currentUserId: string): Promise<void> => {
+  const articleRef = doc(db, 'newsArticles', articleId);
+  const articleSnap = await getDoc(articleRef);
+  if (!articleSnap.exists() || articleSnap.data()?.userId !== currentUserId) {
+    throw new Error("Permission denied: Only the article author can shadow ban subcomments.");
+  }
+  const subCommentRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId, NEWS_SUBCOMMENTS_SUBCOLLECTION, subCommentId);
+  await updateDoc(subCommentRef, {
+    isShadowBanned: newBanStatus,
+    updatedAt: serverTimestamp(),
+  });
+};
+
+export const deleteNewsComment = async (articleId: string, commentId: string, userId: string): Promise<void> => {
+  const commentRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId);
+  const commentSnap = await getDoc(commentRef);
+  if (!commentSnap.exists() || commentSnap.data()?.userId !== userId) {
+    throw new Error("Comment not found or permission denied.");
+  }
+  await deleteDoc(commentRef);
+  await decrementNewsArticleCommentCount(articleId);
+};
+
+export const deleteNewsSubComment = async (articleId: string, commentId: string, subCommentId: string, userId: string): Promise<void> => {
+  const subCommentRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId, NEWS_SUBCOMMENTS_SUBCOLLECTION, subCommentId);
+  const subCommentSnap = await getDoc(subCommentRef);
+  if (!subCommentSnap.exists() || subCommentSnap.data()?.userId !== userId) {
+    throw new Error("Subcomment not found or permission denied.");
+  }
+  await deleteDoc(subCommentRef);
+};
