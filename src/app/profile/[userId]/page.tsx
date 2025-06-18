@@ -22,7 +22,7 @@ import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import type { ConnectionStatus, UserProfileData, VisibilitySetting } from '@/types/connection';
 import { ProfilePostsSection } from '@/components/profile/ProfilePostsSection';
 import { cn } from '@/lib/utils';
-import { addReview, getReviewsForProfile, updateReview, deleteReview, getReviewsGivenByUserId } from '@/services/reviewService';
+import { addReview, getReviewsForProfile, updateReview, deleteReview, getReviewsGivenByUserId } from '@/services/reviewService'; // Corrected import
 import type { ClientReview, NewReviewData, UpdateReviewData } from '@/types/review';
 import {
   AlertDialog,
@@ -135,9 +135,8 @@ const BusinessProfilePage = () => {
       }
     };
 
-    if (isOpen) { // Assuming isOpen refers to the profile page being actively viewed/modal
-      fetchProfileAISuggestions();
-    }
+    // Fetch suggestions when component mounts or relevant data changes
+    fetchProfileAISuggestions();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewedUserProfileData, currentUser]); // Removed isOpen from deps as it's not defined here. Triggered by viewedUserProfileData/currentUser
 
@@ -768,5 +767,3 @@ const BusinessProfilePage = () => {
 };
 
 export default BusinessProfilePage;
-
-    
