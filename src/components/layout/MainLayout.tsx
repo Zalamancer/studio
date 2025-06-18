@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper, Edit2 } from "lucide-react"; // Added Edit2
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper } from "lucide-react"; // Removed Edit2
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -448,15 +448,7 @@ export default function MainLayout({
                 </div>
               ) : user ? (
                 <>
-                  <Button variant="outline" size="sm" asChild>
-                    <Link href="/plan/create">
-                      <Brain className="mr-2 h-4 w-4" />
-                       <span className="hidden sm:inline">Create Plan</span>
-                       <span className="sm:hidden">Plan</span>
-                    </Link>
-                  </Button>
-                  {/* Create News Button removed from here */}
-
+                  {/* "Create Plan" button removed from here */}
                   {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
