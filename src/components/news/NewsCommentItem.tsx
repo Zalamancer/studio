@@ -349,12 +349,15 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
       toast({ title: "Reply Added" });
       setNewReply(''); setShowSuggestions(false); setMentionQuery(''); setReplyingToSubComment(null);
       if (!showReplies) setShowReplies(true); else refetchSubComments();
+      queryClient.invalidateQueries({ queryKey: ['newsArticle', articleId] });
+      queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
+      if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
     } catch (error: any) {
       toast({ variant: "destructive", title: "Reply Failed", description: error.message });
     } finally {
       setIsSubmittingReply(false);
     }
-  }, [user, newReply, isSubmittingReply, articleId, comment.id, showReplies, refetchSubComments, toast, allRelevantProfilesForReplyContext]);
+  }, [user, newReply, isSubmittingReply, articleId, comment.id, showReplies, refetchSubComments, toast, allRelevantProfilesForReplyContext, queryClient]);
   
   const evaluateMentionState = useCallback((text: string, cursorPosition: number) => {
     let activeQuery = null; const textBeforeCursor = text.substring(0, cursorPosition); const lastAtIndex = textBeforeCursor.lastIndexOf('@');
@@ -407,7 +410,13 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
 
   const toggleShowReplies = useCallback(() => setShowReplies(prev => !prev), []);
   const toggleReplyForm = useCallback(() => { setIsReplying(prev => { if (!prev) { setNewReply(''); setReplyingToSubComment(null); if(replyInputRef.current) evaluateMentionState("", 0); setTimeout(() => replyInputRef.current?.focus(), 0); } else { setShowSuggestions(false); setMentionQuery(''); } return !prev; }); }, [evaluateMentionState, setNewReply]);
-  const handleSubCommentDeleted = useCallback(() => refetchSubComments(), [refetchSubComments]);
+  const handleSubCommentDeletedInternal = useCallback(() => {
+    refetchSubComments();
+    queryClient.invalidateQueries({ queryKey: ['newsArticle', articleId] });
+    queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
+    if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
+  }, [refetchSubComments, queryClient, articleId, user?.uid]);
+
   const handleStartSubCommentReply = useCallback((subCommentToReplyTo: ClientSubComment) => { if (!user) return; setIsReplying(true); const subCommentAuthorMentionName = subCommentToReplyTo.mentionName || subCommentToReplyTo.userName || generateAnonymousName(subCommentToReplyTo.userId); const initialReplyText = `@${subCommentAuthorMentionName} `; setNewReply(initialReplyText); setReplyingToSubComment(subCommentToReplyTo); if(replyInputRef.current) evaluateMentionState(initialReplyText, initialReplyText.length); setTimeout(() => { replyInputRef.current?.focus(); if (replyInputRef.current) { const len = replyInputRef.current.value.length; replyInputRef.current.setSelectionRange(len, len); } }, 0); }, [user, setNewReply, setIsReplying, setReplyingToSubComment, evaluateMentionState]);
 
 
@@ -456,7 +465,7 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
           : subCommentsError ? <p className="text-xs text-destructive pl-2">{`Error loading replies: ${subCommentsError.message}`}</p>
           : subComments.length === 0 ? <p className="text-xs text-muted-foreground pl-2">No replies yet.</p>
           : subComments.map((subComment) => (
-            <NewsSubCommentItem key={subComment.id} subComment={subComment} currentUserId={currentUserId} articleId={articleId} commentId={comment.id} articleAuthorId={articleAuthorId} onDelete={handleSubCommentDeleted} onStartReply={handleStartSubCommentReply} />
+            <NewsSubCommentItem key={subComment.id} subComment={subComment} currentUserId={currentUserId} articleId={articleId} commentId={comment.id} articleAuthorId={articleAuthorId} onDelete={handleSubCommentDeletedInternal} onStartReply={handleStartSubCommentReply} />
           ))}
       </div>)}
     </div>

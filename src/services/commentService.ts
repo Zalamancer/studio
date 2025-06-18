@@ -246,6 +246,8 @@ export const addSubCommentToComment = async (postId: string, commentId: string, 
         updatedAt: serverTimestamp() as Timestamp,
     };
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
+    // Note: Sub-comments on regular posts currently DO NOT affect the parent post's primary commentCount.
+    // If they should, you'd add `await updateDoc(doc(db, 'posts', postId), { commentCount: increment(1) });` here.
     return docRef.id;
   } catch (error: any) {
     throw new Error(`Failed to add subcomment: ${error.message}`);
@@ -297,6 +299,8 @@ export const deleteSubCommentFromComment = async (postId: string, commentId: str
   try {
     const subCommentDocRef = doc(db, 'posts', postId, 'comments', commentId, 'subcomments', subCommentId);
     await deleteDoc(subCommentDocRef);
+    // Note: Sub-comments on regular posts currently DO NOT affect the parent post's primary commentCount.
+    // If they should, you'd add `await updateDoc(doc(db, 'posts', postId), { commentCount: increment(-1) });` here.
   } catch (error: any) {
     throw new Error(`Failed to delete subcomment: ${error.message}`);
   }
@@ -451,7 +455,7 @@ export const addNewsSubCommentToNewsComment = async (articleId: string, commentI
       updatedAt: serverTimestamp() as Timestamp,
     };
     const docRef = await addDoc(subCommentsCollectionRef, fullSubCommentData);
-    // Simplified: Notification logic for news subcomments can be added
+    await incrementNewsArticleCommentCount(articleId); // Increment parent article's comment count
     return docRef.id;
   } catch (error: any) {
     throw new Error(`Failed to add news subcomment: ${error.message}`);
@@ -546,4 +550,5 @@ export const deleteNewsSubComment = async (articleId: string, commentId: string,
     throw new Error("Subcomment not found or permission denied.");
   }
   await deleteDoc(subCommentRef);
+  await decrementNewsArticleCommentCount(articleId); // Decrement parent article's comment count
 };

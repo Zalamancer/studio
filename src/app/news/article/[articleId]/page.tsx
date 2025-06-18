@@ -181,7 +181,9 @@ const ArticlePage = () => {
       toast({ title: "Comment Posted" });
       setNewComment('');
       refetchNewsComments();
-      refetchArticle();
+      refetchArticle(); // Refetch article to update its commentCount
+      queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
+      if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Failed to Post Comment", description: error.message }),
     onSettled: () => setIsSubmittingComment(false),
@@ -244,16 +246,10 @@ const ArticlePage = () => {
 
   const handleCommentDeletedOrBanned = useCallback(() => {
     refetchNewsComments();
-    if (articleIdParam) {
-        // No need to explicitly call decrement here if rules don't allow user to delete
-        // but keeping for consistency if user deletes their own comment.
-        // The count should reflect *visible* comments if that's the definition.
-        // For now, we decrement on actual deletion. Shadow banning does not change count.
-        // If a comment is truly deleted (not just shadow-banned), then decrement.
-        // This assumes the onDelete in NewsCommentItem is only for true deletions.
-        refetchArticle(); // To update comment count on article
-    }
-  }, [refetchNewsComments, articleIdParam, refetchArticle]);
+    refetchArticle(); // Refetch article to update its commentCount
+    queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
+    if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
+  }, [refetchNewsComments, articleIdParam, refetchArticle, queryClient, user?.uid]);
 
   const handleToggleLikeArticle = async () => {
     if (!user || !articleIdParam || isLikingArticle || isEditingAllowed) return;
@@ -385,6 +381,8 @@ const ArticlePage = () => {
       toast({ title: successTitle, description: successDescription });
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError(""); setIsToolbarExpanded(false); setShowContextualUI(false);
       refetchArticle();
+      queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
+      if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
       setCoverImageFile(null);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
@@ -570,7 +568,7 @@ const ArticlePage = () => {
       {article.status === 'published' && articleIdParam && (
         <div className="max-w-3xl mx-auto mt-12 pt-8 border-t">
           <h3 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-            <MessageSquare className="h-6 w-6 text-primary" /> Comments ({visibleComments.length + shadowBannedComments.length})
+            <MessageSquare className="h-6 w-6 text-primary" /> Comments ({article.commentCount || 0})
           </h3>
           {user && (
             <Popover
