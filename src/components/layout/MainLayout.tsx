@@ -1,3 +1,4 @@
+
 // src/components/layout/MainLayout.tsx
 "use client";
 
@@ -454,15 +455,7 @@ export default function MainLayout({
                        <span className="sm:hidden">Plan</span>
                     </Link>
                   </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.push('/news/create')}
-                  >
-                    <Edit2 className="mr-2 h-4 w-4" /> {/* Changed icon to Edit2 for consistency */}
-                    <span className="hidden sm:inline">Create News</span>
-                    <span className="sm:hidden">News</span>
-                  </Button>
+                  {/* Create News Button removed from here */}
 
                   {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
                   <DropdownMenu>
