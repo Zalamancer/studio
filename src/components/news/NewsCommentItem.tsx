@@ -1,3 +1,4 @@
+
 // src/components/news/NewsCommentItem.tsx
 "use client";
 
@@ -118,7 +119,7 @@ const NewsSubCommentItem: React.FC<NewsSubCommentItemProps> = React.memo(({
       setIsDeleting(true);
       try {
           await deleteNewsSubComment(articleId, commentId, subComment.id, currentUserId!);
-          onDelete(); // This should trigger refetch in parent (NewsCommentItem)
+          onDelete(); 
           toast({ title: "Reply Deleted" });
       } catch (error: any) {
           toast({ variant: "destructive", title: "Delete Failed", description: error.message });
@@ -365,11 +366,12 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
   }, [setMentionQuery, setShowSuggestions]);
 
   const handleMentionInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value; setNewReply(value); evaluateMentionState(value, e.target.selectionStart || 0);
+    const value = e.target.value; setNewReply(value); 
+    if(replyInputRef.current) evaluateMentionState(value, replyInputRef.current.selectionStart || 0);
   }, [setNewReply, evaluateMentionState]);
 
   const handleMentionInputFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => {
-    evaluateMentionState(e.target.value, e.target.selectionStart || 0);
+    if(replyInputRef.current) evaluateMentionState(e.target.value, replyInputRef.current.selectionStart || 0);
   }, [evaluateMentionState]);
 
   const handleSelectSuggestion = useCallback((profile: UserProfileBasic) => {
@@ -402,9 +404,9 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
 
 
   const toggleShowReplies = useCallback(() => setShowReplies(prev => !prev), []);
-  const toggleReplyForm = useCallback(() => { setIsReplying(prev => { if (!prev) { setNewReply(''); setReplyingToSubComment(null); evaluateMentionState("", 0); setTimeout(() => replyInputRef.current?.focus(), 0); } else { setShowSuggestions(false); setMentionQuery(''); } return !prev; }); }, [evaluateMentionState, setNewReply]);
+  const toggleReplyForm = useCallback(() => { setIsReplying(prev => { if (!prev) { setNewReply(''); setReplyingToSubComment(null); if(replyInputRef.current) evaluateMentionState("", 0); setTimeout(() => replyInputRef.current?.focus(), 0); } else { setShowSuggestions(false); setMentionQuery(''); } return !prev; }); }, [evaluateMentionState, setNewReply]);
   const handleSubCommentDeleted = useCallback(() => refetchSubComments(), [refetchSubComments]);
-  const handleStartSubCommentReply = useCallback((subCommentToReplyTo: ClientSubComment) => { if (!user) return; setIsReplying(true); const subCommentAuthorMentionName = subCommentToReplyTo.mentionName || subCommentToReplyTo.userName || generateAnonymousName(subCommentToReplyTo.userId); const initialReplyText = `@${subCommentAuthorMentionName} `; setNewReply(initialReplyText); setReplyingToSubComment(subCommentToReplyTo); evaluateMentionState(initialReplyText, initialReplyText.length); setTimeout(() => { replyInputRef.current?.focus(); if (replyInputRef.current) { const len = replyInputRef.current.value.length; replyInputRef.current.setSelectionRange(len, len); } }, 0); }, [user, setNewReply, setIsReplying, setReplyingToSubComment, evaluateMentionState]);
+  const handleStartSubCommentReply = useCallback((subCommentToReplyTo: ClientSubComment) => { if (!user) return; setIsReplying(true); const subCommentAuthorMentionName = subCommentToReplyTo.mentionName || subCommentToReplyTo.userName || generateAnonymousName(subCommentToReplyTo.userId); const initialReplyText = `@${subCommentAuthorMentionName} `; setNewReply(initialReplyText); setReplyingToSubComment(subCommentToReplyTo); if(replyInputRef.current) evaluateMentionState(initialReplyText, initialReplyText.length); setTimeout(() => { replyInputRef.current?.focus(); if (replyInputRef.current) { const len = replyInputRef.current.value.length; replyInputRef.current.setSelectionRange(len, len); } }, 0); }, [user, setNewReply, setIsReplying, setReplyingToSubComment, evaluateMentionState]);
 
 
   return (
@@ -449,7 +451,7 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
           </PopoverContent></Popover>)}
       {showReplies && (<div className="pl-11 mt-3 space-y-3 border-l-2 border-border ml-5">
         {isLoadingSubComments ? <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
-          : subCommentsError ? <p className="text-xs text-destructive pl-2">Error loading replies.</p>
+          : subCommentsError ? <p className="text-xs text-destructive pl-2">Error loading replies: {subCommentsError.message}</p>
           : subComments.length === 0 ? <p className="text-xs text-muted-foreground pl-2">No replies yet.</p>
           : subComments.map((subComment) => (
             <NewsSubCommentItem key={subComment.id} subComment={subComment} currentUserId={currentUserId} articleId={articleId} commentId={comment.id} articleAuthorId={articleAuthorId} onDelete={handleSubCommentDeleted} onStartReply={handleStartSubCommentReply} />
@@ -459,4 +461,3 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
   );
 });
 NewsCommentItem.displayName = 'NewsCommentItem';
-
