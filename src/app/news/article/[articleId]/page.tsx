@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -12,7 +11,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon, Tag, PlusCircle, MessageSquare, Heart } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon, Tag, PlusCircle, MessageSquare, Heart, ListFilter } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -30,12 +29,18 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'; // Added Avatar imports
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
 import { searchTags, getOrCreateTagsAndUpdateUsage } from '@/services/tagService';
 import type { ClientTag } from '@/types/tag';
 import { NewsCommentItem } from '@/components/news/NewsCommentItem';
@@ -159,11 +164,15 @@ const ArticlePage = () => {
     }
   }, [article, isEditingAllowed]);
 
-  const { data: newsComments = [], isLoading: isLoadingNewsComments, refetch: refetchNewsComments } = useQuery<ClientComment[]>({
+  const { data: allNewsComments = [], isLoading: isLoadingNewsComments, refetch: refetchNewsComments } = useQuery<ClientComment[]>({
     queryKey: ['newsComments', articleIdParam],
     queryFn: () => articleIdParam ? getNewsCommentsForArticle(articleIdParam) : Promise.resolve([]),
     enabled: !!articleIdParam && !!user,
   });
+
+  const visibleComments = useMemo(() => allNewsComments.filter(comment => !comment.isShadowBanned || (isEditingAllowed && comment.userId === user?.uid)), [allNewsComments, isEditingAllowed, user?.uid]);
+  const shadowBannedCommentsByOthers = useMemo(() => allNewsComments.filter(comment => comment.isShadowBanned && (!isEditingAllowed || comment.userId !== user?.uid)), [allNewsComments, isEditingAllowed, user?.uid]);
+
 
   const addNewsCommentMutation = useMutation({
     mutationFn: (data: { articleId: string; commentData: Omit<NewCommentData, 'likeCount' | 'likedBy' | 'isShadowBanned'> }) =>
@@ -172,7 +181,7 @@ const ArticlePage = () => {
       toast({ title: "Comment Posted" });
       setNewComment('');
       refetchNewsComments();
-      refetchArticle(); // To update comment count on the article
+      refetchArticle(); 
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Failed to Post Comment", description: error.message }),
     onSettled: () => setIsSubmittingComment(false),
@@ -197,7 +206,7 @@ const ArticlePage = () => {
     const commentPayload: Omit<NewCommentData, 'likeCount' | 'likedBy' | 'isShadowBanned'> = {
       userId: user.uid,
       text: newComment.trim(),
-      mentionName: generateAnonymousName(user.uid), // Generate name for the comment
+      mentionName: generateAnonymousName(user.uid), 
       mentionedUserIds: finalMentionedUids,
     };
     addNewsCommentMutation.mutate({ articleId: articleIdParam, commentData: commentPayload });
@@ -220,7 +229,7 @@ const ArticlePage = () => {
       const textBeforeMention = currentValue.substring(0, lastAtIndex); const textAfterCursor = currentValue.substring(cursorPosition);
       setNewComment(`${textBeforeMention}@${profile.mentionName} ${textAfterCursor}`);
       const newCursorPosition = textBeforeMention.length + `@${profile.mentionName} `.length;
-      setTimeout(() => { newCommentInputRef.current?.focus(); newCommentInputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition); }, 0);
+      setTimeout(() => { newCommentInputRef.current?.focus(); if (newCommentInputRef.current) newCommentInputRef.current.setSelectionRange(newCursorPosition, newCursorPosition); }, 0);
     }
     setShowNewCommentSuggestions(false); setNewCommentMentionQuery('');
   }, [newComment]);
@@ -340,7 +349,7 @@ const ArticlePage = () => {
         articleUpdateData.content = mainContentForService || null;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
-      } else if (contentToSaveParam !== undefined) { // Explicit content save for other status changes potentially
+      } else if (contentToSaveParam !== undefined) { 
         articleUpdateData.content = mainContentForService || null;
       }
   
@@ -484,6 +493,11 @@ const ArticlePage = () => {
               </Button>
             )}
             <span className="text-xs text-muted-foreground mr-1">{article.likeCount || 0} Likes</span>
+            {currentUserId && !isEditingAllowed && ( // Save button for non-authors
+              <Button variant="ghost" size="icon" className="h-8 w-8 p-1" title="Save to Collection (Placeholder)">
+                <Bookmark className="h-4 w-4 text-muted-foreground" />
+              </Button>
+            )}
           {isEditingAllowed && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 p-1"><MoreVertical className="h-4 w-4" /><span className="sr-only">More options</span></Button></DropdownMenuTrigger>
@@ -548,7 +562,7 @@ const ArticlePage = () => {
       {article.status === 'published' && articleIdParam && (
         <div className="max-w-3xl mx-auto mt-12 pt-8 border-t">
           <h3 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-            <MessageSquare className="h-6 w-6 text-primary" /> Comments ({article.commentCount || 0})
+            <MessageSquare className="h-6 w-6 text-primary" /> Comments ({visibleComments.length})
           </h3>
           {user && (
             <Popover
@@ -593,8 +607,8 @@ const ArticlePage = () => {
           )}
           <div className="space-y-6">
             {isLoadingNewsComments && <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin"/></div>}
-            {!isLoadingNewsComments && newsComments.length === 0 && <p className="text-sm text-muted-foreground text-center">No comments yet.</p>}
-            {newsComments.map(comment => (
+            {!isLoadingNewsComments && visibleComments.length === 0 && shadowBannedCommentsByOthers.length === 0 && <p className="text-sm text-muted-foreground text-center">No comments yet.</p>}
+            {visibleComments.map(comment => (
               <NewsCommentItem
                 key={comment.id}
                 comment={comment}
@@ -605,6 +619,30 @@ const ArticlePage = () => {
               />
             ))}
           </div>
+          {shadowBannedCommentsByOthers.length > 0 && (
+            <Accordion type="single" collapsible className="w-full mt-8">
+              <AccordionItem value="shadow-banned-comments">
+                <AccordionTrigger className="text-sm text-muted-foreground hover:text-foreground">
+                  <div className="flex items-center gap-2">
+                    <ListFilter className="h-4 w-4" />
+                    View Potentially Hidden Comments ({shadowBannedCommentsByOthers.length})
+                  </div>
+                </AccordionTrigger>
+                <AccordionContent className="pt-4 space-y-6">
+                  {shadowBannedCommentsByOthers.map(comment => (
+                    <NewsCommentItem
+                      key={`sb-${comment.id}`}
+                      comment={comment}
+                      currentUserId={user?.uid || null}
+                      articleId={articleIdParam!}
+                      articleAuthorId={article.userId}
+                      onDelete={handleCommentDeleted} // Author can still delete their own hidden comments
+                    />
+                  ))}
+                </AccordionContent>
+              </AccordionItem>
+            </Accordion>
+          )}
         </div>
       )}
     </div>
@@ -615,4 +653,3 @@ const ArticlePage = () => {
   );
 };
 export default ArticlePage;
-

@@ -1,4 +1,3 @@
-
 // src/services/commentService.ts
 // Client-callable by default (no 'use server;' at the top)
 
@@ -365,7 +364,7 @@ export const addNewsCommentToArticle = async (articleId: string, commentData: Om
 
 export const getNewsCommentsForArticle = async (articleId: string): Promise<ClientComment[]> => {
   if (!articleId) return [];
-  const articleAuthor = (await getDoc(doc(db, 'newsArticles', articleId))).data()?.userId;
+  // const articleAuthor = (await getDoc(doc(db, 'newsArticles', articleId))).data()?.userId; // Not needed for fetching all comments
 
   try {
     const articleDocRef = doc(db, 'newsArticles', articleId);
@@ -376,7 +375,8 @@ export const getNewsCommentsForArticle = async (articleId: string): Promise<Clie
     const commentsPromises = querySnapshot.docs.map(async (docSnap) => {
       const data = docSnap.data();
       if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) return null;
-      if (data.isShadowBanned === true && auth.currentUser?.uid !== articleAuthor) return null; // Filter for non-authors
+      // No longer filter by isShadowBanned here; client will handle it
+      // if (data.isShadowBanned === true && auth.currentUser?.uid !== articleAuthor) return null;
 
       const userProfile = await fetchUserProfileBasic(data.userId);
       return {
@@ -460,7 +460,7 @@ export const addNewsSubCommentToNewsComment = async (articleId: string, commentI
 
 export const getNewsSubCommentsForComment = async (articleId: string, commentId: string): Promise<ClientSubComment[]> => {
   if (!articleId || !commentId) return [];
-  const articleAuthor = (await getDoc(doc(db, 'newsArticles', articleId))).data()?.userId;
+  // const articleAuthor = (await getDoc(doc(db, 'newsArticles', articleId))).data()?.userId;
 
   try {
     const commentDocRef = doc(db, 'newsArticles', articleId, NEWS_COMMENTS_SUBCOLLECTION, commentId);
@@ -471,7 +471,8 @@ export const getNewsSubCommentsForComment = async (articleId: string, commentId:
     const subCommentsPromises = querySnapshot.docs.map(async (docSnap) => {
       const data = docSnap.data();
       if (!data.userId || !data.text || !(data.timestamp instanceof Timestamp)) return null;
-      if (data.isShadowBanned === true && auth.currentUser?.uid !== articleAuthor) return null;
+      // No longer filter by isShadowBanned here
+      // if (data.isShadowBanned === true && auth.currentUser?.uid !== articleAuthor) return null;
 
       const userProfile = await fetchUserProfileBasic(data.userId);
       return {

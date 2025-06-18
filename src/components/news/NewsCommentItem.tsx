@@ -1,4 +1,3 @@
-
 // src/components/news/NewsCommentItem.tsx
 "use client";
 
@@ -19,7 +18,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
-import { Badge } from "@/components/ui/badge"; // Added Badge import
+import { Badge } from "@/components/ui/badge";
 import { Loader2, Trash2, Send, Heart, CornerDownRight, Eye, EyeOff } from 'lucide-react';
 import type { ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
 import {
@@ -389,7 +388,7 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
       const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
       setTimeout(() => {
         replyInputRef.current?.focus();
-        if (replyInputRef.current) { // Check if current is not null
+        if (replyInputRef.current) { 
           replyInputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
         }
       }, 0);
@@ -454,7 +453,7 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
           </PopoverContent></Popover>)}
       {showReplies && (<div className="pl-11 mt-3 space-y-3 border-l-2 border-border ml-5">
         {isLoadingSubComments ? <div className="flex items-center justify-center py-4"><Loader2 className="h-4 w-4 animate-spin text-primary" /></div>
-          : subCommentsError ? <p className="text-xs text-destructive pl-2">Error loading replies: {subCommentsError.message}</p>
+          : subCommentsError ? <p className="text-xs text-destructive pl-2">{`Error loading replies: ${subCommentsError.message}`}</p>
           : subComments.length === 0 ? <p className="text-xs text-muted-foreground pl-2">No replies yet.</p>
           : subComments.map((subComment) => (
             <NewsSubCommentItem key={subComment.id} subComment={subComment} currentUserId={currentUserId} articleId={articleId} commentId={comment.id} articleAuthorId={articleAuthorId} onDelete={handleSubCommentDeleted} onStartReply={handleStartSubCommentReply} />
