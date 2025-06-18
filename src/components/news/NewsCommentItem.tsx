@@ -19,6 +19,7 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Badge } from "@/components/ui/badge"; // Added Badge import
 import { Loader2, Trash2, Send, Heart, CornerDownRight, Eye, EyeOff } from 'lucide-react';
 import type { ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
 import {
@@ -388,7 +389,9 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
       const newCursorPosition = textBeforeMention.length + `@${mentionToInsert} `.length;
       setTimeout(() => {
         replyInputRef.current?.focus();
-        replyInputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
+        if (replyInputRef.current) { // Check if current is not null
+          replyInputRef.current.setSelectionRange(newCursorPosition, newCursorPosition);
+        }
       }, 0);
     } 
     setShowSuggestions(false);
