@@ -19,10 +19,10 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion, User, Globe } from 'lucide-react'; // Added Globe icon
+import { Loader2, Brain, Eye, Lock, Users, Link as LinkIcon, ShieldQuestion, User, Globe } from 'lucide-react';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import type { PlanVisibility, PlanEditability } from '@/types/plan';
-import { useToast } from '@/hooks/use-toast'; // Import useToast
+import { useToast } from '@/hooks/use-toast';
 
 const planFormSchema = z.object({
   name: z.string().min(3, "Plan name must be at least 3 characters.").max(100, "Plan name cannot exceed 100 characters."),
@@ -67,13 +67,14 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
       editability: 'owner_only',
     },
   });
-  const { toast } = useToast(); // Initialize toast
+  const { toast } = useToast();
 
   const [currentSubSectors, setCurrentSubSectors] = useState<SubSector[]>([]);
   const [currentIndustries, setCurrentIndustries] = useState<Industry[]>([]);
 
   const selectedSectorCode = form.watch("sector");
-  const watchedVisibility = form.watch("visibility"); // Watch visibility field
+  const watchedVisibility = form.watch("visibility");
+  const watchedEditability = form.watch("editability");
 
   useEffect(() => {
     if (selectedSectorCode) {
@@ -99,17 +100,23 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
     }
   }, [selectedSubSectorCode, currentSubSectors, form]);
 
-  // Effect to adjust editability if visibility changes to 'unlisted'
   useEffect(() => {
-    if (watchedVisibility === 'unlisted' && form.getValues("editability") === 'everyone') {
+    if (watchedVisibility === 'unlisted' && watchedEditability === 'everyone') {
       form.setValue("editability", 'owner_only');
       toast({
         title: "Editability Adjusted",
         description: "The 'Everyone' edit option is not available for unlisted plans. Editability set to 'Owner Only'.",
         duration: 5000,
       });
+    } else if (watchedVisibility === 'private' && watchedEditability !== 'owner_only') {
+      form.setValue("editability", 'owner_only');
+      toast({
+        title: "Editability Adjusted",
+        description: "Private plans can only be edited by the owner. Editability set to 'Owner Only'.",
+        duration: 5000,
+      });
     }
-  }, [watchedVisibility, form, toast]);
+  }, [watchedVisibility, watchedEditability, form, toast]);
 
 
   const handleFormSubmit = async (values: z.infer<typeof planFormSchema>) => {
@@ -246,17 +253,18 @@ export const CreatePlanForm: React.FC<CreatePlanFormProps> = ({
                   <SelectItem value="owner_only">
                      <div className="flex items-center gap-2"><User className="h-4 w-4" /> Only you (Owner)</div>
                   </SelectItem>
-                  <SelectItem value="collaborators">
+                  <SelectItem value="collaborators" disabled={watchedVisibility === 'private'}>
                      <div className="flex items-center gap-2"><Users className="h-4 w-4" /> People who you invite (Collaborators)</div>
                   </SelectItem>
-                  <SelectItem value="everyone" disabled={watchedVisibility === 'unlisted'}>
+                  <SelectItem value="everyone" disabled={watchedVisibility === 'unlisted' || watchedVisibility === 'private'}>
                      <div className="flex items-center gap-2"><Globe className="h-4 w-4" /> All Authenticated Users</div>
                   </SelectItem>
                 </SelectContent>
               </Select>
               <FormDescription>
                 Determine editing permissions. If 'Collaborators', you can invite specific users to edit. 'All Authenticated Users' allows any logged-in user with view access to edit.
-                {watchedVisibility === 'unlisted' && " (The 'Everyone' option is disabled for unlisted plans.)"}
+                {watchedVisibility === 'unlisted' && " ('Everyone' option is disabled for unlisted plans.)"}
+                {watchedVisibility === 'private' && " (Only 'Owner Only' editability is allowed for private plans.)"}
               </FormDescription>
               <FormMessage />
             </FormItem>

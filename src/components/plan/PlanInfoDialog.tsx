@@ -144,17 +144,23 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
     }
   }, [initialPlanData, isOpen, setViewPermissionsSearch, setEditPermissionsSearch]);
 
-  // Effect to adjust editability if visibility changes
   useEffect(() => {
+    if (!isOpen || !isOwnerForUIDisplay) return;
+
     if (visibility === 'unlisted' && editability === 'everyone') {
-      setEditability('owner_only'); // Or 'collaborators' as default
-      if (isOwnerForUIDisplay && isOpen) { // Only toast if the owner is viewing and dialog is open
-        toast({
-          title: "Editability Adjusted",
-          description: "The 'Everyone' edit option is not available for unlisted plans. Editability set to 'Owner Only'.",
-          duration: 5000,
-        });
-      }
+      setEditability('owner_only');
+      toast({
+        title: "Editability Adjusted",
+        description: "The 'Everyone' edit option is not available for unlisted plans. Editability set to 'Owner Only'.",
+        duration: 5000,
+      });
+    } else if (visibility === 'private' && editability !== 'owner_only') {
+      setEditability('owner_only');
+      toast({
+        title: "Editability Adjusted",
+        description: "Private plans can only be edited by the owner. Editability set to 'Owner Only'.",
+        duration: 5000,
+      });
     }
   }, [visibility, editability, isOwnerForUIDisplay, isOpen, toast]);
 
@@ -470,10 +476,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                               <Select value={visibility} onValueChange={(v) => {
                                 const newVisibility = v as PlanVisibility;
                                 setVisibility(newVisibility);
-                                if (newVisibility === 'unlisted' && editability === 'everyone') {
-                                    setEditability('owner_only');
-                                    toast({title: "Editability Adjusted", description: "The 'Everyone' edit option is not available for unlisted plans. Adjusted to 'Owner Only'.", duration: 5000});
-                                }
+                                // No automatic toast for 'unlisted' change here to avoid duplicate with other effect.
+                                // The effect watching 'visibility' and 'editability' will handle adjustments.
                               }} disabled={isSavingSettings}>
                                   <SelectTrigger id="plan-visibility" className="text-sm h-9 mt-1">
                                   <SelectValue placeholder="Select visibility" />
@@ -493,8 +497,8 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                                   </SelectTrigger>
                                   <SelectContent>
                                   <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
-                                  <SelectItem value="collaborators"><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                                  <SelectItem value="everyone" disabled={visibility === 'unlisted'}><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
+                                  <SelectItem value="collaborators" disabled={visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
+                                  <SelectItem value="everyone" disabled={visibility === 'unlisted' || visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
                                   </SelectContent>
                               </Select>
                               </div>
