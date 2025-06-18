@@ -7,7 +7,7 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardFooter, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import type { Post } from '@/types/post';
 import type { User as FirebaseUser } from 'firebase/auth';
@@ -33,12 +33,12 @@ import { findOrCreateConversation } from '@/services/messagingService';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 import { Badge } from '@/components/ui/badge'; // Import Badge
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Import Tabs components
 
 import { PostDetailHeader } from './PostDetailHeader';
 import { PostDetailContentBody } from './PostDetailContentBody';
-// PostDetailBidding was integrated
+import { PostDetailBiddingDisplay } from './PostDetailBidding'; // Renamed import
 import { PostDetailComments } from './PostDetailComments';
-// PostDetailActions was integrated into Header and Footer
 
 import { aiConnectionMatcher, type AIConnectionMatcherInput, type AIConnectionMatcherOutput } from '@/ai/flows/ai-connection-matcher';
 
@@ -63,6 +63,11 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const router = useRouter();
   const user = currentUser;
 
+  const isHelpRequestWithBidding = post.requestType === 'help_request' && post.maxBudget != null;
+  const [activeTab, setActiveTab] = useState<'bids' | 'comments'>(
+    isHelpRequestWithBidding ? 'bids' : 'comments'
+  );
+
   // State for New Comment Input
   const [newComment, setNewComment] = useState('');
   const [isSubmittingComment, setIsSubmittingComment] = useState(false);
@@ -72,7 +77,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
 
-  // State for Inline Bidding
+  // State for Inline Bidding (moved from PostDetailBidding)
   const [inlineBidAmount, setInlineBidAmount] = useState<string>("");
   const [inlineBidError, setInlineBidError] = useState<string | null>(null);
   const [isProcessingOffer, setIsProcessingOffer] = useState(false);
@@ -93,7 +98,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const { data: bids = [], isLoading: isLoadingBids } = useQuery<ClientBid[], Error>({
     queryKey: ['bids', post?.id],
     queryFn: () => (post?.id ? getBidsForPost(post.id) : Promise.resolve([])),
-    enabled: !!post && post.requestType === 'help_request' && !!user,
+    enabled: !!post && isHelpRequestWithBidding && !!user,
   });
 
   const { data: connectionStatus } = useQuery<ConnectionStatus | null>({
@@ -145,8 +150,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     if (post?.id) {
         fetchAISuggestions();
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [post, currentUser]); // Removed aiSuggestions, isLoadingAISuggestions, aiSuggestionsError from deps to avoid re-triggering on their change
+  }, [post, currentUser, aiSuggestions, isLoadingAISuggestions, aiSuggestionsError]);
 
 
   // --- @Mention Suggestions for New Comment Input ---
@@ -168,7 +172,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     const map = new Map<string, UserProfileBasic>();
     if (generalSuggestibleUsers) {
       generalSuggestibleUsers.forEach(profile => {
-        if (profile.userId !== currentUser?.uid) { // Exclude self from suggestions
+        if (profile.userId !== currentUser?.uid) { 
            map.set(profile.userId, profile);
         }
       });
@@ -189,7 +193,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       toast({ title: "Comment Added" });
       if (post) {
         queryClient.invalidateQueries({ queryKey: ['comments', post.id] });
-        queryClient.invalidateQueries({ queryKey: ['posts'] }); // To update commentCount on PostCard
+        queryClient.invalidateQueries({ queryKey: ['posts'] }); 
       }
     },
     onError: (error: Error) => {
@@ -213,7 +217,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       likedBy: [],
     };
     addCommentMutation.mutate(commentData);
-  }, [user, post, newComment, addCommentMutation.isPending, generalSuggestibleUsers, queryClient, toast]);
+  }, [user, post, newComment, addCommentMutation, generalSuggestibleUsers, queryClient, toast]);
 
   const evaluateNewCommentMentionState = useCallback((text: string, cursorPosition: number) => {
     let activeQuery = null;
@@ -304,8 +308,8 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   }, [showNewCommentSuggestions, isLoadingGeneralSuggestions, generalSuggestibleUsers, debouncedNewCommentMentionQuery]);
 
 
-  // --- Bidding Logic ---
-  const addBidMutationInternal = useMutation({ // Renamed to avoid conflict
+  // --- Bidding Logic (Moved from PostDetailBidding) ---
+  const addBidMutationInternal = useMutation({
     mutationFn: addBidToPost,
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['bids', variables.postId] });
@@ -382,7 +386,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
       const conversationId = await findOrCreateConversation(user.uid, post.userId, post.id);
       if (conversationId) {
         toast({ title: "Bid Placed & Conversation Started", description: "Redirecting to Messages..." });
-        router.push(`/contracts?conversationId=${conversationId}&postId=${post.id}&initialBidAmount=${parsedBidAmount}`);
+        router.push(`/messages?conversationId=${conversationId}&postId=${post.id}&initialMessageText=${encodeURIComponent(`My bid for your request '${post.question.substring(0,30)}...' is $${parsedBidAmount.toLocaleString()}. Let's discuss!`)}`);
         setInlineBidAmount("");
         setInlineBidError(null);
         if(onClose) onClose();
@@ -465,61 +469,38 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
             </div>
           )}
 
-        {/* Bidding Section Display (not the form) */}
-        {post.requestType === 'help_request' && post.maxBudget != null && (
-            <div className="mt-6 border-t pt-4 px-4">
-              <div className="flex justify-between items-center mb-2">
-                <h4 className="text-md font-semibold flex items-center gap-2">
-                  <DollarSign className="h-5 w-5 text-green-600" /> Bids ({user && !isLoadingBids ? bids.length : '...'})
-                  <span className="text-xs text-muted-foreground font-normal ml-1">
-                     (Min. bid: {minimumBidAmount !== null ? `$${minimumBidAmount.toLocaleString()}` : 'N/A'})
-                  </span>
-                </h4>
-              </div>
-              {isLoadingBids && user ? (
-                <div className="flex items-center text-sm text-muted-foreground"><Loader2 className="mr-2 h-4 w-4 animate-spin" />Loading bids...</div>
-              ) : !user ? (
-                <p className="text-sm text-muted-foreground text-center py-4">Login to view bids.</p>
-              ) : bids.length === 0 && !isLoadingBids ? (
-                <p className="text-sm text-muted-foreground">No bids placed yet.</p>
-              ) : (
-                <div className="space-y-3 max-h-48 overflow-y-auto pr-2"> {/* Added max-h and overflow for bid list */}
-                  {bids.map(bid => (
-                    bid && bid.bidderId ? (
-                      <Card key={bid.id} className="p-3 bg-muted/30 shadow-sm">
-                        <div className="flex items-start gap-2.5">
-                          <Avatar className="h-8 w-8">
-                            <AvatarImage src={bid.bidderAvatar} alt={bid.bidderName || generateAnonymousName(bid.bidderId)} />
-                            <AvatarFallback className="text-xs">{getInitials(bid.bidderName || generateAnonymousName(bid.bidderId))}</AvatarFallback>
-                          </Avatar>
-                          <div className="flex-grow min-w-0">
-                            <div className="flex justify-between items-center">
-                              <p className="text-xs font-medium text-foreground truncate">{bid.bidderName || generateAnonymousName(bid.bidderId)}</p>
-                              <p className="text-xs text-muted-foreground flex-shrink-0 ml-2">
-                                {bid.timestamp ? new Date(bid.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit'}) : 'just now'}
-                              </p>
-                            </div>
-                            <p className="text-sm font-semibold text-primary">${bid.bidAmount.toLocaleString()}</p>
-                            {bid.bidMessage && <p className="text-xs text-muted-foreground mt-0.5 break-words">{bid.bidMessage}</p>}
-                          </div>
-                        </div>
-                      </Card>
-                    ) : null
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        <PostDetailComments post={post} currentUser={user} />
+        {/* Tabs for Bids/Comments or just Comments */}
+        {isHelpRequestWithBidding ? (
+          <Tabs value={activeTab} onValueChange={(value) => setActiveTab(value as 'bids' | 'comments')} className="mt-6 px-4">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="bids">Bids ({isLoadingBids ? '...' : bids.length})</TabsTrigger>
+              <TabsTrigger value="comments">Comments ({isLoadingComments ? '...' : comments.length})</TabsTrigger>
+            </TabsList>
+            <TabsContent value="bids" className="mt-4">
+              <PostDetailBiddingDisplay
+                bids={bids}
+                isLoadingBids={isLoadingBids}
+                currentUser={currentUser}
+                postMaxBudget={post.maxBudget} // Pass maxBudget
+                minimumBidAmount={minimumBidAmount}
+              />
+            </TabsContent>
+            <TabsContent value="comments" className="mt-4">
+              <PostDetailComments post={post} currentUser={currentUser} />
+            </TabsContent>
+          </Tabs>
+        ) : (
+          <PostDetailComments post={post} currentUser={currentUser} />
+        )}
       </ScrollArea>
 
       {/* Footer: Comment Input and Bidding Actions */}
       <CardFooter className="p-3 border-t bg-card flex-shrink-0 flex-col items-stretch gap-3">
-         {/* Bidding UI for Help Requests, moved to footer */}
-        {user && post.requestType === 'help_request' && post.userId !== user.uid && post.maxBudget != null && (
-          <div className="w-full pt-1 mb-2 space-y-2">
+         {/* Bidding UI for Help Requests */}
+        {user && isHelpRequestWithBidding && activeTab === 'bids' && post.userId !== user.uid && (
+          <div className="w-full pt-1 mb-1 space-y-2">
             <Label htmlFor="inlineBidAmount" className="text-xs font-medium">
-                Your Bid (Max: ${post.maxBudget.toLocaleString()})
+                Your Bid (Max: ${post.maxBudget!.toLocaleString()})
             </Label>
             <div className="flex flex-col sm:flex-row items-stretch gap-2">
                  <div className="flex items-center gap-2 flex-shrink-0">
@@ -528,7 +509,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                 <Input
                     id="inlineBidAmount"
                     type="number"
-                    placeholder={currentUserHasBid ? `Your bid: $${currentUserBid?.bidAmount.toLocaleString()}` : `Custom amount (0 - ${post.maxBudget.toLocaleString()})`}
+                    placeholder={currentUserHasBid ? `Your bid: $${currentUserBid?.bidAmount.toLocaleString()}` : `Custom amount (0 - ${post.maxBudget!.toLocaleString()})`}
                     value={currentUserHasBid ? String(currentUserBid?.bidAmount ?? "") : inlineBidAmount}
                     onChange={handleInlineBidChange}
                     className={cn("h-9 text-sm bg-background flex-grow", inlineBidError && !currentUserHasBid && "border-destructive ring-destructive focus-visible:ring-destructive")}
@@ -570,7 +551,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
         )}
 
         {/* New Comment Input */}
-        {user && (
+        {user && (!isHelpRequestWithBidding || activeTab === 'comments') && (
           <Popover
             open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && !['loading-main-comment', 'no-users-main-comment', 'no-match-main-comment'].includes(filteredNewCommentSuggestions[0]?.userId)}
             onOpenChange={(open) => { setShowNewCommentSuggestions(open); if (!open) setNewCommentMentionQuery(''); }}
@@ -605,7 +586,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
               onOpenAutoFocus={(e) => e.preventDefault()}
             >
               {filteredNewCommentSuggestions.map(profile => {
-                const displayableName = profile.companyName || profile.displayName || profile.mentionName; // Fallback to mentionName for primary display
+                const displayableName = profile.companyName || profile.displayName || profile.mentionName; 
                 const showSecondaryNameLine = (profile.companyName || profile.displayName) && (profile.companyName || profile.displayName)?.toLowerCase() !== profile.mentionName.toLowerCase();
 
                 return (
@@ -617,7 +598,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
                       variant="ghost"
                       size="sm"
                       className="w-full justify-start h-auto px-2 py-1 text-xs"
-                      onMouseDown={(e) => e.preventDefault()}
+                      onMouseDown={(e) => e.preventDefault()} 
                       onClick={() => handleSelectNewCommentSuggestion(profile)}
                     >
                       <Avatar className="h-5 w-5 mr-2">
