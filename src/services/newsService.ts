@@ -189,9 +189,13 @@ export const updateNewsArticle = async (
 
 
   const oldTags = existingData.tags || [];
-  const newTags = dataToUpdate.tags || oldTags;
+  const newTags = dataToUpdate.tags || oldTags; // Use dataToUpdate.tags if present, otherwise stick with oldTags
 
-  payload.tags = newTags;
+  payload.tags = newTags; // Ensure payload.tags is the final set of tags
+
+  // Calculate tagsAdded and tagsRemoved
+  const tagsAdded = newTags.filter(tag => !oldTags.includes(tag));
+  const tagsRemoved = oldTags.filter(tag => !newTags.includes(tag));
 
   try {
     await updateDoc(articleDocRef, payload);
@@ -342,3 +346,4 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
     throw error;
   }
 };
+
