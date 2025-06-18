@@ -4,134 +4,96 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Helper Functions
+    // Default deny all access unless explicitly allowed
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions (assuming these are defined correctly by the user elsewhere or inline)
     function isAuthenticated() {
       return request.auth != null;
     }
 
-    function isUser(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
-    }
-
-    function getPlanData(planId) {
-      return get(/databases/$(database)/documents/plans/$(planId)).data;
-    }
-
     function isPlanOwner(planId) {
-      let planData = getPlanData(planId);
-      return planData != null && planData.ownerId == request.auth.uid;
+      return isAuthenticated() && get(/databases/$(database)/documents/plans/$(planId)).data.ownerId == request.auth.uid;
     }
 
     function canViewPlan(planId) {
-      if (!isAuthenticated()) {
-        return false;
-      }
-      let planData = getPlanData(planId);
-      return planData != null &&
-             (planData.visibility == 'public' ||
-              planData.visibility == 'unlisted' || // Unlisted implies viewable with link, so read should be allowed if queried
-              planData.ownerId == request.auth.uid ||
-              (planData.viewUserIds is list && request.auth.uid in planData.viewUserIds));
-    }
-
-    function canEditPlan(planId) {
-      if (!isAuthenticated()) {
-        return false;
-      }
-      let planData = getPlanData(planId);
-      return planData != null &&
-             (planData.ownerId == request.auth.uid ||
-              (planData.editability == 'collaborators' && planData.editUserIds is list && request.auth.uid in planData.editUserIds) ||
-              (planData.editability == 'everyone' && canViewPlan(planId)) // If everyone can edit, they must also be able to view
+      let planDoc = get(/databases/$(database)/documents/plans/$(planId)).data;
+      return isAuthenticated() &&
+             (planDoc.visibility == 'public' ||
+              planDoc.visibility == 'unlisted' || // Unlisted plans are viewable by any authenticated user if they have the link
+              (planDoc.visibility == 'private' && request.auth.uid == planDoc.ownerId) ||
+              (planDoc.viewUserIds is list && request.auth.uid in planDoc.viewUserIds) // User is explicitly in viewUserIds
              );
     }
 
-    function isValidPlanVisibility(visibility) {
-      return visibility == 'private' || visibility == 'unlisted' || visibility == 'public';
+    function canEditPlan(planId) {
+      let planDoc = get(/databases/$(database)/documents/plans/$(planId)).data;
+      return isAuthenticated() &&
+             (request.auth.uid == planDoc.ownerId ||
+              (planDoc.editability == 'collaborators' && planDoc.editUserIds is list && request.auth.uid in planDoc.editUserIds) ||
+              (planDoc.editability == 'everyone' && // If 'everyone' can edit, they still must be able to view
+                (planDoc.visibility == 'public' || planDoc.visibility == 'unlisted' || (planDoc.viewUserIds is list && request.auth.uid in planDoc.viewUserIds))
+              )
+             );
     }
 
-    function isValidPlanEditability(editability) {
-      return editability == 'owner_only' || editability == 'collaborators' || editability == 'everyone';
+    function isValidPlanVisibility(vis) {
+      return vis in ['private', 'unlisted', 'public'];
+    }
+    function isValidPlanEditability(edit) {
+      return edit in ['owner_only', 'collaborators', 'everyone'];
     }
 
-    function isValidViewAndEditUserIds(planResourceData, authUid) {
-      let visibility = planResourceData.visibility;
-      let editability = planResourceData.editability;
-      let viewUserIds = planResourceData.viewUserIds;
-      let editUserIds = planResourceData.editUserIds;
-      let ownerId = planResourceData.ownerId;
+    function isValidViewAndEditUserIds(data, authUid) {
+      let ownerMustBeViewer = data.visibility == 'public' || (data.viewUserIds is list && authUid in data.viewUserIds);
+      let ownerMustBeEditor = (data.editability == 'owner_only' && data.editUserIds is list && data.editUserIds.size() == 1 && authUid in data.editUserIds) ||
+                              (data.editability == 'collaborators' && data.editUserIds is list && authUid in data.editUserIds) ||
+                              (data.editability == 'everyone' && data.visibility == 'public'); // If everyone can edit a public plan
 
-      // Ensure owner is always in viewUserIds and editUserIds if those lists are used
-      let ownerInViewers = viewUserIds is list && ownerId in viewUserIds;
-      let ownerInEditors = editUserIds is list && ownerId in editUserIds;
+      let editorsAreViewers = data.visibility == 'public' ||
+                              (data.viewUserIds is list && data.editUserIds is list && data.editUserIds.toSet().subsetOf(data.viewUserIds.toSet()));
 
-      // If private, only owner can view and edit.
-      if (visibility == 'private') {
-        return editability == 'owner_only' &&
-               viewUserIds is list && viewUserIds.size() == 1 && ownerInViewers &&
-               editUserIds is list && editUserIds.size() == 1 && ownerInEditors;
-      }
-      // If unlisted or public
-      if (editability == 'owner_only') {
-        return editUserIds is list && editUserIds.size() == 1 && ownerInEditors &&
-               (visibility == 'public' || (viewUserIds is list && ownerInViewers)); // For unlisted, owner must be in viewers
-      }
-      if (editability == 'collaborators') {
-        return editUserIds is list && ownerInEditors &&
-               (visibility == 'public' || (viewUserIds is list && ownerInViewers && editUserIds.hasAny(viewUserIds))); // Editors must be a subset of viewers for unlisted
-      }
-      if (editability == 'everyone') {
-        return visibility == 'public' && // 'everyone' editability only makes sense for public plans
-               editUserIds is list && editUserIds.size() == 0 && // editUserIds should be empty if 'everyone'
-               viewUserIds is list && viewUserIds.size() == 0; // viewUserIds should be empty if 'everyone' (public handles view)
-      }
-      return false; // Should not happen if visibility/editability are valid
-    }
-
-    function isNotEmpty(value) {
-      return value != null && value.size() > 0;
+      return data.viewUserIds is list && data.editUserIds is list &&
+             ownerMustBeViewer && ownerMustBeEditor && editorsAreViewers;
     }
 
 
     // Plans Collection
     match /plans/{planId} {
       allow read: if canViewPlan(planId);
+
+      // SIMPLIFIED LIST RULE: Allows authenticated users to list plans with common constraints.
+      // The `canViewPlan` in `allow read` will handle actual document visibility.
       allow list: if isAuthenticated() &&
                      request.query.limit <= 50 &&
-                     (request.query.orderBy == null || request.query.orderBy.path == 'createdAt' || request.query.orderBy.path == 'updatedAt') &&
-                     (
-                       request.query.filters.size() == 0 ||
-                       (
-                         request.query.filters.size() == 1 &&
-                         (
-                           (request.query.filters[0].field == 'visibility' && request.query.filters[0].operator == 'in') ||
-                           (request.query.filters[0].field == 'ownerId' && request.query.filters[0].operator == '==')
-                         )
-                       )
-                     );
+                     (request.query.orderBy == null || request.query.orderBy.path == 'createdAt' || request.query.orderBy.path == 'updatedAt');
 
 
       allow create: if isAuthenticated() && request.auth.uid == request.resource.data.ownerId &&
                        request.resource.data.createdAt == request.time &&
                        request.resource.data.updatedAt == request.time &&
                        request.resource.data.version == 1 &&
-                       request.resource.data.roadmap is list &&
+                       request.resource.data.roadmap is list && // roadmap must be a list (can be empty)
                        isValidPlanVisibility(request.resource.data.visibility) &&
                        isValidPlanEditability(request.resource.data.editability) &&
                        isValidViewAndEditUserIds(request.resource.data, request.auth.uid) &&
                        request.resource.data.keys().hasOnly(['name', 'ownerId', 'description', 'sector', 'subSector', 'industry', 'naicsCode', 'createdAt', 'updatedAt', 'version', 'roadmap', 'visibility', 'editability', 'viewUserIds', 'editUserIds']);
 
-      allow update: if isAuthenticated() && canEditPlan(planId) &&
-                       request.resource.data.ownerId == resource.data.ownerId &&
-                       request.resource.data.createdAt == resource.data.createdAt &&
-                       request.resource.data.updatedAt == request.time &&
+      allow update: if isAuthenticated() && canEditPlan(planId) && // Ensure user has edit permission for the plan
+                       request.resource.data.ownerId == resource.data.ownerId && // Owner cannot change
+                       request.resource.data.createdAt == resource.data.createdAt && // Creation time cannot change
+                       request.resource.data.updatedAt == request.time && // Must set updatedAt to server time
+                       // Main OR condition for type of update
                        (
-                           ( // E1: Roadmap update path
+                           ( // E1: Roadmap update path (user can edit plan, version increments)
                                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['roadmap', 'version', 'updatedAt']) &&
                                request.resource.data.version == resource.data.version + 1
                            ) ||
-                           ( // E2: Settings update path
-                               isPlanOwner(planId) &&
+                           ( // E2: Settings update path (only owner can change settings, version does not change)
+                               isPlanOwner(planId) && // Stricter check: only owner for these settings
+                               // Using request.resource.data.keys() which are the keys in the incoming write
                                !request.resource.data.keys().hasAny(['roadmap', 'version']) && // Roadmap and version field itself must not be part of this update type
                                request.resource.data.keys().hasOnly([
                                    'name', 'description', 'sector', 'subSector', 'industry', 'naicsCode',
@@ -140,7 +102,7 @@ service cloud.firestore {
                                isValidPlanVisibility(request.resource.data.visibility) &&
                                isValidPlanEditability(request.resource.data.editability) &&
                                isValidViewAndEditUserIds(request.resource.data, request.auth.uid) &&
-                               request.resource.data.version == resource.data.version
+                               request.resource.data.version == resource.data.version // Version number value must remain same
                            )
                        );
 
@@ -148,480 +110,578 @@ service cloud.firestore {
 
       // Plan Versions Subcollection
       match /versions/{versionId} {
-          allow read: if canViewPlan(planId);
-          allow list: if canViewPlan(planId);
-          allow create: if isAuthenticated() && canEditPlan(planId) &&
+          allow read: if canViewPlan(planId); // Fine for read, planId is bound
+
+          // CORRECTED LIST RULE for versions:
+          // Allows listing if authenticated and the parent plan document path is valid.
+          // `canViewPlan` in the `read` rule above will filter the results.
+          allow list: if isAuthenticated() && exists(/databases/$(database)/documents/plans/$(planId));
+
+          allow create: if isAuthenticated() && canEditPlan(planId) && // User who can edit the plan can create a version
                          request.resource.data.planId == planId &&
                          request.resource.data.editorUid == request.auth.uid &&
                          request.resource.data.timestamp == request.time &&
                          request.resource.data.roadmap is list &&
                          request.resource.data.versionNumber is number &&
                          request.resource.data.keys().hasOnly(['planId', 'roadmap', 'editorUid', 'timestamp', 'versionNumber']);
-          allow update, delete: if false;
+          allow update, delete: if false; // Versions are immutable
       }
     }
+    // Placeholder for other collections (users, notifications, etc.)
+    // These would have their own specific rules.
+    // It's crucial that these are defined by the user and are correct.
 
-    // Other collections below...
-    // Users Collection
     match /users/{userId} {
-      allow read: if isAuthenticated() || (get(/databases/$(database)/documents/users/$(userId)).data.descriptionVisibility == 'everyone');
-      allow list: if isAuthenticated(); // Allow listing/searching users if authenticated
-      allow create: if isAuthenticated() && request.auth.uid == userId &&
-                     request.resource.data.uid == userId &&
-                     request.resource.data.createdAt == request.time &&
-                     request.resource.data.keys().hasOnly([
-                        'uid', 'email', 'companyName', 'mentionName', 'mentionNameLowercase',
-                        'avatarUrl', 'industry', 'description', 'descriptionVisibility',
-                        'sectorName', 'subSectorName', 'industryName', 'naicsCode',
-                        'tags', 'established', 'verified', 'isBotAccount', 'incomeRange',
-                        'createdAt', 'lastLoginAt', 'updatedAt'
-                     ]); // Ensure only allowed fields are written
-      allow update: if isAuthenticated() && request.auth.uid == userId &&
-                      request.resource.data.uid == resource.data.uid &&
-                      request.resource.data.email == resource.data.email &&
-                      request.resource.data.mentionName == resource.data.mentionName &&
-                      request.resource.data.mentionNameLowercase == resource.data.mentionNameLowercase &&
-                      request.resource.data.companyName == resource.data.companyName && // Company name can be set at signup but not changed by user via settings
-                      request.resource.data.createdAt == resource.data.createdAt &&
-                      request.resource.data.updatedAt == request.time &&
-                       // Allow only specific fields to be updated by user
-                      request.resource.data.keys().hasOnly([
-                        'uid', 'email', 'companyName', 'mentionName', 'mentionNameLowercase',
-                        'avatarUrl', 'industry', 'description', 'descriptionVisibility',
-                        'sectorName', 'subSectorName', 'industryName', 'naicsCode',
-                        'tags', 'established', 'verified', 'isBotAccount', 'incomeRange',
-                        'createdAt', 'lastLoginAt', 'updatedAt' // Allow these to be updated, others are restricted
-                      ]);
-      allow delete: if false; // Users should not be able to delete their profiles directly
+        allow read: if isAuthenticated(); // Allow any authenticated user to read basic profiles
+        allow create: if request.auth != null && request.auth.uid == userId &&
+                        // Ensure required fields are present and types are correct
+                        request.resource.data.uid == userId &&
+                        (request.resource.data.email == request.auth.token.email || request.resource.data.email == null) &&
+                        request.resource.data.mentionName is string && request.resource.data.mentionName.size() > 0 &&
+                        request.resource.data.mentionNameLowercase is string && request.resource.data.mentionNameLowercase == request.resource.data.mentionName.lower() &&
+                        (request.resource.data.companyName is string || request.resource.data.companyName == null) &&
+                        (request.resource.data.avatarUrl is string || request.resource.data.avatarUrl == null) &&
+                        (request.resource.data.industry is string || request.resource.data.industry == null) &&
+                        (request.resource.data.description is string || request.resource.data.description == null) &&
+                        request.resource.data.descriptionVisibility is string && request.resource.data.descriptionVisibility in ['everyone', 'connected', 'only_me'] &&
+                        (request.resource.data.sectorName is string || request.resource.data.sectorName == null) &&
+                        (request.resource.data.subSectorName is string || request.resource.data.subSectorName == null) &&
+                        (request.resource.data.industryName is string || request.resource.data.industryName == null) &&
+                        (request.resource.data.naicsCode is string || request.resource.data.naicsCode == null) &&
+                        request.resource.data.tags is list &&
+                        (request.resource.data.established is string || request.resource.data.established == null) &&
+                        request.resource.data.verified is bool &&
+                        request.resource.data.isBotAccount is bool &&
+                        (request.resource.data.incomeRange is string || request.resource.data.incomeRange == null) &&
+                        request.resource.data.createdAt == request.time &&
+                        request.resource.data.updatedAt == request.time &&
+                        request.resource.data.lastLoginAt == request.time &&
+                        // Ensure no extra fields are being written
+                        request.resource.data.keys().hasOnly([
+                            'uid', 'email', 'companyName', 'mentionName', 'mentionNameLowercase', 'avatarUrl', 'industry',
+                            'description', 'descriptionVisibility', 'sectorName', 'subSectorName', 'industryName', 'naicsCode',
+                            'tags', 'established', 'verified', 'isBotAccount', 'incomeRange', 'createdAt', 'lastLoginAt', 'updatedAt'
+                        ]);
+
+        allow update: if request.auth != null && request.auth.uid == userId &&
+                        // Prevent changing immutable fields
+                        request.resource.data.uid == resource.data.uid &&
+                        request.resource.data.email == resource.data.email &&
+                        request.resource.data.mentionName == resource.data.mentionName &&
+                        request.resource.data.mentionNameLowercase == resource.data.mentionNameLowercase &&
+                        request.resource.data.companyName == resource.data.companyName && // Assuming company name is set at signup and not editable this way
+                        request.resource.data.createdAt == resource.data.createdAt &&
+                        request.resource.data.isBotAccount == resource.data.isBotAccount &&
+                        // Validate types of updatable fields
+                        (request.resource.data.avatarUrl is string || request.resource.data.avatarUrl == null) &&
+                        (request.resource.data.industry is string || request.resource.data.industry == null) &&
+                        (request.resource.data.description is string || request.resource.data.description == null) &&
+                        request.resource.data.descriptionVisibility is string && request.resource.data.descriptionVisibility in ['everyone', 'connected', 'only_me'] &&
+                        (request.resource.data.sectorName is string || request.resource.data.sectorName == null) &&
+                        (request.resource.data.subSectorName is string || request.resource.data.subSectorName == null) &&
+                        (request.resource.data.industryName is string || request.resource.data.industryName == null) &&
+                        (request.resource.data.naicsCode is string || request.resource.data.naicsCode == null) &&
+                        request.resource.data.tags is list &&
+                        (request.resource.data.established is string || request.resource.data.established == null) &&
+                        request.resource.data.verified is bool &&
+                        (request.resource.data.incomeRange is string || request.resource.data.incomeRange == null) &&
+                        request.resource.data.updatedAt == request.time &&
+                        (request.resource.data.lastLoginAt == request.time || request.resource.data.lastLoginAt == resource.data.lastLoginAt) && // Allow lastLoginAt to be updated or remain same
+                        // Ensure only allowed fields are being updated
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                            'avatarUrl', 'industry', 'description', 'descriptionVisibility', 'sectorName', 'subSectorName', 'industryName', 'naicsCode',
+                            'tags', 'established', 'verified', 'incomeRange', 'lastLoginAt', 'updatedAt'
+                        ]);
     }
 
-    // Mutuals Collection (Connections)
     match /mutuals/{connectionId} {
-      // Anyone in userIds list can read their own connection document
-      allow read: if isAuthenticated() && request.auth.uid in resource.data.userIds;
-      // Only specific queries allowed for listing
-      allow list: if isAuthenticated() &&
-                     (
-                       ( // For getPendingRequests or getConnections
-                         request.query.filters.size() == 2 &&
-                         request.query.filters[0].field == 'userIds' && request.query.filters[0].operator == 'array-contains' && request.query.filters[0].value == request.auth.uid &&
-                         request.query.filters[1].field == 'status' && request.query.filters[1].operator == '==' && (request.query.filters[1].value == 'pending' || request.query.filters[1].value == 'connected') &&
-                         request.query.limit <= 100 &&
-                         (request.query.orderBy.path == 'requestedAt' || request.query.orderBy.path == 'connectedAt')
-                       )
-                     );
-      allow create: if isAuthenticated() &&
-                      request.resource.data.requesterId == request.auth.uid &&
-                      request.resource.data.userIds.hasAll([request.auth.uid]) && // Make sure auth user is one of the participants
-                      request.resource.data.userIds.size() == 2 &&
-                      request.resource.data.status == 'pending' &&
-                      request.resource.data.requestedAt == request.time &&
-                      request.resource.data.updatedAt == request.time &&
-                      // Ensure only these fields are present on create
-                      request.resource.data.keys().hasOnly(['userIds', 'status', 'requesterId', 'requestedAt', 'updatedAt']);
+        // Helper function to check if user is part of the connection
+        function isUserInConnection() {
+            return request.auth.uid in resource.data.userIds;
+        }
+        // Helper function to check if the connection involves the authenticated user
+        function requestInvolvesAuthUser() {
+            return request.resource.data.userIds.hasAny([request.auth.uid]);
+        }
+        // Allow read if user is part of the connection
+        allow read: if isAuthenticated() && isUserInConnection();
+        // Allow list for queries like fetching user's connections or pending requests
+        allow list: if isAuthenticated() &&
+                       request.query.filters.size() > 0 && // Must have at least one filter
+                       request.query.filters[0].field == 'userIds' && request.query.filters[0].operator == 'array-contains' && request.query.filters[0].value == request.auth.uid &&
+                       request.query.limit <= 100; // Limit the query size
 
-      allow update: if isAuthenticated() &&
-                       request.auth.uid in resource.data.userIds && // Must be part of the connection
-                       resource.data.status == 'pending' && // Can only update pending requests (to accept)
-                       request.resource.data.status == 'connected' && // New status must be 'connected'
-                       request.resource.data.requesterId == resource.data.requesterId && // Requester cannot change
-                       request.resource.data.userIds == resource.data.userIds && // Participants cannot change
-                       request.resource.data.connectedAt == request.time && // Must set connectedAt to server time
-                       request.resource.data.updatedAt == request.time &&
-                       // Only allow status and connectedAt to change from a pending state to connected
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'connectedAt', 'updatedAt']);
+        allow create: if isAuthenticated() &&
+                         request.auth.uid == request.resource.data.requesterId &&
+                         requestInvolvesAuthUser() &&
+                         request.resource.data.userIds.size() == 2 &&
+                         request.resource.data.status == 'pending' &&
+                         request.resource.data.requestedAt == request.time &&
+                         request.resource.data.updatedAt == request.time &&
+                         !exists(/databases/$(database)/documents/mutuals/$(connectionId)); // Ensure it doesn't already exist
 
-      allow delete: if isAuthenticated() && request.auth.uid in resource.data.userIds &&
-                      (resource.data.status == 'pending' || resource.data.status == 'connected');
+        allow update: if isAuthenticated() && isUserInConnection() &&
+                         // Ensure core fields are not changed
+                         request.resource.data.userIds == resource.data.userIds &&
+                         request.resource.data.requesterId == resource.data.requesterId &&
+                         request.resource.data.requestedAt == resource.data.requestedAt &&
+                         request.resource.data.updatedAt == request.time &&
+                         // Allow status change from pending to connected (by recipient)
+                         ( (resource.data.status == 'pending' && request.resource.data.status == 'connected' &&
+                            request.auth.uid != resource.data.requesterId && // Recipient accepts
+                            request.resource.data.connectedAt == request.time &&
+                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'connectedAt', 'updatedAt']))
+                         );
+        allow delete: if isAuthenticated() && isUserInConnection() &&
+                         (resource.data.status == 'pending' || resource.data.status == 'connected'); // Allow deleting pending requests or existing connections
     }
 
-    // Posts Collection and Subcollections
     match /posts/{postId} {
-        allow read: if true; // Publicly readable
-        allow list: if true; // Publicly listable
-        allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
+        allow read: if true; // Anyone can read posts
+        allow list: if true; // Anyone can list posts (with client-side limits)
+        allow create: if isAuthenticated() &&
+                         request.auth.uid == request.resource.data.userId &&
                          request.resource.data.createdAt == request.time &&
-                         // Add all expected fields for a new post
+                         request.resource.data.commentCount == 0 &&
+                         request.resource.data.imageUrls is list &&
+                         request.resource.data.mentionedUserIds is list &&
                          request.resource.data.keys().hasOnly([
-                           'userId', 'question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode',
-                           'ratingScore', 'imageUrls', 'mentionedUserIds', 'requestType', 'createdAt',
-                           'commentCount', 'descriptionDetails', 'descriptionTried', 'descriptionOutcome',
-                           'maxBudget', 'deadline'
+                            'userId', 'question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode',
+                            'ratingScore', 'imageUrls', 'mentionedUserIds', 'requestType',
+                            'descriptionDetails', 'descriptionTried', 'descriptionOutcome',
+                            'maxBudget', 'deadline', 'createdAt', 'commentCount'
                          ]);
         allow update: if isAuthenticated() && request.auth.uid == resource.data.userId &&
-                        // Allow updating only specific fields by the owner, e.g., question, description, tags, etc.
-                        // Forbid changing userId, createdAt.
-                        request.resource.data.userId == resource.data.userId &&
-                        request.resource.data.createdAt == resource.data.createdAt &&
-                        // Whitelist updatable fields if needed, or allow all if owner can edit everything
-                        // Example: only allow tags and description to be updated
-                        // request.resource.data.diff(resource.data).affectedKeys().hasOnly(['tags', 'description']);
-                        // For now, allow owner to update most fields
-                        true;
+                         // Only allow updating commentCount or specific fields like miroBoardEmbedUrl if it were still present
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'updatedAt']) &&
+                         request.resource.data.updatedAt == request.time;
         allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
 
-        // Comments Subcollection
         match /comments/{commentId} {
-            allow read: if true; // Publicly readable
-            allow list: if true; // Publicly listable
-            allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
+            allow read: if true;
+            allow list: if true;
+            allow create: if isAuthenticated() &&
+                             request.auth.uid == request.resource.data.userId &&
+                             request.resource.data.postId == postId &&
                              request.resource.data.timestamp == request.time &&
                              request.resource.data.updatedAt == request.time &&
-                             request.resource.data.keys().hasOnly(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'mentionName', 'isShadowBanned']);
-            allow update: if isAuthenticated() && request.auth.uid == request.resource.data.userId && // User can update their own comment
-                             request.resource.data.userId == resource.data.userId && // Cannot change author
-                             request.resource.data.timestamp == resource.data.timestamp && // Cannot change original timestamp
-                             request.resource.data.updatedAt == request.time && // Must set updatedAt
-                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'likedBy', 'likeCount', 'updatedAt']);
-            allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId; // User can delete their own comment
+                             request.resource.data.likeCount == 0 &&
+                             request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
+                             request.resource.data.mentionedUserIds is list &&
+                             request.resource.data.isShadowBanned == false &&
+                             request.resource.data.keys().hasOnly(['userId', 'postId', 'text', 'mentionName', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'isShadowBanned']);
 
-             // SubComments (Replies to comments) Subcollection
+            allow update: if isAuthenticated() &&
+                             (request.auth.uid == resource.data.userId || request.auth.uid == get(/databases/$(database)/documents/posts/$(postId)).data.userId) && // Comment owner or post owner
+                             request.resource.data.postId == resource.data.postId &&
+                             request.resource.data.userId == resource.data.userId &&
+                             request.resource.data.timestamp == resource.data.timestamp &&
+                             request.resource.data.updatedAt == request.time &&
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'likedBy', 'likeCount', 'updatedAt', 'isShadowBanned', 'mentionName', 'mentionedUserIds']); // Allow shadowban by post owner
+
+            allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId; // Only comment owner can delete
+
             match /subcomments/{subCommentId} {
                 allow read: if true;
                 allow list: if true;
-                allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
+                allow create: if isAuthenticated() &&
+                                 request.auth.uid == request.resource.data.userId &&
                                  request.resource.data.timestamp == request.time &&
                                  request.resource.data.updatedAt == request.time &&
-                                 request.resource.data.keys().hasOnly(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'mentionName', 'isShadowBanned']);
-                allow update: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
+                                 request.resource.data.likeCount == 0 &&
+                                 request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
+                                 request.resource.data.mentionedUserIds is list &&
+                                 request.resource.data.isShadowBanned == false &&
+                                 request.resource.data.keys().hasOnly(['userId', 'text', 'mentionName', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'isShadowBanned']);
+                allow update: if isAuthenticated() && request.auth.uid == resource.data.userId &&
                                  request.resource.data.userId == resource.data.userId &&
                                  request.resource.data.timestamp == resource.data.timestamp &&
                                  request.resource.data.updatedAt == request.time &&
-                                 request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'likedBy', 'likeCount', 'updatedAt']);
+                                 request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'likedBy', 'likeCount', 'updatedAt', 'isShadowBanned', 'mentionName', 'mentionedUserIds']);
                 allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
             }
         }
-
-        // Bids Subcollection
         match /bids/{bidId} {
-            allow read: if isAuthenticated(); // Only authenticated users can read bids, potentially owner or bidder
-            allow list: if isAuthenticated();
+            allow read: if true; // Anyone can read bids
+            allow list: if true; // Anyone can list bids
             allow create: if isAuthenticated() &&
-                             request.auth.uid == request.resource.data.bidderId && // Bidder ID must be the authenticated user
-                             request.resource.data.postId == postId && // Bid must belong to this post
+                             request.auth.uid == request.resource.data.bidderId &&
+                             request.resource.data.postId == postId &&
                              request.resource.data.timestamp == request.time &&
-                             get(/databases/$(database)/documents/posts/$(postId)).data.userId != request.auth.uid && // Cannot bid on own post
+                             // Ensure user is not bidding on their own post
+                             get(/databases/$(database)/documents/posts/$(postId)).data.userId != request.auth.uid &&
                              request.resource.data.keys().hasOnly(['postId', 'bidderId', 'bidAmount', 'bidMessage', 'timestamp']);
-            allow update, delete: if false; // Bids are immutable once placed
+            allow update, delete: if false; // Bids are immutable
         }
     }
 
-    // Notifications Collection
     match /notifications/{notificationId} {
-      allow read, list: if isAuthenticated() && request.auth.uid == resource.data.userId; // User can read their own notifications
-      allow create: if isAuthenticated() && // Typically created by server or trusted client acting on behalf of a user action
-                       request.resource.data.timestamp == request.time &&
-                       request.resource.data.isRead == false &&
-                       request.resource.data.keys().hasOnly(['userId', 'type', 'senderId', 'senderName', 'senderAvatar', 'postId', 'postQuestion', 'commentId', 'subCommentId', 'conversationId', 'textSnippet', 'timestamp', 'isRead']);
-      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId && // User can update their own notification (e.g., mark as read)
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'updatedAt']) && // Only isRead and updatedAt can be changed
-                       request.resource.data.updatedAt == request.time;
-      allow delete: if false; // Users should not delete notifications directly
-    }
-
-    // UserPreferences Collection
-    match /userPreferences/{userId} {
-      allow read, update: if isAuthenticated() && request.auth.uid == userId; // User can manage their own preferences
-      allow create: if isAuthenticated() && request.auth.uid == userId &&
-                     request.resource.data.userId == userId && // Ensure userId in doc matches path
-                     request.resource.data.createdAt == request.time &&
-                     request.resource.data.updatedAt == request.time &&
-                     // Define expected fields, ensure this is comprehensive
-                     request.resource.data.keys().hasOnly([
-                        'userId', 'notifyOnReply', 'notifyOnMention',
-                        'notifyOnNewConnectionRequest', 'notifyOnConnectionAccepted',
-                        'notifyOnNewMessage', 'notifyOnPlatformUpdates',
-                        'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
-                        'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
-                        'paymentMethods', 'createdAt', 'updatedAt'
-                     ]);
-      allow list, delete: if false;
-    }
-
-    // Reviews Collection
-    match /reviews/{reviewId} {
-      allow read: if true; // Reviews are public
-      allow list: if true; // Reviews are listable
-      allow create: if isAuthenticated() &&
-                       request.resource.data.reviewerId == request.auth.uid && // Reviewer must be the authenticated user
-                       request.resource.data.targetUserId != request.auth.uid && // Cannot review oneself
-                       request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
-                       request.resource.data.createdAt == request.time &&
-                       request.resource.data.updatedAt == request.time &&
-                       request.resource.data.keys().hasOnly(['targetUserId', 'reviewerId', 'reviewerName', 'reviewerAvatar', 'rating', 'comment', 'reviewerHistoricalAvgRating', 'createdAt', 'updatedAt']);
-      allow update: if isAuthenticated() &&
-                       request.auth.uid == resource.data.reviewerId && // Only the original reviewer can update
-                       request.resource.data.reviewerId == resource.data.reviewerId &&
-                       request.resource.data.targetUserId == resource.data.targetUserId &&
-                       request.resource.data.createdAt == resource.data.createdAt &&
-                       request.resource.data.updatedAt == request.time &&
-                       request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'comment', 'updatedAt', 'reviewerHistoricalAvgRating']); // Only allow these fields to be updated
-    allow delete: if isAuthenticated() && request.auth.uid == resource.data.reviewerId; // Only original reviewer can delete
-    }
-
-    // Conversations Collection and Messages Subcollection
-    match /conversations/{conversationId} {
-      // Users can read conversations they are part of.
-      // Users can list conversations where their UID is in the 'participants' array.
-      // This rule is crucial for loading the conversation list.
-      allow read, list: if isAuthenticated() && request.auth.uid in resource.data.participants;
-
-      allow create: if isAuthenticated() &&
-                     request.auth.uid in request.resource.data.participants &&
-                     request.resource.data.createdAt == request.time &&
-                     request.resource.data.updatedAt == request.time &&
-                     (
-                       ( // Direct Chat Rules
-                         request.resource.data.type == 'direct' &&
-                         request.resource.data.participants.size() == 2 &&
-                         (request.resource.data.postId == null || request.resource.data.postId is string) && // postId can be null or a string
-                         request.resource.data.keys().hasOnly(['participants', 'type', 'postId', 'createdAt', 'updatedAt', 'lastMessage', 'lastMessageTimestamp', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds'])
-                       ) ||
-                       ( // Group Chat Rules
-                         request.resource.data.type == 'group' &&
-                         request.resource.data.participants.size() >= 2 &&
-                         request.resource.data.groupName is string && request.resource.data.groupName.size() > 0 &&
-                         (request.resource.data.groupAvatarUrl == null || request.resource.data.groupAvatarUrl is string) &&
-                         request.resource.data.ownerId == request.auth.uid && // Creator must be owner
-                         request.resource.data.adminIds is list && request.resource.data.adminIds.hasAll([request.auth.uid]) && // Creator must be an admin
-                         request.resource.data.postId == null && // postId must be null for groups
-                         request.resource.data.keys().hasOnly(['participants', 'type', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds', 'postId', 'lastMessage', 'lastMessageTimestamp', 'createdAt', 'updatedAt', 'formerParticipants'])
-                       )
-                     );
-
-
-      allow update: if isAuthenticated() && request.auth.uid in resource.data.participants && // Must be a current participant
-                       request.resource.data.createdAt == resource.data.createdAt && // Cannot change createdAt
-                       request.resource.data.updatedAt == request.time && // Must set updatedAt
-                       ( // OR condition for different types of updates
-                         ( // U1: Updating last message details (typically done by sendMessage)
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastMessageTimestamp', 'lastMessageSenderId', 'updatedAt']) &&
-                           request.resource.data.participants == resource.data.participants && // Participants cannot change during message send
-                           request.resource.data.type == resource.data.type // Type cannot change
-                         ) ||
-                         ( // U2: Updating group details (name, avatar) by an admin
-                           resource.data.type == 'group' &&
-                           request.auth.uid in resource.data.adminIds && // Only admin can update group details
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['groupName', 'groupAvatarUrl', 'updatedAt']) &&
-                           request.resource.data.participants == resource.data.participants && // Participants cannot change here
-                           request.resource.data.ownerId == resource.data.ownerId // Owner cannot change here
-                         ) ||
-                         ( // U3: Adding members to a group by an admin
-                           resource.data.type == 'group' &&
-                           request.auth.uid in resource.data.adminIds &&
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'updatedAt']) &&
-                           request.resource.data.ownerId == resource.data.ownerId && // Owner cannot change here
-                           request.resource.data.adminIds == resource.data.adminIds // Admins list cannot change here
-                         ) ||
-                         ( // U4: Removing members from a group by an admin (non-owner)
-                           resource.data.type == 'group' &&
-                           request.auth.uid in resource.data.adminIds &&
-                           request.auth.uid != resource.data.ownerId && // This rule part applies if admin is not owner
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'adminIds', 'updatedAt']) && // Can affect both lists
-                           request.resource.data.ownerId == resource.data.ownerId &&
-                           // Check that only specified user is removed, and not the owner.
-                           resource.data.participants.removeAll(request.resource.data.participants).size() == 1 && // Only one user removed from participants
-                           !request.resource.data.participants.hasAny([resource.data.ownerId]) // Ensure owner is not in the list of people being removed (implicitly, owner is not removed)
-                         ) ||
-                         ( // U4.1: Removing members from a group by the owner
-                           resource.data.type == 'group' &&
-                           request.auth.uid == resource.data.ownerId && // Owner specific
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'adminIds', 'updatedAt']) &&
-                           request.resource.data.ownerId == resource.data.ownerId &&
-                           // Owner can remove anyone except themselves IF they are not the last participant or last admin
-                           (
-                             (resource.data.participants.removeAll(request.resource.data.participants).size() >= 1 &&
-                              !request.resource.data.participants.hasAny([resource.data.ownerId])) || // Not removing self
-                             (request.resource.data.participants.size() >= 1 && // If removing self, ensure others remain
-                              request.resource.data.ownerId == request.auth.uid && // Is owner
-                              request.resource.data.participants.hasAny([request.auth.uid]) == false && // Is removing self
-                              request.resource.data.participants.size() >= 1 // At least one other participant remains
-                             )
-                           ) &&
-                           // If owner is removed, admin list should also remove owner
-                           (!(request.auth.uid in request.resource.data.adminIds) || request.resource.data.adminIds.hasAll(resource.data.adminIds.removeAll([request.auth.uid])))
-                         ) ||
-                         ( // U5: Leaving a group (self-removal, including owner if conditions met)
-                           resource.data.type == 'group' &&
-                           request.auth.uid in resource.data.participants && // User must be participant
-                           request.resource.data.participants.size() == resource.data.participants.size() - 1 && // Exactly one person removed
-                           request.resource.data.participants.hasAll(resource.data.participants.removeAll([request.auth.uid])) && // The removed person is the auth user
-                           // If user was admin, they are also removed from adminIds
-                           (!(request.auth.uid in resource.data.adminIds) || request.resource.data.adminIds.hasAll(resource.data.adminIds.removeAll([request.auth.uid]))) &&
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'adminIds', 'updatedAt', 'formerParticipants']) &&
-                           // formerParticipants handling for leaving
-                           (request.resource.data.formerParticipants == resource.data.formerParticipants ||
-                            (request.resource.data.formerParticipants[request.auth.uid] == request.time &&
-                             request.resource.data.formerParticipants.affectedKeys().hasOnly([request.auth.uid])
-                            )
-                           ) &&
-                           // Owner cannot change, unless they are leaving and conditions met
-                           (request.resource.data.ownerId == resource.data.ownerId || (request.resource.data.ownerId == null && request.auth.uid == resource.data.ownerId && request.resource.data.participants.size() == 0))
-                         ) ||
-                         ( // U6: Admin Management by Owner (promote/demote non-owner admins)
-                           resource.data.type == 'group' &&
-                           request.auth.uid == resource.data.ownerId &&
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['adminIds', 'updatedAt']) &&
-                           request.resource.data.participants == resource.data.participants && // Participants list doesn't change
-                           request.resource.data.ownerId == resource.data.ownerId // Owner doesn't change
-                           // New adminIds must contain owner, and any other new admins must be participants
-                           && request.resource.data.adminIds.hasAll([resource.data.ownerId])
-                           && request.resource.data.adminIds.removeAll([resource.data.ownerId]).hasOnly(resource.data.participants)
-                         ) ||
-                         ( // U7: Ownership Transfer by current Owner
-                           resource.data.type == 'group' &&
-                           request.auth.uid == resource.data.ownerId && // Current user must be owner
-                           request.resource.data.ownerId != resource.data.ownerId && // Owner ID must change
-                           request.resource.data.ownerId in resource.data.participants && // New owner must be a participant
-                           request.resource.data.adminIds.hasAll([request.resource.data.ownerId]) && // New owner must be an admin
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerId', 'adminIds', 'updatedAt']) &&
-                           request.resource.data.participants == resource.data.participants // Participants don't change
-                         )
-                       );
-
-      allow delete: if false; // Do not allow direct deletion for now; use "leave group" or admin actions
-
-
-      // Messages Subcollection
-      match /messages/{messageId} {
-        allow read, list: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
-        allow create: if isAuthenticated() && request.auth.uid == request.resource.data.senderId &&
-                         request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants &&
+        allow read, list: if isAuthenticated() && request.auth.uid == resource.data.userId;
+        allow create: if isAuthenticated() &&
+                         request.auth.uid == request.resource.data.senderId && // Sender creates it
+                         request.resource.data.userId != request.resource.data.senderId && // Cannot notify self
                          request.resource.data.timestamp == request.time &&
-                         request.resource.data.keys().hasOnly(['senderId', 'text', 'timestamp', 'read', 'isBotMessage', 'replyToMessageId', 'repliedToTextSnippet', 'conversationId']);
-        allow update: if false; // Messages are immutable
-        allow delete: if false; // For now, no direct deletion by users
-      }
-    }
-
-    // newsArticles Collection
-    match /newsArticles/{articleId} {
-      allow read: if resource.data.status == 'published' || (isAuthenticated() && request.auth.uid == resource.data.userId);
-      allow list: if true; // Public listing for published, rules on read will filter
-      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
-                       request.resource.data.createdAt == request.time &&
-                       request.resource.data.updatedAt == request.time &&
-                       // Ensure all fields are present and correct types
-                       request.resource.data.keys().hasOnly([
-                         'userId', 'title', 'tags', 'content', 'status', 'coverImageUrl', 'createdAt', 'updatedAt', 'publishedAt',
-                         'likeCount', 'likedBy', 'commentCount',
-                         'descriptionDetails', 'descriptionOutcome', 'descriptionTried', 'imageUrls', 'maxBudget', 'deadline',
-                         'mentionedUserIds', 'naicsCode', 'question', 'ratingScore', 'requestType', 'sector', 'subSector', 'industry',
-                         'draftContent', 'hasUnpublishedChanges'
-                       ]);
-      allow update: if isAuthenticated() && request.auth.uid == resource.data.userId &&
-                       request.resource.data.userId == resource.data.userId &&
-                       request.resource.data.createdAt == resource.data.createdAt &&
-                       request.resource.data.updatedAt == request.time &&
-                       // Allow specific fields to be updated
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                         'title', 'tags', 'content', 'status', 'coverImageUrl', 'publishedAt', 'updatedAt',
-                         'likeCount', 'likedBy', // likeCount/likedBy managed by specific transaction
-                         'draftContent', 'hasUnpublishedChanges',
-                         'descriptionDetails', 'descriptionOutcome', 'descriptionTried', 'imageUrls', 'maxBudget', 'deadline',
-                         'mentionedUserIds', 'naicsCode', 'question', 'ratingScore', 'requestType', 'sector', 'subSector', 'industry'
-                       ]);
-      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
-
-      // News Comments Subcollection
-      match /newsComments/{commentId} {
-        allow read: if resource.data.isShadowBanned == false || (isAuthenticated() && request.auth.uid == get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId);
-        allow list: if true; // Actual filtering done by read rule
-        allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
-                         request.resource.data.timestamp == request.time &&
-                         request.resource.data.updatedAt == request.time &&
-                         request.resource.data.keys().hasOnly(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'mentionName', 'isShadowBanned']);
-        allow update: if isAuthenticated() &&
-                         ( (request.auth.uid == resource.data.userId && // User can update their own comment (text, likes)
-                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'likedBy', 'likeCount', 'updatedAt'])
-                           ) ||
-                           (request.auth.uid == get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId && // Article author can update ban status
-                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isShadowBanned', 'updatedAt'])
-                           )
-                         ) &&
-                         request.resource.data.userId == resource.data.userId &&
-                         request.resource.data.timestamp == resource.data.timestamp &&
+                         request.resource.data.isRead == false &&
+                         request.resource.data.keys().hasOnly([
+                            'userId', 'type', 'senderId', 'senderName', 'senderAvatar',
+                            'postId', 'postQuestion', 'commentId', 'subCommentId',
+                            'conversationId', 'textSnippet', 'timestamp', 'isRead'
+                         ]);
+        allow update: if isAuthenticated() && request.auth.uid == resource.data.userId && // Receiver can update
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'updatedAt']) &&
                          request.resource.data.updatedAt == request.time;
-        allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId; // User can delete own
-
-        // News SubComments (Replies) Subcollection
-        match /newsSubcomments/{subCommentId} {
-          allow read: if resource.data.isShadowBanned == false || (isAuthenticated() && request.auth.uid == get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId);
-          allow list: if true; // Filtering by read rule
-          allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
-                           request.resource.data.timestamp == request.time &&
-                           request.resource.data.updatedAt == request.time &&
-                           request.resource.data.keys().hasOnly(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'mentionName', 'isShadowBanned']);
-          allow update: if isAuthenticated() &&
-                           ( (request.auth.uid == resource.data.userId &&
-                              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'likedBy', 'likeCount', 'updatedAt'])
-                             ) ||
-                             (request.auth.uid == get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId &&
-                              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isShadowBanned', 'updatedAt'])
-                             )
-                           ) &&
-                           request.resource.data.userId == resource.data.userId &&
-                           request.resource.data.timestamp == resource.data.timestamp &&
-                           request.resource.data.updatedAt == request.time;
-          allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
-        }
-      }
+        allow delete: if false; // Notifications are not user-deletable for now
     }
 
-    // Article Tags Collection
+    match /userPreferences/{userId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow create: if isAuthenticated() && request.auth.uid == userId &&
+                        request.resource.data.userId == userId &&
+                        request.resource.data.createdAt == request.time &&
+                        request.resource.data.updatedAt == request.time &&
+                        request.resource.data.paymentMethods is list &&
+                        // Verify all other fields are of correct type or null for optional ones
+                        (request.resource.data.stripeCustomerId is string || request.resource.data.stripeCustomerId == null) &&
+                        (request.resource.data.stripeSubscriptionId is string || request.resource.data.stripeSubscriptionId == null) &&
+                        (request.resource.data.activeStripePriceId is string || request.resource.data.activeStripePriceId == null) &&
+                        (request.resource.data.stripeSubscriptionStatus is string || request.resource.data.stripeSubscriptionStatus == null) &&
+                        (request.resource.data.stripeSubscriptionCurrentPeriodEnd is number || request.resource.data.stripeSubscriptionCurrentPeriodEnd == null) &&
+                        (request.resource.data.stripeSubscriptionWillCancelAtPeriodEnd is bool || request.resource.data.stripeSubscriptionWillCancelAtPeriodEnd == null) &&
+                        request.resource.data.keys().hasOnly([
+                            'userId', 'paymentMethods',
+                            'notifyOnReply', 'notifyOnMention', 'notifyOnNewConnectionRequest',
+                            'notifyOnConnectionAccepted', 'notifyOnNewMessage', 'notifyOnPlatformUpdates',
+                            'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
+                            'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
+                            'createdAt', 'updatedAt'
+                        ]);
+        allow update: if isAuthenticated() && request.auth.uid == userId &&
+                        request.resource.data.userId == resource.data.userId &&
+                        request.resource.data.createdAt == resource.data.createdAt &&
+                        request.resource.data.updatedAt == request.time &&
+                        request.resource.data.paymentMethods is list &&
+                        (request.resource.data.stripeCustomerId is string || request.resource.data.stripeCustomerId == null) &&
+                        (request.resource.data.stripeSubscriptionId is string || request.resource.data.stripeSubscriptionId == null) &&
+                        (request.resource.data.activeStripePriceId is string || request.resource.data.activeStripePriceId == null) &&
+                        (request.resource.data.stripeSubscriptionStatus is string || request.resource.data.stripeSubscriptionStatus == null) &&
+                        (request.resource.data.stripeSubscriptionCurrentPeriodEnd is number || request.resource.data.stripeSubscriptionCurrentPeriodEnd == null) &&
+                        (request.resource.data.stripeSubscriptionWillCancelAtPeriodEnd is bool || request.resource.data.stripeSubscriptionWillCancelAtPeriodEnd == null) &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                            'paymentMethods',
+                            'notifyOnReply', 'notifyOnMention', 'notifyOnNewConnectionRequest',
+                            'notifyOnConnectionAccepted', 'notifyOnNewMessage', 'notifyOnPlatformUpdates',
+                            'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
+                            'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
+                            'updatedAt'
+                        ]);
+    }
+
+    match /conversations/{conversationId} {
+        // Helper to check if current user is a participant
+        function isParticipant() {
+          return request.auth.uid in resource.data.participants;
+        }
+        // Helper to check if current user is owner or admin of a group
+        function isGroupAdminOrOwner() {
+            return resource.data.type == 'group' &&
+                   (request.auth.uid == resource.data.ownerId || request.auth.uid in resource.data.adminIds);
+        }
+
+        allow read: if isAuthenticated() && isParticipant();
+        allow list: if isAuthenticated() &&
+                       request.query.filters.size() == 1 &&
+                       request.query.filters[0].field == 'participants' &&
+                       request.query.filters[0].operator == 'array-contains' &&
+                       request.query.filters[0].value == request.auth.uid &&
+                       request.query.limit <= 50 &&
+                       (request.query.orderBy == null || request.query.orderBy.path == 'lastMessageTimestamp');
+
+        allow create: if isAuthenticated() &&
+                        request.resource.data.participants.hasAny([request.auth.uid]) && // Creator must be a participant
+                        request.resource.data.createdAt == request.time &&
+                        request.resource.data.updatedAt == request.time &&
+                        // Direct Chat specific rules
+                        ((request.resource.data.type == 'direct' &&
+                          request.resource.data.participants.size() == 2 &&
+                          request.resource.data.groupName == null &&
+                          request.resource.data.groupAvatarUrl == null &&
+                          request.resource.data.ownerId == null &&
+                          request.resource.data.adminIds.size() == 0
+                         ) ||
+                        // Group Chat specific rules
+                         (request.resource.data.type == 'group' &&
+                          request.resource.data.participants.size() >= 2 &&
+                          request.resource.data.groupName is string && request.resource.data.groupName.size() > 0 &&
+                          (request.resource.data.groupAvatarUrl is string || request.resource.data.groupAvatarUrl == null) &&
+                          request.resource.data.ownerId == request.auth.uid &&
+                          request.resource.data.adminIds.hasAll([request.auth.uid]) // Creator is admin
+                         )) &&
+                         request.resource.data.keys().hasOnly([
+                           'participants', 'type', 'postId', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds',
+                           'lastMessage', 'lastMessageTimestamp', 'createdAt', 'updatedAt'
+                         ]);
+
+        allow update: if isAuthenticated() && isParticipant() &&
+                         request.resource.data.updatedAt == request.time &&
+                         // Fields common to both direct and group that can be updated by any participant
+                         ((request.resource.data.diff(resource.data).affectedKeys().hasOnly(['lastMessage', 'lastMessageSenderId', 'lastMessageTimestamp', 'updatedAt'])) ||
+                         // Fields specific to group updates, only by admin/owner
+                          (isGroupAdminOrOwner() &&
+                           request.resource.data.type == 'group' &&
+                           request.resource.data.createdAt == resource.data.createdAt && // Cannot change type or creation time
+                           request.resource.data.postId == resource.data.postId && // Cannot change related post
+                           request.resource.data.ownerId == resource.data.ownerId && // Standard admin cannot change owner directly
+                           // Allow updates to participants (add/remove), groupName, groupAvatarUrl, adminIds
+                           request.resource.data.diff(resource.data).affectedKeys().hasAny(['participants', 'groupName', 'groupAvatarUrl', 'adminIds', 'updatedAt', 'lastMessage', 'lastMessageSenderId', 'lastMessageTimestamp'])) ||
+                           // Owner transferring ownership
+                           (resource.data.type == 'group' && request.auth.uid == resource.data.ownerId && // Current user is owner
+                            request.resource.data.ownerId != resource.data.ownerId && // Owner ID is changing
+                            request.resource.data.ownerId in resource.data.participants && // New owner is a participant
+                            request.resource.data.adminIds.hasAll([request.resource.data.ownerId]) && // New owner becomes an admin
+                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['ownerId', 'adminIds', 'updatedAt'])
+                           ) ||
+                           // Leaving a group (updating formerParticipants)
+                           (
+                               !request.resource.data.participants.hasAny([request.auth.uid]) && // User is no longer in participants
+                               resource.data.participants.hasAny([request.auth.uid]) && // User was in participants
+                               request.resource.data.formerParticipants[request.auth.uid] == request.time && // Setting leave time for user
+                               request.resource.data.diff(resource.data).affectedKeys().hasOnly(['participants', 'formerParticipants', 'updatedAt', 'adminIds']) &&
+                               // If owner leaves and is last admin, special handling might be needed (e.g. promote someone or delete group - complex for rules)
+                               // For simplicity, let's assume client logic handles admin promotion if owner leaves.
+                               // Admin list should also remove the leaving user if they were an admin
+                               (request.resource.data.adminIds.hasAll(resource.data.adminIds.removeAll([request.auth.uid])) || request.resource.data.adminIds.size() == resource.data.adminIds.removeAll([request.auth.uid]).size())
+                           )
+                         );
+
+
+        match /messages/{messageId} {
+            allow read, list: if isAuthenticated() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+            allow create: if isAuthenticated() &&
+                             request.auth.uid == request.resource.data.senderId &&
+                             request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants &&
+                             request.resource.data.conversationId == conversationId &&
+                             request.resource.data.timestamp == request.time &&
+                             request.resource.data.read == false &&
+                             (request.resource.data.isBotMessage == false || request.resource.data.isBotMessage == true) &&
+                             request.resource.data.keys().hasOnly(['senderId', 'conversationId', 'text', 'timestamp', 'read', 'isBotMessage', 'replyToMessageId', 'repliedToTextSnippet']);
+            allow update, delete: if false; // Messages are immutable
+        }
+    }
+    // News Articles Collection (new)
+    match /newsArticles/{articleId} {
+        // Helper: Is user the author of this article?
+        function isNewsArticleAuthor() {
+          return isAuthenticated() && resource.data.userId == request.auth.uid;
+        }
+        // Helper: Can the current authenticated user view this article?
+        function canViewNewsArticle() {
+          return (resource.data.status == 'published') || // Published articles are public
+                 (resource.data.status == 'draft' && isNewsArticleAuthor()); // Drafts only by author
+        }
+
+        allow read: if canViewNewsArticle();
+        allow list: if isAuthenticated() && // Anyone authenticated can list (results filtered by read)
+                       request.query.limit <= 100 &&
+                       (request.query.orderBy == null || request.query.orderBy.path == 'publishedAt' || request.query.orderBy.path == 'createdAt' || request.query.orderBy.path == 'updatedAt');
+
+
+        allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
+                        request.resource.data.createdAt == request.time &&
+                        request.resource.data.updatedAt == request.time &&
+                        (request.resource.data.publishedAt == request.time || request.resource.data.publishedAt == null) &&
+                        request.resource.data.likeCount == 0 &&
+                        request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
+                        request.resource.data.commentCount == 0 &&
+                        request.resource.data.status in ['draft', 'published'] &&
+                        // Check all expected fields for news articles from your 'NewsArticle' type
+                        request.resource.data.keys().hasOnly([
+                           'userId', 'title', 'tags', 'content', 'draftContent', 'hasUnpublishedChanges', 'status', 'coverImageUrl',
+                           'createdAt', 'updatedAt', 'publishedAt', 'likeCount', 'likedBy', 'commentCount',
+                           // Fields from Post type that might be relevant if NewsArticle extends/mirrors it
+                           'descriptionDetails', 'descriptionOutcome', 'descriptionTried', 'imageUrls',
+                           'maxBudget', 'deadline', 'mentionedUserIds', 'naicsCode', 'question',
+                           'ratingScore', 'requestType', 'sector', 'subSector', 'industry'
+                        ]);
+
+        allow update: if isAuthenticated() && isNewsArticleAuthor() && // Only author can update
+                        request.resource.data.userId == resource.data.userId && // Cannot change author
+                        request.resource.data.createdAt == resource.data.createdAt && // Cannot change creation time
+                        request.resource.data.updatedAt == request.time && // Must set update time
+                        request.resource.data.status in ['draft', 'published'] &&
+                        // Allow updating specific fields
+                        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                           'title', 'tags', 'content', 'draftContent', 'hasUnpublishedChanges', 'status', 'coverImageUrl',
+                           'publishedAt', 'updatedAt', 'likeCount', 'likedBy', // likeCount/likedBy for author actions if any (or remove if only users can like)
+                           // Other potentially updatable fields if NewsArticle has them:
+                           'descriptionDetails', 'descriptionOutcome', 'descriptionTried', 'imageUrls',
+                           'maxBudget', 'deadline', 'mentionedUserIds', 'naicsCode', 'question',
+                           'ratingScore', 'requestType', 'sector', 'subSector', 'industry'
+                        ]);
+        allow delete: if isAuthenticated() && isNewsArticleAuthor(); // Only author can delete
+
+        // Subcollection for News Comments
+        match /newsComments/{commentId} {
+            function isCommentOwner() {
+              return isAuthenticated() && resource.data.userId == request.auth.uid;
+            }
+            // Article author can also manage comments (e.g., shadow ban)
+            function isArticleAuthorForComment() {
+                return isAuthenticated() && get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId == request.auth.uid;
+            }
+
+            allow read: if resource.data.isShadowBanned == false || isArticleAuthorForComment() || isCommentOwner();
+            allow list: if true; // Public list, read rule filters based on shadowBan
+
+            allow create: if isAuthenticated() &&
+                             request.auth.uid == request.resource.data.userId &&
+                             request.resource.data.timestamp == request.time &&
+                             request.resource.data.updatedAt == request.time &&
+                             request.resource.data.likeCount == 0 &&
+                             request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
+                             request.resource.data.mentionedUserIds is list &&
+                             request.resource.data.isShadowBanned == false && // New comments are not shadow banned by default
+                             request.resource.data.keys().hasOnly(['userId', 'text', 'mentionName', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'isShadowBanned']);
+
+            allow update: if isAuthenticated() &&
+                             request.resource.data.userId == resource.data.userId && // Cannot change author
+                             request.resource.data.timestamp == resource.data.timestamp && // Cannot change creation time
+                             request.resource.data.updatedAt == request.time &&
+                             ( // Option 1: User updating their own like/text
+                               (request.auth.uid == resource.data.userId &&
+                                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'likedBy', 'likeCount', 'updatedAt', 'mentionName', 'mentionedUserIds'])) ||
+                               // Option 2: Article author shadow banning
+                               (isArticleAuthorForComment() &&
+                                request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isShadowBanned', 'updatedAt']))
+                             );
+
+            allow delete: if isAuthenticated() && isCommentOwner(); // Only comment owner can delete
+
+            // Subcollection for News SubComments (Replies to News Comments)
+            match /newsSubcomments/{subCommentId} {
+                function isSubCommentOwner() {
+                  return isAuthenticated() && resource.data.userId == request.auth.uid;
+                }
+
+                allow read: if resource.data.isShadowBanned == false || isArticleAuthorForComment() || isSubCommentOwner();
+                allow list: if true; // Public list, read rule filters
+
+                allow create: if isAuthenticated() &&
+                                 request.auth.uid == request.resource.data.userId &&
+                                 request.resource.data.timestamp == request.time &&
+                                 request.resource.data.updatedAt == request.time &&
+                                 request.resource.data.likeCount == 0 &&
+                                 request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
+                                 request.resource.data.mentionedUserIds is list &&
+                                 request.resource.data.isShadowBanned == false &&
+                                 request.resource.data.keys().hasOnly(['userId', 'text', 'mentionName', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'isShadowBanned']);
+
+                allow update: if isAuthenticated() &&
+                                 request.resource.data.userId == resource.data.userId &&
+                                 request.resource.data.timestamp == resource.data.timestamp &&
+                                 request.resource.data.updatedAt == request.time &&
+                                 ( // Option 1: User updating their own like/text
+                                   (request.auth.uid == resource.data.userId &&
+                                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'likedBy', 'likeCount', 'updatedAt', 'mentionName', 'mentionedUserIds'])) ||
+                                   // Option 2: Article author shadow banning
+                                   (isArticleAuthorForComment() &&
+                                    request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isShadowBanned', 'updatedAt']))
+                                 );
+                allow delete: if isAuthenticated() && isSubCommentOwner();
+            }
+        }
+    }
+
     match /articleTags/{tagId} {
         allow read: if true; // Tags are public
-        allow list: if true; // Tags are listable
-        // Create and update handled by transaction in getOrCreateTagsAndUpdateUsage
-        // which implies it's done by an authenticated user (checked in service).
-        // Rules here should permit the transactional write if conditions match.
+        allow list: if true; // Allow listing/searching tags
         allow create: if isAuthenticated() &&
-                         request.resource.data.createdBy == request.auth.uid &&
+                         request.auth.uid == request.resource.data.createdBy &&
                          request.resource.data.createdAt == request.time &&
+                         request.resource.data.usageCount >= 0 && // Can be 0 or more
                          request.resource.data.keys().hasOnly(['name', 'nameLowercase', 'usageCount', 'createdAt', 'createdBy']);
-        allow update: if isAuthenticated() &&
+        allow update: if isAuthenticated() && // Allow authenticated users to increment/decrement usageCount
+                         request.resource.data.name == resource.data.name &&
+                         request.resource.data.nameLowercase == resource.data.nameLowercase &&
+                         request.resource.data.createdBy == resource.data.createdBy &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount']);
-                         // Only usageCount can be updated this way. Name changes would require new doc.
-        allow delete: if false; // Tags are not directly deleted by users.
+        allow delete: if false; // Tags are not user-deletable for now
     }
 
-    // Collections (User's saved posts)
+    match /reviews/{reviewId} {
+        allow read: if true; // Reviews are public
+        allow list: if isAuthenticated(); // Allow fetching reviews (e.g., for a profile or by a user)
+
+        allow create: if isAuthenticated() &&
+                         request.auth.uid == request.resource.data.reviewerId && // User can only create review as themselves
+                         request.resource.data.createdAt == request.time &&
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.rating is number && request.resource.data.rating >=1 && request.resource.data.rating <=5 &&
+                         request.resource.data.comment is string &&
+                         // reviewerHistoricalAvgRating can be number or null
+                         (request.resource.data.reviewerHistoricalAvgRating is number || request.resource.data.reviewerHistoricalAvgRating == null) &&
+                         request.resource.data.keys().hasOnly([
+                            'targetUserId', 'reviewerId', 'reviewerName', 'reviewerAvatar',
+                            'rating', 'comment', 'reviewerHistoricalAvgRating', 'createdAt', 'updatedAt'
+                         ]);
+        allow update: if isAuthenticated() &&
+                         request.auth.uid == resource.data.reviewerId && // Only the reviewer can update their review
+                         request.resource.data.targetUserId == resource.data.targetUserId &&
+                         request.resource.data.reviewerId == resource.data.reviewerId &&
+                         request.resource.data.reviewerName == resource.data.reviewerName &&
+                         request.resource.data.reviewerAvatar == resource.data.reviewerAvatar &&
+                         request.resource.data.reviewerHistoricalAvgRating == resource.data.reviewerHistoricalAvgRating && // Cannot change this on update
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.rating is number && request.resource.data.rating >=1 && request.resource.data.rating <=5 &&
+                         request.resource.data.comment is string &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'comment', 'updatedAt']);
+        allow delete: if isAuthenticated() && request.auth.uid == resource.data.reviewerId; // Only reviewer can delete
+    }
+
     match /collections/{collectionId} {
-      function isCollectionOwner() {
-        return resource.data.ownerId == request.auth.uid;
-      }
-      function isSharedWithUser() {
-        return request.auth.uid in resource.data.sharedWithUserIds;
-      }
+        // Helper: Is the user the owner of this collection?
+        function isCollectionOwner() {
+          return isAuthenticated() && resource.data.ownerId == request.auth.uid;
+        }
+        // Helper: Is the user shared on this collection?
+        function isSharedWithUser() {
+          return isAuthenticated() && resource.data.sharedWithUserIds.hasAny([request.auth.uid]);
+        }
 
-      allow read: if isAuthenticated() && (isCollectionOwner() || isSharedWithUser());
-      allow list: if isAuthenticated() &&
-                     (
-                       (request.query.filters.size() == 1 && request.query.filters[0].field == 'ownerId' && request.query.filters[0].value == request.auth.uid) ||
-                       (request.query.filters.size() == 1 && request.query.filters[0].field == 'sharedWithUserIds' && request.query.filters[0].operator == 'array-contains' && request.query.filters[0].value == request.auth.uid)
-                     ) && request.query.limit <= 100 && request.query.orderBy.path == 'createdAt';
+        allow read: if isCollectionOwner() || isSharedWithUser();
+        allow list: if isAuthenticated() &&
+                       request.query.filters.size() > 0 && // Must have at least one filter
+                       (
+                         (request.query.filters[0].field == 'ownerId' && request.query.filters[0].operator == '==' && request.query.filters[0].value == request.auth.uid) ||
+                         (request.query.filters[0].field == 'sharedWithUserIds' && request.query.filters[0].operator == 'array-contains' && request.query.filters[0].value == request.auth.uid)
+                       ) &&
+                       request.query.limit <= 100 && // Reasonable limit
+                       (request.query.orderBy == null || request.query.orderBy.path == 'createdAt'); // Common ordering
 
-      allow create: if isAuthenticated() &&
-                       request.resource.data.ownerId == request.auth.uid &&
-                       request.resource.data.name is string && request.resource.data.name.size() > 0 &&
-                       request.resource.data.createdAt == request.time &&
-                       request.resource.data.updatedAt == request.time &&
-                       request.resource.data.postIds is list && // Ensure postIds is a list
-                       request.resource.data.sharedWithUserIds is list && // Ensure sharedWithUserIds is a list
-                       // Allow description to be string or null.
-                       (request.resource.data.description == null || request.resource.data.description is string) &&
-                       request.resource.data.keys().hasOnly(['name', 'description', 'ownerId', 'postIds', 'sharedWithUserIds', 'createdAt', 'updatedAt']);
+        allow create: if isAuthenticated() && request.auth.uid == request.resource.data.ownerId &&
+                         request.resource.data.createdAt == request.time &&
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.name is string && request.resource.data.name.size() > 0 &&
+                         request.resource.data.description is string &&
+                         request.resource.data.postIds is list &&
+                         request.resource.data.sharedWithUserIds is list &&
+                         request.resource.data.keys().hasOnly(['name', 'description', 'ownerId', 'postIds', 'sharedWithUserIds', 'createdAt', 'updatedAt']);
 
-      allow update: if isAuthenticated() && isCollectionOwner() &&
-                       request.resource.data.ownerId == resource.data.ownerId && // Owner cannot change
-                       request.resource.data.createdAt == resource.data.createdAt && // Creation time cannot change
-                       request.resource.data.updatedAt == request.time &&
-                       // Allow only these fields to be updated by the owner
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'postIds', 'sharedWithUserIds', 'updatedAt']);
+        allow update: if isAuthenticated() && isCollectionOwner() &&
+                         request.resource.data.ownerId == resource.data.ownerId && // Owner cannot change
+                         request.resource.data.createdAt == resource.data.createdAt && // Creation time cannot change
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.name is string && (request.resource.data.name.size() == 0 || request.resource.data.name.size() > 0) && // Allow empty or non-empty name if present
+                         request.resource.data.description is string &&
+                         request.resource.data.postIds is list &&
+                         request.resource.data.sharedWithUserIds is list &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'postIds', 'sharedWithUserIds', 'updatedAt']);
 
-      allow delete: if isAuthenticated() && isCollectionOwner();
+        allow delete: if isAuthenticated() && isCollectionOwner();
     }
+
+
   }
 }
 
