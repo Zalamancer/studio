@@ -1,4 +1,3 @@
-
 // src/components/news/NewsCommentItem.tsx
 "use client";
 
@@ -248,7 +247,7 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
     return () => clearTimeout(handler);
   }, [mentionQuery]);
 
-  const { data: subComments = [], isLoading: isLoadingSubComments, refetch: refetchSubComments } = useQuery<ClientSubComment[]>({
+  const { data: subComments = [], isLoading: isLoadingSubComments, error: subCommentsError, refetch: refetchSubComments } = useQuery<ClientSubComment[]>({
     queryKey: ['newsSubComments', articleId, comment.id],
     queryFn: () => getNewsSubCommentsForComment(articleId, comment.id),
     enabled: showReplies && !!user,
@@ -389,7 +388,7 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
         replyInputRef.current?.focus();
         replyInputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition);
       }, 0);
-    } // Corrected: Added missing closing brace for the if block
+    } 
     setShowSuggestions(false);
     setMentionQuery('');
   }, [newReply, setNewReply, setMentionQuery, setShowSuggestions]);
@@ -415,8 +414,10 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
         <div className="flex-grow bg-muted/50 p-3 rounded-lg min-w-0">
           <div className="flex justify-between items-center mb-1">
             <Link href={`/profile/${comment.userId}`} passHref><p className="text-sm font-medium text-foreground truncate hover:underline cursor-pointer">{displayAnonymousName}</p></Link>
-            <div className="flex items-center gap-1.5 flex-shrink-0 ml-2">
-              <p className="text-xs text-muted-foreground">{new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+            <div className="flex items-center gap-1 flex-shrink-0 ml-2">
+              <p className="text-xs text-muted-foreground">
+                {new Date(comment.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </p>
               {user && (<Button variant="ghost" size="xs" onClick={handleLikeComment} disabled={isLiking} className={cn("text-xs h-auto p-0.5 flex items-center gap-0.5", hasLiked ? "text-red-500 hover:text-red-600" : "text-muted-foreground hover:text-red-500")} aria-pressed={hasLiked}>
                 {isLiking ? <Loader2 className="h-3 w-3 animate-spin" /> : <Heart className={cn("h-3 w-3", hasLiked && "fill-current")} />}
                 {(comment.likeCount ?? 0) > 0 && <span className="text-xs ml-0.5">({comment.likeCount})</span>}
