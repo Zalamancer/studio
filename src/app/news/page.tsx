@@ -31,8 +31,8 @@ const NewsPage = () => {
   const [tagSearchInput, setTagSearchInput] = useState('');
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
 
-  const [isSearchActive, setIsSearchActive] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
+  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
+  const headerSearchInputRef = useRef<HTMLInputElement>(null);
 
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticlesAll'],
@@ -66,6 +66,25 @@ const NewsPage = () => {
     return ids;
   }, [userCollections]);
 
+  // Moved getCleanTextExcerpt before filteredArticles
+  const getCleanTextExcerpt = useCallback((htmlString: string | null | undefined, maxLength: number = 150): string => {
+    if (typeof document === 'undefined' || !htmlString) return '';
+    try {
+      const tempDiv = document.createElement('div');
+      tempDiv.innerHTML = htmlString;
+      tempDiv.querySelectorAll('pre, figure, hr, img, iframe, div[data-embed-wrapper="true"], h1, h2, h3, h4, h5, h6').forEach(el => el.remove());
+      let textContent = tempDiv.textContent || tempDiv.innerText || "";
+      textContent = textContent.replace(/\s\s+/g, ' ').trim();
+      if (textContent.length <= maxLength) return textContent;
+      let excerpt = textContent.substring(0, maxLength);
+      const lastSpace = excerpt.lastIndexOf(' ');
+      if (lastSpace > Math.floor(maxLength * 0.7)) excerpt = excerpt.substring(0, lastSpace);
+      return excerpt + "...";
+    } catch (e) {
+      return htmlString.substring(0, maxLength) + (htmlString.length > maxLength ? "..." : "");
+    }
+  }, []);
+
   const filteredArticles = useMemo(() => {
     let articlesToDisplay = activeArticleView === 'my_articles' && user ? userArticles : allPublishedArticles;
 
@@ -92,27 +111,10 @@ const NewsPage = () => {
     }
     return articlesToDisplay.sort((a,b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0));
 
-  }, [allPublishedArticles, userArticles, activeArticleView, user, selectedTags, searchTerm]);
+  }, [allPublishedArticles, userArticles, activeArticleView, user, selectedTags, searchTerm, getCleanTextExcerpt]);
 
   const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles);
 
-  const getCleanTextExcerpt = useCallback((htmlString: string | null | undefined, maxLength: number = 150): string => {
-    if (typeof document === 'undefined' || !htmlString) return '';
-    try {
-      const tempDiv = document.createElement('div');
-      tempDiv.innerHTML = htmlString;
-      tempDiv.querySelectorAll('pre, figure, hr, img, iframe, div[data-embed-wrapper="true"], h1, h2, h3, h4, h5, h6').forEach(el => el.remove());
-      let textContent = tempDiv.textContent || tempDiv.innerText || "";
-      textContent = textContent.replace(/\s\s+/g, ' ').trim();
-      if (textContent.length <= maxLength) return textContent;
-      let excerpt = textContent.substring(0, maxLength);
-      const lastSpace = excerpt.lastIndexOf(' ');
-      if (lastSpace > Math.floor(maxLength * 0.7)) excerpt = excerpt.substring(0, lastSpace);
-      return excerpt + "...";
-    } catch (e) {
-      return htmlString.substring(0, maxLength) + (htmlString.length > maxLength ? "..." : "");
-    }
-  }, []);
 
   const handleCollectionUpdate = useCallback(() => {
     if (user) {
@@ -139,34 +141,34 @@ const NewsPage = () => {
     return count;
   }, [selectedTags]);
 
-  const toggleSearchActive = () => {
-    setIsSearchActive(prev => {
-      if (!prev) { // Means it's about to become active
-        setTimeout(() => searchInputRef.current?.focus(), 0);
-      } else { // Means it's about to become inactive
-        setSearchTerm(''); // Clear search term when search bar is hidden
+  const toggleHeaderSearch = () => {
+    setIsHeaderSearchActive(prev => {
+      if (prev) { // If search was active and is now being deactivated
+        setSearchTerm(''); // Clear the search term
+      } else { // If search is about to become active
+        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
       }
       return !prev;
     });
   };
 
   useEffect(() => {
-    if (isSearchActive && searchInputRef.current) {
-      searchInputRef.current.focus();
+    if (isHeaderSearchActive && headerSearchInputRef.current) {
+      headerSearchInputRef.current.focus();
     }
-  }, [isSearchActive]);
+  }, [isHeaderSearchActive]);
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
       {/* Main header bar */}
       <div className="mb-6 flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b">
-        <Button variant="ghost" size="icon" onClick={toggleSearchActive} className="flex-shrink-0 h-9 w-9 p-2">
-          {isSearchActive ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+        <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className="flex-shrink-0 h-9 w-9 p-2">
+          {isHeaderSearchActive ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
         </Button>
 
-        {isSearchActive ? (
+        {isHeaderSearchActive ? (
           <Input
-            ref={searchInputRef}
+            ref={headerSearchInputRef}
             type="search"
             placeholder="Search articles by title, content, or tags..."
             value={searchTerm}
