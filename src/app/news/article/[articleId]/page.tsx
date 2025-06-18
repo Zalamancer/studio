@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -12,7 +11,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -32,13 +31,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Textarea } from '@/components/ui/textarea';
-import { Badge } from '@/components/ui/badge'; // Added Badge
+import { Badge } from '@/components/ui/badge';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
-import { TagsInput } from '@/components/TagsInput';
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -56,7 +54,7 @@ const ArticlePage = () => {
   const [errorLoadingArticle, setErrorLoadingArticle] = useState<string | null>(null);
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]); // Tags are still managed, just not via header input
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -66,7 +64,7 @@ const ArticlePage = () => {
   const [isSavingDraftOfPublished, setIsSavingDraftOfPublished] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState("");
+  const [tagsError, setTagsError] = useState(""); // Still needed if tags are validated elsewhere
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -92,22 +90,6 @@ const ArticlePage = () => {
   const [embedCodeInput, setEmbedCodeInput] = useState("");
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
-
-  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
-  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
-  const headerSearchInputRef = useRef<HTMLInputElement>(null);
-
-  const toggleHeaderSearch = useCallback(() => {
-    setIsHeaderSearchActive(prev => {
-      const newState = !prev;
-      if (newState) {
-        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
-      } else {
-        setHeaderSearchTerm('');
-      }
-      return newState;
-    });
-  }, []);
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
@@ -182,7 +164,6 @@ const ArticlePage = () => {
       setStoryError("");
     }
   }, [article, isEditingAllowed, toast]);
-
 
   const updateSelectionNonce = useCallback(() => requestAnimationFrame(() => setSelectionNonce(n => n + 1)), []);
 
@@ -391,7 +372,7 @@ const ArticlePage = () => {
       setPublishAttempted(true);
       if (!validateFields()) {
         if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-        else if (tags.length === 0) { /* Error for tags will be shown by TagsInput */ }
+        // Removed focus logic for TagsInput as it's no longer in the header
         else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
         return;
       }
@@ -505,6 +486,7 @@ const ArticlePage = () => {
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
     if (inlineImageInputRef.current) inlineImageInputRef.current.click();
   }, [isEditingAllowed]);
+
   const handleInlineImageFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     if (!isEditingAllowed) return;
     const file = event.target.files?.[0];
@@ -519,6 +501,7 @@ const ArticlePage = () => {
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
     setIsYouTubeDialogOpen(true); setYouTubeUrlInput(""); setIsToolbarExpanded(false);
   }, [isEditingAllowed]);
+
   const handleYouTubeDialogSubmit = () => {
     if (youTubeUrlInput) {
       let videoId = ''; try { const urlObj = new URL(youTubeUrlInput); if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.substring(1); else if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v')!; else videoId = youTubeUrlInput; } catch (e) { videoId = youTubeUrlInput; }
@@ -535,6 +518,7 @@ const ArticlePage = () => {
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
     setIsEmbedDialogOpen(true); setEmbedCodeInput(""); setIsToolbarExpanded(false);
   }, [isEditingAllowed]);
+
   const handleEmbedDialogSubmit = () => {
     if (embedCodeInput) {
       const sanitizedCode = embedCodeInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
@@ -543,6 +527,7 @@ const ArticlePage = () => {
     }
     setIsEmbedDialogOpen(false); setSavedRange(null);
   };
+
   const handleInsertCodeBlock = useCallback(() => {
     if (!isEditingAllowed) return;
     const selection = window.getSelection();
@@ -550,6 +535,7 @@ const ArticlePage = () => {
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
     insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`);
   }, [insertHTMLAndFocus, isEditingAllowed]);
+
   const handleInsertSeparator = useCallback(() => {
     if (!isEditingAllowed) return;
     const selection = window.getSelection();
@@ -657,7 +643,6 @@ const ArticlePage = () => {
     );
   }
 
-  // Editing View
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6" key={articleId}>
@@ -666,37 +651,15 @@ const ArticlePage = () => {
             <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleHeaderSearch}
-          className="h-9 w-9 p-2 flex-shrink-0"
-          aria-label={isHeaderSearchActive ? "Close search" : "Open search for tags"}
-        >
-          {isHeaderSearchActive ? <CloseIcon className="h-5 w-5" /> : <Search className="h-5 w-5" />}
-        </Button>
-
-        <div className="flex-grow min-w-[150px] sm:min-w-[200px]">
-          {isHeaderSearchActive ? (
-            <Input
-              ref={headerSearchInputRef}
-              type="search"
-              placeholder="Search all tags (coming soon)..."
-              value={headerSearchTerm}
-              onChange={(e) => setHeaderSearchTerm(e.target.value)}
-              className="h-9 text-xs w-full"
-              disabled={true} // Temporarily disable until search functionality is implemented
-            />
+        <div className="flex-grow min-w-[150px] sm:min-w-[200px] flex items-center gap-1.5 overflow-x-auto py-1.5 h-9">
+          {tags.length > 0 ? (
+            tags.map((tag, index) => (
+              <Badge key={index} variant="secondary" className="text-xs flex-shrink-0">
+                {tag}
+              </Badge>
+            ))
           ) : (
-            <TagsInput
-                value={tags}
-                onChange={setTags}
-                placeholder="Add tags (required)"
-                disabled={isSubmitting}
-                error={publishAttempted && tagsError ? tagsError : null}
-                onPublishAttempt={publishAttempted}
-                className="text-xs"
-            />
+            <span className="text-xs text-muted-foreground italic">No tags selected</span>
           )}
         </div>
 
@@ -736,7 +699,7 @@ const ArticlePage = () => {
                       <Send className="mr-2 h-4 w-4" /> Publish
                     </DropdownMenuItem>
                   </>
-                ) : ( // Article is published
+                ) : (
                   <>
                     <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">
                       {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
@@ -823,6 +786,8 @@ const ArticlePage = () => {
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
+            onClick={updateSelectionNonce}
+            onKeyUp={updateSelectionNonce}
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
@@ -843,6 +808,7 @@ const ArticlePage = () => {
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
+        {publishAttempted && tagsError && <p className="text-xs text-destructive mt-2">{tagsError}</p>}
         <style jsx global>{`
           div[contentEditable="true"][data-placeholder]:empty:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:empty:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child > br:only-child:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:has(br:only-child):before { content: attr(data-placeholder); color: hsl(var(--muted-foreground) / 0.5); pointer-events: none; display: block; position: absolute; top: 0.5rem; left: 0; }
           div[contentEditable="true"][data-placeholder]:not(:empty):before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:not(:empty):before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:not(:has(br:only-child)):before { content: none; }

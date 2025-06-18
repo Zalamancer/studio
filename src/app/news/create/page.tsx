@@ -1,12 +1,11 @@
-
 // src/app/news/create/page.tsx
 "use client";
 
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Tag, Search, X as CloseIcon } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -24,7 +23,7 @@ import { createNewsArticle } from '@/services/newsService';
 import { uploadNewsCoverImage } from '@/services/storageService';
 import type { NewNewsArticleData, NewsArticleStatus } from '@/types/news';
 import Image from 'next/image';
-import { TagsInput } from '@/components/TagsInput';
+import { Badge } from '@/components/ui/badge'; // Added Badge for displaying tags
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -35,7 +34,7 @@ const CreateNewsArticlePage = () => {
   const router = useRouter();
 
   const [title, setTitle] = useState("");
-  const [tags, setTags] = useState<string[]>([]);
+  const [tags, setTags] = useState<string[]>([]); // Tags are still managed, just not via header input
   const [storyContent, setStoryContent] = useState("<p><br></p>");
   const [coverImageFile, setCoverImageFile] = useState<File | null>(null);
   const [coverImagePreview, setCoverImagePreview] = useState<string | null>(null);
@@ -43,7 +42,7 @@ const CreateNewsArticlePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [publishAttempted, setPublishAttempted] = useState(false);
   const [titleError, setTitleError] = useState("");
-  const [tagsError, setTagsError] = useState("");
+  const [tagsError, setTagsError] = useState(""); // Still needed if tags are validated elsewhere
   const [storyError, setStoryError] = useState("");
 
   const formWrapperRef = useRef<HTMLDivElement>(null);
@@ -67,23 +66,6 @@ const CreateNewsArticlePage = () => {
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
-
-  const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
-  const [headerSearchTerm, setHeaderSearchTerm] = useState('');
-  const headerSearchInputRef = useRef<HTMLInputElement>(null);
-
-  const toggleHeaderSearch = useCallback(() => {
-    setIsHeaderSearchActive(prev => {
-      const newState = !prev;
-      if (newState) {
-        setTimeout(() => headerSearchInputRef.current?.focus(), 0);
-      } else {
-        setHeaderSearchTerm('');
-      }
-      return newState;
-    });
-  }, []);
-
 
   useEffect(() => {
     if (contentEditableRef.current && contentEditableRef.current.innerHTML !== storyContent) {
@@ -118,7 +100,6 @@ const CreateNewsArticlePage = () => {
     }
     return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl;
   }, [contentEditableRef]);
-
 
   const getCurrentLineText = useCallback((): string => {
     const contentEl = contentEditableRef.current;
@@ -263,7 +244,7 @@ const CreateNewsArticlePage = () => {
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
             event.preventDefault(); prevElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return;
           }
-        } else { // Delete key
+        } else {
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
@@ -288,7 +269,7 @@ const CreateNewsArticlePage = () => {
     setPublishAttempted(true);
     if (!validateFields()) {
       if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
-      else if (tags.length === 0) { /* Error for tags will be shown by TagsInput */ }
+      // Removed focus logic for TagsInput as it's no longer in the header
       else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
       return;
     }
@@ -326,7 +307,7 @@ const CreateNewsArticlePage = () => {
 
   const handlePublish = () => handleFormSubmission('published');
   const handleSaveDraft = () => {
-    if (!title.trim() || tags.length === 0) {
+    if (!title.trim() || tags.length === 0) { // Tags validation is simplified, actual input mechanism is TBD by user
         setPublishAttempted(true);
         if (!title.trim()) setTitleError("Title is required to save a draft."); else setTitleError("");
         if (tags.length === 0) setTagsError("At least one tag is required to save a draft."); else setTagsError("");
@@ -372,6 +353,7 @@ const CreateNewsArticlePage = () => {
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
     if (inlineImageInputRef.current) inlineImageInputRef.current.click();
   }, []);
+
   const handleInlineImageFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (file) { const reader = new FileReader(); reader.onloadend = () => { const dataUri = reader.result as string; insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center" contenteditable="false"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p><br></p>`); }; reader.readAsDataURL(file); if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; }
@@ -384,6 +366,7 @@ const CreateNewsArticlePage = () => {
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
     setIsYouTubeDialogOpen(true); setYouTubeUrlInput(""); setIsToolbarExpanded(false);
   }, []);
+
   const handleYouTubeDialogSubmit = () => {
     if (youTubeUrlInput) {
       let videoId = ''; try { const urlObj = new URL(youTubeUrlInput); if (urlObj.hostname === 'youtu.be') videoId = urlObj.pathname.substring(1); else if (urlObj.hostname.includes('youtube.com') && urlObj.searchParams.has('v')) videoId = urlObj.searchParams.get('v')!; else videoId = youTubeUrlInput; } catch (e) { videoId = youTubeUrlInput; }
@@ -399,6 +382,7 @@ const CreateNewsArticlePage = () => {
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
     setIsEmbedDialogOpen(true); setEmbedCodeInput(""); setIsToolbarExpanded(false);
   }, []);
+
   const handleEmbedDialogSubmit = () => {
     if (embedCodeInput) {
       const sanitizedCode = embedCodeInput.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, "");
@@ -407,12 +391,14 @@ const CreateNewsArticlePage = () => {
     }
     setIsEmbedDialogOpen(false); setSavedRange(null);
   };
+
   const handleInsertCodeBlock = useCallback(() => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange());
     else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); }
     insertHTMLAndFocus(`<pre class="my-4 p-3 bg-muted text-muted-foreground rounded-md overflow-x-auto text-sm" style="white-space: pre-wrap; word-wrap: break-word;" contenteditable="true"><code class="language-plaintext" style="display: block;">\n// Your code here...\n\n</code></pre><p><br></p>`);
   }, [insertHTMLAndFocus]);
+
   const handleInsertSeparator = useCallback(() => {
     const selection = window.getSelection();
     if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange());
@@ -446,39 +432,22 @@ const CreateNewsArticlePage = () => {
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
 
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={toggleHeaderSearch}
-          className="h-9 w-9 p-2 flex-shrink-0"
-          aria-label={isHeaderSearchActive ? "Close search" : "Open search for tags"}
-        >
-          {isHeaderSearchActive ? <CloseIcon className="h-5 w-5" /> : <Search className="h-5 w-5" />}
-        </Button>
-
-        <div className="flex-grow min-w-[150px] sm:min-w-[200px]">
-          {isHeaderSearchActive ? (
-            <Input
-              ref={headerSearchInputRef}
-              type="search"
-              placeholder="Search all tags (coming soon)..."
-              value={headerSearchTerm}
-              onChange={(e) => setHeaderSearchTerm(e.target.value)}
-              className="h-9 text-xs w-full"
-              disabled={true} // Temporarily disable until search functionality is implemented
-            />
+        <div className="flex-grow min-w-[150px] sm:min-w-[200px] flex items-center gap-1.5 overflow-x-auto py-1.5 h-9">
+          {tags.length > 0 ? (
+            tags.map((tag, index) => (
+              <Badge key={index} variant="secondary" className="text-xs flex-shrink-0">
+                {tag}
+                {/* Optionally, add a remove button for tags here if tag management is still part of this form */}
+              </Badge>
+            ))
           ) : (
-            <TagsInput
-                value={tags}
-                onChange={setTags}
-                placeholder="Add tags (required)"
-                disabled={isSubmitting}
-                error={publishAttempted && tagsError ? tagsError : null}
-                onPublishAttempt={publishAttempted}
-                className="text-xs"
-            />
+            <span className="text-xs text-muted-foreground italic">No tags selected</span>
           )}
         </div>
+        
+        {/* Placeholder for where TagsInput was. If you need to add/edit tags, you'll need a new UI element or move TagsInput elsewhere in the form */}
+        {/* Example: <Button variant="outline" size="sm" onClick={() => { /* open tag modal or show TagsInput */ }}>Edit Tags</Button> */}
+
 
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
@@ -534,6 +503,8 @@ const CreateNewsArticlePage = () => {
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
             onKeyDown={handleContentKeyDown}
+            onClick={updateSelectionNonce}
+            onKeyUp={updateSelectionNonce}
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
@@ -554,6 +525,12 @@ const CreateNewsArticlePage = () => {
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
+        {/* Removed TagsInput from main form body, as it's no longer directly placed. 
+            If tags are managed elsewhere (e.g. a modal triggered by an "Edit Tags" button), 
+            that UI would contain the TagsInput. This example assumes `tags` state is updated by some means.
+        */}
+        {publishAttempted && tagsError && <p className="text-xs text-destructive mt-2">{tagsError}</p>}
+
         <style jsx global>{`
           div[contentEditable="true"][data-placeholder]:empty:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:empty:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child > br:only-child:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:has(br:only-child):before { content: attr(data-placeholder); color: hsl(var(--muted-foreground) / 0.5); pointer-events: none; display: block; position: absolute; top: 0.5rem; left: 0; }
           div[contentEditable="true"][data-placeholder]:not(:empty):before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:not(:empty):before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:not(:has(br:only-child)):before { content: none; }
