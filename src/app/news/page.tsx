@@ -2,8 +2,8 @@
 // src/app/news/page.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, Tag, PlusCircle } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, Tag, PlusCircle, X, FilterX } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,27 +12,27 @@ import { getPublishedNewsArticles, getNewsArticlesByUserId } from '@/services/ne
 import type { ClientNewsArticle } from '@/types/news';
 import { cn } from '@/lib/utils';
 import { ArticleListItem } from '@/components/news/ArticleListItem';
-// Tabs components removed
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
-import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover'; // For tag filter
-import { Checkbox } from '@/components/ui/checkbox'; // For tag filter
-import { Label } from '@/components/ui/label'; // For tag filter
-import { searchTags } from '@/services/tagService'; // Import tag search
-import type { ClientTag } from '@/types/tag'; // Import tag type
-
-// newsCategoriesForFilter removed
+import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
+import { searchTags } from '@/services/tagService';
+import type { ClientTag } from '@/types/tag';
 
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
-  // selectedFilter state removed, will filter by tags instead
+  const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
   const [searchTerm, setSearchTerm] = useState('');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]); // State for selected tags
-  const [tagSearchInput, setTagSearchInput] = useState(''); // For searching within tag filter
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [tagSearchInput, setTagSearchInput] = useState('');
   const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
+
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticlesAll'],
@@ -55,8 +55,8 @@ const NewsPage = () => {
 
   const { data: availableTagsForFilter = [], isLoading: isLoadingTagsForFilter } = useQuery<ClientTag[]>({
     queryKey: ['searchTagsForFilter', tagSearchInput],
-    queryFn: () => searchTags(tagSearchInput, 20), // Fetch top 20 or based on search
-    staleTime: 1000 * 60 * 1, // Cache for 1 minute
+    queryFn: () => searchTags(tagSearchInput, 20),
+    staleTime: 1000 * 60 * 1,
   });
 
   const savedItemIds = useMemo(() => {
@@ -65,8 +65,6 @@ const NewsPage = () => {
     userCollections.forEach(collection => collection.postIds?.forEach(id => ids.add(id)));
     return ids;
   }, [userCollections]);
-
-  const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
 
   const filteredArticles = useMemo(() => {
     let articlesToDisplay = activeArticleView === 'my_articles' && user ? userArticles : allPublishedArticles;
@@ -137,108 +135,137 @@ const NewsPage = () => {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedTags.length > 0) count++;
-    if (searchTerm.trim() !== '') count++;
+    // Search term itself is not counted as a "filter" for the "Clear All" button that affects tags
     return count;
-  }, [selectedTags, searchTerm]);
+  }, [selectedTags]);
 
+  const toggleSearchActive = () => {
+    setIsSearchActive(prev => {
+      if (!prev) { // Means it's about to become active
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+      } else { // Means it's about to become inactive
+        setSearchTerm(''); // Clear search term when search bar is hidden
+      }
+      return !prev;
+    });
+  };
+
+  useEffect(() => {
+    if (isSearchActive && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isSearchActive]);
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      <div className="mb-6 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-            <Button 
-                variant={activeArticleView === 'all' ? "secondary" : "ghost"}
-                size="sm" 
-                onClick={() => setActiveArticleView('all')}
-                className={cn("h-9 px-4 text-xs rounded-full", activeArticleView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-            >
-                All Articles
-            </Button>
-            {user && (
-                <Button 
-                    variant={activeArticleView === 'my_articles' ? "secondary" : "ghost"}
-                    size="sm" 
-                    onClick={() => setActiveArticleView('my_articles')}
-                    className={cn("h-9 px-4 text-xs rounded-full", activeArticleView === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-                >
-                    My Articles
-                </Button>
-            )}
-        </div>
-        {user && (
-          <Button asChild size="sm" className="w-full sm:w-auto">
-            <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
-          </Button>
-        )}
-      </div>
+      {/* Main header bar */}
+      <div className="mb-6 flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b">
+        <Button variant="ghost" size="icon" onClick={toggleSearchActive} className="flex-shrink-0 h-9 w-9 p-2">
+          {isSearchActive ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
+        </Button>
 
-      {/* Filters: Search Bar and Tag Filter */}
-      <div className="mb-6 sticky top-[56px] z-40 bg-background py-3 border-b flex flex-col sm:flex-row items-stretch gap-2">
-        <div className="relative flex items-center flex-grow">
-            <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-                type="search"
-                placeholder="Search articles by title, content, or tags..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-9 pr-3 h-9 text-xs w-full rounded-md border-input focus:ring-primary focus:border-primary"
-                aria-label="Search articles"
-            />
-        </div>
-        <Popover open={isTagFilterOpen} onOpenChange={setIsTagFilterOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="outline" size="sm" className="h-9 text-xs w-full sm:w-auto flex-shrink-0">
-              <Tag className="mr-1.5 h-3.5 w-3.5" />
-              Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-72 p-0" align="end">
-            <div className="p-3 border-b">
-              <Input
-                type="search"
-                placeholder="Search tags..."
-                value={tagSearchInput}
-                onChange={(e) => setTagSearchInput(e.target.value)}
-                className="h-8 text-xs"
-              />
+        {isSearchActive ? (
+          <Input
+            ref={searchInputRef}
+            type="search"
+            placeholder="Search articles by title, content, or tags..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="h-9 text-xs flex-grow"
+          />
+        ) : (
+          <>
+            {/* View Toggles */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Button 
+                  variant={activeArticleView === 'all' ? "secondary" : "ghost"}
+                  size="sm" 
+                  onClick={() => setActiveArticleView('all')}
+                  className={cn("h-9 px-3 text-xs rounded-full", activeArticleView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+              >
+                  All Articles
+              </Button>
+              {user && (
+                  <Button 
+                      variant={activeArticleView === 'my_articles' ? "secondary" : "ghost"}
+                      size="sm" 
+                      onClick={() => setActiveArticleView('my_articles')}
+                      className={cn("h-9 px-3 text-xs rounded-full", activeArticleView === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                  >
+                      My Articles
+                  </Button>
+              )}
             </div>
-            <ScrollArea className="h-48">
-              <div className="p-3 space-y-1.5">
-                {isLoadingTagsForFilter ? (
-                  <div className="flex justify-center p-2"><Loader2 className="h-4 w-4 animate-spin"/></div>
-                ) : availableTagsForFilter.length > 0 ? (
-                  availableTagsForFilter.map((tag) => (
-                    <div key={tag.id} className="flex items-center space-x-2">
-                      <Checkbox
-                        id={`tag-filter-${tag.id}`}
-                        checked={selectedTags.includes(tag.name)}
-                        onCheckedChange={() => handleTagToggle(tag.name)}
-                      />
-                      <Label htmlFor={`tag-filter-${tag.id}`} className="text-xs font-normal flex items-center justify-between w-full">
-                        <span>{tag.name}</span>
-                        <span className="text-muted-foreground text-[10px]">({tag.usageCount})</span>
-                      </Label>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-xs text-muted-foreground text-center">
-                    {tagSearchInput ? `No tags matching "${tagSearchInput}".` : "No tags found."}
-                  </p>
-                )}
-              </div>
-            </ScrollArea>
-            {selectedTags.length > 0 && (
-              <div className="p-3 border-t">
-                <Button variant="ghost" size="xs" onClick={clearAllTagFilters} className="w-full text-primary">Clear Tag Filters</Button>
-              </div>
-            )}
-          </PopoverContent>
-        </Popover>
 
-        {activeFilterCount > 0 && !isTagFilterOpen && (
-          <Button variant="ghost" size="sm" onClick={clearAllTagFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0 w-full sm:w-auto">
-            Clear All Filters ({activeFilterCount})
-          </Button>
+            {/* Spacer */}
+            <div className="flex-grow"></div>
+
+            {/* Tag Filter & Clear */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <Popover open={isTagFilterOpen} onOpenChange={setIsTagFilterOpen}>
+                <PopoverTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-9 text-xs">
+                    <Tag className="mr-1.5 h-3.5 w-3.5" />
+                    Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-72 p-0" align="end">
+                  <div className="p-3 border-b">
+                    <Input
+                      type="search"
+                      placeholder="Search tags..."
+                      value={tagSearchInput}
+                      onChange={(e) => setTagSearchInput(e.target.value)}
+                      className="h-8 text-xs"
+                    />
+                  </div>
+                  <ScrollArea className="h-48">
+                    <div className="p-3 space-y-1.5">
+                      {isLoadingTagsForFilter ? (
+                        <div className="flex justify-center p-2"><Loader2 className="h-4 w-4 animate-spin"/></div>
+                      ) : availableTagsForFilter.length > 0 ? (
+                        availableTagsForFilter.map((tag) => (
+                          <div key={tag.id} className="flex items-center space-x-2">
+                            <Checkbox
+                              id={`tag-filter-${tag.id}`}
+                              checked={selectedTags.includes(tag.name)}
+                              onCheckedChange={() => handleTagToggle(tag.name)}
+                            />
+                            <Label htmlFor={`tag-filter-${tag.id}`} className="text-xs font-normal flex items-center justify-between w-full">
+                              <span>{tag.name}</span>
+                              <span className="text-muted-foreground text-[10px]">({tag.usageCount})</span>
+                            </Label>
+                          </div>
+                        ))
+                      ) : (
+                        <p className="text-xs text-muted-foreground text-center">
+                          {tagSearchInput ? `No tags matching "${tagSearchInput}".` : "No tags found."}
+                        </p>
+                      )}
+                    </div>
+                  </ScrollArea>
+                  {selectedTags.length > 0 && (
+                    <div className="p-3 border-t">
+                      <Button variant="ghost" size="xs" onClick={clearAllTagFilters} className="w-full text-primary">Clear Tag Filters</Button>
+                    </div>
+                  )}
+                </PopoverContent>
+              </Popover>
+
+              {activeFilterCount > 0 && !isTagFilterOpen && (
+                <Button variant="ghost" size="sm" onClick={clearAllTagFilters} className="h-9 text-xs text-primary hover:underline">
+                  <FilterX className="mr-1.5 h-3.5 w-3.5" /> Clear Filters ({activeFilterCount})
+                </Button>
+              )}
+            </div>
+
+            {/* Create Button */}
+            {user && (
+              <Button asChild size="sm" className="ml-2 h-9 px-3 text-xs flex-shrink-0">
+                <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
+              </Button>
+            )}
+          </>
         )}
       </div>
 
@@ -292,3 +319,4 @@ const NewsPage = () => {
 };
 
 export default NewsPage;
+
