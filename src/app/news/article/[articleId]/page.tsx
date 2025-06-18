@@ -1,3 +1,4 @@
+
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -5,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
-import { getNewsArticleById, updateNewsArticle, toggleLikeNewsArticle, incrementNewsArticleCommentCount, decrementNewsArticleCommentCount } from '@/services/newsService';
+import { getNewsArticleById, updateNewsArticle, toggleLikeNewsArticle, decrementNewsArticleCommentCount } from '@/services/newsService';
 import { uploadNewsCoverImage } from '@/services/storageService';
 import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from '@/types/news';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,6 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogClose,
 } from '@/components/ui/dialog';
 import {
   DropdownMenu,
@@ -43,7 +43,7 @@ import type { NewCommentData, ClientComment } from '@/types/comment';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
 import type { UserProfileBasic } from '@/types/connection';
-import { TextWithMentions } from '@/components/board-page/TextWithMentions'; // Re-use existing for consistency
+import { TextWithMentions } from '@/components/board-page/TextWithMentions';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 
 const TOOLBAR_HEIGHT = 36;
@@ -64,7 +64,6 @@ const extractMentionedUidsForNewsComment = (text: string, profilesToSearch: User
   return Array.from(resolvedUids);
 };
 
-
 const ArticlePage = () => {
   const params = useParams();
   const articleIdParam = params?.articleId as string | undefined;
@@ -73,7 +72,6 @@ const ArticlePage = () => {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // Moved useQuery for article here
   const { data: article, isLoading: isLoadingArticle, error: errorLoadingArticle, refetch: refetchArticle } = useQuery<ClientNewsArticle | null>({
     queryKey: ['newsArticle', articleIdParam],
     queryFn: () => articleIdParam ? getNewsArticleById(articleIdParam) : Promise.resolve(null),
@@ -134,7 +132,6 @@ const ArticlePage = () => {
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [isLikingArticle, setIsLikingArticle] = useState(false);
 
-
   const isEditingAllowed = useMemo(() => !!user && !!article && user.uid === article.userId, [article, user]);
 
   useEffect(() => {
@@ -145,7 +142,6 @@ const ArticlePage = () => {
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
           contentToLoadInEditor = article.draftContent;
-          // toast({ title: "Draft Loaded", description: "You are editing a saved draft of this published article.", duration: 4000 });
         } else {
           contentToLoadInEditor = article.content || "<p><br></p>";
         }
@@ -159,18 +155,13 @@ const ArticlePage = () => {
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
-    } else if (!isLoadingArticle && articleIdParam && !errorLoadingArticle) {
-      // Article might be null because it doesn't exist or access denied
-      // Handled by the main return logic
     }
-  }, [article, isEditingAllowed, isLoadingArticle, articleIdParam, errorLoadingArticle]);
+  }, [article, isEditingAllowed]);
 
-
-  // --- Comment Section Logic ---
   const { data: newsComments = [], isLoading: isLoadingNewsComments, refetch: refetchNewsComments } = useQuery<ClientComment[]>({
     queryKey: ['newsComments', articleIdParam],
     queryFn: () => articleIdParam ? getNewsCommentsForArticle(articleIdParam) : Promise.resolve([]),
-    enabled: !!articleIdParam && !!user, // Only fetch if article ID and user exist
+    enabled: !!articleIdParam && !!user,
   });
 
   const addNewsCommentMutation = useMutation({
@@ -180,7 +171,7 @@ const ArticlePage = () => {
       toast({ title: "Comment Posted" });
       setNewComment('');
       refetchNewsComments();
-      refetchArticle(); // To update commentCount on the article
+      refetchArticle();
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Failed to Post Comment", description: error.message }),
     onSettled: () => setIsSubmittingComment(false),
@@ -205,23 +196,23 @@ const ArticlePage = () => {
     const commentPayload: Omit<NewCommentData, 'likeCount' | 'likedBy' | 'isShadowBanned'> = {
       userId: user.uid,
       text: newComment.trim(),
-      mentionName: generateAnonymousName(user.uid), // Get user's mention name
+      mentionName: generateAnonymousName(user.uid),
       mentionedUserIds: finalMentionedUids,
     };
     addNewsCommentMutation.mutate({ articleId: articleIdParam, commentData: commentPayload });
   };
 
-  const evaluateNewCommentMentionState = useCallback((text: string, cursorPosition: number) => { /* ... (same as PostDetailPanel) ... */
+  const evaluateNewCommentMentionState = useCallback((text: string, cursorPosition: number) => {
     let activeQuery = null; const textBeforeCursor = text.substring(0, cursorPosition); const lastAtIndex = textBeforeCursor.lastIndexOf('@');
     if (lastAtIndex > -1 && (lastAtIndex === 0 || /\s|^$/.test(textBeforeCursor.charAt(lastAtIndex - 1)))) {
       const potentialQuery = textBeforeCursor.substring(lastAtIndex + 1);
       if (!/\s/.test(potentialQuery) && !/\r\n|\r|\n/.test(potentialQuery)) activeQuery = potentialQuery;
     }
     setNewCommentMentionQuery(activeQuery !== null ? activeQuery : ''); setShowNewCommentSuggestions(activeQuery !== null);
-  }, [setNewCommentMentionQuery, setShowNewCommentSuggestions]);
-  const handleNewCommentInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { const value = e.target.value; setNewComment(value); if (newCommentInputRef.current) evaluateNewCommentMentionState(value, newCommentInputRef.current.selectionStart || 0); }, [evaluateNewCommentMentionState, setNewComment, newCommentInputRef]);
-  const handleNewCommentInputFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => { if (newCommentInputRef.current) evaluateNewCommentMentionState(e.target.value, newCommentInputRef.current.selectionStart || 0); }, [evaluateNewCommentMentionState, newCommentInputRef]);
-  const handleSelectNewCommentSuggestion = useCallback((profile: UserProfileBasic) => { /* ... (same as PostDetailPanel) ... */
+  }, []);
+  const handleNewCommentInputChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => { const value = e.target.value; setNewComment(value); if (newCommentInputRef.current) evaluateNewCommentMentionState(value, newCommentInputRef.current.selectionStart || 0); }, [evaluateNewCommentMentionState]);
+  const handleNewCommentInputFocus = useCallback((e: React.FocusEvent<HTMLInputElement>) => { if (newCommentInputRef.current) evaluateNewCommentMentionState(e.target.value, newCommentInputRef.current.selectionStart || 0); }, [evaluateNewCommentMentionState]);
+  const handleSelectNewCommentSuggestion = useCallback((profile: UserProfileBasic) => {
     if (!newCommentInputRef.current || !profile.mentionName) return; const currentValue = newComment; const cursorPosition = newCommentInputRef.current.selectionStart || 0;
     const textBeforeCursor = currentValue.substring(0, cursorPosition); const lastAtIndex = textBeforeCursor.lastIndexOf('@');
     if (lastAtIndex > -1) {
@@ -231,16 +222,15 @@ const ArticlePage = () => {
       setTimeout(() => { newCommentInputRef.current?.focus(); newCommentInputRef.current?.setSelectionRange(newCursorPosition, newCursorPosition); }, 0);
     }
     setShowNewCommentSuggestions(false); setNewCommentMentionQuery('');
-  }, [newComment, setNewComment, setShowNewCommentSuggestions, setNewCommentMentionQuery, newCommentInputRef]);
-  useEffect(() => { /* ... (same as PostDetailPanel for click outside popover) ... */
+  }, [newComment]);
+  useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => { if (showNewCommentSuggestions && newCommentSuggestionsPopoverRef.current && !newCommentSuggestionsPopoverRef.current.contains(event.target as Node) && newCommentInputRef.current && !newCommentInputRef.current.contains(event.target as Node)) { setShowNewCommentSuggestions(false); } };
     if (showNewCommentSuggestions) document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [showNewCommentSuggestions]);
-  const filteredNewCommentSuggestions = useMemo(() => { /* ... (same as PostDetailPanel, adjust loading/no-match IDs if needed) ... */
+  const filteredNewCommentSuggestions = useMemo(() => {
     if (!showNewCommentSuggestions) return []; if (profilesForNewCommentSuggestions.length === 0 && debouncedNewCommentMentionQuery) return [{ userId: 'no-match-news-comment', displayName: `No users matching "@${debouncedNewCommentMentionQuery}"`, mentionName: 'no-match-news-comment' } as UserProfileBasic]; if (profilesForNewCommentSuggestions.length === 0) return [{ userId: 'no-users-news-comment', displayName: 'No users to suggest.', mentionName: 'no-users-news-comment' } as UserProfileBasic]; return profilesForNewCommentSuggestions.filter(p => p.userId !== user?.uid);
   }, [showNewCommentSuggestions, profilesForNewCommentSuggestions, debouncedNewCommentMentionQuery, user?.uid]);
-
 
   const handleCommentDeleted = useCallback(() => {
     refetchNewsComments();
@@ -252,7 +242,7 @@ const ArticlePage = () => {
     setIsLikingArticle(true);
     try {
       await toggleLikeNewsArticle(articleIdParam, user.uid);
-      refetchArticle(); // Refetch article to update likeCount and likedBy
+      refetchArticle();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Failed to like article", description: error.message });
     } finally {
@@ -261,22 +251,132 @@ const ArticlePage = () => {
   };
   const hasLikedArticle = useMemo(() => !!user && !!article && !!article.likedBy?.includes(user.uid), [user, article]);
 
-
-  // --- Editor Toolbar & Content Handling Logic (copied from create page, needs adaptation if any differences) ---
   const updateSelectionNonce = useCallback(() => requestAnimationFrame(() => setSelectionNonce(n => n + 1)), []);
-  const getCurrentBlockElement = useCallback((): HTMLElement | null => { const contentEl = contentEditableRef.current; if (!contentEl) return null; const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) { if (document.activeElement === contentEl && contentEl.lastChild && contentEl.lastChild.nodeType === Node.ELEMENT_NODE) return contentEl.lastChild as HTMLElement; return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; } let node = selection.focusNode; if (!node || !contentEl.contains(node)) { if (document.activeElement === contentEl && contentEl.firstChild && contentEl.firstChild.nodeType === Node.ELEMENT_NODE) return contentEl.firstChild as HTMLElement; return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; } while (node && node !== contentEl) { if (node.nodeType === Node.ELEMENT_NODE) { const element = node as HTMLElement; const tagName = element.tagName.toLowerCase(); if (['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'figure', 'hr'].includes(tagName)) { if (contentEl.contains(element)) return element; } } node = node.parentNode; } return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; }, [contentEditableRef]);
-  const getCurrentLineText = useCallback((): string => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) return titleInputRef.current.value.trim(); if (focusedField === 'content' && contentEl) { const currentBlock = getCurrentBlockElement(); if (currentBlock) { if (currentBlock.tagName === 'PRE' && currentBlock.textContent?.trim() !== '') return 'PRE_HAS_CONTENT'; if (currentBlock.tagName === 'FIGURE' && (currentBlock.querySelector('img') || currentBlock.querySelector('iframe'))) return 'FIGURE_HAS_CONTENT'; if (currentBlock.tagName === 'DIV' && currentBlock.hasAttribute('data-embed-wrapper')) return 'EMBED_HAS_CONTENT'; if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT'; return currentBlock.textContent?.trim() || ""; } if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>") return "EDITOR_IS_EMPTY"; return "NO_CURRENT_BLOCK_FOUND"; } return "NO_FOCUS_OR_UNHANDLED_FIELD"; }, [focusedField, getCurrentBlockElement, titleInputRef, contentEditableRef]);
-  const calculateCursorLineYOffset = useCallback((): number | null => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) { const titleRect = titleInputRef.current.getBoundingClientRect(); return titleRect.top + titleRect.height / 2; } if (focusedField === 'content' && contentEl) { const selection = window.getSelection(); if (selection && selection.rangeCount > 0) { const range = selection.getRangeAt(0); const rects = range.getClientRects(); if (rects.length > 0) return rects[0].top + rects[0].height / 2; let container = range.startContainer; if (container.nodeType === Node.TEXT_NODE && container.parentElement) container = container.parentElement; if (container.nodeType === Node.ELEMENT_NODE && contentEl.contains(container)) { const elementRect = (container as HTMLElement).getBoundingClientRect(); if (elementRect.height > 0) { const computedStyle = window.getComputedStyle(container as HTMLElement); const paddingTop = parseFloat(computedStyle.paddingTop) || 0; let lineHeight = parseFloat(computedStyle.lineHeight); if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; return elementRect.top + paddingTop + (lineHeight / 2); } } } const currentBlock = getCurrentBlockElement(); if (currentBlock && currentBlock !== contentEl && currentBlock.offsetHeight > 0) { const blockRect = currentBlock.getBoundingClientRect(); const computedStyle = window.getComputedStyle(currentBlock); const paddingTop = parseFloat(computedStyle.paddingTop) || 0; let lineHeight = parseFloat(computedStyle.lineHeight); if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; return blockRect.top + paddingTop + (lineHeight / 2); } const mainDivRect = contentEl.getBoundingClientRect(); const computedStyleMain = window.getComputedStyle(contentEl); const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0; let lineHeightMain = parseFloat(computedStyleMain.lineHeight); if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4; return mainDivRect.top + paddingTopMain + (lineHeightMain / 2); } return null; }, [focusedField, contentEditableRef, titleInputRef, getCurrentBlockElement]);
-  const calculateAndUpdateToolbarStyle = useCallback(() => { let shouldShowPlusButton = false; let shouldShowExpandedToolbar = false; if (focusedField && (document.activeElement === titleInputRef.current || document.activeElement === contentEditableRef.current)) { const lineYOffsetClient = calculateCursorLineYOffset(); if (lineYOffsetClient !== null) { let referenceElementRect: DOMRect | undefined; if (focusedField === 'title' && titleWrapperRef.current) referenceElementRect = titleWrapperRef.current.getBoundingClientRect(); else if (focusedField === 'content' && contentWrapperRef.current) referenceElementRect = contentWrapperRef.current.getBoundingClientRect(); if (referenceElementRect && formWrapperRef.current) { const formRect = formWrapperRef.current.getBoundingClientRect(); const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET; const newTop = lineYOffsetClient - formRect.top - (TOOLBAR_HEIGHT / 2); setToolbarStyle({ top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' }); } const currentLineText = getCurrentLineText(); const lineIsEmpty = currentLineText === "" || currentLineText === "EDITOR_IS_EMPTY" || currentLineText === "NO_CURRENT_BLOCK_FOUND"; if (lineIsEmpty && !isToolbarExpanded) shouldShowPlusButton = true; if (isToolbarExpanded) shouldShowExpandedToolbar = true; } } setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar); }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, titleInputRef, contentEditableRef, titleWrapperRef, contentWrapperRef, formWrapperRef, setToolbarStyle, setShowContextualUI]);
-  useEffect(() => { if (isEditingAllowed) { document.addEventListener('selectionchange', () => { if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) { requestAnimationFrame(updateSelectionNonce); } }); } return () => { if (isEditingAllowed) document.removeEventListener('selectionchange', () => requestAnimationFrame(updateSelectionNonce)); }; }, [isEditingAllowed, updateSelectionNonce]);
+  const getCurrentBlockElement = useCallback((): HTMLElement | null => { const contentEl = contentEditableRef.current; if (!contentEl) return null; const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) { if (document.activeElement === contentEl && contentEl.lastChild && contentEl.lastChild.nodeType === Node.ELEMENT_NODE) return contentEl.lastChild as HTMLElement; return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; } let node = selection.focusNode; if (!node || !contentEl.contains(node)) { if (document.activeElement === contentEl && contentEl.firstChild && contentEl.firstChild.nodeType === Node.ELEMENT_NODE) return contentEl.firstChild as HTMLElement; return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; } while (node && node !== contentEl) { if (node.nodeType === Node.ELEMENT_NODE) { const element = node as HTMLElement; const tagName = element.tagName.toLowerCase(); if (['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'figure', 'hr'].includes(tagName)) { if (contentEl.contains(element)) return element; } } node = node.parentNode; } return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; }, []);
+  const getCurrentLineText = useCallback((): string => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) return titleInputRef.current.value.trim(); if (focusedField === 'content' && contentEl) { const currentBlock = getCurrentBlockElement(); if (currentBlock) { if (currentBlock.tagName === 'PRE' && currentBlock.textContent?.trim() !== '') return 'PRE_HAS_CONTENT'; if (currentBlock.tagName === 'FIGURE' && (currentBlock.querySelector('img') || currentBlock.querySelector('iframe'))) return 'FIGURE_HAS_CONTENT'; if (currentBlock.tagName === 'DIV' && currentBlock.hasAttribute('data-embed-wrapper')) return 'EMBED_HAS_CONTENT'; if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT'; return currentBlock.textContent?.trim() || ""; } if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>") return "EDITOR_IS_EMPTY"; return "NO_CURRENT_BLOCK_FOUND"; } return "NO_FOCUS_OR_UNHANDLED_FIELD"; }, [focusedField, getCurrentBlockElement]);
+  const calculateCursorLineYOffset = useCallback((): number | null => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) { const titleRect = titleInputRef.current.getBoundingClientRect(); return titleRect.top + titleRect.height / 2; } if (focusedField === 'content' && contentEl) { const selection = window.getSelection(); if (selection && selection.rangeCount > 0) { const range = selection.getRangeAt(0); const rects = range.getClientRects(); if (rects.length > 0) return rects[0].top + rects[0].height / 2; let container = range.startContainer; if (container.nodeType === Node.TEXT_NODE && container.parentElement) container = container.parentElement; if (container.nodeType === Node.ELEMENT_NODE && contentEl.contains(container)) { const elementRect = (container as HTMLElement).getBoundingClientRect(); if (elementRect.height > 0) { const computedStyle = window.getComputedStyle(container as HTMLElement); const paddingTop = parseFloat(computedStyle.paddingTop) || 0; let lineHeight = parseFloat(computedStyle.lineHeight); if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; return elementRect.top + paddingTop + (lineHeight / 2); } } } const currentBlock = getCurrentBlockElement(); if (currentBlock && currentBlock !== contentEl && currentBlock.offsetHeight > 0) { const blockRect = currentBlock.getBoundingClientRect(); const computedStyle = window.getComputedStyle(currentBlock); const paddingTop = parseFloat(computedStyle.paddingTop) || 0; let lineHeight = parseFloat(computedStyle.lineHeight); if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; return blockRect.top + paddingTop + (lineHeight / 2); } const mainDivRect = contentEl.getBoundingClientRect(); const computedStyleMain = window.getComputedStyle(contentEl); const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0; let lineHeightMain = parseFloat(computedStyleMain.lineHeight); if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4; return mainDivRect.top + paddingTopMain + (lineHeightMain / 2); } return null; }, [focusedField, getCurrentBlockElement]);
+  
+  const calculateAndUpdateToolbarStyle = useCallback(() => {
+    let shouldShowPlusButton = false; let shouldShowExpandedToolbar = false;
+    if (focusedField && (document.activeElement === titleInputRef.current || document.activeElement === contentEditableRef.current)) {
+      const lineYOffsetClient = calculateCursorLineYOffset();
+      if (lineYOffsetClient !== null) {
+        let referenceElementRect: DOMRect | undefined;
+        if (focusedField === 'title' && titleWrapperRef.current) referenceElementRect = titleWrapperRef.current.getBoundingClientRect();
+        else if (focusedField === 'content' && contentWrapperRef.current) referenceElementRect = contentWrapperRef.current.getBoundingClientRect();
+        if (referenceElementRect && formWrapperRef.current) {
+          const formRect = formWrapperRef.current.getBoundingClientRect();
+          const newLeft = referenceElementRect.left - formRect.left - TOOLBAR_HORIZONTAL_OFFSET;
+          const newTop = lineYOffsetClient - formRect.top - (TOOLBAR_HEIGHT / 2);
+          setToolbarStyle({ top: `${newTop}px`, left: `${newLeft}px`, zIndex: 50, position: 'absolute' });
+        }
+        const currentLineText = getCurrentLineText();
+        const lineIsEmpty = currentLineText === "" || currentLineText === "EDITOR_IS_EMPTY" || currentLineText === "NO_CURRENT_BLOCK_FOUND";
+        if (lineIsEmpty && !isToolbarExpanded) shouldShowPlusButton = true;
+        if (isToolbarExpanded) shouldShowExpandedToolbar = true;
+      }
+    }
+    setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
+  }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, setToolbarStyle, setShowContextualUI]);
+  
+  useEffect(() => {
+    const handleSelectionChangeLocal = () => {
+      if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) {
+        requestAnimationFrame(updateSelectionNonce);
+      }
+    };
+    if (isEditingAllowed) {
+      document.addEventListener('selectionchange', handleSelectionChangeLocal);
+    }
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChangeLocal);
+    };
+  }, [isEditingAllowed, updateSelectionNonce]);
+
   useEffect(() => { if (isEditingAllowed) calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle, isEditingAllowed]);
   const handleFocus = useCallback((field: 'title' | 'content') => { if (isEditingAllowed) { setFocusedField(field); requestAnimationFrame(updateSelectionNonce); } }, [isEditingAllowed, updateSelectionNonce]);
   const handleBlur = useCallback(() => { if (!isEditingAllowed) return; queueMicrotask(() => { const activeEl = document.activeElement; if (!((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen || (tagSuggestionsPopoverContentRef.current && tagSuggestionsPopoverContentRef.current.contains(activeEl)) || (headerSearchInputRef.current === activeEl))) { setFocusedField(null); setIsToolbarExpanded(false); setShowContextualUI(false); setSavedRange(null); } }); }, [isYouTubeDialogOpen, isEmbedDialogOpen, isEditingAllowed]);
-  const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => { if (!isEditingAllowed) return; const currentHTML = event.currentTarget.innerHTML; if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") { setStoryContent("<p><br></p>"); if (event.currentTarget.innerHTML !== "<p><br></p>") { event.currentTarget.innerHTML = "<p><br></p>"; const pTag = event.currentTarget.querySelector('p'); if(pTag) { const range = document.createRange(); const sel = window.getSelection(); try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {}} } } else setStoryContent(currentHTML); if (publishAttempted) { const currentText = event.currentTarget.textContent || ""; if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) setStoryError(""); else setStoryError("Story content is required."); } requestAnimationFrame(updateSelectionNonce); }, [publishAttempted, setStoryError, updateSelectionNonce, isEditingAllowed]);
-  const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => { if (!isEditingAllowed) return; const editorEl = contentEditableRef.current; if (!editorEl) return; const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return; const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement(); if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); setTimeout(() => { if (contentEditableRef.current) { setStoryContent(contentEditableRef.current.innerHTML); requestAnimationFrame(updateSelectionNonce); }}, 0); return; } if (event.key === 'Backspace' || event.key === 'Delete') { if (range.collapsed && currentBlock) { const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false; if (event.key === 'Backspace') { if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true; const prevElement = currentBlock.previousElementSibling; if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) { event.preventDefault(); prevElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return; } } else { if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true; const nextElement = currentBlock.nextElementSibling; if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) { event.preventDefault(); nextElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return; } } } } }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce, isEditingAllowed]);
+  const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => { if (!isEditingAllowed) return; const currentHTML = event.currentTarget.innerHTML; if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") { setStoryContent("<p><br></p>"); if (event.currentTarget.innerHTML !== "<p><br></p>") { event.currentTarget.innerHTML = "<p><br></p>"; const pTag = event.currentTarget.querySelector('p'); if(pTag) { const range = document.createRange(); const sel = window.getSelection(); try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {}} } } else setStoryContent(currentHTML); if (publishAttempted) { const currentText = event.currentTarget.textContent || ""; if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) setStoryError(""); else setStoryError("Story content is required."); } requestAnimationFrame(updateSelectionNonce); }, [publishAttempted, updateSelectionNonce, isEditingAllowed]);
+  const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => { if (!isEditingAllowed) return; const editorEl = contentEditableRef.current; if (!editorEl) return; const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return; const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement(); if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); setTimeout(() => { if (contentEditableRef.current) { setStoryContent(contentEditableRef.current.innerHTML); requestAnimationFrame(updateSelectionNonce); }}, 0); return; } if (event.key === 'Backspace' || event.key === 'Delete') { if (range.collapsed && currentBlock) { const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false; if (event.key === 'Backspace') { if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true; const prevElement = currentBlock.previousElementSibling; if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) { event.preventDefault(); prevElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return; } } else { if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true; const nextElement = currentBlock.nextElementSibling; if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) { event.preventDefault(); nextElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return; } } } } }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed]);
   const validateFields = useCallback(() => { let isValid = true; if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); } if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); } const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || ""; if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); } return isValid; }, [title, tags]);
-  const handleUpdateArticle = async (newStatus: NewsArticleStatus, contentToSaveParam?: string | null, isSavingDraftOfPublishedArticleParam: boolean = false) => { if (!user || !articleIdParam || !article || !isEditingAllowed) { toast({ variant: "destructive", title: "Error", description: "Cannot update article. Auth or data missing." }); return; } if (newStatus === 'published' || isSavingDraftOfPublishedArticleParam) { setPublishAttempted(true); if (!validateFields()) { if (!title.trim() && titleInputRef.current) titleInputRef.current.focus(); else if (tags.length === 0 && isHeaderSearchActive && headerSearchInputRef.current) headerSearchInputRef.current.focus(); else if (contentEditableRef.current && storyError) contentEditableRef.current.focus(); return; } } setIsSubmitting(true); if (isSavingDraftOfPublishedArticleParam) setIsSavingDraftOfPublished(true); let newCoverImageUrl: string | null | undefined = undefined; try { if (coverImageFile) newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleIdParam); else if (coverImagePreview === null && currentCoverImageUrl !== null) newCoverImageUrl = null; const mainContentForService = contentToSaveParam !== undefined ? contentToSaveParam : storyContent; const articleUpdateData: UpdateNewsArticleData = { title: title.trim(), tags: tags, status: newStatus, }; if (isSavingDraftOfPublishedArticleParam && article.status === 'published') { articleUpdateData.draftContent = mainContentForService || null; articleUpdateData.hasUnpublishedChanges = true; } else if (newStatus === 'published') { articleUpdateData.content = mainContentForService || null; articleUpdateData.draftContent = null; articleUpdateData.hasUnpublishedChanges = false; } else if (newStatus === 'draft') { articleUpdateData.content = mainContentForService || null; articleUpdateData.draftContent = null; articleUpdateData.hasUnpublishedChanges = false; } else if (contentToSaveParam !== undefined) { articleUpdateData.content = mainContentForService || null; } if (newCoverImageUrl !== undefined) articleUpdateData.coverImageUrl = newCoverImageUrl; await updateNewsArticle(articleIdParam, articleUpdateData, isSavingDraftOfPublishedArticleParam); let successTitle = "Update Successful"; let successDescription = `Article "${title.trim()}" updated.`; if (isSavingDraftOfPublishedArticleParam && article.status === 'published') { successTitle = "Draft Saved!"; successDescription = `Your changes to "${title.trim()}" have been saved as a draft.`; } else if (newStatus === 'published') { if (article.status !== 'published') { successTitle = "Article Published!"; successDescription = `"${title.trim()}" is now live.`; } else { successTitle = "Live Article Updated!"; successDescription = `Changes to "${title.trim()}" are now live.`; } } else if (newStatus === 'draft') { if (article.status === 'published') { successTitle = "Article Unpublished"; successDescription = `"${title.trim()}" is no longer live. It's a draft.`; } else { successTitle = "Draft Updated!"; successDescription = `Draft for "${title.trim()}" has been saved.`; } } toast({ title: successTitle, description: successDescription }); setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError(""); setIsToolbarExpanded(false); setShowContextualUI(false); refetchArticle(); // Refetch article to get updated data from server setCoverImageFile(null); } catch (error: any) { toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." }); } finally { setIsSubmitting(false); setIsSavingDraftOfPublished(false); } };
-  const insertHTMLAndFocus = useCallback((htmlToInsert: string) => { if(!isEditingAllowed) return; const editorEl = contentEditableRef.current; if (!editorEl) return; queueMicrotask(() => { editorEl.focus(); const selection = window.getSelection(); let range: Range; if (savedRange && editorEl.contains(savedRange.commonAncestorContainer)) range = savedRange; else if (selection && selection.rangeCount > 0 && editorEl.contains(selection.getRangeAt(0).commonAncestorContainer)) range = selection.getRangeAt(0); else { range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); } if (selection) { selection.removeAllRanges(); selection.addRange(range); } setSavedRange(null); const currentBlock = getCurrentBlockElement(); if (currentBlock && editorEl.contains(currentBlock) && (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;") && currentBlock.innerHTML.toLowerCase() !== "<p><br></p>") { if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) { const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>)$/i); if (!isEditorAndEmptyOrSinglePBR || (isEditorAndEmptyOrSinglePBR && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) range.selectNodeContents(currentBlock); } } if (!range.collapsed) range.deleteContents(); const fragment = range.createContextualFragment(htmlToInsert); const lastNodeOfFragment = fragment.lastChild; range.insertNode(fragment); if (lastNodeOfFragment && editorEl.contains(lastNodeOfFragment)) { if (lastNodeOfFragment.nodeName === 'P' && (lastNodeOfFragment as HTMLElement).innerHTML.toLowerCase().includes('<br>')) range.setStart(lastNodeOfFragment, 0); else range.setStartAfter(lastNodeOfFragment); range.collapse(true); } else { range.selectNodeContents(editorEl); range.collapse(false); } if (selection) { selection.removeAllRanges(); selection.addRange(range); } setStoryContent(editorEl.innerHTML || "<p><br></p>"); setIsToolbarExpanded(false); queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); }); }); }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange, isEditingAllowed]);
+  
+  const handleUpdateArticle = async (newStatus: NewsArticleStatus, contentToSaveParam?: string | null, isSavingDraftOfPublishedArticleParam: boolean = false) => {
+    if (!user || !articleIdParam || !article || !isEditingAllowed) {
+      toast({ variant: "destructive", title: "Error", description: "Cannot update article. Auth or data missing." });
+      return;
+    }
+    if (newStatus === 'published' || isSavingDraftOfPublishedArticleParam) {
+      setPublishAttempted(true);
+      if (!validateFields()) {
+        if (!title.trim() && titleInputRef.current) titleInputRef.current.focus();
+        else if (tags.length === 0 && isHeaderSearchActive && headerSearchInputRef.current) headerSearchInputRef.current.focus();
+        else if (contentEditableRef.current && storyError) contentEditableRef.current.focus();
+        return;
+      }
+    }
+    setIsSubmitting(true);
+    if (isSavingDraftOfPublishedArticleParam) setIsSavingDraftOfPublished(true);
+    let newCoverImageUrl: string | null | undefined = undefined;
+    try {
+      if (coverImageFile) newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleIdParam);
+      else if (coverImagePreview === null && currentCoverImageUrl !== null) newCoverImageUrl = null;
+      
+      const mainContentForService = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
+      const articleUpdateData: UpdateNewsArticleData = {
+        title: title.trim(),
+        tags: tags,
+        status: newStatus,
+      };
+  
+      if (isSavingDraftOfPublishedArticleParam && article.status === 'published') {
+        articleUpdateData.draftContent = mainContentForService || null;
+        articleUpdateData.hasUnpublishedChanges = true;
+      } else if (newStatus === 'published') {
+        articleUpdateData.content = mainContentForService || null;
+        articleUpdateData.draftContent = null;
+        articleUpdateData.hasUnpublishedChanges = false;
+      } else if (newStatus === 'draft') {
+        articleUpdateData.content = mainContentForService || null;
+        articleUpdateData.draftContent = null;
+        articleUpdateData.hasUnpublishedChanges = false;
+      } else if (contentToSaveParam !== undefined) { // Explicit content save for other status changes potentially
+        articleUpdateData.content = mainContentForService || null;
+      }
+  
+      if (newCoverImageUrl !== undefined) articleUpdateData.coverImageUrl = newCoverImageUrl;
+      
+      const oldTags = article?.tags || [];
+      const currentNewTags = articleUpdateData.tags || [];
+      const tagsAdded = currentNewTags.filter(tag => !oldTags.includes(tag));
+      const tagsRemoved = oldTags.filter(tag => !currentNewTags.includes(tag));
+
+      await updateNewsArticle(articleIdParam, articleUpdateData, isSavingDraftOfPublishedArticleParam);
+      
+      if (tagsAdded.length > 0) {
+        await getOrCreateTagsAndUpdateUsage(tagsAdded, user.uid, 1);
+      }
+      if (tagsRemoved.length > 0) {
+        await getOrCreateTagsAndUpdateUsage(tagsRemoved, user.uid, -1);
+      }
+
+      let successTitle = "Update Successful";
+      let successDescription = `Article "${title.trim()}" updated.`;
+      if (isSavingDraftOfPublishedArticleParam && article.status === 'published') { successTitle = "Draft Saved!"; successDescription = `Your changes to "${title.trim()}" have been saved as a draft.`; }
+      else if (newStatus === 'published') { if (article.status !== 'published') { successTitle = "Article Published!"; successDescription = `"${title.trim()}" is now live.`; } else { successTitle = "Live Article Updated!"; successDescription = `Changes to "${title.trim()}" are now live.`; } }
+      else if (newStatus === 'draft') { if (article.status === 'published') { successTitle = "Article Unpublished"; successDescription = `"${title.trim()}" is no longer live. It's a draft.`; } else { successTitle = "Draft Updated!"; successDescription = `Draft for "${title.trim()}" has been saved.`; } }
+      toast({ title: successTitle, description: successDescription });
+      setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError(""); setIsToolbarExpanded(false); setShowContextualUI(false);
+      refetchArticle();
+      setCoverImageFile(null);
+    } catch (error: any) {
+      toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
+    } finally {
+      setIsSubmitting(false);
+      setIsSavingDraftOfPublished(false);
+    }
+  };
+
+  const insertHTMLAndFocus = useCallback((htmlToInsert: string) => { if(!isEditingAllowed) return; const editorEl = contentEditableRef.current; if (!editorEl) return; queueMicrotask(() => { editorEl.focus(); const selection = window.getSelection(); let range: Range; if (savedRange && editorEl.contains(savedRange.commonAncestorContainer)) range = savedRange; else if (selection && selection.rangeCount > 0 && editorEl.contains(selection.getRangeAt(0).commonAncestorContainer)) range = selection.getRangeAt(0); else { range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); } if (selection) { selection.removeAllRanges(); selection.addRange(range); } setSavedRange(null); const currentBlock = getCurrentBlockElement(); if (currentBlock && editorEl.contains(currentBlock) && (currentBlock.textContent?.trim() === "" || currentBlock.innerHTML.toLowerCase() === "<br>" || currentBlock.innerHTML.toLowerCase() === "<p></p>" || currentBlock.innerHTML.toLowerCase() === "&nbsp;") && currentBlock.innerHTML.toLowerCase() !== "<p><br></p>") { if (range.collapsed && (currentBlock.isSameNode(range.startContainer) || currentBlock.contains(range.startContainer))) { const isEditorAndEmptyOrSinglePBR = currentBlock.isSameNode(editorEl) && editorEl.innerHTML.trim().match(/^($|<br\s*\/?>|<p><br\s*\/?><\/p>|<p><\/p>)$/i); if (!isEditorAndEmptyOrSinglePBR || (isEditorAndEmptyOrSinglePBR && range.startOffset === 0 && range.endOffset === 0 && editorEl.childNodes.length <= 1)) range.selectNodeContents(currentBlock); } } if (!range.collapsed) range.deleteContents(); const fragment = range.createContextualFragment(htmlToInsert); const lastNodeOfFragment = fragment.lastChild; range.insertNode(fragment); if (lastNodeOfFragment && editorEl.contains(lastNodeOfFragment)) { if (lastNodeOfFragment.nodeName === 'P' && (lastNodeOfFragment as HTMLElement).innerHTML.toLowerCase().includes('<br>')) range.setStart(lastNodeOfFragment, 0); else range.setStartAfter(lastNodeOfFragment); range.collapse(true); } else { range.selectNodeContents(editorEl); range.collapse(false); } if (selection) { selection.removeAllRanges(); selection.addRange(range); } setStoryContent(editorEl.innerHTML || "<p><br></p>"); setIsToolbarExpanded(false); queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); }); }); }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed]);
   const triggerInlineImageUpload = useCallback(() => { if (!isEditingAllowed) return; const selection = window.getSelection(); if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange()); else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); } if (inlineImageInputRef.current) inlineImageInputRef.current.click(); }, [isEditingAllowed]);
   const handleInlineImageFileChange = useCallback((event: React.ChangeEvent<HTMLInputElement>) => { if (!isEditingAllowed) return; const file = event.target.files?.[0]; if (file) { const reader = new FileReader(); reader.onloadend = () => { const dataUri = reader.result as string; insertHTMLAndFocus(`<figure class="my-4 flex flex-col items-center" contenteditable="false"><img src="${dataUri}" alt="User uploaded image" style="max-width: 100%; height: auto; display: block; border-radius: 0.25rem; margin-bottom: 0.5rem;" data-ai-hint="user uploaded" /><figcaption contenteditable="true" data-placeholder="Optional caption..." style="text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem;" class="w-full"></figcaption></figure><p><br></p>`); }; reader.readAsDataURL(file); if (inlineImageInputRef.current) inlineImageInputRef.current.value = ''; } setSavedRange(null); }, [insertHTMLAndFocus, isEditingAllowed]);
   const handleInsertYouTubeVideo = useCallback(() => { if (!isEditingAllowed) return; const selection = window.getSelection(); if (selection && selection.rangeCount > 0 && contentEditableRef.current?.contains(selection.getRangeAt(0).commonAncestorContainer)) setSavedRange(selection.getRangeAt(0).cloneRange()); else { const editorEl = contentEditableRef.current; if (editorEl) { const range = document.createRange(); if (editorEl.lastChild) range.setStartAfter(editorEl.lastChild); else range.selectNodeContents(editorEl); range.collapse(false); setSavedRange(range); } else setSavedRange(null); } setIsYouTubeDialogOpen(true); setYouTubeUrlInput(""); setIsToolbarExpanded(false); }, [isEditingAllowed]);
@@ -291,11 +391,10 @@ const ArticlePage = () => {
   const toggleHeaderSearch = () => { setIsHeaderSearchActive(prev => { if (prev) { setHeaderSearchTerm(''); setIsTagSuggestionsPopoverOpen(false); } else { setTimeout(() => headerSearchInputRef.current?.focus(), 0); } return !prev; }); };
   useEffect(() => { const timerId = setTimeout(() => { setDebouncedHeaderSearchTerm(headerSearchTerm); }, 300); return () => clearTimeout(timerId); }, [headerSearchTerm]);
   useEffect(() => { if (debouncedHeaderSearchTerm.trim() && isHeaderSearchActive) { setIsTagSuggestionsLoading(true); searchTags(debouncedHeaderSearchTerm.trim(), 7).then(fetchedTags => { const currentSelectedLowercase = tags.map(t => t.toLowerCase()); setTagSuggestions(fetchedTags.filter(tag => !currentSelectedLowercase.includes(tag.name.toLowerCase()))); setIsTagSuggestionsPopoverOpen(true); }).catch(() => setTagSuggestions([])).finally(() => setIsTagSuggestionsLoading(false)); } else { setTagSuggestions([]); setIsTagSuggestionsPopoverOpen(false); } }, [debouncedHeaderSearchTerm, tags, isHeaderSearchActive]);
-  const handleAddTagFromSearch = (tagToAdd: string) => { const trimmedTag = tagToAdd.trim(); if (trimmedTag && !tags.map(t => t.toLowerCase()).includes(trimmedTag.toLowerCase())) { if (tags.length < 5) { setTags(prev => [...prev, trimmedTag]); if (publishAttempted && (tags.length + 1 > 0)) setTagsError(""); } else { toast({ title: "Tag Limit Reached", description: "You can add a maximum of 5 tags.", variant: "default" }); } } setHeaderSearchTerm(''); setIsTagSuggestionsPopoverOpen(false); setTimeout(() => headerSearchInputRef.current?.focus(), 0); };
-  const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') { e.preventDefault(); if (headerSearchTerm.trim()) { handleAddTagFromSearch(headerSearchTerm.trim()); } } else if (e.key === 'Escape') { setIsTagSuggestionsPopoverOpen(false); } };
+  const handleAddTagFromSearch = (tagToAdd: string) => { const trimmedTag = tagToAdd.trim(); if (trimmedTag && !tags.map(t => t.toLowerCase()).includes(trimmedTag.toLowerCase())) { if (tags.length < 5) { setTags(prev => [...prev, trimmedTag]); if (publishAttempted && (tags.length + 1 > 0)) setTagsError(""); } else { toast({ title: "Tag Limit Reached", description: "You can add a maximum of 5 tags.", variant: "default" }); } } setHeaderSearchTerm(''); setIsTagSuggestionsPopoverOpen(false); setIsHeaderSearchActive(false); };
+  const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') { e.preventDefault(); if (headerSearchTerm.trim()) { handleAddTagFromSearch(headerSearchTerm.trim()); } } else if (e.key === 'Escape') { setIsTagSuggestionsPopoverOpen(false); setIsHeaderSearchActive(false); } };
   const handleRemoveTagFromDisplay = (tagToRemove: string) => { if (!isEditingAllowed) return; setTags(prev => { const newTags = prev.filter(t => t !== tagToRemove); if (publishAttempted && newTags.length === 0) { setTagsError("At least one tag is required."); } else if (publishAttempted && newTags.length > 0) { setTagsError(""); } return newTags; }); };
   useEffect(() => { const handleClickOutsidePopover = (event: MouseEvent) => { if (isTagSuggestionsPopoverOpen && tagSuggestionsPopoverContentRef.current && !tagSuggestionsPopoverContentRef.current.contains(event.target as Node) && headerSearchInputRef.current && !headerSearchInputRef.current.contains(event.target as Node)) { setIsTagSuggestionsPopoverOpen(false); } }; if (isTagSuggestionsPopoverOpen) document.addEventListener('mousedown', handleClickOutsidePopover); return () => document.removeEventListener('mousedown', handleClickOutsidePopover); }, [isTagSuggestionsPopoverOpen]);
-
 
   if (authLoading || isLoadingArticle) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle.message}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
@@ -312,7 +411,6 @@ const ArticlePage = () => {
     );
   }
 
-  // Combined View for Published (Non-Editing) and Editing Mode
   const publishedDateStr = article.publishedAt ? format(new Date(article.publishedAt), 'PPP') : 'Not published';
   const lastEditedDateStr = article.updatedAt ? format(new Date(article.updatedAt), 'PPp') : '';
   const showLastEdited = article.status === 'published' && article.publishedAt && article.updatedAt && (article.updatedAt > (article.publishedAt + 60000));
@@ -320,24 +418,25 @@ const ArticlePage = () => {
   return (
     <>
     <div className="container mx-auto py-8 px-4 md:px-6" key={articleIdParam}>
-      {/* Header Section */}
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
         <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3 flex-shrink-0">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
+          <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
 
-        <div className="flex items-center gap-1.5 flex-grow min-w-[150px] sm:min-w-[200px]">
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onClick={toggleHeaderSearch}
-            className={cn("h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0 transition-transform duration-200 ease-in-out", isHeaderSearchActive && "rotate-45")}
-            aria-label={isHeaderSearchActive ? "Close tag search" : "Search and add tags"}
-            disabled={isSubmitting || !isEditingAllowed}
-          >
-            {isHeaderSearchActive ? <CloseIcon className="h-4 w-4" /> : <Search className="h-4 w-4" />}
-          </Button>
+        <div className="flex items-center gap-1.5 flex-grow min-w-0">
+          {isEditingAllowed && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              onClick={toggleHeaderSearch}
+              className={cn("h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0 transition-transform duration-200 ease-in-out", isHeaderSearchActive && "rotate-45")}
+              aria-label={isHeaderSearchActive ? "Close tag search" : "Search and add tags"}
+              disabled={isSubmitting}
+            >
+              {isHeaderSearchActive ? <CloseIcon className="h-4 w-4" /> : <Search className="h-4 w-4" />}
+            </Button>
+          )}
 
           {isHeaderSearchActive && isEditingAllowed ? (
             <div className="relative flex-grow">
@@ -346,7 +445,7 @@ const ArticlePage = () => {
                   <Input
                     ref={headerSearchInputRef}
                     type="text"
-                    placeholder="Search or create tags..."
+                    placeholder="Search or create tags (max 5)..."
                     value={headerSearchTerm}
                     onChange={(e) => { setHeaderSearchTerm(e.target.value); if (e.target.value.trim()) setIsTagSuggestionsPopoverOpen(true); else setIsTagSuggestionsPopoverOpen(false); }}
                     onKeyDown={handleHeaderSearchKeyDown}
@@ -402,7 +501,6 @@ const ArticlePage = () => {
         </div>
       </div>
 
-      {/* Main Content Area: Editor or Read-only View */}
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
          {showContextualUI && isEditingAllowed && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}><PlusCircle className={cn("h-5 w-5 text-primary transition-transform duration-200 ease-in-out", isToolbarExpanded && "rotate-45")} /></Button>
@@ -446,13 +544,11 @@ const ArticlePage = () => {
         <style jsx global>{` div[contentEditable="true"][data-placeholder]:empty:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:empty:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child > br:only-child:before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:has(br:only-child):before { content: attr(data-placeholder); color: hsl(var(--muted-foreground) / 0.5); pointer-events: none; display: block; position: absolute; top: 0.5rem; left: 0; } div[contentEditable="true"][data-placeholder]:not(:empty):before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:not(:empty):before, div[contentEditable="true"][data-placeholder] > p:first-child:last-child:not(:has(br:only-child)):before { content: none; } div[contentEditable="true"] figure { margin-left: auto; margin-right: auto; max-width: 100%; } div[contentEditable="true"] figure img, div[contentEditable="true"] figure iframe { display: block; margin-left: auto; margin-right: auto; max-width: 100%; border-radius: 0.25rem; } div[contentEditable="true"] figure figcaption { text-align: center; color: hsl(var(--muted-foreground)); font-style: italic; font-size: 0.9em; outline: none; padding: 0.25rem; margin-top: 0.25rem; } div[contentEditable="true"] figure figcaption:empty:before { content: attr(data-placeholder); color: hsl(var(--muted-foreground) / 0.7); } div[contentEditable="true"] pre { background-color: hsl(var(--muted)); color: hsl(var(--muted-foreground)); padding: 1rem; border-radius: 0.375rem; overflow-x: auto; font-family: monospace; font-size: 0.875rem; line-height: 1.25rem; white-space: pre-wrap; word-wrap: break-word; } div[contentEditable="true"] pre code { display: block; white-space: pre-wrap !important; word-wrap: break-word !important; outline: none; } div[contentEditable="true"] hr { border-color: hsl(var(--border)); margin-top: 2rem; margin-bottom: 2rem; } div[contentEditable="true"] div[data-embed-wrapper="true"] { margin: 1rem 0; } div[contentEditable="true"] div[data-embed-wrapper="true"] > div > * { width: 100%; height: 100%; border: 0; display: block; } `}</style>
       </div>
 
-      {/* Comment Section */}
       {article.status === 'published' && articleIdParam && (
         <div className="max-w-3xl mx-auto mt-12 pt-8 border-t">
           <h3 className="text-2xl font-semibold mb-6 flex items-center gap-2">
             <MessageSquare className="h-6 w-6 text-primary" /> Comments ({article.commentCount || 0})
           </h3>
-          {/* New Comment Input */}
           {user && (
             <Popover
               open={showNewCommentSuggestions && filteredNewCommentSuggestions.length > 0 && !['loading-main-comment', 'no-users-main-comment', 'no-match-main-comment'].includes(filteredNewCommentSuggestions[0]?.userId)}
@@ -494,7 +590,6 @@ const ArticlePage = () => {
               </PopoverContent>
             </Popover>
           )}
-          {/* Display Comments */}
           <div className="space-y-6">
             {isLoadingNewsComments && <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin"/></div>}
             {!isLoadingNewsComments && newsComments.length === 0 && <p className="text-sm text-muted-foreground text-center">No comments yet.</p>}
@@ -513,11 +608,9 @@ const ArticlePage = () => {
       )}
     </div>
 
-    {/* Dialogs for Editor Toolbar */}
     <Dialog open={isYouTubeDialogOpen} onOpenChange={(open) => { setIsYouTubeDialogOpen(open); if (!open) setSavedRange(null); }}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Embed YouTube Video</DialogTitle><DialogDescription>Paste the YouTube video URL or video ID below.</DialogDescription></DialogHeader><div className="grid gap-4 py-4"><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="youtube-url" className="text-right col-span-1">URL/ID</Label><Input id="youtube-url" value={youTubeUrlInput} onChange={(e) => setYouTubeUrlInput(e.target.value)} className="col-span-3" placeholder="e.g., https://www.youtube.com/watch?v=VIDEO_ID" /></div></div><DialogFooter><Button type="button" variant="outline" onClick={() => {setIsYouTubeDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleYouTubeDialogSubmit}>Embed Video</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={isEmbedDialogOpen} onOpenChange={(open) => { setIsEmbedDialogOpen(open); if (!open) setSavedRange(null); }}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Embed External Content</DialogTitle><DialogDescription>Paste your embed code (e.g., from Twitter, Vimeo, etc.). Ensure it&apos;s safe, typically iframe-based.</DialogDescription></DialogHeader><div className="py-4"><Label htmlFor="embed-code" className="sr-only">Embed Code</Label><Textarea id="embed-code" value={embedCodeInput} onChange={(e) => setEmbedCodeInput(e.target.value)} className="min-h-[150px] font-mono text-xs" placeholder="<iframe src='...'></iframe>" /></div><DialogFooter><Button type="button" variant="outline" onClick={() => {setIsEmbedDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleEmbedDialogSubmit}>Embed Content</Button></DialogFooter></DialogContent></Dialog>
     </>
   );
 };
-
 export default ArticlePage;
