@@ -35,6 +35,7 @@ import { Badge } from '@/components/ui/badge';
 import { format, formatDistanceToNowStrict } from 'date-fns';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
+import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar'; // Added Avatar imports
 import { searchTags, getOrCreateTagsAndUpdateUsage } from '@/services/tagService';
 import type { ClientTag } from '@/types/tag';
 import { NewsCommentItem } from '@/components/news/NewsCommentItem';
@@ -171,7 +172,7 @@ const ArticlePage = () => {
       toast({ title: "Comment Posted" });
       setNewComment('');
       refetchNewsComments();
-      refetchArticle();
+      refetchArticle(); // To update comment count on the article
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Failed to Post Comment", description: error.message }),
     onSettled: () => setIsSubmittingComment(false),
@@ -196,7 +197,7 @@ const ArticlePage = () => {
     const commentPayload: Omit<NewCommentData, 'likeCount' | 'likedBy' | 'isShadowBanned'> = {
       userId: user.uid,
       text: newComment.trim(),
-      mentionName: generateAnonymousName(user.uid),
+      mentionName: generateAnonymousName(user.uid), // Generate name for the comment
       mentionedUserIds: finalMentionedUids,
     };
     addNewsCommentMutation.mutate({ articleId: articleIdParam, commentData: commentPayload });
@@ -391,7 +392,7 @@ const ArticlePage = () => {
   const toggleHeaderSearch = () => { setIsHeaderSearchActive(prev => { if (prev) { setHeaderSearchTerm(''); setIsTagSuggestionsPopoverOpen(false); } else { setTimeout(() => headerSearchInputRef.current?.focus(), 0); } return !prev; }); };
   useEffect(() => { const timerId = setTimeout(() => { setDebouncedHeaderSearchTerm(headerSearchTerm); }, 300); return () => clearTimeout(timerId); }, [headerSearchTerm]);
   useEffect(() => { if (debouncedHeaderSearchTerm.trim() && isHeaderSearchActive) { setIsTagSuggestionsLoading(true); searchTags(debouncedHeaderSearchTerm.trim(), 7).then(fetchedTags => { const currentSelectedLowercase = tags.map(t => t.toLowerCase()); setTagSuggestions(fetchedTags.filter(tag => !currentSelectedLowercase.includes(tag.name.toLowerCase()))); setIsTagSuggestionsPopoverOpen(true); }).catch(() => setTagSuggestions([])).finally(() => setIsTagSuggestionsLoading(false)); } else { setTagSuggestions([]); setIsTagSuggestionsPopoverOpen(false); } }, [debouncedHeaderSearchTerm, tags, isHeaderSearchActive]);
-  const handleAddTagFromSearch = (tagToAdd: string) => { const trimmedTag = tagToAdd.trim(); if (trimmedTag && !tags.map(t => t.toLowerCase()).includes(trimmedTag.toLowerCase())) { if (tags.length < 5) { setTags(prev => [...prev, trimmedTag]); if (publishAttempted && (tags.length + 1 > 0)) setTagsError(""); } else { toast({ title: "Tag Limit Reached", description: "You can add a maximum of 5 tags.", variant: "default" }); } } setHeaderSearchTerm(''); setIsTagSuggestionsPopoverOpen(false); setIsHeaderSearchActive(false); };
+  const handleAddTagFromSearch = (tagToAdd: string) => { const trimmedTag = tagToAdd.trim(); if (trimmedTag && !tags.map(t => t.toLowerCase()).includes(trimmedTag.toLowerCase())) { if (tags.length < 5) { setTags(prev => [...prev, trimmedTag]); if (publishAttempted && (tags.length + 1 > 0)) setTagsError(""); } else { toast({ title: "Tag Limit Reached", description: "You can add a maximum of 5 tags.", variant: "default" }); } } setHeaderSearchTerm(''); setIsTagSuggestionsPopoverOpen(false); setTimeout(() => headerSearchInputRef.current?.focus(), 0); };
   const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') { e.preventDefault(); if (headerSearchTerm.trim()) { handleAddTagFromSearch(headerSearchTerm.trim()); } } else if (e.key === 'Escape') { setIsTagSuggestionsPopoverOpen(false); setIsHeaderSearchActive(false); } };
   const handleRemoveTagFromDisplay = (tagToRemove: string) => { if (!isEditingAllowed) return; setTags(prev => { const newTags = prev.filter(t => t !== tagToRemove); if (publishAttempted && newTags.length === 0) { setTagsError("At least one tag is required."); } else if (publishAttempted && newTags.length > 0) { setTagsError(""); } return newTags; }); };
   useEffect(() => { const handleClickOutsidePopover = (event: MouseEvent) => { if (isTagSuggestionsPopoverOpen && tagSuggestionsPopoverContentRef.current && !tagSuggestionsPopoverContentRef.current.contains(event.target as Node) && headerSearchInputRef.current && !headerSearchInputRef.current.contains(event.target as Node)) { setIsTagSuggestionsPopoverOpen(false); } }; if (isTagSuggestionsPopoverOpen) document.addEventListener('mousedown', handleClickOutsidePopover); return () => document.removeEventListener('mousedown', handleClickOutsidePopover); }, [isTagSuggestionsPopoverOpen]);
@@ -567,7 +568,7 @@ const ArticlePage = () => {
                     onChange={handleNewCommentInputChange}
                     onFocus={handleNewCommentInputFocus}
                     onKeyDownCapture={(e) => { if (showNewCommentSuggestions && (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Enter' || e.key === 'Escape')) { if (e.key !== 'Escape') e.preventDefault(); } }}
-                    onBlurCapture={() => setTimeout(() => { if (newCommentSuggestionsPopoverRef.current && !newCommentSuggestionsPopoverRef.current.contains(document.activeElement as Node) && newCommentInputRef.current !== document.activeElement) { setShowNewCommentSuggestions(false); } }, 150)}
+                    onBlurCapture={() => setTimeout(() => { if (newCommentSuggestionsPopoverRef.current && !newCommentSuggestionsPopoverRef.current.contains(document.activeElement as Node) && newCommentInputRef.current && !newCommentInputRef.current.contains(document.activeElement as Node)) { setShowNewCommentSuggestions(false); } }, 150)}
                     disabled={isSubmittingComment}
                     className="flex-grow"
                   />
@@ -598,7 +599,7 @@ const ArticlePage = () => {
                 key={comment.id}
                 comment={comment}
                 currentUserId={user?.uid || null}
-                articleId={articleIdParam}
+                articleId={articleIdParam!}
                 articleAuthorId={article.userId}
                 onDelete={handleCommentDeleted}
               />
@@ -614,3 +615,4 @@ const ArticlePage = () => {
   );
 };
 export default ArticlePage;
+
