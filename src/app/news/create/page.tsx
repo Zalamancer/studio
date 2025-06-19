@@ -6,11 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-<<<<<<< HEAD
 import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, XIcon, Trash2, ArrowLeft, Search, X as CloseIcon, Tag, PlusCircle } from 'lucide-react';
-=======
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Search } from 'lucide-react';
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -74,12 +70,7 @@ const CreateNewsArticlePage = () => {
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
-<<<<<<< HEAD
 
-  // Header Search State
-=======
-  
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
   const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
   const [headerSearchTerm, setHeaderSearchTerm] = useState('');
   const [tagSuggestions, setTagSuggestions] = useState<ClientTag[]>([]);
@@ -96,13 +87,7 @@ const CreateNewsArticlePage = () => {
     }
   }, [storyContent]);
 
-<<<<<<< HEAD
   const updateSelectionNonce = useCallback(() => requestAnimationFrame(() => setSelectionNonce(n => n + 1)), []);
-=======
-  const updateSelectionNonce = useCallback(() => {
-    setSelectionNonce(n => n + 1);
-  }, []);
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
 
   const getCurrentBlockElement = useCallback((): HTMLElement | null => {
     const contentEl = contentEditableRef.current;
@@ -218,7 +203,6 @@ const CreateNewsArticlePage = () => {
   useEffect(() => { calculateAndUpdateToolbarStyle(); }, [focusedField, selectionNonce, isToolbarExpanded, calculateAndUpdateToolbarStyle]);
 
   useEffect(() => {
-<<<<<<< HEAD
     const handleSelectionChange = () => {
       if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) {
         requestAnimationFrame(updateSelectionNonce);
@@ -226,17 +210,6 @@ const CreateNewsArticlePage = () => {
     };
     document.addEventListener('selectionchange', handleSelectionChange);
     return () => document.removeEventListener('selectionchange', handleSelectionChange);
-=======
-    const handleDocSelectionChange = () => {
-      if (document.activeElement === contentEditableRef.current || (titleInputRef.current && document.activeElement === titleInputRef.current)) {
-        requestAnimationFrame(updateSelectionNonce);
-      }
-    };
-    document.addEventListener('selectionchange', handleDocSelectionChange);
-    return () => {
-      document.removeEventListener('selectionchange', handleDocSelectionChange);
-    };
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
   }, [updateSelectionNonce]);
 
   const handleFocus = useCallback((field: 'title' | 'content') => {
@@ -255,7 +228,6 @@ const CreateNewsArticlePage = () => {
 
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => {
     const currentHTML = event.currentTarget.innerHTML;
-<<<<<<< HEAD
     if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") {
       setStoryContent("<p><br></p>");
       if (event.currentTarget.innerHTML !== "<p><br></p>") { event.currentTarget.innerHTML = "<p><br></p>";
@@ -269,36 +241,23 @@ const CreateNewsArticlePage = () => {
     }
     requestAnimationFrame(updateSelectionNonce);
   }, [publishAttempted, setStoryError, updateSelectionNonce]);
-=======
-    setStoryContent(currentHTML); 
-    // Removed requestAnimationFrame(updateSelectionNonce);
 
-    if (publishAttempted) {
-      const currentText = event.currentTarget.textContent || "";
-      if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) {
-        setStoryError("");
-      } else {
-        setStoryError("Story content is required.");
-      }
-    }
-  }, [publishAttempted, setStoryError]);
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
 
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const editorEl = contentEditableRef.current; if (!editorEl) return;
     const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
-<<<<<<< HEAD
-    if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); setTimeout(() => { if (contentEditableRef.current) { setStoryContent(contentEditableRef.current.innerHTML); requestAnimationFrame(updateSelectionNonce);}}, 0); return; }
-=======
-    if (event.key === 'Enter') { 
-        event.preventDefault(); 
-        document.execCommand('insertParagraph', false, undefined); 
-        if (editorEl) setStoryContent(editorEl.innerHTML); 
-        // Removed requestAnimationFrame(updateSelectionNonce);
-        return; 
-    } 
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
+
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        document.execCommand('insertParagraph', false, undefined);
+        setTimeout(() => {
+            if (editorEl) setStoryContent(editorEl.innerHTML);
+            requestAnimationFrame(updateSelectionNonce);
+        }, 0);
+        return;
+    }
+
     if (event.key === 'Backspace' || event.key === 'Delete') {
       if (range.collapsed && currentBlock) {
         const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false;
@@ -306,40 +265,35 @@ const CreateNewsArticlePage = () => {
           if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
-<<<<<<< HEAD
-            event.preventDefault(); prevElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return;
-=======
-            event.preventDefault(); prevElement.remove(); 
-            if (editorEl) setStoryContent(editorEl.innerHTML); 
-            // Removed requestAnimationFrame(updateSelectionNonce);
-            return; 
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
+            event.preventDefault(); prevElement.remove();
+            setTimeout(() => {
+                if (editorEl) setStoryContent(editorEl.innerHTML || "<p><br></p>");
+                requestAnimationFrame(updateSelectionNonce);
+            }, 0);
+            return;
           }
-        } else {
+        } else { // Delete key
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
-<<<<<<< HEAD
-            event.preventDefault(); nextElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return;
-=======
-            event.preventDefault(); nextElement.remove(); 
-            if (editorEl) setStoryContent(editorEl.innerHTML); 
-            // Removed requestAnimationFrame(updateSelectionNonce);
-            return; 
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
+            event.preventDefault(); nextElement.remove();
+            setTimeout(() => {
+                if (editorEl) setStoryContent(editorEl.innerHTML || "<p><br></p>");
+                requestAnimationFrame(updateSelectionNonce);
+            }, 0);
+            return;
           }
         }
       }
     }
-<<<<<<< HEAD
+    // General case for Backspace/Delete if not handled by special element logic
+    // Update storyContent and nonce after the native action completes
+    setTimeout(() => {
+        if (editorEl) setStoryContent(editorEl.innerHTML);
+        requestAnimationFrame(updateSelectionNonce);
+    }, 0);
   }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce]);
-=======
-    setTimeout(() => { 
-        if (editorEl) setStoryContent(editorEl.innerHTML); 
-        // Removed requestAnimationFrame(updateSelectionNonce);
-    },0); 
-  }, [getCurrentBlockElement, setStoryContent]);
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
+
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -348,7 +302,7 @@ const CreateNewsArticlePage = () => {
     const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags, contentEditableRef]); // Added contentEditableRef to dependencies
+  }, [title, tags, contentEditableRef]);
 
   const handleFormSubmission = async (status: NewsArticleStatus) => {
     if (!user) { toast({ variant: "destructive", title: "Error", description: "You must be logged in." }); return; }
@@ -507,7 +461,6 @@ const CreateNewsArticlePage = () => {
     }
   };
 
-  // Header Search Logic
   const toggleHeaderSearch = () => {
     setIsHeaderSearchActive(prev => {
       if (prev) {
@@ -556,10 +509,9 @@ const CreateNewsArticlePage = () => {
     }
     setHeaderSearchTerm('');
     setIsTagSuggestionsPopoverOpen(false);
-    // Do not close search on add: setIsHeaderSearchActive(false);
     setTimeout(() => headerSearchInputRef.current?.focus(), 0);
   };
-  
+
   const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
           e.preventDefault();
@@ -606,7 +558,6 @@ const CreateNewsArticlePage = () => {
         <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3 flex-shrink-0">
           <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
         </Button>
-<<<<<<< HEAD
 
         <div className="flex items-center gap-1.5 flex-grow min-w-[150px] sm:min-w-[200px]">
           <Button
@@ -619,12 +570,6 @@ const CreateNewsArticlePage = () => {
             disabled={isSubmitting}
           >
             {isHeaderSearchActive ? <CloseIcon className="h-4 w-4" /> : <Search className="h-4 w-4" />}
-=======
-        
-        <div className="flex items-center gap-2 flex-grow min-w-0">
-          <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className={cn("h-9 w-9 p-1.5 flex-shrink-0", isHeaderSearchActive && "bg-muted")}>
-            <Search className={cn("h-4 w-4 transition-transform duration-200", isHeaderSearchActive && "rotate-[30deg]")} />
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
           </Button>
 
           {isHeaderSearchActive ? (
@@ -686,7 +631,7 @@ const CreateNewsArticlePage = () => {
             </div>
           )}
         </div>
-        
+
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
             <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
@@ -720,7 +665,6 @@ const CreateNewsArticlePage = () => {
           </div>
         )}
         <div ref={titleWrapperRef} className="relative mb-4">
-<<<<<<< HEAD
           <Input
             ref={titleInputRef}
             placeholder="Title"
@@ -731,22 +675,6 @@ const CreateNewsArticlePage = () => {
             className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
             autoComplete="off"
             disabled={isSubmitting}
-=======
-          <Input 
-            ref={titleInputRef} 
-            placeholder="Title" 
-            value={title} 
-            onChange={(e) => { 
-              setTitle(e.target.value); 
-              if (publishAttempted) { if (e.target.value.trim()) setTitleError(""); else setTitleError("Title is required."); } 
-              // Removed requestAnimationFrame(updateSelectionNonce);
-            }} 
-            onFocus={() => handleFocus('title')} 
-            onBlur={handleBlur} 
-            className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2" 
-            autoComplete="off" 
-            disabled={isSubmitting} 
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
           />
           {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
         </div>
@@ -757,11 +685,7 @@ const CreateNewsArticlePage = () => {
             onInput={handleContentEditableInput}
             onFocus={() => handleFocus('content')}
             onBlur={handleBlur}
-<<<<<<< HEAD
             onKeyDown={handleContentKeyDown}
-=======
-            onKeyDown={handleContentKeyDown} 
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
             data-placeholder="Tell your story..."
             className={cn(
               "w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case",
@@ -779,10 +703,7 @@ const CreateNewsArticlePage = () => {
             aria-label="News article content"
             suppressContentEditableWarning={true}
             dir="ltr"
-<<<<<<< HEAD
-=======
             dangerouslySetInnerHTML={{ __html: storyContent }}
->>>>>>> baeeb37859f94e900ab087fc7c82923443e7bb1e
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
@@ -815,4 +736,3 @@ const CreateNewsArticlePage = () => {
   );
 };
 export default CreateNewsArticlePage;
-
