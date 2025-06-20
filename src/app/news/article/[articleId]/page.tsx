@@ -52,6 +52,9 @@ import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectio
 import type { UserProfileBasic } from '@/types/connection';
 import { TextWithMentions } from '@/components/board-page/TextWithMentions';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
+import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
+import { getUserCollections } from '@/services/collectionService';
+import type { ClientCollection } from '@/types/collection';
 
 const TOOLBAR_HEIGHT = 36;
 const TOOLBAR_HORIZONTAL_OFFSET = 40;
@@ -78,7 +81,6 @@ const ArticlePage = () => {
   const { toast } = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
-  // const currentUserId = user?.uid; // This was defined but user?.uid used below, standardized to user?.uid
 
   const { data: article, isLoading: isLoadingArticle, error: errorLoadingArticle, refetch: refetchArticle } = useQuery<ClientNewsArticle | null>({
     queryKey: ['newsArticle', articleIdParam],
@@ -139,8 +141,30 @@ const ArticlePage = () => {
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
   const [isLikingArticle, setIsLikingArticle] = useState(false);
+  const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
   const isEditingAllowed = useMemo(() => !!user && !!article && user.uid === article.userId, [article, user]);
+
+  const { data: userCollections = [] } = useQuery<ClientCollection[]>({
+    queryKey: ['userCollections', user?.uid],
+    queryFn: () => user ? getUserCollections(user.uid) : Promise.resolve([]),
+    enabled: !!user,
+  });
+
+  const savedItemIds = useMemo(() => {
+    if (!userCollections || userCollections.length === 0) return new Set<string>();
+    const ids = new Set<string>();
+    userCollections.forEach(collection => collection.postIds?.forEach(id => ids.add(id)));
+    return ids;
+  }, [userCollections]);
+
+  const handleCollectionUpdate = useCallback(() => {
+    if (user) {
+      queryClient.invalidateQueries({ queryKey: ['userCollections', user.uid] });
+    }
+  }, [user, queryClient]);
+
+  const isSaved = useMemo(() => savedItemIds.has(article?.id || ''), [savedItemIds, article]);
 
   useEffect(() => {
     if (article) {
@@ -504,8 +528,20 @@ const ArticlePage = () => {
             )}
             <span className="text-xs text-muted-foreground mr-1">{article.likeCount || 0} Likes</span>
             {user?.uid && !isEditingAllowed && (
-              <Button variant="ghost" size="icon" className="h-8 w-8 p-1" title="Save to Collection (Placeholder)">
-                <Bookmark className="h-4 w-4 text-muted-foreground" />
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 p-1"
+                title={isSaved ? "Saved in Collection" : "Save to Collection"}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  e.preventDefault();
+                  setIsSaveToCollectionDialogOpen(true);
+                }}
+                disabled={isSubmitting}
+                aria-pressed={isSaved}
+              >
+                <Bookmark className={cn("h-4 w-4 text-muted-foreground", isSaved && "fill-primary text-primary")} />
               </Button>
             )}
           {isEditingAllowed && (
@@ -540,7 +576,7 @@ const ArticlePage = () => {
         <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting || !isEditingAllowed} />
         <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting || !isEditingAllowed} />
 
-        {coverImagePreview && ( <div className="mb-4 relative group"> <Image src={coverImagePreview} alt="Cover image preview" width={800} height={450} className="rounded-md object-cover w-full max-h-[300px] border" data-ai-hint="news cover"/> {isEditingAllowed && <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); setCurrentCoverImageUrl(null); if(coverImageInputRef.current) coverImageInputRef.current.value = "";}} disabled={isSubmitting}><Trash2 className="h-4 w-4" /></Button>} </div> )}
+        {coverImagePreview && ( <div className="mb-4 relative group"> <Image src={coverImagePreview} alt="Cover image preview" width={800} height={450} className="rounded-md object-cover w-full max-h-[300px] border" data-ai-hint="news cover" sizes="(max-width: 768px) 100vw, 800px"/> {isEditingAllowed && <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); setCurrentCoverImageUrl(null); if(coverImageInputRef.current) coverImageInputRef.current.value = "";}} disabled={isSubmitting}><Trash2 className="h-4 w-4" /></Button>} </div> )}
         {article && article.status === 'published' && article.hasUnpublishedChanges && isEditingAllowed && ( <div className="mb-3 p-2 text-sm bg-yellow-100 border border-yellow-300 text-yellow-700 rounded-md flex items-center gap-2"> <AlertTriangle className="h-4 w-4" /> You are editing a saved draft. The live article may be different. <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => { if (contentEditableRef.current && article.content) { setStoryContent(article.content); contentEditableRef.current.innerHTML = article.content; } toast({title: "Viewing Live Content", description: "Editor now shows the live published content."}); }}>View live content</Button> </div> )}
 
         {isEditingAllowed ? (
@@ -659,6 +695,20 @@ const ArticlePage = () => {
 
     <Dialog open={isYouTubeDialogOpen} onOpenChange={(open) => { setIsYouTubeDialogOpen(open); if (!open) setSavedRange(null); }}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>Embed YouTube Video</DialogTitle><DialogDescription>Paste the YouTube video URL or video ID below.</DialogDescription></DialogHeader><div className="grid gap-4 py-4"><div className="grid grid-cols-4 items-center gap-4"><Label htmlFor="youtube-url" className="text-right col-span-1">URL/ID</Label><Input id="youtube-url" value={youTubeUrlInput} onChange={(e) => setYouTubeUrlInput(e.target.value)} className="col-span-3" placeholder="e.g., https://www.youtube.com/watch?v=VIDEO_ID" /></div></div><DialogFooter><Button type="button" variant="outline" onClick={() => {setIsYouTubeDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleYouTubeDialogSubmit}>Embed Video</Button></DialogFooter></DialogContent></Dialog>
     <Dialog open={isEmbedDialogOpen} onOpenChange={(open) => { setIsEmbedDialogOpen(open); if (!open) setSavedRange(null); }}><DialogContent className="sm:max-w-lg"><DialogHeader><DialogTitle>Embed External Content</DialogTitle><DialogDescription>Paste your embed code (e.g., from Twitter, Vimeo, etc.). Ensure it&apos;s safe, typically iframe-based.</DialogDescription></DialogHeader><div className="py-4"><Label htmlFor="embed-code" className="sr-only">Embed Code</Label><Textarea id="embed-code" value={embedCodeInput} onChange={(e) => setEmbedCodeInput(e.target.value)} className="min-h-[150px] font-mono text-xs" placeholder="<iframe src='...'></iframe>" /></div><DialogFooter><Button type="button" variant="outline" onClick={() => {setIsEmbedDialogOpen(false); setSavedRange(null);}}>Cancel</Button><Button type="button" onClick={handleEmbedDialogSubmit}>Embed Content</Button></DialogFooter></DialogContent></Dialog>
+    
+    {user && article && (
+      <SaveToCollectionDialog
+        isOpen={isSaveToCollectionDialogOpen}
+        onOpenChange={(open) => {
+          setIsSaveToCollectionDialogOpen(open);
+          if (!open) {
+            handleCollectionUpdate();
+          }
+        }}
+        postId={article.id}
+        postTitle={article.title}
+      />
+    )}
     </>
   );
 };
