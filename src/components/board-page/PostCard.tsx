@@ -64,7 +64,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
       </CardHeader>
       <CardContent className="p-4 pt-0">
         {post.imageUrls && post.imageUrls.length > 0 && (
-          <div className="mb-3 rounded-md overflow-hidden aspect-[3/4] relative">
+          <div className="mb-3 rounded-md overflow-hidden aspect-[4/3] relative">
             <Image
               src={post.imageUrls[0]}
               alt={post.question}

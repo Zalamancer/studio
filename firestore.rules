@@ -122,20 +122,21 @@ service cloud.firestore {
                        request.resource.data.size() == 18; // Adjust size based on exact fields on create
 
       allow update: if isAuthenticated() &&
-                       (
-                        ( // Case 1: Owner updating their own post
-                         request.auth.uid == resource.data.userId && 
-                         request.resource.data.userId == resource.data.userId && 
-                         request.resource.data.createdAt == resource.data.createdAt && 
-                         request.resource.data.diff(resource.data).affectedKeys().hasAny(['question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'imageUrls', 'requestType', 'descriptionDetails', 'descriptionTried', 'descriptionOutcome', 'maxBudget', 'deadline', 'updatedAt'])
-                        )
-                       || // Case 2: System updating commentCount
+                       request.auth.uid == resource.data.userId && // Only owner can update their post
+                       request.resource.data.userId == resource.data.userId && // Cannot change owner
+                       request.resource.data.createdAt == resource.data.createdAt && // Cannot change creation time
+                       // Allow specific fields to be updated by owner
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                         'question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'imageUrls', 'requestType',
+                         'descriptionDetails', 'descriptionTried', 'descriptionOutcome', 'maxBudget', 'deadline',
+                         'updatedAt' // If you add an updatedAt field
+                       ])
+                       || // OR allow atomic increment/decrement of commentCount by anyone (implicitly for create/delete of comment)
                        (
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'updatedAt']) &&
                          (request.resource.data.commentCount == resource.data.commentCount + 1 || request.resource.data.commentCount == resource.data.commentCount - 1) &&
-                         request.resource.data.updatedAt == request.time 
-                       )
-                      );
+                         request.resource.data.updatedAt == request.time // Ensure updatedAt is also set
+                       );
 
 
       allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId; // Only owner can delete
@@ -180,7 +181,7 @@ service cloud.firestore {
                            request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
                            request.resource.data.mentionedUserIds is list &&
                            request.resource.data.isShadowBanned == false &&
-                           request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) && 
+                           request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
                            request.resource.data.size() == 9;
           allow update: if isAuthenticated() &&
                            request.resource.data.updatedAt == request.time && // Must be part of any update
@@ -508,11 +509,12 @@ service cloud.firestore {
                          request.resource.data.nameLowercase == request.resource.data.name.lower() &&
                          request.resource.data.usageCount >= 0 && 
                          request.resource.data.createdAt == request.time &&
-                         request.resource.data.keys().hasAll(['name', 'nameLowercase', 'usageCount', 'createdAt', 'createdBy']) &&
-                         request.resource.data.size() == 5;
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.keys().hasAll(['name', 'nameLowercase', 'usageCount', 'createdAt', 'createdBy', 'updatedAt']) &&
+                         request.resource.data.size() == 6;
 
        	allow update: if isAuthenticated() &&
- 					request.resource.data.updatedAt == request.time;
+                         request.resource.data.updatedAt == request.time;
           
         allow delete: if false;
     }
@@ -565,6 +567,14 @@ service cloud.firestore {
                        ( // Case 2: Any authenticated user liking/unliking (not author)
                          request.auth.uid != resource.data.userId &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
+                         // Core immutable fields must not change
+                         request.resource.data.userId == resource.data.userId &&
+                         request.resource.data.title == resource.data.title &&
+                         request.resource.data.content == resource.data.content &&
+                         request.resource.data.status == resource.data.status &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         request.resource.data.publishedAt == resource.data.publishedAt &&
+                         // Liking logic
                          (request.resource.data.likeCount == resource.data.likeCount + 1 || request.resource.data.likeCount == resource.data.likeCount - 1) &&
                          (
                            ( // Liking
@@ -623,13 +633,11 @@ service cloud.firestore {
                            request.resource.data.updatedAt == request.time &&
                            ( // Case 1: Liking/Unliking
                              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
-                             // Immutable fields check
+                             // Core immutable fields must not change
                              request.resource.data.userId == resource.data.userId &&
                              request.resource.data.text == resource.data.text &&
                              request.resource.data.timestamp == resource.data.timestamp &&
-                             request.resource.data.get('mentionName', null) == resource.data.get('mentionName', null) &&
-                             request.resource.data.get('mentionedUserIds', []) == resource.data.get('mentionedUserIds', []) &&
-                             request.resource.data.get('isShadowBanned', false) == resource.data.get('isShadowBanned', false) &&
+                             // Liking logic
                              (request.resource.data.likeCount == resource.data.likeCount + 1 || request.resource.data.likeCount == resource.data.likeCount - 1) &&
                              (request.resource.data.likedBy.hasOnly(resource.data.likedBy.added(request.auth.uid)) ||
                               request.resource.data.likedBy.hasOnly(resource.data.likedBy.removed(request.auth.uid)))
@@ -637,11 +645,10 @@ service cloud.firestore {
                            ( // Case 2: Article owner shadow banning/unbanning
                              isParentArticleOwner() &&
                              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isShadowBanned', 'updatedAt']) &&
+                             // Core immutable fields must not change
                              request.resource.data.userId == resource.data.userId &&
                              request.resource.data.text == resource.data.text &&
                              request.resource.data.timestamp == resource.data.timestamp &&
-                             request.resource.data.get('mentionName', null) == resource.data.get('mentionName', null) &&
-                             request.resource.data.get('mentionedUserIds', []) == resource.data.get('mentionedUserIds', []) &&
                              request.resource.data.likeCount == resource.data.likeCount &&
                              request.resource.data.likedBy == resource.data.likedBy
                            );
@@ -673,12 +680,11 @@ service cloud.firestore {
                                request.resource.data.updatedAt == request.time &&
                                ( // Case 1: Liking/Unliking
                                  request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
+                                 // Core immutable fields must not change
                                  request.resource.data.userId == resource.data.userId &&
                                  request.resource.data.text == resource.data.text &&
                                  request.resource.data.timestamp == resource.data.timestamp &&
-                                 request.resource.data.get('mentionName', null) == resource.data.get('mentionName', null) &&
-                                 request.resource.data.get('mentionedUserIds', []) == resource.data.get('mentionedUserIds', []) &&
-                                 request.resource.data.get('isShadowBanned', false) == resource.data.get('isShadowBanned', false) &&
+                                 // Liking logic
                                  (request.resource.data.likeCount == resource.data.likeCount + 1 || request.resource.data.likeCount == resource.data.likeCount - 1) &&
                                  (request.resource.data.likedBy.hasOnly(resource.data.likedBy.added(request.auth.uid)) ||
                                   request.resource.data.likedBy.hasOnly(resource.data.likedBy.removed(request.auth.uid)))
@@ -686,11 +692,10 @@ service cloud.firestore {
                                ( // Case 2: Article owner shadow banning/unbanning
                                  isParentArticleOwner() &&
                                  request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isShadowBanned', 'updatedAt']) &&
+                                 // Core immutable fields must not change
                                  request.resource.data.userId == resource.data.userId &&
                                  request.resource.data.text == resource.data.text &&
                                  request.resource.data.timestamp == resource.data.timestamp &&
-                                 request.resource.data.get('mentionName', null) == resource.data.get('mentionName', null) &&
-                                 request.resource.data.get('mentionedUserIds', []) == resource.data.get('mentionedUserIds', []) &&
                                  request.resource.data.likeCount == resource.data.likeCount &&
                                  request.resource.data.likedBy == resource.data.likedBy
                                );

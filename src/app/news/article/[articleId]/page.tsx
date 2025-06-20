@@ -562,7 +562,7 @@ const ArticlePage = () => {
                 <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-2">{article.title}</h1>
                 <p className="text-sm text-muted-foreground"> {article.status === 'published' ? <>Published on <time dateTime={new Date(article.publishedAt || 0).toISOString()}>{publishedDateStr}</time></> : `Draft (Last saved: ${formatDistanceToNowStrict(new Date(article.updatedAt), { addSuffix: true })} ago)`} {showLastEdited && ` (Last edited: ${lastEditedDateStr})`} </p>
             </header>
-            {article.coverImageUrl && ( <div className="mb-8 relative aspect-video rounded-lg overflow-hidden shadow-md"> <Image src={article.coverImageUrl} alt={article.title} fill style={{objectFit:"cover"}} priority data-ai-hint="news cover article"/> </div> )}
+            {article.coverImageUrl && ( <div className="mb-8 relative aspect-video rounded-lg overflow-hidden shadow-md"> <Image src={article.coverImageUrl} alt={article.title} fill sizes="(max-width: 768px) 100vw, 768px" style={{objectFit:"cover"}} priority data-ai-hint="news cover article"/> </div> )}
             <div className="prose prose-lg dark:prose-invert max-w-none" dangerouslySetInnerHTML={{ __html: article.content || "" }} />
           </>
         )}

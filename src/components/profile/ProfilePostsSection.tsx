@@ -1,3 +1,4 @@
+
 // src/components/profile/ProfilePostsSection.tsx
 "use client";
 
@@ -161,7 +162,7 @@ export const ProfilePostsSection: React.FC<ProfilePostsSectionProps> = ({ userId
                                                  src={url}
                                                  alt={`Post image ${index + 1}`}
                                                  fill
-                                                 sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+                                                 sizes="(max-width: 640px) 100vw, 576px"
                                                  style={{ objectFit: 'contain' }}
                                                  className="rounded-md"
                                                  data-ai-hint="uploaded content"
