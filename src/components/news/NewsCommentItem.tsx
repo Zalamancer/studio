@@ -164,7 +164,7 @@ const NewsSubCommentItem: React.FC<NewsSubCommentItemProps> = React.memo(({
               </Button>
             )}
             {user && (
-                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-muted-foreground/70 hover:text-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" onClick={() => onStartReply(subComment)} title="Reply">
+                 <Button variant="ghost" size="icon" className="h-5 w-5 p-0.5 text-muted-foreground/70 hover:text-primary opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity" onClick={() => onStartReply(subComment)} title="Reply to this comment">
                     <CornerDownRight className="h-3 w-3" />
                  </Button>
             )}
@@ -341,6 +341,7 @@ export const NewsCommentItem: React.FC<NewsCommentItemProps> = React.memo(({ com
     const replyData: Omit<NewSubCommentData, 'likeCount' | 'likedBy'> = {
       userId: user.uid,
       text: newReply.trim(),
+      mentionName: generateAnonymousName(user.uid),
       mentionedUserIds: finalMentionedUids,
       isShadowBanned: false,
     };
