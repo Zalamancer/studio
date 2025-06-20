@@ -182,7 +182,7 @@ const ArticlePage = () => {
       toast({ title: "Comment Posted" });
       setNewComment('');
       refetchNewsComments();
-      refetchArticle();
+      refetchArticle(); 
       queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
       if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
     },
@@ -247,11 +247,9 @@ const ArticlePage = () => {
 
   const handleCommentDeleted = useCallback(() => {
     refetchNewsComments();
-    if (articleIdParam) {
-        decrementNewsArticleCommentCount(articleIdParam);
-        queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
-        if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
-    }
+    if (articleIdParam) decrementNewsArticleCommentCount(articleIdParam);
+    queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
+    if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
   }, [refetchNewsComments, articleIdParam, queryClient, user?.uid]);
 
   const handleToggleLikeArticle = async () => {
@@ -661,3 +659,4 @@ const ArticlePage = () => {
 };
 export default ArticlePage;
 
+    
