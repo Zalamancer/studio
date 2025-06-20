@@ -1,14 +1,13 @@
 
 // src/lib/firebase/config.ts
-import { initializeApp, getApps, getApp, FirebaseApp } from "firebase/app";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-// Add other Firebase services like Firestore, Storage, etc., if needed
-import { getFirestore } from "firebase/firestore"; // Ensure Firestore is imported
-import { getStorage } from "firebase/storage"; // Import getStorage
+import { getFirestore } from "firebase/firestore";
+import { getStorage } from "firebase/storage";
 
-// Your web app's Firebase configuration
-// For Firebase JS SDK v7.20.0 and later, measurementId is optional
-// Ensure these environment variables are set in your .env.local file
+// Define a unique name for your Firebase app
+const FIREBASE_APP_NAME = "AnonyCollabWebApp"; // You can choose any unique name
+
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -16,20 +15,19 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID // Optional
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase
+// Initialize Firebase with a unique name
 let app: FirebaseApp;
-if (!getApps().length) {
-  app = initializeApp(firebaseConfig);
+if (!getApps().find(existingApp => existingApp.name === FIREBASE_APP_NAME)) {
+  app = initializeApp(firebaseConfig, FIREBASE_APP_NAME);
 } else {
-  app = getApp();
+  app = getApp(FIREBASE_APP_NAME);
 }
 
 const auth = getAuth(app);
-const db = getFirestore(app); // Initialize Firestore
-const storage = getStorage(app); // Initialize Firebase Storage
+const db = getFirestore(app);
+const storage = getStorage(app);
 
-export { app, auth, db, storage }; // Export initialized services including db and storage
-
+export { app, auth, db, storage };
