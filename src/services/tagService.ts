@@ -1,3 +1,4 @@
+
 // src/services/tagService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -13,8 +14,8 @@ import {
   Timestamp,
   writeBatch,
   limit,
-  orderBy,
-  runTransaction,
+  runTransaction, // Explicitly ensure runTransaction is from the correct import
+  // getDoc, // Not directly used in this file, but good practice if needed elsewhere
 } from 'firebase/firestore';
 import type { Tag, ClientTag } from '@/types/tag';
 
@@ -42,8 +43,7 @@ export const searchTags = async (searchQuery: string, count = 10): Promise<Clien
     articleTagsCollectionRef,
     where('nameLowercase', '>=', lowerQuery),
     where('nameLowercase', '<=', lowerQuery + '\uf8ff'),
-    orderBy('nameLowercase', 'asc'), // Order by name first for prefix search consistency
-    // then order by usageCount might be better done client-side after fetching if complex
+    orderBy('nameLowercase', 'asc'),
     limit(count)
   );
 
@@ -54,7 +54,6 @@ export const searchTags = async (searchQuery: string, count = 10): Promise<Clien
       ...docSnap.data(),
       createdAt: (docSnap.data().createdAt as Timestamp).toMillis(),
     } as ClientTag));
-    // Secondary sort by usageCount client-side if needed, or adjust query if Firestore allows
     return tags.sort((a, b) => b.usageCount - a.usageCount);
   } catch (error: any) {
     console.error("[tagService] Error searching tags:", error);
@@ -64,37 +63,44 @@ export const searchTags = async (searchQuery: string, count = 10): Promise<Clien
 
 
 /**
- * Ensures tags exist, creates them if not, and increments their usage counts.
+ * Ensures tags exist, creates them if not, and increments/decrements their usage counts.
  * This function is transactional to ensure atomicity for usage counts.
  */
 export const getOrCreateTagsAndUpdateUsage = async (tagNames: string[], userId: string, incrementBy: number = 1): Promise<void> => {
   if (!tagNames || tagNames.length === 0) return;
   if (!userId) throw new Error("User ID is required to create/update tags.");
 
+  // Using the imported db instance directly in runTransaction
+  const firestoreDb = db;
+
   try {
-    await runTransaction(db, async (transaction) => {
+    await runTransaction(firestoreDb, async (transaction) => {
       for (const tagName of tagNames) {
         if (!tagName || tagName.trim() === '') continue;
         const nameTrimmed = tagName.trim();
         const nameLowercase = nameTrimmed.toLowerCase();
 
+        // Query object constructed with imported functions
         const q = query(articleTagsCollectionRef, where('nameLowercase', '==', nameLowercase), limit(1));
-        const snapshot = await transaction.get(q); // Use transaction.get
+        
+        // console.log('[tagService] Inside transaction. About to call transaction.get(). Query:', q);
+        // console.log('[tagService] Transaction object type:', typeof transaction, 'Has get method:', typeof transaction?.get === 'function');
+
+        const snapshot = await transaction.get(q); // Line 82 - error occurs here
 
         if (snapshot.empty) {
-          // Tag doesn't exist, create it
-          const newTagRef = doc(articleTagsCollectionRef); // Auto-generate ID for new tag
+          const newTagRef = doc(articleTagsCollectionRef);
           const newTagData: Omit<Tag, 'id'> = {
             name: nameTrimmed,
             nameLowercase: nameLowercase,
-            usageCount: incrementBy > 0 ? incrementBy : 0, // Ensure non-negative for new tags
+            usageCount: incrementBy > 0 ? incrementBy : 0,
             createdAt: serverTimestamp() as Timestamp,
             createdBy: userId,
           };
           transaction.set(newTagRef, newTagData);
         } else {
-          // Tag exists, update its usageCount
           const existingTagDocRef = snapshot.docs[0].ref;
+          // increment function imported from firebase/firestore
           transaction.update(existingTagDocRef, {
             usageCount: increment(incrementBy)
           });
@@ -103,6 +109,10 @@ export const getOrCreateTagsAndUpdateUsage = async (tagNames: string[], userId: 
     });
   } catch (error: any) {
     console.error("[tagService] Error in getOrCreateTagsAndUpdateUsage transaction:", error);
+    // Log more details if it's the specific error
+    if (error.message && error.message.toLowerCase().includes("t is undefined") || error.message.toLowerCase().includes("transaction is undefined")) {
+      console.error("[tagService] Critical SDK error within transaction.get(). Transaction object or its context might be invalid.");
+    }
     throw new Error(error.message || "Could not process tags.");
   }
 };
