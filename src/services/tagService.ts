@@ -2,7 +2,7 @@
 // src/services/tagService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
-  collection as firestoreCollection, // Aliased to avoid conflict if needed
+  collection as firestoreCollection,
   query,
   where,
   getDocs,
@@ -15,35 +15,34 @@ import {
   writeBatch,
   limit,
   runTransaction,
-  orderBy, // Added orderBy
-  // getDoc, // Not directly used in this file, but good practice if needed elsewhere
+  orderBy,
+  type FieldValue,
 } from 'firebase/firestore';
-import type { Tag, ClientTag, NewTagData } from '@/types/tag'; // Import NewTagData
+import type { Tag, ClientTag, NewTagData } from '@/types/tag';
 
 const ARTICLE_TAGS_COLLECTION = 'articleTags';
-// Keep a top-level reference for non-transactional operations like searchTags
-const articleTagsTopLevelRef = firestoreCollection(db, ARTICLE_TAGS_COLLECTION);
 
 /**
  * Searches for tags based on a query string (prefix match on nameLowercase).
  * Returns tags ordered by usageCount descending, then by name.
  */
 export const searchTags = async (searchQuery: string, count = 10): Promise<ClientTag[]> => {
+  const articleTagsCollectionRef = firestoreCollection(db, ARTICLE_TAGS_COLLECTION); // Define ref here
+
   if (!searchQuery || searchQuery.trim() === '') {
-    // If query is empty, return most popular tags
-    const q = query(articleTagsTopLevelRef, orderBy('usageCount', 'desc'), orderBy('nameLowercase', 'asc'), limit(count));
+    const q = query(articleTagsCollectionRef, orderBy('usageCount', 'desc'), orderBy('nameLowercase', 'asc'), limit(count));
     const snapshot = await getDocs(q);
     return snapshot.docs.map(docSnap => ({
       id: docSnap.id,
       ...docSnap.data(),
       createdAt: (docSnap.data().createdAt as Timestamp).toMillis(),
-      usageCount: docSnap.data().usageCount || 0, // Ensure usageCount is a number
+      usageCount: docSnap.data().usageCount || 0,
     } as ClientTag));
   }
 
   const lowerQuery = searchQuery.toLowerCase();
   const q = query(
-    articleTagsTopLevelRef,
+    articleTagsCollectionRef,
     where('nameLowercase', '>=', lowerQuery),
     where('nameLowercase', '<=', lowerQuery + '\uf8ff'),
     orderBy('nameLowercase', 'asc'),
@@ -56,9 +55,9 @@ export const searchTags = async (searchQuery: string, count = 10): Promise<Clien
       id: docSnap.id,
       ...docSnap.data(),
       createdAt: (docSnap.data().createdAt as Timestamp).toMillis(),
-      usageCount: docSnap.data().usageCount || 0, // Ensure usageCount is a number
+      usageCount: docSnap.data().usageCount || 0,
     } as ClientTag));
-    return tags.sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0)); // Sort by usageCount on client
+    return tags.sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0));
   } catch (error: any) {
     console.error("[tagService] Error searching tags:", error);
     throw new Error(error.message || "Could not search tags.");
@@ -78,7 +77,7 @@ export const getOrCreateTagsAndUpdateUsage = async (tagNames: string[], userId: 
 
   try {
     await runTransaction(firestoreDb, async (transaction) => {
-      // Re-create collection reference INSIDE the transaction using the db instance
+      // Re-initialize collection ref *inside* the transaction with the transaction's db instance
       const articleTagsCollectionRefInTransaction = firestoreCollection(firestoreDb, ARTICLE_TAGS_COLLECTION);
 
       for (const tagName of tagNames) {
@@ -86,33 +85,27 @@ export const getOrCreateTagsAndUpdateUsage = async (tagNames: string[], userId: 
         const nameTrimmed = tagName.trim();
         const nameLowercase = nameTrimmed.toLowerCase();
 
-        // Query for the tag using the transaction-scoped collection reference
         const q = query(articleTagsCollectionRefInTransaction, where('nameLowercase', '==', nameLowercase));
-        
-        // console.log('[tagService] Inside transaction. About to call transaction.get(). Query constructed with transaction-scoped ref.');
-        const snapshot = await transaction.get(q); 
+        const snapshot = await transaction.get(q);
 
         if (snapshot.docs.length === 0) {
-          // Tag doesn't exist, create it
-          const newTagRef = doc(articleTagsCollectionRefInTransaction); // Create a new doc ref in the transaction-scoped collection
-          const newTagData: NewTagData = { // Use NewTagData type
+          const newTagRef = doc(articleTagsCollectionRefInTransaction); // Create new doc ref
+          const newTagData: NewTagData = {
             name: nameTrimmed,
             nameLowercase: nameLowercase,
             usageCount: incrementBy > 0 ? incrementBy : 0,
-            createdAt: serverTimestamp(), // No 'as Timestamp'
+            createdAt: serverTimestamp() as FieldValue,
             createdBy: userId,
           };
           transaction.set(newTagRef, newTagData);
         } else {
-          // Tag exists, update it
           const existingTagDocRef = snapshot.docs[0].ref;
           const currentUsageCount = snapshot.docs[0].data().usageCount || 0;
           const newUsageCount = currentUsageCount + incrementBy;
           
           transaction.update(existingTagDocRef, {
-            usageCount: newUsageCount < 0 ? 0 : newUsageCount, // Ensure usageCount doesn't go below 0
-            // Optionally update an 'updatedAt' field if you have one
-            // updatedAt: serverTimestamp()
+            usageCount: newUsageCount < 0 ? 0 : newUsageCount,
+            updatedAt: serverTimestamp() as FieldValue, // Add updatedAt on updates
           });
         }
       }
@@ -125,4 +118,5 @@ export const getOrCreateTagsAndUpdateUsage = async (tagNames: string[], userId: 
     throw new Error(error.message || "Could not process tags.");
   }
 };
+
     
