@@ -6,7 +6,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, XIcon, Trash2, ArrowLeft, Search, X as CloseIcon, Tag, PlusCircle } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, PlusIcon, XIcon, Trash2, ArrowLeft, Search, X as CloseIcon, Tag, PlusCircle } from 'lucide-react'; // Added PlusCircle
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
@@ -71,6 +71,7 @@ const CreateNewsArticlePage = () => {
   const [isEmbedDialogOpen, setIsEmbedDialogOpen] = useState(false);
   const [embedCodeInput, setEmbedCodeInput] = useState("");
 
+  // Header Search State
   const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
   const [headerSearchTerm, setHeaderSearchTerm] = useState('');
   const [tagSuggestions, setTagSuggestions] = useState<ClientTag[]>([]);
@@ -220,7 +221,7 @@ const CreateNewsArticlePage = () => {
   const handleBlur = useCallback(() => {
     queueMicrotask(() => {
       const activeEl = document.activeElement;
-      if (!((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen || (tagSuggestionsPopoverContentRef.current && tagSuggestionsPopoverContentRef.current.contains(activeEl)) || (headerSearchInputRef.current === activeEl))) {
+      if (!((toolbarWrapperRef.current && toolbarWrapperRef.current.contains(activeEl)) || titleInputRef.current === activeEl || contentEditableRef.current === activeEl || isYouTubeDialogOpen || isEmbedDialogOpen)) {
         setFocusedField(null); setIsToolbarExpanded(false); setShowContextualUI(false); setSavedRange(null);
       }
     });
@@ -242,22 +243,21 @@ const CreateNewsArticlePage = () => {
     requestAnimationFrame(updateSelectionNonce);
   }, [publishAttempted, setStoryError, updateSelectionNonce]);
 
-
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
     const editorEl = contentEditableRef.current; if (!editorEl) return;
     const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return;
     const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement();
-
     if (event.key === 'Enter') {
-        event.preventDefault();
-        document.execCommand('insertParagraph', false, undefined);
-        setTimeout(() => {
-            if (editorEl) setStoryContent(editorEl.innerHTML);
-            requestAnimationFrame(updateSelectionNonce);
-        }, 0);
-        return;
+      event.preventDefault();
+      document.execCommand('insertParagraph', false, undefined);
+      setTimeout(() => {
+        if (contentEditableRef.current) {
+          setStoryContent(contentEditableRef.current.innerHTML);
+          requestAnimationFrame(updateSelectionNonce);
+        }
+      }, 0);
+      return;
     }
-
     if (event.key === 'Backspace' || event.key === 'Delete') {
       if (range.collapsed && currentBlock) {
         const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false;
@@ -265,35 +265,18 @@ const CreateNewsArticlePage = () => {
           if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const prevElement = currentBlock.previousElementSibling;
           if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) {
-            event.preventDefault(); prevElement.remove();
-            setTimeout(() => {
-                if (editorEl) setStoryContent(editorEl.innerHTML || "<p><br></p>");
-                requestAnimationFrame(updateSelectionNonce);
-            }, 0);
-            return;
+            event.preventDefault(); prevElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return;
           }
-        } else { // Delete key
+        } else {
           if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true;
           const nextElement = currentBlock.nextElementSibling;
           if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) {
-            event.preventDefault(); nextElement.remove();
-            setTimeout(() => {
-                if (editorEl) setStoryContent(editorEl.innerHTML || "<p><br></p>");
-                requestAnimationFrame(updateSelectionNonce);
-            }, 0);
-            return;
+            event.preventDefault(); nextElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return;
           }
         }
       }
     }
-    // General case for Backspace/Delete if not handled by special element logic
-    // Update storyContent and nonce after the native action completes
-    setTimeout(() => {
-        if (editorEl) setStoryContent(editorEl.innerHTML);
-        requestAnimationFrame(updateSelectionNonce);
-    }, 0);
   }, [getCurrentBlockElement, setStoryContent, updateSelectionNonce]);
-
 
   const validateFields = useCallback(() => {
     let isValid = true;
@@ -302,7 +285,7 @@ const CreateNewsArticlePage = () => {
     const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || "";
     if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); }
     return isValid;
-  }, [title, tags, contentEditableRef]);
+  }, [title, tags]);
 
   const handleFormSubmission = async (status: NewsArticleStatus) => {
     if (!user) { toast({ variant: "destructive", title: "Error", description: "You must be logged in." }); return; }
@@ -330,7 +313,7 @@ const CreateNewsArticlePage = () => {
 
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
       setIsToolbarExpanded(false); setShowContextualUI(false);
-      requestAnimationFrame(updateSelectionNonce);
+      updateSelectionNonce();
 
       if (status === 'published') {
         router.push(`/news/article/${articleId}`);
@@ -383,7 +366,7 @@ const CreateNewsArticlePage = () => {
       } else { range.selectNodeContents(editorEl); range.collapse(false); }
       if (selection) { selection.removeAllRanges(); selection.addRange(range); }
       setStoryContent(editorEl.innerHTML || "<p><br></p>"); setIsToolbarExpanded(false);
-      queueMicrotask(() => { editorEl.focus(); requestAnimationFrame(updateSelectionNonce); });
+      queueMicrotask(() => { editorEl.focus(); updateSelectionNonce(); });
     });
   }, [getCurrentBlockElement, updateSelectionNonce, contentEditableRef, setStoryContent, setIsToolbarExpanded, savedRange]);
 
@@ -461,6 +444,7 @@ const CreateNewsArticlePage = () => {
     }
   };
 
+  // Header Search Logic
   const toggleHeaderSearch = () => {
     setIsHeaderSearchActive(prev => {
       if (prev) {
@@ -509,9 +493,10 @@ const CreateNewsArticlePage = () => {
     }
     setHeaderSearchTerm('');
     setIsTagSuggestionsPopoverOpen(false);
+    // Do not close search on add: setIsHeaderSearchActive(false);
     setTimeout(() => headerSearchInputRef.current?.focus(), 0);
   };
-
+  
   const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === 'Enter') {
           e.preventDefault();
@@ -565,7 +550,7 @@ const CreateNewsArticlePage = () => {
             variant="ghost"
             size="icon"
             onClick={toggleHeaderSearch}
-            className={cn("h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0 transition-transform duration-200 ease-in-out", isHeaderSearchActive && "rotate-45")}
+            className="h-7 w-7 p-1 text-muted-foreground hover:text-foreground flex-shrink-0"
             aria-label={isHeaderSearchActive ? "Close tag search" : "Search and add tags"}
             disabled={isSubmitting}
           >
@@ -631,7 +616,7 @@ const CreateNewsArticlePage = () => {
             </div>
           )}
         </div>
-
+        
         <div className="flex items-center gap-1 sm:gap-1.5 flex-shrink-0">
           <Button type="button" variant="outline" size="sm" onClick={() => coverImageInputRef.current?.click()} className="text-xs py-1.5 h-9 rounded-md" disabled={isSubmitting}>
             <ImageUp className="mr-1.5 h-3.5 w-3.5" /> <span className="hidden sm:inline">Cover Image</span><span className="sm:hidden">Cover</span>
@@ -644,7 +629,7 @@ const CreateNewsArticlePage = () => {
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
         {showContextualUI && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}>
-              <PlusCircle className={cn("h-5 w-5 text-primary transition-transform duration-200 ease-in-out", isToolbarExpanded && "rotate-45")} />
+              <PlusIcon className={cn("h-5 w-5 text-primary transition-transform duration-200 ease-in-out", isToolbarExpanded && "rotate-45")} />
             </Button>
             {isToolbarExpanded && (<div className="bg-card border p-0.5 rounded-full shadow-lg flex items-center space-x-0.5 ml-1 animate-in fade-in-50 slide-in-from-left-2 duration-200">
                 <button onClick={triggerInlineImageUpload} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert image" title="Upload image"><ImageIcon className={iconClass} /></button>
@@ -703,7 +688,6 @@ const CreateNewsArticlePage = () => {
             aria-label="News article content"
             suppressContentEditableWarning={true}
             dir="ltr"
-            dangerouslySetInnerHTML={{ __html: storyContent }}
           />
         </div>
         {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
@@ -736,3 +720,4 @@ const CreateNewsArticlePage = () => {
   );
 };
 export default CreateNewsArticlePage;
+

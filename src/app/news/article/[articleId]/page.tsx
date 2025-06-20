@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -78,6 +77,7 @@ const ArticlePage = () => {
   const { toast } = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
+  const currentUserId = user?.uid; // Define currentUserId here
 
   const { data: article, isLoading: isLoadingArticle, error: errorLoadingArticle, refetch: refetchArticle } = useQuery<ClientNewsArticle | null>({
     queryKey: ['newsArticle', articleIdParam],
@@ -171,9 +171,8 @@ const ArticlePage = () => {
     enabled: !!articleIdParam && !!user,
   });
 
-  const visibleComments = useMemo(() => allNewsComments.filter(comment => !comment.isShadowBanned || (isEditingAllowed && comment.userId === user?.uid)), [allNewsComments, isEditingAllowed, user?.uid]);
-  const shadowBannedCommentsByOthers = useMemo(() => allNewsComments.filter(comment => comment.isShadowBanned && (!isEditingAllowed || comment.userId !== user?.uid)), [allNewsComments, isEditingAllowed, user?.uid]);
-
+  const visibleComments = useMemo(() => allNewsComments.filter(comment => !comment.isShadowBanned), [allNewsComments]);
+  const shadowBannedComments = useMemo(() => allNewsComments.filter(comment => comment.isShadowBanned), [allNewsComments]);
 
   const addNewsCommentMutation = useMutation({
     mutationFn: (data: { articleId: string; commentData: Omit<NewCommentData, 'likeCount' | 'likedBy' | 'isShadowBanned'> }) =>
@@ -182,7 +181,7 @@ const ArticlePage = () => {
       toast({ title: "Comment Posted" });
       setNewComment('');
       refetchNewsComments();
-      refetchArticle(); 
+      refetchArticle(); // Refetch article to update its commentCount
       queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
       if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
     },
@@ -195,7 +194,7 @@ const ArticlePage = () => {
     queryFn: () => getSuggestibleUsers(debouncedNewCommentMentionQuery, 10),
     enabled: showNewCommentSuggestions && !!user,
   });
-  
+
   useEffect(() => {
     const handler = setTimeout(() => { setDebouncedNewCommentMentionQuery(newCommentMentionQuery); }, 300);
     return () => clearTimeout(handler);
@@ -209,7 +208,7 @@ const ArticlePage = () => {
     const commentPayload: Omit<NewCommentData, 'likeCount' | 'likedBy' | 'isShadowBanned'> = {
       userId: user.uid,
       text: newComment.trim(),
-      mentionName: generateAnonymousName(user.uid), 
+      mentionName: generateAnonymousName(user.uid),
       mentionedUserIds: finalMentionedUids,
     };
     addNewsCommentMutation.mutate({ articleId: articleIdParam, commentData: commentPayload });
@@ -245,12 +244,12 @@ const ArticlePage = () => {
     if (!showNewCommentSuggestions) return []; if (profilesForNewCommentSuggestions.length === 0 && debouncedNewCommentMentionQuery) return [{ userId: 'no-match-news-comment', displayName: `No users matching "@${debouncedNewCommentMentionQuery}"`, mentionName: 'no-match-news-comment' } as UserProfileBasic]; if (profilesForNewCommentSuggestions.length === 0) return [{ userId: 'no-users-news-comment', displayName: 'No users to suggest.', mentionName: 'no-users-news-comment' } as UserProfileBasic]; return profilesForNewCommentSuggestions.filter(p => p.userId !== user?.uid);
   }, [showNewCommentSuggestions, profilesForNewCommentSuggestions, debouncedNewCommentMentionQuery, user?.uid]);
 
-  const handleCommentDeleted = useCallback(() => {
+  const handleCommentDeletedOrBanned = useCallback(() => {
     refetchNewsComments();
-    if (articleIdParam) decrementNewsArticleCommentCount(articleIdParam);
+    refetchArticle(); // Refetch article to update its commentCount
     queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
     if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
-  }, [refetchNewsComments, articleIdParam, queryClient, user?.uid]);
+  }, [refetchNewsComments, articleIdParam, refetchArticle, queryClient, user?.uid]);
 
   const handleToggleLikeArticle = async () => {
     if (!user || !articleIdParam || isLikingArticle || isEditingAllowed) return;
@@ -268,9 +267,9 @@ const ArticlePage = () => {
 
   const updateSelectionNonce = useCallback(() => requestAnimationFrame(() => setSelectionNonce(n => n + 1)), []);
   const getCurrentBlockElement = useCallback((): HTMLElement | null => { const contentEl = contentEditableRef.current; if (!contentEl) return null; const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) { if (document.activeElement === contentEl && contentEl.lastChild && contentEl.lastChild.nodeType === Node.ELEMENT_NODE) return contentEl.lastChild as HTMLElement; return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; } let node = selection.focusNode; if (!node || !contentEl.contains(node)) { if (document.activeElement === contentEl && contentEl.firstChild && contentEl.firstChild.nodeType === Node.ELEMENT_NODE) return contentEl.firstChild as HTMLElement; return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; } while (node && node !== contentEl) { if (node.nodeType === Node.ELEMENT_NODE) { const element = node as HTMLElement; const tagName = element.tagName.toLowerCase(); if (['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'figure', 'hr'].includes(tagName)) { if (contentEl.contains(element)) return element; } } node = node.parentNode; } return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; }, []);
-  const getCurrentLineText = useCallback((): string => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) return titleInputRef.current.value.trim(); if (focusedField === 'content' && contentEl) { const currentBlock = getCurrentBlockElement(); if (currentBlock) { if (currentBlock.tagName === 'PRE' && currentBlock.textContent?.trim() !== '') return 'PRE_HAS_CONTENT'; if (currentBlock.tagName === 'FIGURE' && (currentBlock.querySelector('img') || currentBlock.querySelector('iframe'))) return 'FIGURE_HAS_CONTENT'; if (currentBlock.tagName === 'DIV' && currentBlock.hasAttribute('data-embed-wrapper')) return 'EMBED_HAS_CONTENT'; if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT'; return currentBlock.textContent?.trim() || ""; } if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>" || contentEl.innerHTML.trim() === "<p><br></p>") return "EDITOR_IS_EMPTY"; return "NO_CURRENT_BLOCK_FOUND"; } return "NO_FOCUS_OR_UNHANDLED_FIELD"; }, [focusedField, getCurrentBlockElement]);
+  const getCurrentLineText = useCallback((): string => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) return titleInputRef.current.value.trim(); if (focusedField === 'content' && contentEl) { const currentBlock = getCurrentBlockElement(); if (currentBlock) { if (currentBlock.tagName === 'PRE' && currentBlock.textContent?.trim() !== '') return 'PRE_HAS_CONTENT'; if (currentBlock.tagName === 'FIGURE' && (currentBlock.querySelector('img') || currentBlock.querySelector('iframe'))) return 'FIGURE_HAS_CONTENT'; if (currentBlock.tagName === 'DIV' && currentBlock.hasAttribute('data-embed-wrapper')) return 'EMBED_HAS_CONTENT'; if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT'; return currentBlock.textContent?.trim() || ""; } if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>") return "EDITOR_IS_EMPTY"; return "NO_CURRENT_BLOCK_FOUND"; } return "NO_FOCUS_OR_UNHANDLED_FIELD"; }, [focusedField, getCurrentBlockElement]);
   const calculateCursorLineYOffset = useCallback((): number | null => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) { const titleRect = titleInputRef.current.getBoundingClientRect(); return titleRect.top + titleRect.height / 2; } if (focusedField === 'content' && contentEl) { const selection = window.getSelection(); if (selection && selection.rangeCount > 0) { const range = selection.getRangeAt(0); const rects = range.getClientRects(); if (rects.length > 0) return rects[0].top + rects[0].height / 2; let container = range.startContainer; if (container.nodeType === Node.TEXT_NODE && container.parentElement) container = container.parentElement; if (container.nodeType === Node.ELEMENT_NODE && contentEl.contains(container)) { const elementRect = (container as HTMLElement).getBoundingClientRect(); if (elementRect.height > 0) { const computedStyle = window.getComputedStyle(container as HTMLElement); const paddingTop = parseFloat(computedStyle.paddingTop) || 0; let lineHeight = parseFloat(computedStyle.lineHeight); if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; return elementRect.top + paddingTop + (lineHeight / 2); } } } const currentBlock = getCurrentBlockElement(); if (currentBlock && currentBlock !== contentEl && currentBlock.offsetHeight > 0) { const blockRect = currentBlock.getBoundingClientRect(); const computedStyle = window.getComputedStyle(currentBlock); const paddingTop = parseFloat(computedStyle.paddingTop) || 0; let lineHeight = parseFloat(computedStyle.lineHeight); if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; return blockRect.top + paddingTop + (lineHeight / 2); } const mainDivRect = contentEl.getBoundingClientRect(); const computedStyleMain = window.getComputedStyle(contentEl); const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0; let lineHeightMain = parseFloat(computedStyleMain.lineHeight); if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4; return mainDivRect.top + paddingTopMain + (lineHeightMain / 2); } return null; }, [focusedField, getCurrentBlockElement]);
-  
+
   const calculateAndUpdateToolbarStyle = useCallback(() => {
     let shouldShowPlusButton = false; let shouldShowExpandedToolbar = false;
     if (focusedField && (document.activeElement === titleInputRef.current || document.activeElement === contentEditableRef.current)) {
@@ -293,7 +292,7 @@ const ArticlePage = () => {
     }
     setShowContextualUI(shouldShowPlusButton || shouldShowExpandedToolbar);
   }, [focusedField, calculateCursorLineYOffset, getCurrentLineText, isToolbarExpanded, setToolbarStyle, setShowContextualUI]);
-  
+
   useEffect(() => {
     const handleSelectionChangeLocal = () => {
       if (document.activeElement === contentEditableRef.current || document.activeElement === titleInputRef.current) {
@@ -314,7 +313,7 @@ const ArticlePage = () => {
   const handleContentEditableInput = useCallback((event: React.SyntheticEvent<HTMLDivElement>) => { if (!isEditingAllowed) return; const currentHTML = event.currentTarget.innerHTML; if (currentHTML.trim() === "" || currentHTML.trim() === "<br>" || currentHTML.trim() === "<p><br></p>" || currentHTML.trim() === "<p></p>") { setStoryContent("<p><br></p>"); if (event.currentTarget.innerHTML !== "<p><br></p>") { event.currentTarget.innerHTML = "<p><br></p>"; const pTag = event.currentTarget.querySelector('p'); if(pTag) { const range = document.createRange(); const sel = window.getSelection(); try { range.setStart(pTag, 0); range.collapse(true); sel?.removeAllRanges(); sel?.addRange(range); } catch(e) {}} } } else setStoryContent(currentHTML); if (publishAttempted) { const currentText = event.currentTarget.textContent || ""; if (currentText.trim() || /<img|<figure|<video|<pre|<hr/i.test(currentHTML)) setStoryError(""); else setStoryError("Story content is required."); } requestAnimationFrame(updateSelectionNonce); }, [publishAttempted, updateSelectionNonce, isEditingAllowed]);
   const handleContentKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => { if (!isEditingAllowed) return; const editorEl = contentEditableRef.current; if (!editorEl) return; const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) return; const range = selection.getRangeAt(0); const currentBlock = getCurrentBlockElement(); if (event.key === 'Enter') { event.preventDefault(); document.execCommand('insertParagraph', false, undefined); setTimeout(() => { if (contentEditableRef.current) { setStoryContent(contentEditableRef.current.innerHTML); requestAnimationFrame(updateSelectionNonce); }}, 0); return; } if (event.key === 'Backspace' || event.key === 'Delete') { if (range.collapsed && currentBlock) { const focusNode = selection.focusNode; const focusOffset = selection.focusOffset; let isAtBoundary = false; if (event.key === 'Backspace') { if ((focusNode === currentBlock && focusOffset === 0) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === 0 && !focusNode.previousSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.firstChild === focusNode && focusOffset === 0 && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true; const prevElement = currentBlock.previousElementSibling; if (isAtBoundary && prevElement && (prevElement.tagName === 'FIGURE' || prevElement.getAttribute('data-embed-wrapper') === 'true' || prevElement.tagName === 'PRE' || prevElement.tagName === 'HR')) { event.preventDefault(); prevElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return; } } else { if ((focusNode === currentBlock && focusOffset === currentBlock.childNodes.length) || (focusNode && focusNode.nodeType === Node.TEXT_NODE && currentBlock.contains(focusNode) && focusOffset === focusNode.textContent?.length && !focusNode.nextSibling) || (focusNode && focusNode.nodeType === Node.ELEMENT_NODE && currentBlock.lastChild === focusNode && focusOffset === focusNode.childNodes.length && (focusNode.textContent === "" || (focusNode as HTMLElement).tagName === 'BR'))) isAtBoundary = true; const nextElement = currentBlock.nextElementSibling; if (isAtBoundary && nextElement && (nextElement.tagName === 'FIGURE' || nextElement.getAttribute('data-embed-wrapper') === 'true' || nextElement.tagName === 'PRE' || nextElement.tagName === 'HR')) { event.preventDefault(); nextElement.remove(); setStoryContent(editorEl.innerHTML || "<p><br></p>"); requestAnimationFrame(updateSelectionNonce); return; } } } } }, [getCurrentBlockElement, updateSelectionNonce, isEditingAllowed]);
   const validateFields = useCallback(() => { let isValid = true; if (!title.trim()) { setTitleError("Title is required."); isValid = false; } else { setTitleError(""); } if (tags.length === 0) { setTagsError("At least one tag is required."); isValid = false; } else { setTagsError(""); } const currentHTMLContent = contentEditableRef.current?.innerHTML || ""; const currentTextContent = contentEditableRef.current?.textContent || ""; if (!currentTextContent.trim() && !/<img|<figure|<video|<pre|<hr/i.test(currentHTMLContent)) { setStoryError("Story content is required."); isValid = false; } else { setStoryError(""); } return isValid; }, [title, tags]);
-  
+
   const handleUpdateArticle = async (newStatus: NewsArticleStatus, contentToSaveParam?: string | null, isSavingDraftOfPublishedArticleParam: boolean = false) => {
     if (!user || !articleIdParam || !article || !isEditingAllowed) {
       toast({ variant: "destructive", title: "Error", description: "Cannot update article. Auth or data missing." });
@@ -335,14 +334,14 @@ const ArticlePage = () => {
     try {
       if (coverImageFile) newCoverImageUrl = await uploadNewsCoverImage(coverImageFile, user.uid, articleIdParam);
       else if (coverImagePreview === null && currentCoverImageUrl !== null) newCoverImageUrl = null;
-      
+
       const mainContentForService = contentToSaveParam !== undefined ? contentToSaveParam : storyContent;
       const articleUpdateData: UpdateNewsArticleData = {
         title: title.trim(),
         tags: tags,
         status: newStatus,
       };
-  
+
       if (isSavingDraftOfPublishedArticleParam && article.status === 'published') {
         articleUpdateData.draftContent = mainContentForService || null;
         articleUpdateData.hasUnpublishedChanges = true;
@@ -354,19 +353,19 @@ const ArticlePage = () => {
         articleUpdateData.content = mainContentForService || null;
         articleUpdateData.draftContent = null;
         articleUpdateData.hasUnpublishedChanges = false;
-      } else if (contentToSaveParam !== undefined) { 
+      } else if (contentToSaveParam !== undefined) {
         articleUpdateData.content = mainContentForService || null;
       }
-  
+
       if (newCoverImageUrl !== undefined) articleUpdateData.coverImageUrl = newCoverImageUrl;
-      
+
       const oldTags = article?.tags || [];
       const currentNewTags = articleUpdateData.tags || [];
       const tagsAdded = currentNewTags.filter(tag => !oldTags.includes(tag));
       const tagsRemoved = oldTags.filter(tag => !currentNewTags.includes(tag));
 
       await updateNewsArticle(articleIdParam, articleUpdateData, isSavingDraftOfPublishedArticleParam);
-      
+
       if (tagsAdded.length > 0) {
         await getOrCreateTagsAndUpdateUsage(tagsAdded, user.uid, 1);
       }
@@ -382,6 +381,8 @@ const ArticlePage = () => {
       toast({ title: successTitle, description: successDescription });
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError(""); setIsToolbarExpanded(false); setShowContextualUI(false);
       refetchArticle();
+      queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
+      if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
       setCoverImageFile(null);
     } catch (error: any) {
       toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
@@ -498,7 +499,7 @@ const ArticlePage = () => {
               </Button>
             )}
             <span className="text-xs text-muted-foreground mr-1">{article.likeCount || 0} Likes</span>
-            {user?.uid && !isEditingAllowed && ( // Save button for non-authors
+            {currentUserId && !isEditingAllowed && ( // Save button for non-authors
               <Button variant="ghost" size="icon" className="h-8 w-8 p-1" title="Save to Collection (Placeholder)">
                 <Bookmark className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -567,7 +568,7 @@ const ArticlePage = () => {
       {article.status === 'published' && articleIdParam && (
         <div className="max-w-3xl mx-auto mt-12 pt-8 border-t">
           <h3 className="text-2xl font-semibold mb-6 flex items-center gap-2">
-            <MessageSquare className="h-6 w-6 text-primary" /> Comments ({visibleComments.length})
+            <MessageSquare className="h-6 w-6 text-primary" /> Comments ({article.commentCount || 0})
           </h3>
           {user && (
             <Popover
@@ -612,7 +613,7 @@ const ArticlePage = () => {
           )}
           <div className="space-y-6">
             {isLoadingNewsComments && <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin"/></div>}
-            {!isLoadingNewsComments && visibleComments.length === 0 && shadowBannedCommentsByOthers.length === 0 && <p className="text-sm text-muted-foreground text-center">No comments yet.</p>}
+            {!isLoadingNewsComments && visibleComments.length === 0 && shadowBannedComments.length === 0 && <p className="text-sm text-muted-foreground text-center">No comments yet.</p>}
             {visibleComments.map(comment => (
               <NewsCommentItem
                 key={comment.id}
@@ -620,28 +621,28 @@ const ArticlePage = () => {
                 currentUserId={user?.uid || null}
                 articleId={articleIdParam!}
                 articleAuthorId={article.userId}
-                onDelete={handleCommentDeleted}
+                onDelete={handleCommentDeletedOrBanned}
               />
             ))}
           </div>
-          {shadowBannedCommentsByOthers.length > 0 && (
+          {shadowBannedComments.length > 0 && (
             <Accordion type="single" collapsible className="w-full mt-8">
               <AccordionItem value="shadow-banned-comments">
                 <AccordionTrigger className="text-sm text-muted-foreground hover:text-foreground">
                   <div className="flex items-center gap-2">
                     <ListFilter className="h-4 w-4" />
-                    View Potentially Hidden Comments ({shadowBannedCommentsByOthers.length})
+                    View Potentially Hidden Comments ({shadowBannedComments.length})
                   </div>
                 </AccordionTrigger>
                 <AccordionContent className="pt-4 space-y-6">
-                  {shadowBannedCommentsByOthers.map(comment => (
+                  {shadowBannedComments.map(comment => (
                     <NewsCommentItem
                       key={`sb-${comment.id}`}
                       comment={comment}
                       currentUserId={user?.uid || null}
                       articleId={articleIdParam!}
                       articleAuthorId={article.userId}
-                      onDelete={handleCommentDeleted} // Author can still delete their own hidden comments
+                      onDelete={handleCommentDeletedOrBanned} // Author can still delete their own hidden comments
                     />
                   ))}
                 </AccordionContent>
@@ -658,5 +659,3 @@ const ArticlePage = () => {
   );
 };
 export default ArticlePage;
-
-    
