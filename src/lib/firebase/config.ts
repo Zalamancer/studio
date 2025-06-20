@@ -1,12 +1,9 @@
-
 // src/lib/firebase/config.ts
-import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
+import { initializeApp, getApps, getApp } from "firebase/app";
+import type { FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
-
-// Define a unique name for your Firebase app
-const FIREBASE_APP_NAME = "AnonyCollabWebApp"; // You can choose any unique name
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -18,12 +15,12 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase with a unique name
+// Standard Firebase initialization - check if any apps exist before initializing.
 let app: FirebaseApp;
-if (!getApps().find(existingApp => existingApp.name === FIREBASE_APP_NAME)) {
-  app = initializeApp(firebaseConfig, FIREBASE_APP_NAME);
+if (getApps().length === 0) {
+  app = initializeApp(firebaseConfig);
 } else {
-  app = getApp(FIREBASE_APP_NAME);
+  app = getApp();
 }
 
 const auth = getAuth(app);

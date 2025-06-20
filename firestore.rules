@@ -481,15 +481,9 @@ service cloud.firestore {
                          request.resource.data.keys().hasAll(['name', 'nameLowercase', 'usageCount', 'createdAt', 'createdBy']) &&
                          request.resource.data.size() == 5;
 
-        allow update: if isAuthenticated() && // Simplified for diagnostics
-                         request.resource.data.updatedAt == request.time;
-                         // Original stricter rule:
-                         // request.resource.data.name == resource.data.name &&
-                         // request.resource.data.nameLowercase == resource.data.nameLowercase &&
-                         // request.resource.data.createdAt == resource.data.createdAt &&
-                         // request.resource.data.createdBy == resource.data.createdBy &&
-                         // request.resource.data.updatedAt == request.time && 
-                         // request.resource.data.diff(resource.data).affectedKeys().hasOnly(['usageCount', 'updatedAt']); 
+ allow update: if isAuthenticated() &&
+ request.resource.data.updatedAt == request.time;
+
         allow delete: if false;
     }
 

@@ -105,7 +105,7 @@ export const getOrCreateTagsAndUpdateUsage = async (tagNames: string[], userId: 
           
           transaction.update(existingTagDocRef, {
             usageCount: newUsageCount < 0 ? 0 : newUsageCount,
-            updatedAt: serverTimestamp() as FieldValue, // Add updatedAt on updates
+ updatedAt: serverTimestamp() as FieldValue, // Add updatedAt on updates
           });
         }
       }
