@@ -39,9 +39,8 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     throw new Error("Authenticated user does not match article's userId.");
   }
 
-  // Added pre-check for title
   if (!articleData.title || articleData.title.trim() === "") {
-    console.error("[newsService] createNewsArticle: Article title cannot be empty. This should have been validated by the client form.");
+    console.error("[newsService] createNewsArticle: Article title cannot be empty.");
     throw new Error("Article title cannot be empty.");
   }
 
@@ -57,23 +56,9 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     createdAt: FieldValue;
     updatedAt: FieldValue;
     publishedAt: FieldValue | null;
-    likeCount: number; // Added
-    likedBy: string[]; // Added
+    likeCount: number;
+    likedBy: string[];
     commentCount: number;
-    descriptionDetails: string | null;
-    descriptionOutcome: string | null;
-    descriptionTried: string | null;
-    imageUrls: string[];
-    maxBudget: number | null;
-    deadline: Timestamp | null;
-    mentionedUserIds: string[];
-    naicsCode: string | null;
-    question: string | null;
-    ratingScore: number;
-    requestType: string | null;
-    sector: string | null;
-    subSector: string | null;
-    industry: string | null;
   } = {
     userId: articleData.userId,
     title: articleData.title,
@@ -86,26 +71,12 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     publishedAt: articleData.status === 'published' ? serverTimestamp() : null,
-    likeCount: 0, // Initialize likeCount
-    likedBy: [],   // Initialize likedBy
+    likeCount: 0,
+    likedBy: [],
     commentCount: 0,
-    descriptionDetails: articleData.descriptionDetails || null,
-    descriptionOutcome: articleData.descriptionOutcome || null,
-    descriptionTried: articleData.descriptionTried || null,
-    imageUrls: Array.isArray(articleData.imageUrls) ? articleData.imageUrls : [],
-    maxBudget: articleData.maxBudget === undefined ? null : articleData.maxBudget,
-    deadline: articleData.deadline instanceof Date ? Timestamp.fromDate(articleData.deadline) : (articleData.deadline || null),
-    mentionedUserIds: Array.isArray(articleData.mentionedUserIds) ? articleData.mentionedUserIds : [],
-    naicsCode: articleData.naicsCode || null,
-    question: articleData.question || null,
-    ratingScore: articleData.ratingScore || 0,
-    requestType: articleData.requestType || null,
-    sector: articleData.sector || null,
-    subSector: articleData.subSector || null,
-    industry: articleData.industry || null,
   };
 
-  const expectedFields = ['userId', 'title', 'tags', 'content', 'status', 'coverImageUrl', 'createdAt', 'updatedAt', 'publishedAt', 'likeCount', 'likedBy', 'commentCount', 'descriptionDetails', 'descriptionOutcome', 'descriptionTried', 'imageUrls', 'maxBudget', 'deadline', 'mentionedUserIds', 'naicsCode', 'question', 'ratingScore', 'requestType', 'sector', 'subSector', 'industry', 'draftContent', 'hasUnpublishedChanges'];
+  const expectedFields = ['userId', 'title', 'tags', 'content', 'status', 'coverImageUrl', 'createdAt', 'updatedAt', 'publishedAt', 'likeCount', 'likedBy', 'commentCount', 'draftContent', 'hasUnpublishedChanges'];
   const currentKeys = Object.keys(dataToSave);
   if (currentKeys.length !== expectedFields.length || !expectedFields.every(f => currentKeys.includes(f))) {
        console.warn(`[newsService DEBUG] createNewsArticle - Field mismatch detected. Expected ${expectedFields.length} fields, got ${currentKeys.length}.
@@ -148,10 +119,7 @@ export const updateNewsArticle = async (
 
   const generalUpdatableFields: (keyof UpdateNewsArticleData)[] = [
     'title', 'content', 'status', 'coverImageUrl', 'draftContent', 'hasUnpublishedChanges',
-    'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'requestType', 'question',
-    'descriptionDetails', 'descriptionTried', 'descriptionOutcome', 'maxBudget',
-    'imageUrls', 'mentionedUserIds'
-    // likeCount & likedBy handled by toggleLikeNewsArticle
+    'tags' // likeCount & likedBy handled by toggleLikeNewsArticle
   ];
 
   generalUpdatableFields.forEach(key => {
@@ -160,19 +128,13 @@ export const updateNewsArticle = async (
     }
   });
 
-  if (dataToUpdate.deadline instanceof Date) {
-    payload.deadline = Timestamp.fromDate(dataToUpdate.deadline);
-  } else if (dataToUpdate.hasOwnProperty('deadline') && dataToUpdate.deadline === null) {
-    payload.deadline = null;
-  }
-
   const newStatus = dataToUpdate.status;
-  const contentValueFromUpdate = dataToUpdate.content; // If undefined, content is not part of this specific update
+  const contentValueFromUpdate = dataToUpdate.content;
 
   if (isSavingDraftOfPublishedArticle && existingData.status === 'published') {
     payload.draftContent = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.draftContent);
     payload.hasUnpublishedChanges = true;
-    payload.status = 'published'; // Keep status as published
+    payload.status = 'published';
   } else if (newStatus === 'published') {
     payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
     payload.draftContent = null;
@@ -183,11 +145,11 @@ export const updateNewsArticle = async (
     }
   } else if (newStatus === 'draft') {
     payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
-    payload.draftContent = null; // When saving as draft, content becomes the main source
-    payload.hasUnpublishedChanges = false; // No unpublished changes when it's a draft itself
+    payload.draftContent = null;
+    payload.hasUnpublishedChanges = false;
     payload.status = 'draft';
-    payload.publishedAt = null; // Unpublish
-  } else if (newStatus !== undefined) { // Status change not covered above (e.g., to archived, etc.)
+    payload.publishedAt = null;
+  } else if (newStatus !== undefined) {
     payload.status = newStatus;
     payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
     payload.draftContent = null;
@@ -196,19 +158,16 @@ export const updateNewsArticle = async (
         payload.publishedAt = null;
     }
   } else if (contentValueFromUpdate !== undefined && !isSavingDraftOfPublishedArticle) {
-    // General content update without explicit status change
     payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
-    if (existingData.status === 'published') { // If it was published, and we're just updating content
-        payload.draftContent = null; // Clear draft
-        payload.hasUnpublishedChanges = false; // No longer has unpublished changes
+    if (existingData.status === 'published') {
+        payload.draftContent = null;
+        payload.hasUnpublishedChanges = false;
     }
   }
 
   const oldTags = existingData.tags || [];
   const newTags = dataToUpdate.tags !== undefined ? (dataToUpdate.tags || []) : oldTags;
-
   payload.tags = newTags;
-
   const tagsAdded = newTags.filter(tag => !oldTags.includes(tag));
   const tagsRemoved = oldTags.filter(tag => !newTags.includes(tag));
 
@@ -248,16 +207,21 @@ export const getNewsArticlesByUserId = async (userId: string, status?: NewsArtic
     const articles = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data() as NewsArticle;
       return {
-        ...data,
         id: docSnap.id,
+        userId: data.userId,
+        title: data.title,
+        tags: data.tags || [],
+        content: data.content,
         draftContent: data.draftContent || null,
         hasUnpublishedChanges: data.hasUnpublishedChanges || false,
+        status: data.status,
+        coverImageUrl: data.coverImageUrl || null,
         createdAt: (data.createdAt as Timestamp).toMillis(),
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
         publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : null,
-        tags: data.tags || [],
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],
+        commentCount: data.commentCount || 0,
       } as ClientNewsArticle;
     });
     return articles;
@@ -280,16 +244,21 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
     const articles = querySnapshot.docs.map((docSnap) => {
       const data = docSnap.data() as NewsArticle;
       return {
-        ...data,
         id: docSnap.id,
+        userId: data.userId,
+        title: data.title,
+        tags: data.tags || [],
+        content: data.content,
         draftContent: null,
         hasUnpublishedChanges: false,
+        status: data.status,
+        coverImageUrl: data.coverImageUrl || null,
         createdAt: (data.createdAt as Timestamp).toMillis(),
         updatedAt: (data.updatedAt as Timestamp).toMillis(),
         publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : Date.now(),
-        tags: data.tags || [],
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],
+        commentCount: data.commentCount || 0,
       } as ClientNewsArticle;
     });
     return articles;
@@ -305,7 +274,6 @@ export const deleteNewsArticle = async (articleId: string, userId: string): Prom
   }
   const articleDocRef = doc(db, NEWS_ARTICLES_COLLECTION, articleId);
   try {
-    // Decrement tag usage counts before deleting
     const docSnap = await getDoc(articleDocRef);
     if (docSnap.exists()) {
       const articleData = docSnap.data() as NewsArticle;
@@ -313,7 +281,6 @@ export const deleteNewsArticle = async (articleId: string, userId: string): Prom
         await getOrCreateTagsAndUpdateUsage(articleData.tags, user.uid, -1);
       }
     }
-    // TODO: Delete associated comments in subcollection if needed (batch delete)
     await deleteDoc(articleDocRef);
   } catch (error: any) {
     throw error;
@@ -347,20 +314,6 @@ export const getNewsArticleById = async (articleId: string): Promise<ClientNewsA
         likeCount: data.likeCount || 0,
         likedBy: data.likedBy || [],
         commentCount: data.commentCount || 0,
-        descriptionDetails: data.descriptionDetails || null,
-        descriptionOutcome: data.descriptionOutcome || null,
-        descriptionTried: data.descriptionTried || null,
-        imageUrls: data.imageUrls || [],
-        maxBudget: data.maxBudget === undefined ? null : data.maxBudget,
-        deadline: data.deadline instanceof Timestamp ? data.deadline.toMillis() : null,
-        mentionedUserIds: data.mentionedUserIds || [],
-        naicsCode: data.naicsCode || null,
-        question: data.question || null,
-        ratingScore: data.ratingScore || 0,
-        requestType: data.requestType || null,
-        sector: data.sector || null,
-        subSector: data.subSector || null,
-        industry: data.industry || null,
       };
       return clientArticle;
     }
@@ -415,7 +368,6 @@ export const toggleLikeNewsArticle = async (articleId: string, userId: string): 
   }
 };
 
-// Function to increment comment count on a news article
 export const incrementNewsArticleCommentCount = async (articleId: string): Promise<void> => {
   const articleRef = doc(db, NEWS_ARTICLES_COLLECTION, articleId);
   try {
@@ -425,18 +377,19 @@ export const incrementNewsArticleCommentCount = async (articleId: string): Promi
     });
   } catch (error) {
     console.error("Error incrementing news article comment count:", error);
-    // Handle error appropriately, maybe log or rethrow
   }
 };
 
-// Function to decrement comment count on a news article
 export const decrementNewsArticleCommentCount = async (articleId: string): Promise<void> => {
   const articleRef = doc(db, NEWS_ARTICLES_COLLECTION, articleId);
   try {
-    await updateDoc(articleRef, {
-      commentCount: increment(-1),
-      updatedAt: serverTimestamp(),
-    });
+    const currentCount = (await getDoc(articleRef)).data()?.commentCount || 0;
+    if (currentCount > 0) {
+        await updateDoc(articleRef, {
+            commentCount: increment(-1),
+            updatedAt: serverTimestamp(),
+        });
+    }
   } catch (error) {
     console.error("Error decrementing news article comment count:", error);
   }

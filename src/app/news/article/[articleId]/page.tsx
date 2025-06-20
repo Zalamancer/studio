@@ -1,3 +1,4 @@
+
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -77,7 +78,7 @@ const ArticlePage = () => {
   const { toast } = useToast();
   const router = useRouter();
   const queryClient = useQueryClient();
-  const currentUserId = user?.uid; // Define currentUserId here
+  // const currentUserId = user?.uid; // This was defined but user?.uid used below, standardized to user?.uid
 
   const { data: article, isLoading: isLoadingArticle, error: errorLoadingArticle, refetch: refetchArticle } = useQuery<ClientNewsArticle | null>({
     queryKey: ['newsArticle', articleIdParam],
@@ -181,7 +182,7 @@ const ArticlePage = () => {
       toast({ title: "Comment Posted" });
       setNewComment('');
       refetchNewsComments();
-      refetchArticle(); // Refetch article to update its commentCount
+      refetchArticle();
       queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
       if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
     },
@@ -246,7 +247,7 @@ const ArticlePage = () => {
 
   const handleCommentDeletedOrBanned = useCallback(() => {
     refetchNewsComments();
-    refetchArticle(); // Refetch article to update its commentCount
+    refetchArticle();
     queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
     if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
   }, [refetchNewsComments, articleIdParam, refetchArticle, queryClient, user?.uid]);
@@ -267,7 +268,10 @@ const ArticlePage = () => {
 
   const updateSelectionNonce = useCallback(() => requestAnimationFrame(() => setSelectionNonce(n => n + 1)), []);
   const getCurrentBlockElement = useCallback((): HTMLElement | null => { const contentEl = contentEditableRef.current; if (!contentEl) return null; const selection = window.getSelection(); if (!selection || selection.rangeCount === 0) { if (document.activeElement === contentEl && contentEl.lastChild && contentEl.lastChild.nodeType === Node.ELEMENT_NODE) return contentEl.lastChild as HTMLElement; return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; } let node = selection.focusNode; if (!node || !contentEl.contains(node)) { if (document.activeElement === contentEl && contentEl.firstChild && contentEl.firstChild.nodeType === Node.ELEMENT_NODE) return contentEl.firstChild as HTMLElement; return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; } while (node && node !== contentEl) { if (node.nodeType === Node.ELEMENT_NODE) { const element = node as HTMLElement; const tagName = element.tagName.toLowerCase(); if (['p', 'div', 'h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'li', 'blockquote', 'pre', 'figure', 'hr'].includes(tagName)) { if (contentEl.contains(element)) return element; } } node = node.parentNode; } return contentEl.querySelector('p, div, h1, h2, h3, h4, h5, h6, li, blockquote, pre, figure, hr') as HTMLElement | null || contentEl; }, []);
-  const getCurrentLineText = useCallback((): string => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) return titleInputRef.current.value.trim(); if (focusedField === 'content' && contentEl) { const currentBlock = getCurrentBlockElement(); if (currentBlock) { if (currentBlock.tagName === 'PRE' && currentBlock.textContent?.trim() !== '') return 'PRE_HAS_CONTENT'; if (currentBlock.tagName === 'FIGURE' && (currentBlock.querySelector('img') || currentBlock.querySelector('iframe'))) return 'FIGURE_HAS_CONTENT'; if (currentBlock.tagName === 'DIV' && currentBlock.hasAttribute('data-embed-wrapper')) return 'EMBED_HAS_CONTENT'; if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT'; return currentBlock.textContent?.trim() || ""; } if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>") return "EDITOR_IS_EMPTY"; return "NO_CURRENT_BLOCK_FOUND"; } return "NO_FOCUS_OR_UNHANDLED_FIELD"; }, [focusedField, getCurrentBlockElement]);
+  const getCurrentLineText = useCallback((): string => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) return titleInputRef.current.value.trim(); if (focusedField === 'content' && contentEl) { const currentBlock = getCurrentBlockElement(); if (currentBlock) { if (currentBlock.tagName === 'PRE' && currentBlock.textContent?.trim() !== '') return 'PRE_HAS_CONTENT'; if (currentBlock.tagName === 'FIGURE' && (currentBlock.querySelector('img') || currentBlock.querySelector('iframe'))) return 'FIGURE_HAS_CONTENT'; if (currentBlock.tagName === 'DIV' && currentBlock.hasAttribute('data-embed-wrapper')) return 'EMBED_HAS_CONTENT'; if (currentBlock.tagName === 'HR') return 'HR_HAS_CONTENT'; return currentBlock.textContent?.trim() || ""; }
+      if (contentEl.innerHTML.trim() === "" || contentEl.innerHTML.trim() === "<br>" || contentEl.innerHTML.trim() === "<p><br></p>") return "EDITOR_IS_EMPTY";
+      return "NO_CURRENT_BLOCK_FOUND";
+    } return "NO_FOCUS_OR_UNHANDLED_FIELD"; }, [focusedField, getCurrentBlockElement]);
   const calculateCursorLineYOffset = useCallback((): number | null => { const contentEl = contentEditableRef.current; if (focusedField === 'title' && titleInputRef.current) { const titleRect = titleInputRef.current.getBoundingClientRect(); return titleRect.top + titleRect.height / 2; } if (focusedField === 'content' && contentEl) { const selection = window.getSelection(); if (selection && selection.rangeCount > 0) { const range = selection.getRangeAt(0); const rects = range.getClientRects(); if (rects.length > 0) return rects[0].top + rects[0].height / 2; let container = range.startContainer; if (container.nodeType === Node.TEXT_NODE && container.parentElement) container = container.parentElement; if (container.nodeType === Node.ELEMENT_NODE && contentEl.contains(container)) { const elementRect = (container as HTMLElement).getBoundingClientRect(); if (elementRect.height > 0) { const computedStyle = window.getComputedStyle(container as HTMLElement); const paddingTop = parseFloat(computedStyle.paddingTop) || 0; let lineHeight = parseFloat(computedStyle.lineHeight); if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; return elementRect.top + paddingTop + (lineHeight / 2); } } } const currentBlock = getCurrentBlockElement(); if (currentBlock && currentBlock !== contentEl && currentBlock.offsetHeight > 0) { const blockRect = currentBlock.getBoundingClientRect(); const computedStyle = window.getComputedStyle(currentBlock); const paddingTop = parseFloat(computedStyle.paddingTop) || 0; let lineHeight = parseFloat(computedStyle.lineHeight); if (isNaN(lineHeight) || lineHeight <= 0) lineHeight = (parseFloat(computedStyle.fontSize) || 16) * 1.4; return blockRect.top + paddingTop + (lineHeight / 2); } const mainDivRect = contentEl.getBoundingClientRect(); const computedStyleMain = window.getComputedStyle(contentEl); const paddingTopMain = parseFloat(computedStyleMain.paddingTop) || 0; let lineHeightMain = parseFloat(computedStyleMain.lineHeight); if (isNaN(lineHeightMain) || lineHeightMain <= 0) lineHeightMain = (parseFloat(computedStyleMain.fontSize) || 20) * 1.4; return mainDivRect.top + paddingTopMain + (lineHeightMain / 2); } return null; }, [focusedField, getCurrentBlockElement]);
 
   const calculateAndUpdateToolbarStyle = useCallback(() => {
@@ -499,7 +503,7 @@ const ArticlePage = () => {
               </Button>
             )}
             <span className="text-xs text-muted-foreground mr-1">{article.likeCount || 0} Likes</span>
-            {currentUserId && !isEditingAllowed && ( // Save button for non-authors
+            {user?.uid && !isEditingAllowed && (
               <Button variant="ghost" size="icon" className="h-8 w-8 p-1" title="Save to Collection (Placeholder)">
                 <Bookmark className="h-4 w-4 text-muted-foreground" />
               </Button>
@@ -642,7 +646,7 @@ const ArticlePage = () => {
                       currentUserId={user?.uid || null}
                       articleId={articleIdParam!}
                       articleAuthorId={article.userId}
-                      onDelete={handleCommentDeletedOrBanned} // Author can still delete their own hidden comments
+                      onDelete={handleCommentDeletedOrBanned}
                     />
                   ))}
                 </AccordionContent>
