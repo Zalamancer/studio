@@ -1,6 +1,5 @@
 // src/lib/firebase/config.ts
-import { initializeApp, getApps, getApp } from "firebase/app";
-import type { FirebaseApp } from "firebase/app";
+import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
 import { getStorage } from "firebase/storage";
@@ -16,15 +15,18 @@ const firebaseConfig = {
 };
 
 // Standard Firebase initialization - check if any apps exist before initializing.
-let app: FirebaseApp;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
-}
+const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 
 const auth = getAuth(app);
 const db = getFirestore(app);
-const storage = getStorage(app);
+
+// Conditionally initialize storage and provide a clear error if not configured.
+let storage;
+if (firebaseConfig.storageBucket) {
+  storage = getStorage(app);
+} else {
+  console.error("Firebase Storage Bucket is not configured. Check NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET in your environment variables. Image upload features will be disabled.");
+  storage = null;
+}
 
 export { app, auth, db, storage };

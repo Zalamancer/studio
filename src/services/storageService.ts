@@ -9,6 +9,9 @@ import { storage } from '@/lib/firebase/config'; // Assumes storage is initializ
  * @returns Promise<string> The public URL of the uploaded image.
  */
 export const uploadPostImage = async (file: File, userId: string): Promise<string> => {
+  if (!storage) {
+    throw new Error("Firebase Storage is not configured. Please check your NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET environment variable.");
+  }
   if (!file) {
     throw new Error("No file provided for upload.");
   }
@@ -45,10 +48,13 @@ export const uploadPostImage = async (file: File, userId: string): Promise<strin
  * Uploads a cover image file to Firebase Storage for a news article.
  * @param file The image file to upload.
  * @param userId The ID of the user (author) uploading the image.
- * @param articleId Tentative article ID, can be used for organization. If creating new, can be placeholder or userId.
+ * @param articleIdPlaceholder Tentative article ID, can be used for organization. If creating new, can be placeholder or userId.
  * @returns Promise<string> The public URL of the uploaded image.
  */
 export const uploadNewsCoverImage = async (file: File, userId: string, articleIdPlaceholder?: string): Promise<string> => {
+  if (!storage) {
+    throw new Error("Firebase Storage is not configured. Please check your NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET environment variable.");
+  }
   if (!file) {
     throw new Error("No file provided for news cover image upload.");
   }
