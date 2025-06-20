@@ -39,6 +39,12 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     throw new Error("Authenticated user does not match article's userId.");
   }
 
+  // Added pre-check for title
+  if (!articleData.title || articleData.title.trim() === "") {
+    console.error("[newsService] createNewsArticle: Article title cannot be empty. This should have been validated by the client form.");
+    throw new Error("Article title cannot be empty.");
+  }
+
   const dataToSave: {
     userId: string;
     title: string;
