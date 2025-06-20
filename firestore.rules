@@ -122,21 +122,20 @@ service cloud.firestore {
                        request.resource.data.size() == 18; // Adjust size based on exact fields on create
 
       allow update: if isAuthenticated() &&
-                       request.auth.uid == resource.data.userId && // Only owner can update their post
-                       request.resource.data.userId == resource.data.userId && // Cannot change owner
-                       request.resource.data.createdAt == resource.data.createdAt && // Cannot change creation time
-                       // Allow specific fields to be updated by owner
-                       request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                         'question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'imageUrls', 'requestType',
-                         'descriptionDetails', 'descriptionTried', 'descriptionOutcome', 'maxBudget', 'deadline',
-                         'updatedAt' // If you add an updatedAt field
-                       ])
-                       || // OR allow atomic increment/decrement of commentCount by anyone (implicitly for create/delete of comment)
+                       (
+                        ( // Case 1: Owner updating their own post
+                         request.auth.uid == resource.data.userId && 
+                         request.resource.data.userId == resource.data.userId && 
+                         request.resource.data.createdAt == resource.data.createdAt && 
+                         request.resource.data.diff(resource.data).affectedKeys().hasAny(['question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'imageUrls', 'requestType', 'descriptionDetails', 'descriptionTried', 'descriptionOutcome', 'maxBudget', 'deadline', 'updatedAt'])
+                        )
+                       || // Case 2: System updating commentCount
                        (
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'updatedAt']) &&
                          (request.resource.data.commentCount == resource.data.commentCount + 1 || request.resource.data.commentCount == resource.data.commentCount - 1) &&
-                         request.resource.data.updatedAt == request.time // Ensure updatedAt is also set
-                       );
+                         request.resource.data.updatedAt == request.time 
+                       )
+                      );
 
 
       allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId; // Only owner can delete
@@ -181,8 +180,8 @@ service cloud.firestore {
                            request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
                            request.resource.data.mentionedUserIds is list &&
                            request.resource.data.isShadowBanned == false &&
-                           request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionedUserIds', 'isShadowBanned']) &&
-                           request.resource.data.size() == 8; // Size 8
+                           request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) && 
+                           request.resource.data.size() == 9;
           allow update: if isAuthenticated() &&
                            request.resource.data.updatedAt == request.time && // Must be part of any update
                            ( // Case 1: Liking/Unliking
@@ -273,7 +272,7 @@ service cloud.firestore {
               request.resource.data.type == resource.data.type &&
               request.resource.data.postId == resource.data.postId &&
               (
-                (request.resource.data.groupName == resource.data.groupName && request.resource.data.groupAvatarUrl == resource.data.groupAvatarUrl && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.adminIds.hasAll(resource.data.adminIds.added(request.resource.data.adminIds.removed(request.auth.uid))))
+                (request.resource.data.groupName == resource.data.groupName && request.resource.data.groupAvatarUrl == resource.data.groupAvatarUrl && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.adminIds.hasAll(resource.data.adminIds))
                 || (request.auth.uid in resource.data.adminIds &&
                   request.resource.data.ownerId == resource.data.ownerId &&
                   request.resource.data.adminIds.hasAll(resource.data.adminIds.added(request.resource.data.adminIds.removed(request.auth.uid))) &&
@@ -624,7 +623,7 @@ service cloud.firestore {
                            request.resource.data.updatedAt == request.time &&
                            ( // Case 1: Liking/Unliking
                              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
-                             // Immutable fields check with .get() for safety
+                             // Immutable fields check
                              request.resource.data.userId == resource.data.userId &&
                              request.resource.data.text == resource.data.text &&
                              request.resource.data.timestamp == resource.data.timestamp &&
@@ -735,4 +734,3 @@ service cloud.firestore {
     }
   }
 }
-```
