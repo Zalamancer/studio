@@ -9,6 +9,7 @@ export interface Tag {
   usageCount: number;
   createdAt: Timestamp; // This is what's read from Firestore after creation
   createdBy: string; // UID of the user who first created this tag
+  updatedAt?: Timestamp; // Add optional updatedAt field
 }
 
 // Type for creating a new tag
@@ -18,10 +19,11 @@ export interface NewTagData {
   usageCount: number;
   createdAt: FieldValue; // This is what's written to Firestore (serverTimestamp())
   createdBy: string;
+  updatedAt: FieldValue; // Add updatedAt for new tag creation
 }
 
-export interface ClientTag extends Omit<Tag, 'createdAt'> {
+export interface ClientTag extends Omit<Tag, 'createdAt' | 'updatedAt'> {
   createdAt: number; // Milliseconds since epoch for client-side use
+  updatedAt?: number; // Optional on client as well
   usageCount: number; // Ensure usageCount is always a number
 }
-

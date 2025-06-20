@@ -36,6 +36,7 @@ export const searchTags = async (searchQuery: string, count = 10): Promise<Clien
       id: docSnap.id,
       ...docSnap.data(),
       createdAt: (docSnap.data().createdAt as Timestamp).toMillis(),
+      updatedAt: (docSnap.data().updatedAt as Timestamp)?.toMillis(),
       usageCount: docSnap.data().usageCount || 0,
     } as ClientTag));
   }
@@ -55,6 +56,7 @@ export const searchTags = async (searchQuery: string, count = 10): Promise<Clien
       id: docSnap.id,
       ...docSnap.data(),
       createdAt: (docSnap.data().createdAt as Timestamp).toMillis(),
+      updatedAt: (docSnap.data().updatedAt as Timestamp)?.toMillis(),
       usageCount: docSnap.data().usageCount || 0,
     } as ClientTag));
     return tags.sort((a, b) => (b.usageCount || 0) - (a.usageCount || 0));
@@ -67,56 +69,49 @@ export const searchTags = async (searchQuery: string, count = 10): Promise<Clien
 
 /**
  * Ensures tags exist, creates them if not, and increments/decrements their usage counts.
- * This function is transactional to ensure atomicity for usage counts.
+ * This function is refactored to AVOID transactions to bypass a potential SDK/environment bug.
+ * Note: This is less robust against high-concurrency race conditions for creating the same new tag.
  */
 export const getOrCreateTagsAndUpdateUsage = async (tagNames: string[], userId: string, incrementBy: number = 1): Promise<void> => {
   if (!tagNames || tagNames.length === 0) return;
   if (!userId) throw new Error("User ID is required to create/update tags.");
 
-  const firestoreDb = db; // Use the configured db instance
+  const articleTagsCollectionRef = firestoreCollection(db, ARTICLE_TAGS_COLLECTION);
 
-  try {
-    await runTransaction(firestoreDb, async (transaction) => {
-      // Re-initialize collection ref *inside* the transaction with the transaction's db instance
-      const articleTagsCollectionRefInTransaction = firestoreCollection(firestoreDb, ARTICLE_TAGS_COLLECTION);
+  for (const tagName of tagNames) {
+    if (!tagName || tagName.trim() === '') continue;
+    const nameTrimmed = tagName.trim();
+    const nameLowercase = nameTrimmed.toLowerCase();
 
-      for (const tagName of tagNames) {
-        if (!tagName || tagName.trim() === '') continue;
-        const nameTrimmed = tagName.trim();
-        const nameLowercase = nameTrimmed.toLowerCase();
+    try {
+      const q = query(articleTagsCollectionRef, where('nameLowercase', '==', nameLowercase), limit(1));
+      const snapshot = await getDocs(q);
 
-        const q = query(articleTagsCollectionRefInTransaction, where('nameLowercase', '==', nameLowercase));
-        const snapshot = await transaction.get(q);
-
-        if (snapshot.docs.length === 0) {
-          const newTagRef = doc(articleTagsCollectionRefInTransaction); // Create new doc ref
+      if (snapshot.empty) {
+        // Tag doesn't exist, create it.
+        if (incrementBy > 0) { // Only create if we are adding usage
           const newTagData: NewTagData = {
             name: nameTrimmed,
             nameLowercase: nameLowercase,
-            usageCount: incrementBy > 0 ? incrementBy : 0,
+            usageCount: incrementBy, // Start with the increment value
             createdAt: serverTimestamp() as FieldValue,
             createdBy: userId,
+            updatedAt: serverTimestamp() as FieldValue,
           };
-          transaction.set(newTagRef, newTagData);
-        } else {
-          const existingTagDocRef = snapshot.docs[0].ref;
-          const currentUsageCount = snapshot.docs[0].data().usageCount || 0;
-          const newUsageCount = currentUsageCount + incrementBy;
-          
-          transaction.update(existingTagDocRef, {
-            usageCount: newUsageCount < 0 ? 0 : newUsageCount,
- updatedAt: serverTimestamp() as FieldValue, // Add updatedAt on updates
-          });
+          await addDoc(articleTagsCollectionRef, newTagData);
         }
+      } else {
+        // Tag exists, update its usage count.
+        const existingTagDocRef = snapshot.docs[0].ref;
+        
+        await updateDoc(existingTagDocRef, {
+          usageCount: increment(incrementBy),
+          updatedAt: serverTimestamp() as FieldValue,
+        });
       }
-    });
-  } catch (error: any) {
-    console.error("[tagService] Error in getOrCreateTagsAndUpdateUsage transaction:", error);
-    if (error.message && (error.message.toLowerCase().includes("t is undefined") || error.message.toLowerCase().includes("transaction is undefined"))) {
-      console.error("[tagService] Critical SDK error within transaction.get(). Transaction object or its context might be invalid.");
+    } catch (error: any) {
+        console.error(`[tagService] Error processing tag "${tagName}":`, error);
+        // We'll log the error but continue to the next tag to not block the whole operation
     }
-    throw new Error(error.message || "Could not process tags.");
   }
 };
-
-    
