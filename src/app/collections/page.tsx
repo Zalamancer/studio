@@ -1,4 +1,3 @@
-
 // src/app/collections/page.tsx
 "use client";
 
@@ -117,7 +116,7 @@ const MyCollectionsPage = () => {
   return (
     <div className="md:container md:mx-auto md:py-8 h-full flex flex-col">
       {isMobile && selectedCollection ? (
-        <div className="mb-4 px-4 flex items-center gap-2 flex-shrink-0">
+        <div className="mt-4 mb-4 px-4 flex items-center gap-2 flex-shrink-0">
           <Button variant="ghost" size="icon" onClick={() => setSelectedCollection(null)} className="h-8 w-8 flex-shrink-0">
             <ArrowLeft className="h-5 w-5" />
             <span className="sr-only">Back to Collections</span>
@@ -169,13 +168,13 @@ const MyCollectionsPage = () => {
         </div>
 
         <div className={cn(
-          "md:col-span-2 flex flex-col min-h-0", // Added flex flex-col and min-h-0 for flex children to scroll
+          "md:col-span-2 flex flex-col min-h-0",
           isMobile && !selectedCollection && "hidden",
-          isMobile && "px-0" // Remove horizontal padding on mobile for full width
+          isMobile && "px-0"
         )}>
           {selectedCollection ? (
             <SelectedCollectionPosts
-              key={selectedCollection.id} // Force re-mount if collection changes
+              key={selectedCollection.id}
               collection={selectedCollection}
               currentUserId={user.uid}
             />
