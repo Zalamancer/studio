@@ -33,10 +33,14 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
   return (
     <Card
       className={cn(
-        "overflow-hidden rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer bg-card",
-        "md:break-inside-avoid", // For desktop masonry layout
-        post.requestType === 'help_request' && "border-2 border-amber-500/70 hover:border-amber-500",
-        isSelected && "ring-2 ring-primary ring-offset-2 shadow-primary/20"
+        "overflow-hidden transition-shadow duration-200 cursor-pointer bg-card", // Removed shadow classes
+        "md:break-inside-avoid",
+        "mb-4 md:mb-0", // Vertical separation on mobile
+        "md:border-border border-b", // Desktop border, mobile bottom border
+        post.requestType === 'help_request' && "border-amber-500/70 hover:border-amber-500",
+        isSelected && "ring-2 ring-primary ring-offset-2", // Removed shadow class
+        "md:border", // ensures border all around on desktop
+        "rounded-none md:rounded-lg" // No rounding on mobile, rounded on desktop
       )}
       onClick={() => onOpen(post)}
       aria-label={`View details for post: ${post.question}`}
@@ -51,7 +55,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
               alt={post.question}
               fill
               sizes="(max-width: 768px) 100vw, (min-width: 768px) 50vw"
-              className="object-cover md:rounded-t-lg"
+              className="object-cover"
               data-ai-hint={post.tags && post.tags.length > 0 ? post.tags.slice(0, 2).join(' ') : 'abstract'}
               priority={isPriority}
             />
