@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, Tag, PlusCircle, X, FilterX } from 'lucide-react';
+import { Newspaper, Edit2, Loader2, AlertTriangle, Filter, Search, Tag, PlusCircle, X, FilterX, ListFilter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -62,11 +62,13 @@ const NewsPage = () => {
   const savedItemIds = useMemo(() => {
     if (!userCollections || userCollections.length === 0) return new Set<string>();
     const ids = new Set<string>();
-    userCollections.forEach(collection => collection.postIds?.forEach(id => ids.add(id)));
+    userCollections.forEach(collection => {
+        (collection.postIds || []).forEach(id => ids.add(id));
+        (collection.articleIds || []).forEach(id => ids.add(id));
+    });
     return ids;
   }, [userCollections]);
 
-  // Moved getCleanTextExcerpt before filteredArticles
   const getCleanTextExcerpt = useCallback((htmlString: string | null | undefined, maxLength: number = 150): string => {
     if (typeof document === 'undefined' || !htmlString) return '';
     try {
@@ -128,24 +130,23 @@ const NewsPage = () => {
     );
   };
 
-  const clearAllTagFilters = () => {
+  const clearAllTagFilters = useCallback(() => {
     setSelectedTags([]);
     setTagSearchInput('');
     setIsTagFilterOpen(false);
-  };
+  }, []);
   
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedTags.length > 0) count++;
-    // Search term itself is not counted as a "filter" for the "Clear All" button that affects tags
     return count;
   }, [selectedTags]);
 
   const toggleHeaderSearch = () => {
     setIsHeaderSearchActive(prev => {
-      if (prev) { // If search was active and is now being deactivated
-        setSearchTerm(''); // Clear the search term
-      } else { // If search is about to become active
+      if (prev) {
+        setSearchTerm('');
+      } else {
         setTimeout(() => headerSearchInputRef.current?.focus(), 0);
       }
       return !prev;
@@ -160,7 +161,6 @@ const NewsPage = () => {
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      {/* Main header bar */}
       <div className="mb-6 flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b">
         <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className="flex-shrink-0 h-9 w-9 p-2">
           {isHeaderSearchActive ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
@@ -177,7 +177,6 @@ const NewsPage = () => {
           />
         ) : (
           <>
-            {/* View Toggles */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <Button 
                   variant={activeArticleView === 'all' ? "secondary" : "ghost"}
@@ -199,10 +198,8 @@ const NewsPage = () => {
               )}
             </div>
 
-            {/* Spacer */}
             <div className="flex-grow"></div>
 
-            {/* Tag Filter & Clear */}
             <div className="flex items-center gap-2 flex-shrink-0">
               <Popover open={isTagFilterOpen} onOpenChange={setIsTagFilterOpen}>
                 <PopoverTrigger asChild>
@@ -261,7 +258,6 @@ const NewsPage = () => {
               )}
             </div>
 
-            {/* Create Button */}
             {user && (
               <Button asChild size="sm" className="ml-2 h-9 px-3 text-xs flex-shrink-0">
                 <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
@@ -321,4 +317,3 @@ const NewsPage = () => {
 };
 
 export default NewsPage;
-
