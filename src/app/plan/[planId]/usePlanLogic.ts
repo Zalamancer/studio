@@ -712,56 +712,64 @@ export const usePlanLogic = () => {
   }, [isPointerDown, getPointerCoords, editableRoadmap, diffTarget, forceRender]);
 
   const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent) => {
-      if (!isPointerDown || !nodeDragInfoRef.current || diffTarget) { setIsPointerDown(false); return; }
-      const { nodeId: sourceNodeId, dotType: sourceDotType, isDotDrag } = nodeDragInfoRef.current;
-      const clickInfo = clickStartInfoRef.current;
-      const isConsideredDrag = isDraggingRef.current;
-      let finalRoadmap = [...editableRoadmap];
-      let hasChanged = false;
-
-      if (isDotDrag && sourceDotType) {
-          if (activeConnectionLinePreviewRef.current?.path) {
-              const targetNodeIdUnderCursor = activeConnectionLinePreviewRef.current.targetNodeId;
-              const dropTargetNode = targetNodeIdUnderCursor ? editableRoadmap.find(s => s.id === targetNodeIdUnderCursor) : undefined;
-              if (dropTargetNode) {
-                  if (dropTargetNode.id !== sourceNodeId) {
-                      const sourceNodeIndex = finalRoadmap.findIndex(s => s.id === sourceNodeId);
-                      if(sourceNodeIndex > -1) {
-                        const updatedSourceNode = {...finalRoadmap[sourceNodeIndex]};
-                        updatedSourceNode.peerConnections = updatedSourceNode.peerConnections || [];
-                        let targetDotOnDropTarget: PeerConnection['targetDot'] = 'W';
-                        if (sourceDotType === 'N') targetDotOnDropTarget = 'S';
-                        else if (sourceDotType === 'S') targetDotOnDropTarget = 'N';
-                        const alreadyConnected = updatedSourceNode.peerConnections.some(pc => pc.targetNodeId === dropTargetNode.id && pc.sourceDot === sourceDotType && pc.targetDot === targetDotOnDropTarget);
-                        if(!alreadyConnected) {
-                          updatedSourceNode.peerConnections.push({ targetNodeId: dropTargetNode.id, sourceDot: sourceDotType, targetDot: targetDotOnDropTarget });
-                          finalRoadmap[sourceNodeIndex] = updatedSourceNode;
-                          hasChanged = true;
-                        }
-                      }
-                  }
-              } else handleInitiateAddNode(sourceNodeId, sourceDotType);
-          }
-      } else if (isConsideredDrag) {
-          hasChanged = true; // Position change is already in editableRoadmap
-      } else if (clickInfo) {
-          const finalCoords = getPointerCoords(event);
-          if ((finalCoords.clientX - clickInfo.clientX)**2 + (finalCoords.clientY - clickInfo.clientY)**2 < 25 && (Date.now() - clickInfo.timestamp) < 300) {
-              const clickedStep = editableRoadmap.find(s => s.id === sourceNodeId);
-              if (clickedStep) handleEditCanvasNode(clickedStep);
-          }
-      }
-      
-      if(hasChanged) saveCurrentRoadmap(finalRoadmap);
-
-      activeConnectionLinePreviewRef.current = null;
-      nodeDragInfoRef.current = null;
-      clickStartInfoRef.current = null;
-      isDraggingRef.current = false;
+    if (!isPointerDown || !nodeDragInfoRef.current || diffTarget) {
       setIsPointerDown(false);
-      forceRender();
-  }, [isPointerDown, getPointerCoords, editableRoadmap, handleInitiateAddNode, handleEditCanvasNode, diffTarget, forceRender, saveCurrentRoadmap]);
-  
+      return;
+    }
+    const { nodeId: sourceNodeId, dotType: sourceDotType, isDotDrag } = nodeDragInfoRef.current;
+    const clickInfo = clickStartInfoRef.current;
+    const isConsideredDrag = isDraggingRef.current;
+    let finalRoadmap = [...editableRoadmap];
+    let hasChanged = false;
+
+    if (isDotDrag && isConsideredDrag && sourceDotType) {
+        const targetNodeIdUnderCursor = activeConnectionLinePreviewRef.current?.targetNodeId;
+        const dropTargetNode = targetNodeIdUnderCursor ? editableRoadmap.find(s => s.id === targetNodeIdUnderCursor) : undefined;
+        if (dropTargetNode) {
+            if (dropTargetNode.id !== sourceNodeId) {
+                const sourceNodeIndex = finalRoadmap.findIndex(s => s.id === sourceNodeId);
+                if (sourceNodeIndex > -1) {
+                    const updatedSourceNode = { ...finalRoadmap[sourceNodeIndex] };
+                    updatedSourceNode.peerConnections = updatedSourceNode.peerConnections || [];
+                    let targetDotOnDropTarget: PeerConnection['targetDot'] = 'W';
+                    if (sourceDotType === 'N') targetDotOnDropTarget = 'S';
+                    else if (sourceDotType === 'S') targetDotOnDropTarget = 'N';
+                    const alreadyConnected = updatedSourceNode.peerConnections.some(pc => pc.targetNodeId === dropTargetNode.id && pc.sourceDot === sourceDotType);
+                    if (!alreadyConnected) {
+                        updatedSourceNode.peerConnections.push({ targetNodeId: dropTargetNode.id, sourceDot: sourceDotType, targetDot: targetDotOnDropTarget });
+                        finalRoadmap[sourceNodeIndex] = updatedSourceNode;
+                        hasChanged = true;
+                    }
+                }
+            }
+        } else {
+            handleInitiateAddNode(sourceNodeId, sourceDotType);
+        }
+    } else if (isConsideredDrag) {
+        hasChanged = true;
+    } else if (clickInfo) {
+        const finalCoords = getPointerCoords(event);
+        if ((finalCoords.clientX - clickInfo.clientX)**2 + (finalCoords.clientY - clickInfo.clientY)**2 < 25 && (Date.now() - clickInfo.timestamp) < 300) {
+            if (isDotDrag && sourceDotType) {
+                handleInitiateAddNode(sourceNodeId, sourceDotType);
+            } else {
+                const clickedStep = editableRoadmap.find(s => s.id === sourceNodeId);
+                if (clickedStep) handleEditCanvasNode(clickedStep);
+            }
+        }
+    }
+
+    if (hasChanged) {
+        saveCurrentRoadmap(finalRoadmap);
+    }
+    activeConnectionLinePreviewRef.current = null;
+    nodeDragInfoRef.current = null;
+    clickStartInfoRef.current = null;
+    isDraggingRef.current = false;
+    setIsPointerDown(false);
+    forceRender();
+}, [isPointerDown, diffTarget, editableRoadmap, getPointerCoords, handleInitiateAddNode, handleEditCanvasNode, saveCurrentRoadmap, forceRender]);
+
   const onNodeDetailPanelSubmit = useCallback(async (data: { title: string; description?: string }) => {
     if (!editingTarget) return;
 
