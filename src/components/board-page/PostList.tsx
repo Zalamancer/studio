@@ -10,7 +10,7 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Loader2, FilterX, Briefcase, LayoutGrid, HandHelping, Search } from "lucide-react"; // Removed unnecessary icons
+import { Loader2, FilterX, Briefcase, LayoutGrid, HandHelping, Search, ListFilter } from "lucide-react";
 import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
