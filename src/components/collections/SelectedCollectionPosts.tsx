@@ -7,7 +7,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsForCollectionPage, removePostFromCollection } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
 import type { Post } from '@/types/post';
-import { Card, CardHeader, CardContent, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Loader2, Trash2, AlertTriangle, FolderOpen, ExternalLink } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
@@ -99,64 +99,104 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
         </div>
       )}
       {!isLoading && !error && posts.length > 0 && (
-        <div className="space-y-3">
+        <div className="space-y-4">
           {posts.map((post) => {
             const postDate = post.createdAt instanceof Timestamp ? post.createdAt.toDate().toLocaleDateString() : 'Date unavailable';
             const hasImage = post.imageUrls && post.imageUrls.length > 0;
 
             return (
               <Card key={post.id} className="shadow-sm hover:shadow-md transition-shadow bg-background p-3">
-                {/* Top Row: Title, Tags, Delete Button */}
-                <div className="flex justify-between items-start gap-2 mb-2">
-                  {/* Title and scrolling tags */}
-                  <div className="flex-grow min-w-0 flex items-center gap-3">
-                    <Link href={`/?postId=${post.id}`} className="flex-shrink-0" target="_blank" rel="noopener noreferrer">
-                      <h3 className="text-sm font-semibold text-foreground hover:text-primary whitespace-nowrap truncate" title={post.question}>
-                        {post.question}
-                      </h3>
-                    </Link>
-                    <div className="flex-grow min-w-0 overflow-x-auto scrollbar-hide">
-                      <div className="flex items-center gap-1.5 whitespace-nowrap">
-                        {post.tags?.map(tag => (
-                          <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
-                        ))}
+                
+                {/* Mobile Layout */}
+                <div className="md:hidden">
+                  {/* Row 1: Title */}
+                   <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer">
+                    <h3 className="text-sm font-semibold text-foreground hover:text-primary" title={post.question}>
+                      {post.question}
+                    </h3>
+                  </Link>
+                  {/* Row 2: Tags + Delete */}
+                  <div className="flex justify-between items-center gap-2 mt-2">
+                     <div className="flex-grow min-w-0 overflow-x-auto horizontal-scroll-with-fade">
+                        <div className="flex items-center gap-1.5 whitespace-nowrap">
+                            {post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
+                        </div>
+                    </div>
+                     <div className="flex-shrink-0 ml-2">
+                        <Button
+                            variant="ghost" size="icon" className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive"
+                            onClick={() => setPostToRemove({ postId: post.id, postTitle: post.question })}
+                            disabled={removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id}
+                            title="Remove from collection"
+                        >
+                            {removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id
+                            ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </Button>
+                     </div>
+                  </div>
+                   {/* Row 3: Image + Description Grid */}
+                  <div className="grid grid-cols-12 gap-3 items-start mt-3">
+                    {hasImage && (
+                      <div className="col-span-4 relative aspect-square rounded-md overflow-hidden bg-muted">
+                        <Image src={post.imageUrls[0]} alt="Post image" fill style={{objectFit:"cover"}} data-ai-hint="abstract illustration" sizes="(max-width: 768px) 33vw, 100px"/>
                       </div>
+                    )}
+                    <div className={cn(hasImage ? "col-span-8" : "col-span-12")}>
+                      <p className="text-xs text-muted-foreground line-clamp-3">
+                        {post.descriptionDetails || 'No additional details provided.'}
+                      </p>
+                      <p className="text-xs text-muted-foreground/80 mt-2">
+                        Added on: {postDate}
+                      </p>
                     </div>
-                  </div>
-
-                  {/* Delete Button */}
-                  <div className="flex-shrink-0">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7 p-1 text-destructive hover:text-destructive"
-                      onClick={() => setPostToRemove({ postId: post.id, postTitle: post.question })}
-                      disabled={removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id}
-                      title="Remove from collection"
-                    >
-                      {removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id
-                        ? <Loader2 className="h-4 w-4 animate-spin" />
-                        : <Trash2 className="h-4 w-4" />}
-                    </Button>
                   </div>
                 </div>
 
-                {/* Bottom Part: Image + Description */}
-                <div className="grid grid-cols-12 gap-3 items-start">
-                  {hasImage && (
-                    <div className="col-span-4 relative aspect-square rounded-md overflow-hidden bg-muted">
-                      <Image src={post.imageUrls[0]} alt="Post image" fill style={{objectFit:"cover"}} data-ai-hint="abstract illustration" sizes="(max-width: 768px) 33vw, 100px"/>
+                {/* Desktop Layout */}
+                <div className="hidden md:grid md:grid-cols-12 md:gap-4 items-start">
+                    {/* Left Column: Image */}
+                    {hasImage && (
+                        <div className="md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted">
+                            <Image src={post.imageUrls[0]} alt="Post image" fill style={{objectFit:"cover"}} data-ai-hint="abstract illustration" sizes="(max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px"/>
+                        </div>
+                    )}
+                    {/* Right Column: Details */}
+                    <div className={cn(hasImage ? "md:col-span-8 lg:col-span-9" : "md:col-span-12", "flex flex-col h-full")}>
+                        <div className="flex justify-between items-start gap-2">
+                             <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0">
+                                <h3 className="text-base font-semibold text-foreground hover:text-primary" title={post.question}>
+                                    {post.question}
+                                </h3>
+                            </Link>
+                             <div className="flex-shrink-0">
+                                <Button
+                                    variant="ghost" size="icon" className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive"
+                                    onClick={() => setPostToRemove({ postId: post.id, postTitle: post.question })}
+                                    disabled={removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id}
+                                    title="Remove from collection"
+                                >
+                                    {removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id
+                                    ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                                </Button>
+                             </div>
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 mt-1.5">
+                            {post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
+                        </div>
+                        <p className="text-sm text-muted-foreground line-clamp-2 mt-2 flex-grow">
+                             {post.descriptionDetails || 'No additional details provided.'}
+                        </p>
+                        <div className="flex justify-between items-center mt-2 pt-2 border-t">
+                            <p className="text-xs text-muted-foreground/80">
+                                Added on: {postDate}
+                            </p>
+                             <Link href={`/?postId=${post.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">
+                                View Post <ExternalLink className="h-3 w-3" />
+                            </Link>
+                        </div>
                     </div>
-                  )}
-                  <div className={cn(hasImage ? "col-span-8" : "col-span-12")}>
-                    <p className="text-xs text-muted-foreground line-clamp-3">
-                      {post.descriptionDetails || 'No additional details provided.'}
-                    </p>
-                    <p className="text-xs text-muted-foreground/80 mt-2">
-                      Added on: {postDate}
-                    </p>
-                  </div>
                 </div>
+
               </Card>
             );
           })}
