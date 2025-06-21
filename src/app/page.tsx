@@ -430,7 +430,7 @@ const BoardPageContent = () => {
   };
 
   return (
-    <div className="flex flex-col flex-grow md:container md:mx-auto md:pt-6">
+    <div className="flex flex-col flex-grow md:container md:mx-auto">
       {isMobile && isFilterViewVisible && (
         <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
           <FilterContent />
@@ -438,11 +438,15 @@ const BoardPageContent = () => {
       )}
 
       <div className={cn(
-          "flex-grow",
+          "flex-grow md:p-4",
           isMobile ? "grid grid-cols-1" : "md:flex md:flex-row",
           isMobile && isFilterViewVisible && "hidden"
         )}>
-        <div className={cn("flex flex-col overflow-hidden", isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:flex-1 md:min-w-0", !isMobile && "md:pr-4")}>
+        <div className={cn(
+            "flex flex-col overflow-hidden",
+            isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:flex-1 md:min-w-0",
+            !isMobile && "md:pr-4"
+        )}>
           <PostList
             posts={filteredPosts}
             isLoading={isLoadingPosts}
