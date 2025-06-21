@@ -96,6 +96,34 @@ export const usePlanLogic = () => {
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
   const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
 
+  // Debouncing for permission search inputs
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedViewPermissionsSearch(viewPermissionsSearch);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [viewPermissionsSearch]);
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedEditPermissionsSearch(editPermissionsSearch);
+    }, 300);
+    return () => clearTimeout(handler);
+  }, [editPermissionsSearch]);
+
+  // The missing queries that define viewPermissionSuggestions and editPermissionSuggestions
+  const { data: viewPermissionSuggestions = [] } = useQuery<UserProfileBasic[]>({
+      queryKey: ['suggestibleUsersForPlanView', debouncedViewPermissionsSearch, user?.uid],
+      queryFn: () => user ? getSuggestibleUsers(debouncedViewPermissionsSearch, 10) : Promise.resolve([]),
+      enabled: !!user && debouncedViewPermissionsSearch.length > 0,
+  });
+  
+  const { data: editPermissionSuggestions = [] } = useQuery<UserProfileBasic[]>({
+      queryKey: ['suggestibleUsersForPlanEdit', debouncedEditPermissionsSearch, user?.uid],
+      queryFn: () => user ? getSuggestibleUsers(debouncedEditPermissionsSearch, 10) : Promise.resolve([]),
+      enabled: !!user && debouncedEditPermissionsSearch.length > 0,
+  });
+
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
   useEffect(() => {
