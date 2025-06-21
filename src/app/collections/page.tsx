@@ -1,4 +1,3 @@
-
 // src/app/collections/page.tsx
 "use client";
 
@@ -11,7 +10,7 @@ import { CollectionCard } from '@/components/collections/CollectionCard';
 import { EditCollectionDialog } from '@/components/collections/EditCollectionDialog';
 import { SelectedCollectionPosts } from '@/components/collections/SelectedCollectionPosts';
 import { Button } from '@/components/ui/button';
-import { Loader2, FolderOpen, AlertTriangle, PlusCircle } from 'lucide-react';
+import { Loader2, FolderOpen, AlertTriangle, ArrowLeft } from 'lucide-react'; // Added ArrowLeft
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 import {
@@ -24,12 +23,15 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useIsMobile } from '@/hooks/use-mobile'; // Added useIsMobile hook
+import { cn } from '@/lib/utils'; // Added cn utility
 
 const MyCollectionsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const router = useRouter();
+  const isMobile = useIsMobile(); // Use the hook
 
   const [selectedCollection, setSelectedCollection] = useState<ClientCollection | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -98,8 +100,6 @@ const MyCollectionsPage = () => {
   }
 
   if (!user) {
-    // Redirect to login or show a message
-    // router.push('/login'); // Or use a more user-friendly approach
     return (
       <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center">
         <AlertTriangle className="h-12 w-12 text-destructive mb-4" />
@@ -116,18 +116,31 @@ const MyCollectionsPage = () => {
 
   return (
     <div className="container mx-auto p-4 md:p-8">
-      <header className="mb-8">
-        <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center">
-          <FolderOpen className="mr-3 h-8 w-8 text-primary" />
-          My Collections
-        </h1>
-        <p className="text-muted-foreground mt-1">
-          Organize, view, and manage your saved posts.
-        </p>
-      </header>
+      {isMobile && selectedCollection ? (
+        <div className="mb-4">
+          <Button variant="ghost" size="sm" onClick={() => setSelectedCollection(null)}>
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Back to Collections
+          </Button>
+        </div>
+      ) : (
+        <header className="mb-8">
+          <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center">
+            <FolderOpen className="mr-3 h-8 w-8 text-primary" />
+            My Collections
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            Organize, view, and manage your saved posts.
+          </p>
+        </header>
+      )}
+
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div className="md:col-span-1 space-y-4">
+        <div className={cn(
+          "md:col-span-1 space-y-4",
+          isMobile && selectedCollection && "hidden"
+        )}>
           <h2 className="text-xl font-semibold text-foreground">Your Saved Collections</h2>
           {isLoadingCollections ? (
             Array.from({ length: 3 }).map((_, i) => (
@@ -154,7 +167,10 @@ const MyCollectionsPage = () => {
           )}
         </div>
 
-        <div className="md:col-span-2">
+        <div className={cn(
+          "md:col-span-2",
+          isMobile && !selectedCollection && "hidden"
+        )}>
           {selectedCollection ? (
             <SelectedCollectionPosts
               key={selectedCollection.id} // Force re-mount if collection changes
@@ -162,7 +178,7 @@ const MyCollectionsPage = () => {
               currentUserId={user.uid}
             />
           ) : (
-            <div className="flex flex-col items-center justify-center h-full min-h-[300px] p-8 border-2 border-dashed rounded-lg bg-muted/30 text-muted-foreground">
+            <div className="hidden md:flex flex-col items-center justify-center h-full min-h-[300px] p-8 border-2 border-dashed rounded-lg bg-muted/30 text-muted-foreground">
               <FolderOpen className="h-16 w-16 mb-4 opacity-50" />
               <p className="text-lg font-medium">Select a collection to view its posts.</p>
               <p className="text-sm mt-1">Or, create a new collection when saving a post.</p>
@@ -209,5 +225,3 @@ const MyCollectionsPage = () => {
 };
 
 export default MyCollectionsPage;
-
-    
