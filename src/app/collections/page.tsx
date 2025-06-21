@@ -22,6 +22,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { EditCollectionDialog } from '@/components/collections/EditCollectionDialog'; // Import EditCollectionDialog
 import { useIsMobile } from '@/hooks/use-mobile'; // Added useIsMobile hook
 import { cn } from '@/lib/utils'; // Added cn utility
 
@@ -123,17 +124,7 @@ const MyCollectionsPage = () => {
           </Button>
           <h2 className="text-lg font-semibold truncate text-foreground">{selectedCollection.name}</h2>
         </div>
-      ) : (
-        <header className="mb-8 px-4 md:px-0 flex-shrink-0">
-          <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center">
-            <FolderOpen className="mr-3 h-8 w-8 text-primary" />
-            My Collections
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Organize, view, and manage your saved posts.
-          </p>
-        </header>
-      )}
+      ) : null}
 
 
       <div className="grid grid-cols-1 md:grid-cols-3 md:gap-6 flex-grow min-h-0">
