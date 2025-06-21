@@ -1,3 +1,4 @@
+
 // src/components/collections/SelectedCollectionPosts.tsx
 "use client";
 
@@ -25,7 +26,7 @@ import {
 import { Badge } from '../ui/badge';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"; // Added Tabs
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface SelectedCollectionPostsProps {
   collection: ClientCollection;
@@ -44,41 +45,48 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
 
   return (
     <div className="p-3">
-      {/* Mobile Layout */}
-      <div className="md:hidden">
-        <h3 className="text-base font-semibold text-foreground hover:text-primary mb-1 line-clamp-3" title={post.question}>
-          <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer">{post.question}</Link>
-        </h3>
-        <div className="flex justify-between items-center gap-2 mb-3">
-          <div className="flex-grow min-w-0 overflow-x-auto horizontal-scroll-with-fade">
-            <div className="flex items-center gap-1.5 whitespace-nowrap">
-              {post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
+      <div className="grid grid-cols-12 gap-3 md:gap-4 items-start">
+        {hasImage && (
+            <div className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted">
+                <Image 
+                    src={post.imageUrls![0]} 
+                    alt="Post image" 
+                    fill 
+                    style={{ objectFit: "cover" }} 
+                    data-ai-hint="abstract illustration" 
+                    sizes="(max-width: 768px) 33vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" 
+                />
             </div>
-          </div>
-          <div className="flex-shrink-0 ml-2">
-            <Button variant="ghost" size="icon" className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(post); }} disabled={removeMutationPending} title="Remove from collection">
-              {removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-        <div className="grid grid-cols-12 gap-3 items-start">
-          {hasImage && <div className="col-span-4 relative aspect-square rounded-md overflow-hidden bg-muted"><Image src={post.imageUrls![0]} alt="Post image" fill style={{ objectFit: "cover" }} data-ai-hint="abstract illustration" sizes="(max-width: 768px) 33vw, 100px" /></div>}
-          <div className={cn(hasImage ? "col-span-8" : "col-span-12")}>
-            <p className="text-xs text-muted-foreground/80 mt-2">Added on: {postDate}</p>
-          </div>
-        </div>
-      </div>
-      {/* Desktop Layout */}
-      <div className="hidden md:grid md:grid-cols-12 md:gap-4 md:items-start">
-        {hasImage && <div className="md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted"><Image src={post.imageUrls![0]} alt="Post image" fill style={{ objectFit: "cover" }} data-ai-hint="abstract illustration" sizes="(max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" /></div>}
-        <div className={cn(hasImage ? "md:col-span-8 lg:col-span-9" : "md:col-span-12", "flex flex-col h-full")}>
-          <div className="flex justify-between items-start gap-2">
-            <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0"><h3 className="text-base font-semibold text-foreground hover:text-primary" title={post.question}>{post.question}</h3></Link>
-            <div className="flex-shrink-0"><Button variant="ghost" size="icon" className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(post); }} disabled={removeMutationPending} title="Remove from collection">{removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</Button></div>
-          </div>
-          <div className="flex flex-wrap gap-1.5 mt-1.5">{post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}</div>
-          <div className="flex-grow"></div> {/* Spacer to push footer down */}
-          <div className="flex justify-between items-center mt-2 pt-2 border-t"><p className="text-xs text-muted-foreground/80">Added on: {postDate}</p><Link href={`/?postId=${post.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">View Post <ExternalLink className="h-3 w-3" /></Link></div>
+        )}
+        <div className={cn(hasImage ? "col-span-8 md:col-span-8 lg:col-span-9" : "col-span-12", "flex flex-col h-full")}>
+            <div className="flex justify-between items-start gap-2">
+                <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0">
+                    <h3 className="text-base font-semibold text-foreground hover:text-primary line-clamp-3" title={post.question}>
+                        {post.question}
+                    </h3>
+                </Link>
+                <div className="flex-shrink-0">
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" 
+                        onClick={(e) => { e.stopPropagation(); onRemove(post); }} 
+                        disabled={removeMutationPending} 
+                        title="Remove from collection"
+                    >
+                        {removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                </div>
+            </div>
+            <div className="flex flex-wrap gap-1 mt-1.5">
+                {post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
+            </div>
+            <div className="flex justify-between items-center mt-auto pt-2 border-t">
+                <p className="text-xs text-muted-foreground/80">Added on: {postDate}</p>
+                <Link href={`/?postId=${post.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">
+                    View Post <ExternalLink className="h-3 w-3" />
+                </Link>
+            </div>
         </div>
       </div>
     </div>
@@ -92,42 +100,48 @@ const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: Cl
   
     return (
       <div className="p-3">
-        {/* Mobile Layout */}
-        <div className="md:hidden">
-          <h3 className="text-base font-semibold text-foreground hover:text-primary mb-1 line-clamp-3" title={article.title}>
-            <Link href={`/news/article/${article.id}`} target="_blank" rel="noopener noreferrer">{article.title}</Link>
-          </h3>
-          <div className="flex justify-between items-center gap-2 mb-3">
-            <div className="flex-grow min-w-0 overflow-x-auto horizontal-scroll-with-fade">
-              <div className="flex items-center gap-1.5 whitespace-nowrap">
-                {article.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
+        <div className="grid grid-cols-12 gap-3 md:gap-4 items-start">
+          {hasImage && (
+            <div className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted">
+              <Image 
+                src={article.coverImageUrl!} 
+                alt={article.title} 
+                fill 
+                style={{ objectFit: "cover" }} 
+                data-ai-hint="news cover" 
+                sizes="(max-width: 768px) 33vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" 
+              />
+            </div>
+          )}
+          <div className={cn(hasImage ? "col-span-8 md:col-span-8 lg:col-span-9" : "col-span-12", "flex flex-col h-full")}>
+            <div className="flex justify-between items-start gap-2">
+              <Link href={`/news/article/${article.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0">
+                <h3 className="text-base font-semibold text-foreground hover:text-primary line-clamp-3" title={article.title}>
+                  {article.title}
+                </h3>
+              </Link>
+              <div className="flex-shrink-0">
+                <Button 
+                  variant="ghost" 
+                  size="icon" 
+                  className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" 
+                  onClick={(e) => { e.stopPropagation(); onRemove(article); }} 
+                  disabled={removeMutationPending} 
+                  title="Remove from collection"
+                >
+                  {removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                </Button>
               </div>
             </div>
-            <div className="flex-shrink-0 ml-2">
-              <Button variant="ghost" size="icon" className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(article); }} disabled={removeMutationPending} title="Remove from collection">
-                {removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-              </Button>
+            <div className="flex flex-wrap gap-1 mt-1.5">
+              {article.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
             </div>
-          </div>
-          <div className="grid grid-cols-12 gap-3 items-start">
-            {hasImage && <div className="col-span-4 relative aspect-square rounded-md overflow-hidden bg-muted"><Image src={article.coverImageUrl!} alt={article.title} fill style={{ objectFit: "cover" }} data-ai-hint="news cover" sizes="(max-width: 768px) 33vw, 100px" /></div>}
-            <div className={cn(hasImage ? "col-span-8" : "col-span-12")}>
-              <p className="text-xs text-muted-foreground/80 mt-2">Published on: {articleDate}</p>
+            <div className="flex justify-between items-center mt-auto pt-2 border-t">
+              <p className="text-xs text-muted-foreground/80">Published on: {articleDate}</p>
+              <Link href={`/news/article/${article.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">
+                View Article <ExternalLink className="h-3 w-3" />
+              </Link>
             </div>
-          </div>
-        </div>
-  
-        {/* Desktop Layout */}
-        <div className="hidden md:grid md:grid-cols-12 md:gap-4 md:items-start">
-          {hasImage && <div className="md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted"><Image src={article.coverImageUrl!} alt={article.title} fill style={{ objectFit: "cover" }} data-ai-hint="news cover" sizes="(max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" /></div>}
-          <div className={cn(hasImage ? "md:col-span-8 lg:col-span-9" : "md:col-span-12", "flex flex-col h-full")}>
-            <div className="flex justify-between items-start gap-2">
-              <Link href={`/news/article/${article.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0"><h3 className="text-base font-semibold text-foreground hover:text-primary" title={article.title}>{article.title}</h3></Link>
-              <div className="flex-shrink-0"><Button variant="ghost" size="icon" className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(article); }} disabled={removeMutationPending} title="Remove from collection">{removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</Button></div>
-            </div>
-            <div className="flex flex-wrap gap-1.5 mt-1.5">{article.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}</div>
-            <div className="flex-grow"></div> {/* Spacer to push footer down */}
-            <div className="flex justify-between items-center mt-2 pt-2 border-t"><p className="text-xs text-muted-foreground/80">Published on: {articleDate}</p><Link href={`/news/article/${article.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">View Article <ExternalLink className="h-3 w-3" /></Link></div>
           </div>
         </div>
       </div>
