@@ -21,15 +21,30 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { searchTags } from '@/services/tagService';
 import type { ClientTag } from '@/types/tag';
+import { useIsMobile } from '@/hooks/use-is-mobile';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
+
 
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
+  const isMobile = useIsMobile();
+
   const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearchInput, setTagSearchInput] = useState('');
-  const [isTagFilterOpen, setIsTagFilterOpen] = useState(false);
+  const [isTagFilterPopoverOpen, setIsTagFilterPopoverOpen] = useState(false);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
 
   const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
   const headerSearchInputRef = useRef<HTMLInputElement>(null);
@@ -133,14 +148,15 @@ const NewsPage = () => {
   const clearAllTagFilters = useCallback(() => {
     setSelectedTags([]);
     setTagSearchInput('');
-    setIsTagFilterOpen(false);
+    setIsTagFilterPopoverOpen(false);
   }, []);
   
   const activeFilterCount = useMemo(() => {
     let count = 0;
+    if (activeArticleView !== 'all') count++;
     if (selectedTags.length > 0) count++;
     return count;
-  }, [selectedTags]);
+  }, [selectedTags, activeArticleView]);
 
   const toggleHeaderSearch = () => {
     setIsHeaderSearchActive(prev => {
@@ -159,9 +175,79 @@ const NewsPage = () => {
     }
   }, [isHeaderSearchActive]);
 
+  const FilterContent = () => (
+    <div className={cn("space-y-4", isMobile ? "p-4" : "p-3 w-72")}>
+      <div className="space-y-1.5">
+          <Label className="text-xs font-medium text-muted-foreground">View</Label>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button 
+                variant={activeArticleView === 'all' ? "secondary" : "ghost"}
+                size="sm" 
+                onClick={() => setActiveArticleView('all')}
+                className={cn("h-9 px-3 text-xs rounded-full flex-1", activeArticleView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+            >
+                All Articles
+            </Button>
+            {user && (
+                <Button 
+                    variant={activeArticleView === 'my_articles' ? "secondary" : "ghost"}
+                    size="sm" 
+                    onClick={() => setActiveArticleView('my_articles')}
+                    className={cn("h-9 px-3 text-xs rounded-full flex-1", activeArticleView === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                >
+                    My Articles
+                </Button>
+            )}
+          </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}</Label>
+        <div className="p-1 border-b">
+          <Input
+            type="search"
+            placeholder="Search tags..."
+            value={tagSearchInput}
+            onChange={(e) => setTagSearchInput(e.target.value)}
+            className="h-8 text-xs border-0 focus-visible:ring-0 shadow-none"
+          />
+        </div>
+        <ScrollArea className="h-48">
+          <div className="p-3 space-y-1.5">
+            {isLoadingTagsForFilter ? (
+              <div className="flex justify-center p-2"><Loader2 className="h-4 w-4 animate-spin"/></div>
+            ) : availableTagsForFilter.length > 0 ? (
+              availableTagsForFilter.map((tag) => (
+                <div key={tag.id} className="flex items-center space-x-2">
+                  <Checkbox
+                    id={`tag-filter-${tag.id}`}
+                    checked={selectedTags.includes(tag.name)}
+                    onCheckedChange={() => handleTagToggle(tag.name)}
+                  />
+                  <Label htmlFor={`tag-filter-${tag.id}`} className="text-xs font-normal flex items-center justify-between w-full">
+                    <span>{tag.name}</span>
+                    <span className="text-muted-foreground text-[10px]">({tag.usageCount})</span>
+                  </Label>
+                </div>
+              ))
+            ) : (
+              <p className="text-xs text-muted-foreground text-center">
+                {tagSearchInput ? `No tags matching "${tagSearchInput}".` : "No tags found."}
+              </p>
+            )}
+          </div>
+        </ScrollArea>
+        {selectedTags.length > 0 && (
+          <div className="p-3 border-t">
+            <Button variant="ghost" size="xs" onClick={clearAllTagFilters} className="w-full text-primary">Clear Tag Filters</Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6">
-      <div className="mb-6 flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b">
+      <div className="flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
         <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className="flex-shrink-0 h-9 w-9 p-2">
           {isHeaderSearchActive ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
         </Button>
@@ -177,91 +263,88 @@ const NewsPage = () => {
           />
         ) : (
           <>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Button 
-                  variant={activeArticleView === 'all' ? "secondary" : "ghost"}
-                  size="sm" 
-                  onClick={() => setActiveArticleView('all')}
-                  className={cn("h-9 px-3 text-xs rounded-full", activeArticleView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-              >
-                  All Articles
-              </Button>
-              {user && (
-                  <Button 
-                      variant={activeArticleView === 'my_articles' ? "secondary" : "ghost"}
-                      size="sm" 
-                      onClick={() => setActiveArticleView('my_articles')}
-                      className={cn("h-9 px-3 text-xs rounded-full", activeArticleView === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-                  >
-                      My Articles
-                  </Button>
-              )}
-            </div>
-
-            <div className="flex-grow"></div>
-
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Popover open={isTagFilterOpen} onOpenChange={setIsTagFilterOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9 text-xs">
-                    <Tag className="mr-1.5 h-3.5 w-3.5" />
-                    Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-0" align="end">
-                  <div className="p-3 border-b">
-                    <Input
-                      type="search"
-                      placeholder="Search tags..."
-                      value={tagSearchInput}
-                      onChange={(e) => setTagSearchInput(e.target.value)}
-                      className="h-8 text-xs"
-                    />
-                  </div>
-                  <ScrollArea className="h-48">
-                    <div className="p-3 space-y-1.5">
-                      {isLoadingTagsForFilter ? (
-                        <div className="flex justify-center p-2"><Loader2 className="h-4 w-4 animate-spin"/></div>
-                      ) : availableTagsForFilter.length > 0 ? (
-                        availableTagsForFilter.map((tag) => (
-                          <div key={tag.id} className="flex items-center space-x-2">
-                            <Checkbox
-                              id={`tag-filter-${tag.id}`}
-                              checked={selectedTags.includes(tag.name)}
-                              onCheckedChange={() => handleTagToggle(tag.name)}
-                            />
-                            <Label htmlFor={`tag-filter-${tag.id}`} className="text-xs font-normal flex items-center justify-between w-full">
-                              <span>{tag.name}</span>
-                              <span className="text-muted-foreground text-[10px]">({tag.usageCount})</span>
-                            </Label>
-                          </div>
-                        ))
-                      ) : (
-                        <p className="text-xs text-muted-foreground text-center">
-                          {tagSearchInput ? `No tags matching "${tagSearchInput}".` : "No tags found."}
-                        </p>
+            {isMobile ? (
+              <div className="flex w-full items-center gap-2">
+                <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
+                      <ListFilter className="h-5 w-5" />
+                      <span className="sr-only">Filters</span>
+                      {activeFilterCount > 0 && (
+                          <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
+                              {activeFilterCount}
+                          </span>
                       )}
-                    </div>
-                  </ScrollArea>
-                  {selectedTags.length > 0 && (
-                    <div className="p-3 border-t">
-                      <Button variant="ghost" size="xs" onClick={clearAllTagFilters} className="w-full text-primary">Clear Tag Filters</Button>
-                    </div>
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
+                      <DialogHeader className="p-4 border-b">
+                          <DialogTitle>Filter Articles</DialogTitle>
+                          <DialogDescription>Refine articles by type or tags.</DialogDescription>
+                      </DialogHeader>
+                      <ScrollArea className="flex-grow min-h-0"><FilterContent /></ScrollArea>
+                      <DialogFooter className="p-4 border-t">
+                          <DialogClose asChild>
+                              <Button type="button" variant="default" size="sm">Done</Button>
+                          </DialogClose>
+                      </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+                {user && (
+                  <Button asChild size="sm" className="text-xs flex-1 h-9">
+                    <Link href="/news/create"><Edit2 className="h-4 w-4 mr-1.5" />Create Article</Link>
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Button 
+                      variant={activeArticleView === 'all' ? "secondary" : "ghost"}
+                      size="sm" 
+                      onClick={() => setActiveArticleView('all')}
+                      className={cn("h-9 px-3 text-xs rounded-full", activeArticleView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                  >
+                      All Articles
+                  </Button>
+                  {user && (
+                      <Button 
+                          variant={activeArticleView === 'my_articles' ? "secondary" : "ghost"}
+                          size="sm" 
+                          onClick={() => setActiveArticleView('my_articles')}
+                          className={cn("h-9 px-3 text-xs rounded-full", activeArticleView === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                      >
+                          My Articles
+                      </Button>
                   )}
-                </PopoverContent>
-              </Popover>
+                </div>
 
-              {activeFilterCount > 0 && !isTagFilterOpen && (
-                <Button variant="ghost" size="sm" onClick={clearAllTagFilters} className="h-9 text-xs text-primary hover:underline">
-                  <FilterX className="mr-1.5 h-3.5 w-3.5" /> Clear Filters ({activeFilterCount})
-                </Button>
-              )}
-            </div>
+                <div className="flex-grow"></div>
 
-            {user && (
-              <Button asChild size="sm" className="ml-2 h-9 px-3 text-xs flex-shrink-0">
-                <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
-              </Button>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <Popover open={isTagFilterPopoverOpen} onOpenChange={setIsTagFilterPopoverOpen}>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm" className="h-9 text-xs">
+                        <Tag className="mr-1.5 h-3.5 w-3.5" />
+                        Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-72 p-0" align="end"><FilterContent /></PopoverContent>
+                  </Popover>
+
+                  {activeFilterCount > 0 && (
+                    <Button variant="ghost" size="sm" onClick={() => { setActiveArticleView('all'); clearAllTagFilters();}} className="h-9 text-xs text-primary hover:underline">
+                      <FilterX className="mr-1.5 h-3.5 w-3.5" /> Clear All ({activeFilterCount})
+                    </Button>
+                  )}
+                </div>
+
+                {user && (
+                  <Button asChild size="sm" className="ml-2 h-9 px-3 text-xs flex-shrink-0">
+                    <Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create News Article</Link>
+                  </Button>
+                )}
+              </>
             )}
           </>
         )}
