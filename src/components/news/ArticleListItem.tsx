@@ -89,52 +89,53 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
     </div>
   );
   
-  const mainContentAndActions = (
-    <>
-        <Link href={`/news/article/${article.id}`} className="group">
-            <h2 className="text-xl md:text-2xl font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-tight">
-            {article.title}
-            </h2>
-            {excerpt && (
-            <p className="mt-1 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
-                {excerpt}
-            </p>
-            )}
-        </Link>
-        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-            <div className="flex items-center gap-3">
-            <span>{displayDate}</span>
-            <span className="flex items-center gap-1">
-                <MessageSquareText className="h-3.5 w-3.5" />
-                {article.commentCount || 0}
-            </span>
-            </div>
-            <div className="flex items-center gap-0.5 sm:gap-1">
-            {isOwnArticle && (
-                <Button variant="ghost" size="icon" className="h-7 w-7 p-1" asChild>
-                    <Link href={`/news/article/${article.id}`} title="Edit Article" onClick={(e) => e.stopPropagation()}>
-                        <Edit3 className="h-4 w-4"/>
-                    </Link>
-                </Button>
-            )}
-            {currentUserId && (
-                <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 p-1"
-                title={isSaved ? "Unsave Article" : "Save Article"}
-                onClick={handleSaveClick}
-                aria-pressed={isSaved}
-                >
-                <Bookmark className={cn("h-4 w-4", isSaved ? "fill-primary text-primary" : "")} />
-                </Button>
-            )}
-            <Button variant="ghost" size="icon" className="h-7 w-7 p-1" title="More options (placeholder)" onClick={(e) => e.stopPropagation()}>
-                <MoreHorizontal className="h-4 w-4" />
-            </Button>
-            </div>
+  const mainContent = (
+    <Link href={`/news/article/${article.id}`} className="group">
+        <h2 className="text-xl md:text-2xl font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-tight">
+        {article.title}
+        </h2>
+        {excerpt && (
+        <p className="mt-1 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+            {excerpt}
+        </p>
+        )}
+    </Link>
+  );
+
+  const actionsRow = (
+    <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="flex items-center gap-3">
+        <span>{displayDate}</span>
+        <span className="flex items-center gap-1">
+            <MessageSquareText className="h-3.5 w-3.5" />
+            {article.commentCount || 0}
+        </span>
         </div>
-    </>
+        <div className="flex items-center gap-0.5 sm:gap-1">
+        {isOwnArticle && (
+            <Button variant="ghost" size="icon" className="h-7 w-7 p-1" asChild>
+                <Link href={`/news/article/${article.id}`} title="Edit Article" onClick={(e) => e.stopPropagation()}>
+                    <Edit3 className="h-4 w-4"/>
+                </Link>
+            </Button>
+        )}
+        {currentUserId && (
+            <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7 p-1"
+            title={isSaved ? "Unsave Article" : "Save Article"}
+            onClick={handleSaveClick}
+            aria-pressed={isSaved}
+            >
+            <Bookmark className={cn("h-4 w-4", isSaved ? "fill-primary text-primary" : "")} />
+            </Button>
+        )}
+        <Button variant="ghost" size="icon" className="h-7 w-7 p-1" title="More options (placeholder)" onClick={(e) => e.stopPropagation()}>
+            <MoreHorizontal className="h-4 w-4" />
+        </Button>
+        </div>
+    </div>
   );
 
   const imageColumn = article.coverImageUrl && (
@@ -160,10 +161,11 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
         </div>
         <div className="flex justify-between items-start gap-4">
           <div className="flex-grow min-w-0">
-            {mainContentAndActions}
+            {mainContent}
           </div>
           {imageColumn}
         </div>
+        {actionsRow}
       </article>
       {currentUserId && (
         <SaveToCollectionDialog
