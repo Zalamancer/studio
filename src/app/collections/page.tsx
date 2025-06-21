@@ -132,7 +132,7 @@ const MyCollectionsPage = () => {
           "md:col-span-1 space-y-4 px-4 md:px-0",
           isMobile && selectedCollection && "hidden"
         )}>
-          <h2 className="text-xl font-semibold text-foreground">Your Saved Collections</h2>
+          <h2 className="text-xl font-semibold text-foreground mt-4">Your Saved Collections</h2>
           {isLoadingCollections ? (
             Array.from({ length: 3 }).map((_, i) => (
               <div key={i} className="p-4 border rounded-lg bg-card shadow-sm animate-pulse">
@@ -161,7 +161,7 @@ const MyCollectionsPage = () => {
         <div className={cn(
           "md:col-span-2 flex flex-col min-h-0",
           isMobile && !selectedCollection && "hidden",
-          isMobile && "px-0"
+          isMobile ? "px-0" : "px-4 md:px-0"
         )}>
           {selectedCollection ? (
             <SelectedCollectionPosts
