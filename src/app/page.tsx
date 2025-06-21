@@ -1,3 +1,4 @@
+
 // src/app/page.tsx
 "use client";
 
@@ -102,6 +103,10 @@ const BoardPageContent = () => {
     );
   }, []);
 
+  const handlePostTypeToggle = useCallback((type: 'help_request' | 'post') => {
+    setSelectedPostType(prevType => (prevType === type ? 'all' : type));
+  }, []);
+
   const clearAllFilters = useCallback(() => {
     setSelectedPostType("all");
     setSelectedTags([]);
@@ -167,7 +172,7 @@ const BoardPageContent = () => {
       const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() || 0);
       return timeB - timeA;
     });
-  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, searchTerm, availableSubSectors, availableIndustries]);
+  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, searchTerm, availableSubSectors, detailedSectorsData]);
 
   const FilterContent = () => (
     <div className="space-y-4 p-4 border-b">
@@ -175,17 +180,9 @@ const BoardPageContent = () => {
         <Label className="text-xs font-medium text-muted-foreground">Post Type</Label>
         <div className="flex items-center gap-2">
           <Button
-            variant={selectedPostType === 'all' ? "secondary" : "ghost"}
-            size="sm"
-            onClick={() => setSelectedPostType('all')}
-            className={cn("h-9 px-3 text-xs flex-1 rounded-md", selectedPostType === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-          >
-            <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> All Posts
-          </Button>
-          <Button
             variant={selectedPostType === 'help_request' ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => setSelectedPostType('help_request')}
+            onClick={() => handlePostTypeToggle('help_request')}
             className={cn("h-9 px-3 text-xs flex-1 rounded-md", selectedPostType === 'help_request' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
           >
             <HandHelping className="mr-1.5 h-3.5 w-3.5" /> Requests
@@ -193,7 +190,7 @@ const BoardPageContent = () => {
           <Button
             variant={selectedPostType === 'post' ? "secondary" : "ghost"}
             size="sm"
-            onClick={() => setSelectedPostType('post')}
+            onClick={() => handlePostTypeToggle('post')}
             className={cn("h-9 px-3 text-xs flex-1 rounded-md", selectedPostType === 'post' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
           >
             <Briefcase className="mr-1.5 h-3.5 w-3.5" /> Opportunities
@@ -202,7 +199,7 @@ const BoardPageContent = () => {
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Tags</Label>
-        <ScrollArea className="h-[120px] p-2.5">
+        <div className="p-1">
           <div className="flex flex-wrap gap-2">
             {availableTags.map((tag) => (
               <Button
@@ -210,14 +207,14 @@ const BoardPageContent = () => {
                 type="button"
                 variant={selectedTags.includes(tag) ? 'secondary' : 'outline'}
                 size="xs"
-                className="h-7 rounded-md px-3 text-xs font-normal"
+                className="h-7 rounded-sm px-3 text-xs font-normal"
                 onClick={() => handleTagToggle(tag)}
               >
                 {tag}
               </Button>
             ))}
           </div>
-        </ScrollArea>
+        </div>
       </div>
 
       <div className="space-y-1.5">
