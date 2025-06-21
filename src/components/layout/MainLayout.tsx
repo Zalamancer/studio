@@ -15,7 +15,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper } from "lucide-react"; // Removed Edit2
+import { Home, Compass, MessageSquare, Handshake, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Factory, Brain, Newspaper, Bookmark } from "lucide-react"; // Added Bookmark
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -448,7 +448,6 @@ export default function MainLayout({
                 </div>
               ) : user ? (
                 <>
-                  {/* "Create Plan" button removed from here */}
                   {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -471,6 +470,9 @@ export default function MainLayout({
                       <DropdownMenuSeparator />
                       <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === `/profile/${user.uid}` && "bg-accent text-accent-foreground")}>
                         <Link href={`/profile/${user.uid}`} className="w-full cursor-pointer"><User className="mr-2 h-4 w-4" /><span>Profile</span></Link>
+                      </DropdownMenuItem>
+                      <DropdownMenuItem asChild className={cn("cursor-pointer w-full", pathname === "/collections" && "bg-accent text-accent-foreground")}>
+                        <Link href="/collections" className="w-full cursor-pointer"><Bookmark className="mr-2 h-4 w-4" /><span>Saved Collections</span></Link>
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         asChild
