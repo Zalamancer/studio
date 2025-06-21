@@ -136,11 +136,6 @@ body {
   }
 }
 
-/* Add 4px padding to ScrollArea viewport */
-[data-radix-scroll-area-viewport] {
-  padding: 4px;
-}
-
 /* CSS for horizontal scroll with fade effect */
 .horizontal-scroll-with-fade {
   position: relative; /* Needed for absolute positioning of pseudo-elements */
