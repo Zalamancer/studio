@@ -561,7 +561,7 @@ export default function MainLayout({
           </div>
         </header>
       )}
-      <main className="flex-1 flex flex-col relative mt-4 bg-muted pb-14 md:pb-0">
+      <main className="flex-1 flex flex-col relative mt-4 bg-background pb-14 md:pb-0">
         {children}
       </main>
       {!hideAppChrome && isMobile && (

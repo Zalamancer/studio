@@ -35,7 +35,7 @@ export const PostList: React.FC<PostListProps> = ({
 
   return (
     <div className="flex flex-col h-full relative">
-      <ScrollArea className="flex-grow overflow-y-auto min-h-0">
+      <ScrollArea className="flex-grow overflow-y-auto min-h-0 bg-muted">
         <div className="space-y-4 md:columns-2 md:gap-4">
           {posts.length > 0 ? (
             posts.map((post, index) => (
