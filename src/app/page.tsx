@@ -13,7 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2, PlusCircle, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search
+  Loader2, PlusCircle, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search, MessageSquare
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
@@ -78,6 +78,7 @@ const BoardPageContent = () => {
       setAvailableSubSectors(sector?.subSectors || []);
       setSelectedSubSectorFilter(undefined);
       setSelectedIndustryFilter(undefined);
+      setAvailableIndustries([]);
     } else {
       setAvailableSubSectors([]);
       setSelectedSubSectorFilter(undefined);
@@ -429,7 +430,10 @@ const BoardPageContent = () => {
   };
 
   return (
-    <div className="w-full md:container md:mx-auto pt-0 md:pt-6 flex flex-col flex-grow">
+    <div className={cn(
+        "flex flex-col flex-grow",
+        isMobile ? "p-0" : "md:container md:mx-auto pt-0 md:pt-6"
+    )}>
       {isMobile && isFilterViewVisible && (
         <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
           <FilterContent />
