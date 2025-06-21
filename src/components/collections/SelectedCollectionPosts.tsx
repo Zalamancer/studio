@@ -25,6 +25,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { Badge } from '../ui/badge';
+import { cn } from '@/lib/utils'; // Import cn
 
 interface SelectedCollectionPostsProps {
   collection: ClientCollection;
@@ -98,53 +99,70 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
         </div>
       )}
       {!isLoading && !error && posts.length > 0 && (
-        <div className="space-y-4 max-h-[calc(100vh-16rem)] overflow-y-auto pr-2">
-          {posts.map((post) => (
-            <Card key={post.id} className="shadow-md hover:shadow-lg transition-shadow bg-background">
-              <CardContent className="p-4 flex gap-4">
-                 {post.imageUrls && post.imageUrls.length > 0 && (
-                      <div className="relative w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-muted">
-                          <Image src={post.imageUrls[0]} alt="Post image" fill style={{objectFit:"cover"}} data-ai-hint="abstract illustration"/>
+        <div className="space-y-3">
+          {posts.map((post) => {
+            const postDate = post.createdAt instanceof Timestamp ? post.createdAt.toDate().toLocaleDateString() : 'Date unavailable';
+            const hasImage = post.imageUrls && post.imageUrls.length > 0;
+
+            return (
+              <Card key={post.id} className="shadow-sm hover:shadow-md transition-shadow bg-background p-3">
+                {/* Top Row: Title, Tags, Delete Button */}
+                <div className="flex justify-between items-start gap-2 mb-2">
+                  {/* Title and scrolling tags */}
+                  <div className="flex-grow min-w-0 flex items-center gap-3">
+                    <Link href={`/?postId=${post.id}`} className="flex-shrink-0" target="_blank" rel="noopener noreferrer">
+                      <h3 className="text-sm font-semibold text-foreground hover:text-primary whitespace-nowrap truncate" title={post.question}>
+                        {post.question}
+                      </h3>
+                    </Link>
+                    <div className="flex-grow min-w-0 overflow-x-auto scrollbar-hide">
+                      <div className="flex items-center gap-1.5 whitespace-nowrap">
+                        {post.tags?.map(tag => (
+                          <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>
+                        ))}
                       </div>
-                 )}
-                <div className="flex-grow min-w-0">
-                    <div className="flex justify-between items-start">
-                        <div className='flex-grow min-w-0'>
-                            <div className="flex flex-wrap gap-1 mb-2">
-                                {post.tags?.slice(0,3).map(tag => <Badge key={`${post.id}-${tag}`} variant="secondary" className="text-xs">{tag}</Badge>)}
-                            </div>
-                            <Link 
-                            href={`/?postId=${post.id}`} 
-                            className="text-base font-semibold text-foreground hover:text-primary line-clamp-2" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            >
-                            {post.question}
-                            </Link>
-                        </div>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          className="h-7 w-7 p-1 text-destructive hover:text-destructive flex-shrink-0 ml-2"
-                          onClick={() => setPostToRemove({ postId: post.id, postTitle: post.question })}
-                          disabled={removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id}
-                          title="Remove from collection"
-                        >
-                          {removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id
-                            ? <Loader2 className="h-4 w-4 animate-spin" />
-                            : <Trash2 className="h-4 w-4" />}
-                        </Button>
                     </div>
-                   <p className="text-xs text-muted-foreground mt-2">
-                    Added on: {post.createdAt instanceof Timestamp ? post.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
-                   </p>
+                  </div>
+
+                  {/* Delete Button */}
+                  <div className="flex-shrink-0">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7 p-1 text-destructive hover:text-destructive"
+                      onClick={() => setPostToRemove({ postId: post.id, postTitle: post.question })}
+                      disabled={removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id}
+                      title="Remove from collection"
+                    >
+                      {removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id
+                        ? <Loader2 className="h-4 w-4 animate-spin" />
+                        : <Trash2 className="h-4 w-4" />}
+                    </Button>
+                  </div>
                 </div>
-              </CardContent>
-            </Card>
-          ))}
+
+                {/* Bottom Part: Image + Description */}
+                <div className="grid grid-cols-12 gap-3 items-start">
+                  {hasImage && (
+                    <div className="col-span-4 relative aspect-square rounded-md overflow-hidden bg-muted">
+                      <Image src={post.imageUrls[0]} alt="Post image" fill style={{objectFit:"cover"}} data-ai-hint="abstract illustration" sizes="(max-width: 768px) 33vw, 100px"/>
+                    </div>
+                  )}
+                  <div className={cn(hasImage ? "col-span-8" : "col-span-12")}>
+                    <p className="text-xs text-muted-foreground line-clamp-3">
+                      {post.descriptionDetails || 'No additional details provided.'}
+                    </p>
+                    <p className="text-xs text-muted-foreground/80 mt-2">
+                      Added on: {postDate}
+                    </p>
+                  </div>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
-      
+
       <AlertDialog open={!!postToRemove} onOpenChange={(open) => !open && setPostToRemove(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
