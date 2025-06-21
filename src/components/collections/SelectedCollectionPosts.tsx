@@ -1,4 +1,3 @@
-
 // src/components/collections/SelectedCollectionPosts.tsx
 "use client";
 
@@ -40,14 +39,13 @@ interface ItemToRemove {
 }
 
 const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMutationPending: boolean }> = ({ post, onRemove, removeMutationPending }) => {
-  const postDate = post.createdAt instanceof Date ? post.createdAt.toLocaleDateString() : 'Date unavailable';
   const hasImage = post.imageUrls && post.imageUrls.length > 0;
 
   return (
     <div className="p-3">
       <div className="grid grid-cols-12 gap-3 md:gap-4 items-start">
         {hasImage && (
-            <div className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted">
+            <Link href={`/?postId=${post.id}`} className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted block" target="_blank" rel="noopener noreferrer">
                 <Image 
                     src={post.imageUrls![0]} 
                     alt="Post image" 
@@ -56,7 +54,7 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
                     data-ai-hint="abstract illustration" 
                     sizes="(max-width: 768px) 33vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" 
                 />
-            </div>
+            </Link>
         )}
         <div className={cn(hasImage ? "col-span-8 md:col-span-8 lg:col-span-9" : "col-span-12", "flex flex-col h-full")}>
             <div className="flex justify-between items-start gap-2">
@@ -81,12 +79,6 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
             <div className="flex flex-wrap gap-1 mt-1.5">
                 {post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
             </div>
-            <div className="flex justify-between items-center mt-auto pt-2 border-t">
-                <p className="text-xs text-muted-foreground/80">Added on: {postDate}</p>
-                <Link href={`/?postId=${post.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">
-                    View Post <ExternalLink className="h-3 w-3" />
-                </Link>
-            </div>
         </div>
       </div>
     </div>
@@ -95,14 +87,13 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
 PostItem.displayName = "PostItem";
 
 const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: ClientNewsArticle) => void, removeMutationPending: boolean }> = ({ article, onRemove, removeMutationPending }) => {
-    const articleDate = article.publishedAt ? new Date(article.publishedAt).toLocaleDateString() : 'Date unavailable';
     const hasImage = !!article.coverImageUrl;
   
     return (
       <div className="p-3">
         <div className="grid grid-cols-12 gap-3 md:gap-4 items-start">
           {hasImage && (
-            <div className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted">
+            <Link href={`/news/article/${article.id}`} className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted block" target="_blank" rel="noopener noreferrer">
               <Image 
                 src={article.coverImageUrl!} 
                 alt={article.title} 
@@ -111,7 +102,7 @@ const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: Cl
                 data-ai-hint="news cover" 
                 sizes="(max-width: 768px) 33vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" 
               />
-            </div>
+            </Link>
           )}
           <div className={cn(hasImage ? "col-span-8 md:col-span-8 lg:col-span-9" : "col-span-12", "flex flex-col h-full")}>
             <div className="flex justify-between items-start gap-2">
@@ -135,12 +126,6 @@ const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: Cl
             </div>
             <div className="flex flex-wrap gap-1 mt-1.5">
               {article.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
-            </div>
-            <div className="flex justify-between items-center mt-auto pt-2 border-t">
-              <p className="text-xs text-muted-foreground/80">Published on: {articleDate}</p>
-              <Link href={`/news/article/${article.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">
-                View Article <ExternalLink className="h-3 w-3" />
-              </Link>
             </div>
           </div>
         </div>
@@ -193,50 +178,54 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
   const error = postsError || articlesError;
 
   return (
-    <div>
-      <div className="mb-6 px-4 md:px-0">
+    <div className="h-full flex flex-col">
+      <div className="mb-4 px-4 md:px-0 flex-shrink-0">
         <h2 className="text-2xl font-bold truncate text-foreground">{collection.name}</h2>
         <p className="text-sm text-muted-foreground truncate">{collection.description || `Items saved in this collection.`}</p>
       </div>
 
-      <Tabs defaultValue="posts" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 mb-4">
+      <Tabs defaultValue="posts" className="w-full flex-grow flex flex-col min-h-0">
+        <TabsList className="grid w-full grid-cols-2 mb-4 flex-shrink-0">
           <TabsTrigger value="posts">Posts ({posts.length})</TabsTrigger>
           <TabsTrigger value="articles">Articles ({articles.length})</TabsTrigger>
         </TabsList>
-        <TabsContent value="posts">
-          {isLoadingPosts && <div className="flex justify-center items-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}
-          {postsError && <div className="text-destructive flex items-center gap-2 text-sm p-4 bg-destructive/5 rounded-md justify-center"><AlertTriangle className="h-5 w-5 flex-shrink-0" /><div>Error loading posts: {postsError.message}</div></div>}
-          {!isLoadingPosts && !postsError && posts.length === 0 && <div className="text-center py-10"><FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">No posts saved in this collection.</p></div>}
-          {!isLoadingPosts && !postsError && posts.length > 0 && (
-            <div className="md:space-y-4">
-              {posts.map((post, index) => (
-                <React.Fragment key={post.id}>
-                  <div className="md:rounded-lg md:border md:shadow-sm md:hover:shadow-md md:mb-4 transition-shadow bg-background">
-                    <PostItem post={post} onRemove={() => setItemToRemove({ id: post.id, title: post.question, type: 'post' })} removeMutationPending={removeMutation.isPending && itemToRemove?.id === post.id} />
-                  </div>
-                  {index < posts.length - 1 && <Separator className="md:hidden" />}
-                </React.Fragment>
-              ))}
-            </div>
-          )}
+        <TabsContent value="posts" className="flex-grow min-h-0">
+            <ScrollArea className="h-full">
+            {isLoadingPosts && <div className="flex justify-center items-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}
+            {postsError && <div className="text-destructive flex items-center gap-2 text-sm p-4 bg-destructive/5 rounded-md justify-center"><AlertTriangle className="h-5 w-5 flex-shrink-0" /><div>Error loading posts: {postsError.message}</div></div>}
+            {!isLoadingPosts && !postsError && posts.length === 0 && <div className="text-center py-10"><FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">No posts saved in this collection.</p></div>}
+            {!isLoadingPosts && !postsError && posts.length > 0 && (
+                <div className="space-y-0 md:space-y-4">
+                {posts.map((post, index) => (
+                    <React.Fragment key={post.id}>
+                    <div className="md:rounded-lg md:border md:shadow-sm md:hover:shadow-md transition-shadow bg-background">
+                        <PostItem post={post} onRemove={() => setItemToRemove({ id: post.id, title: post.question, type: 'post' })} removeMutationPending={removeMutation.isPending && itemToRemove?.id === post.id} />
+                    </div>
+                    {index < posts.length - 1 && <Separator className="md:hidden" />}
+                    </React.Fragment>
+                ))}
+                </div>
+            )}
+            </ScrollArea>
         </TabsContent>
-        <TabsContent value="articles">
-          {isLoadingArticles && <div className="flex justify-center items-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}
-          {articlesError && <div className="text-destructive flex items-center gap-2 text-sm p-4 bg-destructive/5 rounded-md justify-center"><AlertTriangle className="h-5 w-5 flex-shrink-0" /><div>Error loading articles: {articlesError.message}</div></div>}
-          {!isLoadingArticles && !articlesError && articles.length === 0 && <div className="text-center py-10"><FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">No articles saved in this collection.</p></div>}
-          {!isLoadingArticles && !articlesError && articles.length > 0 && (
-            <div className="md:space-y-4">
-              {articles.map((article, index) => (
-                <React.Fragment key={article.id}>
-                  <div className="md:rounded-lg md:border md:shadow-sm md:hover:shadow-md md:mb-4 transition-shadow bg-background">
-                     <ArticleItem article={article} onRemove={() => setItemToRemove({ id: article.id, title: article.title, type: 'article' })} removeMutationPending={removeMutation.isPending && itemToRemove?.id === article.id} />
-                  </div>
-                  {index < articles.length - 1 && <Separator className="md:hidden" />}
-                </React.Fragment>
-              ))}
-            </div>
-          )}
+        <TabsContent value="articles" className="flex-grow min-h-0">
+            <ScrollArea className="h-full">
+            {isLoadingArticles && <div className="flex justify-center items-center py-10"><Loader2 className="h-8 w-8 animate-spin text-primary" /></div>}
+            {articlesError && <div className="text-destructive flex items-center gap-2 text-sm p-4 bg-destructive/5 rounded-md justify-center"><AlertTriangle className="h-5 w-5 flex-shrink-0" /><div>Error loading articles: {articlesError.message}</div></div>}
+            {!isLoadingArticles && !articlesError && articles.length === 0 && <div className="text-center py-10"><FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">No articles saved in this collection.</p></div>}
+            {!isLoadingArticles && !articlesError && articles.length > 0 && (
+                <div className="space-y-0 md:space-y-4">
+                {articles.map((article, index) => (
+                    <React.Fragment key={article.id}>
+                    <div className="md:rounded-lg md:border md:shadow-sm md:hover:shadow-md transition-shadow bg-background">
+                        <ArticleItem article={article} onRemove={() => setItemToRemove({ id: article.id, title: article.title, type: 'article' })} removeMutationPending={removeMutation.isPending && itemToRemove?.id === article.id} />
+                    </div>
+                    {index < articles.length - 1 && <Separator className="md:hidden" />}
+                    </React.Fragment>
+                ))}
+                </div>
+            )}
+            </ScrollArea>
         </TabsContent>
       </Tabs>
       
