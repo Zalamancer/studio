@@ -9,7 +9,7 @@ import { getRecentPlans } from '@/services/planService';
 import type { ClientPlan } from '@/types/plan';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Loader2, AlertTriangle, MapPin, Layers, Filter, FilterX, Tag, PlusCircle, Search, X, Compass, Edit2, Users, LayoutGrid } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Layers, FilterX, Tag, PlusCircle, Search, X, ListFilter, Users, LayoutGrid } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -19,6 +19,17 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { detailedSectorsData } from '@/components/layout/MainLayout';
+import { useIsMobile } from '@/hooks/use-mobile';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogFooter,
+  DialogClose,
+} from '@/components/ui/dialog';
 
 const DiscoverPage = () => {
   const { user } = useAuth();
@@ -27,10 +38,12 @@ const DiscoverPage = () => {
     queryFn: () => getRecentPlans(50), // Fetch more plans for better filtering
     staleTime: 1000 * 60 * 5,
   });
+  const isMobile = useIsMobile();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
   const [isSectorFilterOpen, setIsSectorFilterOpen] = useState(false);
+  const [isFilterDialogOpen, setIsFilterDialogOpen] = useState(false);
   const [isHeaderSearchActive, setIsHeaderSearchActive] = useState(false);
   const headerSearchInputRef = useRef<HTMLInputElement>(null);
   const [activePlanView, setActivePlanView] = useState<'all' | 'my_plans'>('all');
@@ -51,9 +64,14 @@ const DiscoverPage = () => {
     setSearchTerm('');
     setSelectedSectors([]);
     setActivePlanView('all'); // Reset view to 'all'
-    setIsSectorFilterOpen(false);
+    if (isMobile) {
+        setIsFilterDialogOpen(false);
+    } else {
+        setIsSectorFilterOpen(false);
+    }
     if (isHeaderSearchActive) setIsHeaderSearchActive(false); // Close search input if open
-  }, [isHeaderSearchActive]);
+  }, [isHeaderSearchActive, isMobile]);
+
 
   const toggleHeaderSearch = () => {
     setIsHeaderSearchActive(prev => {
@@ -109,11 +127,59 @@ const DiscoverPage = () => {
     return { numNodes, numChildren };
   };
 
+  const FilterContent = () => (
+    <div className={cn("space-y-4", isMobile ? "p-4" : "p-3 w-72")}>
+       <div className="space-y-1.5">
+            <Label className="text-xs font-medium text-muted-foreground">View</Label>
+            <div className="flex items-center gap-2 flex-shrink-0">
+                <Button 
+                    variant={activePlanView === 'all' ? "secondary" : "ghost"}
+                    size="sm" 
+                    onClick={() => setActivePlanView('all')}
+                    className={cn("h-9 px-3 text-xs rounded-full flex-1", activePlanView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                >
+                    <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> All Plans
+                </Button>
+                {user && (
+                    <Button 
+                        variant={activePlanView === 'my_plans' ? "secondary" : "ghost"}
+                        size="sm" 
+                        onClick={() => setActivePlanView('my_plans')}
+                        className={cn("h-9 px-3 text-xs rounded-full flex-1", activePlanView === 'my_plans' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                    >
+                        <Users className="mr-1.5 h-3.5 w-3.5" /> My Plans
+                    </Button>
+                )}
+            </div>
+      </div>
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">Filter by Sector {selectedSectors.length > 0 && `(${selectedSectors.length})`}</Label>
+        <ScrollArea className="h-48 rounded-md border p-2.5">
+          <div className="space-y-1.5">
+            {availableSectorsForFilter.length > 0 ? (
+              availableSectorsForFilter.map((sector) => (
+                <div key={sector.code} className="flex items-center space-x-2">
+                  <Checkbox id={`sector-filter-${sector.code}`} checked={selectedSectors.includes(sector.code)} onCheckedChange={() => handleSectorToggle(sector.code)} />
+                  <Label htmlFor={`sector-filter-${sector.code}`} className="text-xs font-normal">{sector.name}</Label>
+                </div>
+              ))
+            ) : (<p className="text-xs text-muted-foreground text-center">No sectors available.</p>)}
+          </div>
+        </ScrollArea>
+        {selectedSectors.length > 0 && (
+          <div className="pt-2">
+            <Button variant="ghost" size="xs" onClick={() => setSelectedSectors([])} className="w-full text-primary">Clear Sector Filters</Button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div className="container mx-auto p-4 md:p-6 min-h-screen">
 
       {/* Sticky Filter Bar */}
-      <div className="mb-6 flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b -mx-4 md:-mx-6 px-4 md:px-6">
+      <div className="mb-6 flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
         <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className="flex-shrink-0 h-9 w-9 p-2">
           {isHeaderSearchActive ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
         </Button>
@@ -129,71 +195,89 @@ const DiscoverPage = () => {
           />
         ) : (
           <>
-            {/* View Toggles */}
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Button 
-                  variant={activePlanView === 'all' ? "secondary" : "ghost"}
-                  size="sm" 
-                  onClick={() => setActivePlanView('all')}
-                  className={cn("h-9 px-3 text-xs rounded-full", activePlanView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-              >
-                  <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> All Plans
-              </Button>
-              {user && (
-                  <Button 
-                      variant={activePlanView === 'my_plans' ? "secondary" : "ghost"}
-                      size="sm" 
-                      onClick={() => setActivePlanView('my_plans')}
-                      className={cn("h-9 px-3 text-xs rounded-full", activePlanView === 'my_plans' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
-                  >
-                      <Users className="mr-1.5 h-3.5 w-3.5" /> My Plans
-                  </Button>
-              )}
-            </div>
-
-            <div className="flex-grow"></div> {/* Spacer */}
-
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Popover open={isSectorFilterOpen} onOpenChange={setIsSectorFilterOpen}>
-                <PopoverTrigger asChild>
-                  <Button variant="outline" size="sm" className="h-9 text-xs">
-                    <Tag className="mr-1.5 h-3.5 w-3.5" />
-                    Filter by Sector {selectedSectors.length > 0 && `(${selectedSectors.length})`}
-                  </Button>
-                </PopoverTrigger>
-                <PopoverContent className="w-72 p-0" align="end">
-                  <div className="p-3 border-b"><p className="text-sm font-medium">Filter by Sector</p></div>
-                  <ScrollArea className="h-48">
-                    <div className="p-3 space-y-1.5">
-                      {availableSectorsForFilter.length > 0 ? (
-                        availableSectorsForFilter.map((sector) => (
-                          <div key={sector.code} className="flex items-center space-x-2">
-                            <Checkbox id={`sector-filter-${sector.code}`} checked={selectedSectors.includes(sector.code)} onCheckedChange={() => handleSectorToggle(sector.code)} />
-                            <Label htmlFor={`sector-filter-${sector.code}`} className="text-xs font-normal">{sector.name}</Label>
-                          </div>
-                        ))
-                      ) : (<p className="text-xs text-muted-foreground text-center">No sectors available.</p>)}
+            {isMobile ? (
+                 <div className="flex w-full items-center gap-2">
+                    <Dialog open={isFilterDialogOpen} onOpenChange={setIsFilterDialogOpen}>
+                      <DialogTrigger asChild>
+                        <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
+                          <ListFilter className="h-5 w-5" />
+                          <span className="sr-only">Filters</span>
+                          {activeFilterCount > 0 && (
+                              <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
+                                  {activeFilterCount}
+                              </span>
+                          )}
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
+                          <DialogHeader className="p-4 border-b">
+                              <DialogTitle>Filter Plans</DialogTitle>
+                              <DialogDescription>Refine plans by type or sector.</DialogDescription>
+                          </DialogHeader>
+                          <ScrollArea className="flex-grow min-h-0"><FilterContent /></ScrollArea>
+                          <DialogFooter className="p-4 border-t flex flex-row items-center justify-between">
+                            {activeFilterCount > 0 && <Button variant="ghost" size="sm" onClick={clearAllFilters} className="text-primary">Clear All</Button>}
+                            <DialogClose asChild>
+                              <Button type="button" variant="default" size="sm">Done</Button>
+                            </DialogClose>
+                          </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                    {user && (
+                      <Button asChild size="sm" className="text-xs flex-1 h-9">
+                        <Link href="/plan/create"><PlusCircle className="h-4 w-4 mr-1.5" />Create Plan</Link>
+                      </Button>
+                    )}
+                 </div>
+            ) : (
+                <>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <Button 
+                        variant={activePlanView === 'all' ? "secondary" : "ghost"}
+                        size="sm" 
+                        onClick={() => setActivePlanView('all')}
+                        className={cn("h-9 px-3 text-xs rounded-full", activePlanView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                    >
+                        <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> All Plans
+                    </Button>
+                    {user && (
+                        <Button 
+                            variant={activePlanView === 'my_plans' ? "secondary" : "ghost"}
+                            size="sm" 
+                            onClick={() => setActivePlanView('my_plans')}
+                            className={cn("h-9 px-3 text-xs rounded-full", activePlanView === 'my_plans' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+                        >
+                            <Users className="mr-1.5 h-3.5 w-3.5" /> My Plans
+                        </Button>
+                    )}
                     </div>
-                  </ScrollArea>
-                  {selectedSectors.length > 0 && (
-                    <div className="p-3 border-t">
-                      <Button variant="ghost" size="xs" onClick={() => { setSelectedSectors([]); setIsSectorFilterOpen(false); }} className="w-full text-primary">Clear Sector Filters</Button>
+    
+                    <div className="flex-grow"></div> {/* Spacer */}
+    
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                    <Popover open={isSectorFilterOpen} onOpenChange={setIsSectorFilterOpen}>
+                        <PopoverTrigger asChild>
+                        <Button variant="outline" size="sm" className="h-9 text-xs">
+                            <Tag className="mr-1.5 h-3.5 w-3.5" />
+                            Filter by Sector {selectedSectors.length > 0 && `(${selectedSectors.length})`}
+                        </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-72 p-0" align="end"><FilterContent /></PopoverContent>
+                    </Popover>
+    
+                    {activeFilterCount > 0 && (
+                        <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline">
+                        <FilterX className="mr-1.5 h-3.5 w-3.5" /> Clear All ({activeFilterCount})
+                        </Button>
+                    )}
                     </div>
-                  )}
-                </PopoverContent>
-              </Popover>
-
-              {activeFilterCount > 0 && (
-                <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline">
-                  <FilterX className="mr-1.5 h-3.5 w-3.5" /> Clear Filters ({activeFilterCount})
-                </Button>
-              )}
-            </div>
-
-            {user && (
-              <Button asChild size="sm" className="ml-2 h-9 px-3 text-xs flex-shrink-0">
-                <Link href="/plan/create"><PlusCircle className="mr-2 h-4 w-4" /> Create Plan</Link>
-              </Button>
+    
+                    {user && (
+                    <Button asChild size="sm" className="ml-2 h-9 px-3 text-xs flex-shrink-0">
+                        <Link href="/plan/create"><PlusCircle className="mr-2 h-4 w-4" /> Create Plan</Link>
+                    </Button>
+                    )}
+                </>
             )}
           </>
         )}
