@@ -70,79 +70,80 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
   };
 
   return (
-    <Card className="shadow-lg border-border">
-      <CardHeader>
-        <CardTitle className="truncate">{collection.name}</CardTitle>
-        <CardDescription className="truncate">
+    <div>
+      <div className="mb-6">
+        <h2 className="text-2xl font-bold truncate text-foreground">{collection.name}</h2>
+        <p className="text-sm text-muted-foreground truncate">
           {collection.description || "Posts saved in this collection."}
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        {isLoading && (
-          <div className="flex justify-center items-center py-10">
-            <Loader2 className="h-8 w-8 animate-spin text-primary" />
-            <p className="ml-3 text-muted-foreground">Loading posts...</p>
-          </div>
-        )}
-        {error && (
-          <div className="text-destructive flex items-center gap-2 text-sm p-4 bg-destructive/5 rounded-md justify-center">
-            <AlertTriangle className="h-5 w-5 flex-shrink-0" />
-            <div>Error loading posts: {error.message}</div>
-          </div>
-        )}
-        {!isLoading && !error && posts.length === 0 && (
-          <div className="text-center py-10">
-            <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
-            <p className="text-muted-foreground">This collection is empty.</p>
-            <p className="text-xs text-muted-foreground mt-1">Add posts from the main board.</p>
-          </div>
-        )}
-        {!isLoading && !error && posts.length > 0 && (
-          <div className="space-y-4 max-h-[calc(100vh-20rem)] overflow-y-auto pr-2">
-            {posts.map((post) => (
-              <Card key={post.id} className="shadow-sm hover:shadow-md transition-shadow bg-muted/30">
-                <CardHeader className="p-3 pb-2">
-                  <div className="flex justify-between items-start">
-                    <Link 
-                      href={`/?postId=${post.id}`} 
-                      className="text-sm font-semibold text-foreground hover:text-primary line-clamp-2 flex-grow" 
-                      target="_blank" 
-                      rel="noopener noreferrer"
-                    >
-                      {post.question}
-                    </Link>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-6 w-6 p-1 text-destructive hover:text-destructive flex-shrink-0 ml-2"
-                      onClick={() => setPostToRemove({ postId: post.id, postTitle: post.question })}
-                      disabled={removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id}
-                      title="Remove from collection"
-                    >
-                      {removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id
-                        ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        : <Trash2 className="h-3.5 w-3.5" />}
-                    </Button>
-                  </div>
-                   {post.imageUrls && post.imageUrls.length > 0 && (
-                        <div className="mt-1.5 rounded overflow-hidden aspect-[16/9] relative max-h-24">
-                            <Image src={post.imageUrls[0]} alt="Post image" fill style={{objectFit:"cover"}} data-ai-hint="abstract illustration"/>
+        </p>
+      </div>
+
+      {isLoading && (
+        <div className="flex justify-center items-center py-10">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="ml-3 text-muted-foreground">Loading posts...</p>
+        </div>
+      )}
+      {error && (
+        <div className="text-destructive flex items-center gap-2 text-sm p-4 bg-destructive/5 rounded-md justify-center">
+          <AlertTriangle className="h-5 w-5 flex-shrink-0" />
+          <div>Error loading posts: {error.message}</div>
+        </div>
+      )}
+      {!isLoading && !error && posts.length === 0 && (
+        <div className="text-center py-10">
+          <FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" />
+          <p className="text-muted-foreground">This collection is empty.</p>
+          <p className="text-xs text-muted-foreground mt-1">Add posts from the main board.</p>
+        </div>
+      )}
+      {!isLoading && !error && posts.length > 0 && (
+        <div className="space-y-4 max-h-[calc(100vh-16rem)] overflow-y-auto pr-2">
+          {posts.map((post) => (
+            <Card key={post.id} className="shadow-md hover:shadow-lg transition-shadow bg-background">
+              <CardContent className="p-4 flex gap-4">
+                 {post.imageUrls && post.imageUrls.length > 0 && (
+                      <div className="relative w-24 h-24 flex-shrink-0 rounded-md overflow-hidden bg-muted">
+                          <Image src={post.imageUrls[0]} alt="Post image" fill style={{objectFit:"cover"}} data-ai-hint="abstract illustration"/>
+                      </div>
+                 )}
+                <div className="flex-grow min-w-0">
+                    <div className="flex justify-between items-start">
+                        <div className='flex-grow min-w-0'>
+                            <div className="flex flex-wrap gap-1 mb-2">
+                                {post.tags?.slice(0,3).map(tag => <Badge key={`${post.id}-${tag}`} variant="secondary" className="text-xs">{tag}</Badge>)}
+                            </div>
+                            <Link 
+                            href={`/?postId=${post.id}`} 
+                            className="text-base font-semibold text-foreground hover:text-primary line-clamp-2" 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            >
+                            {post.question}
+                            </Link>
                         </div>
-                   )}
-                </CardHeader>
-                <CardContent className="p-3 pt-1">
-                  <div className="flex flex-wrap gap-1 mb-1.5">
-                    {post.tags.slice(0,3).map(tag => <Badge key={`${post.id}-${tag}`} variant="secondary" className="text-xs">{tag}</Badge>)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 p-1 text-destructive hover:text-destructive flex-shrink-0 ml-2"
+                          onClick={() => setPostToRemove({ postId: post.id, postTitle: post.question })}
+                          disabled={removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id}
+                          title="Remove from collection"
+                        >
+                          {removePostMutation.isPending && removePostMutation.variables?.postIdToRemove === post.id
+                            ? <Loader2 className="h-4 w-4 animate-spin" />
+                            : <Trash2 className="h-4 w-4" />}
+                        </Button>
+                    </div>
+                   <p className="text-xs text-muted-foreground mt-2">
                     Added on: {post.createdAt instanceof Timestamp ? post.createdAt.toDate().toLocaleDateString() : 'Date unavailable'}
-                  </p>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </CardContent>
+                   </p>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
       
       <AlertDialog open={!!postToRemove} onOpenChange={(open) => !open && setPostToRemove(null)}>
         <AlertDialogContent>
@@ -167,8 +168,6 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </Card>
+    </div>
   );
 };
-
-    
