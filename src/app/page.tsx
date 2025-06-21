@@ -4,7 +4,7 @@
 
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button } from '@/components/ui/button';
+import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
@@ -430,10 +430,7 @@ const BoardPageContent = () => {
   };
 
   return (
-    <div className={cn(
-        "flex flex-col flex-grow",
-        isMobile ? "p-0" : "md:container md:mx-auto pt-0 md:pt-6"
-    )}>
+    <div className="flex flex-col flex-grow md:container md:mx-auto md:pt-6">
       {isMobile && isFilterViewVisible && (
         <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
           <FilterContent />
