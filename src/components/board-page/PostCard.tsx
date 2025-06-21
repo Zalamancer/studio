@@ -33,14 +33,14 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
   return (
     <Card
       className={cn(
-        "overflow-hidden transition-shadow duration-200 cursor-pointer bg-card", // Removed shadow classes
+        "overflow-hidden transition-shadow duration-200 cursor-pointer bg-card",
         "md:break-inside-avoid",
-        "mb-4 md:mb-0", // Vertical separation on mobile
-        "md:border-border border-b", // Desktop border, mobile bottom border
+        "mb-2 md:mb-0", // Smaller, consistent bottom margin on mobile, removed on desktop
+        "md:border-border border-b",
         post.requestType === 'help_request' && "border-amber-500/70 hover:border-amber-500",
-        isSelected && "ring-2 ring-primary ring-offset-2", // Removed shadow class
-        "md:border", // ensures border all around on desktop
-        "rounded-none md:rounded-lg" // No rounding on mobile, rounded on desktop
+        isSelected && "ring-2 ring-primary ring-offset-2",
+        "md:border",
+        "rounded-none md:rounded-lg"
       )}
       onClick={() => onOpen(post)}
       aria-label={`View details for post: ${post.question}`}
