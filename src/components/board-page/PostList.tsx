@@ -19,7 +19,7 @@ import {
   DialogClose,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search, PlusCircle, X } from "lucide-react";
+import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search, PlusCircle, X, ListFilter } from "lucide-react";
 import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
@@ -103,7 +103,6 @@ export const PostList: React.FC<PostListProps> = ({
       setSelectedIndustryFilter(undefined);
     } else {
       setAvailableIndustries([]);
-      setSelectedIndustryFilter(undefined);
     }
   }, [selectedSubSectorFilter, availableSubSectors]);
 
@@ -273,9 +272,14 @@ export const PostList: React.FC<PostListProps> = ({
                     <div className="flex w-full items-center gap-2">
                         <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
                             <DialogTrigger asChild>
-                                <Button size="sm" variant="outline" className="text-xs flex-1 h-9">
-                                    <Filter className="h-3.5 w-3.5 mr-1.5" />
-                                    Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+                                <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
+                                    <ListFilter className="h-5 w-5" />
+                                    <span className="sr-only">Filters</span>
+                                    {activeFilterCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
+                                            {activeFilterCount}
+                                        </span>
+                                    )}
                                 </Button>
                             </DialogTrigger>
                             <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
