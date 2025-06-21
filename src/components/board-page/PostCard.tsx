@@ -3,7 +3,7 @@
 "use client";
 
 import React from 'react';
-import { Card, CardHeader, CardContent } from "@/components/ui/card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import Image from 'next/image';
 import { Timestamp } from 'firebase/firestore';
@@ -28,12 +28,14 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
     ? new Date(post.createdAt).toLocaleDateString()
     : 'Date unavailable';
 
-  const descriptionToDisplay = post.descriptionDetails || ""; // Always use descriptionDetails
+  const descriptionToDisplay = post.descriptionDetails || "";
+  const hasImage = post.imageUrls && post.imageUrls.length > 0;
 
   return (
     <Card
       className={cn(
-        "mb-4 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-200 cursor-pointer break-inside-avoid bg-card",
+        "overflow-hidden rounded-lg shadow-sm hover:shadow-md transition-shadow duration-200 cursor-pointer bg-card",
+        "md:break-inside-avoid", // For desktop masonry layout
         post.requestType === 'help_request' && "border-2 border-amber-500/70 hover:border-amber-500",
         isSelected && "ring-2 ring-primary ring-offset-2 shadow-primary/20"
       )}
@@ -42,62 +44,67 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onOpen(post)}
     >
-      <CardHeader className="p-4 pb-3">
-        <div className="flex flex-wrap items-center gap-2 mb-2">
-          {post.requestType === 'help_request' && (
-            <Badge variant="outline" className="text-xs cursor-default border-amber-500 text-amber-600 bg-amber-500/10">
-              <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
-            </Badge>
-          )}
-          {post.requestType === 'help_request' && post.maxBudget != null && ( // Check for not null or undefined
-            <Badge variant="secondary" className="text-xs cursor-default">
-              <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
-            </Badge>
-          )}
-          {post.tags?.map((tag, index) => (
-            <Badge key={`${post.id}-tag-${index}`} variant="outline" className="text-xs cursor-default">
-              {tag}
-            </Badge>
-          ))}
-        </div>
-        <h3 className="text-base font-semibold leading-snug text-card-foreground line-clamp-3">{post.question}</h3>
-      </CardHeader>
-      <CardContent className="p-4 pt-0">
-        {post.imageUrls && post.imageUrls.length > 0 && (
-          <div className="mb-3 rounded-md overflow-hidden aspect-[4/3] relative">
+      <div className={cn("flex flex-row md:flex-col")}>
+        {hasImage && (
+          <div className="relative flex-shrink-0 bg-muted 
+                        w-24 h-24 sm:w-28 sm:h-28 md:w-full md:h-auto md:aspect-[4/3]
+                        m-3 md:m-0 rounded-md md:rounded-none md:rounded-t-lg overflow-hidden">
             <Image
-              src={post.imageUrls[0]}
+              src={post.imageUrls![0]}
               alt={post.question}
               fill
-              sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
+              sizes="(max-width: 767px) 112px, (min-width: 768px) 50vw"
               className="object-cover"
               data-ai-hint={post.tags && post.tags.length > 0 ? post.tags.slice(0, 2).join(' ') : 'abstract'}
-              priority={isPriority} // Apply priority prop
-              loading={isPriority ? undefined : "lazy"} // Conditionally set loading
+              priority={isPriority}
             />
           </div>
         )}
-        {descriptionToDisplay && (
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-            <TextWithMentions text={descriptionToDisplay} mentionedUserIds={post.mentionedUserIds || []} />
-          </p>
-        )}
-        <div className="flex items-center justify-between text-xs text-muted-foreground/80">
-          <span>Posted: {postDate}</span>
-          <div className="flex items-center gap-2">
-            {post.ratingScore != null && ( // Check for not null or undefined
-              <div className="flex items-center">
-                <Star className={cn("h-3.5 w-3.5 mr-0.5", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
-                <span>{post.ratingScore.toFixed(1)}</span>
-              </div>
+
+        <div className={cn("flex flex-col flex-grow p-3 md:p-4 min-w-0 justify-between", !hasImage && "w-full")}>
+          <div>
+            <div className="flex flex-wrap items-center gap-2 mb-2">
+              {post.requestType === 'help_request' && (
+                <Badge variant="outline" className="text-xs cursor-default border-amber-500 text-amber-600 bg-amber-500/10">
+                  <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
+                </Badge>
+              )}
+              {post.requestType === 'help_request' && post.maxBudget != null && (
+                <Badge variant="secondary" className="text-xs cursor-default">
+                  <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
+                </Badge>
+              )}
+              {post.tags?.map((tag, index) => (
+                <Badge key={`${post.id}-tag-${index}`} variant="outline" className="text-xs cursor-default">
+                  {tag}
+                </Badge>
+              ))}
+            </div>
+            <h3 className="text-base font-semibold leading-snug text-card-foreground line-clamp-3 md:line-clamp-2">{post.question}</h3>
+            {descriptionToDisplay && (
+              <p className="text-sm text-muted-foreground line-clamp-2 mt-1 md:block">
+                <TextWithMentions text={descriptionToDisplay} mentionedUserIds={post.mentionedUserIds || []} />
+              </p>
             )}
-            <div className="flex items-center">
-                <MessageSquare className="h-3.5 w-3.5 mr-0.5" />
-                <span>{post.commentCount || 0}</span>
+          </div>
+
+          <div className="flex items-center justify-between text-xs text-muted-foreground/80 pt-2 mt-auto">
+            <span>Posted: {postDate}</span>
+            <div className="flex items-center gap-2">
+              {post.ratingScore != null && (
+                <div className="flex items-center">
+                  <Star className={cn("h-3.5 w-3.5 mr-0.5", post.ratingScore > 0 ? "fill-yellow-400 text-yellow-500" : "text-muted-foreground")} />
+                  <span>{post.ratingScore.toFixed(1)}</span>
+                </div>
+              )}
+              <div className="flex items-center">
+                  <MessageSquare className="h-3.5 w-3.5 mr-0.5" />
+                  <span>{post.commentCount || 0}</span>
+              </div>
             </div>
           </div>
         </div>
-      </CardContent>
+      </div>
     </Card>
   );
 });
