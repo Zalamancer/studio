@@ -5,11 +5,13 @@ import React, { createContext, useState, useContext, ReactNode, useCallback } fr
 
 // Type definition for the context's state and functions
 interface PageContextType {
-  isSearchFilterVisible: boolean;
-  setSearchFilterVisible: React.Dispatch<React.SetStateAction<boolean>>;
-  // A function to handle the "Create" action, which will be defined by the active page
+  isSearchOverlayVisible: boolean;
+  setSearchOverlayVisible: React.Dispatch<React.SetStateAction<boolean>>;
+  isFilterViewVisible: boolean;
+  setFilterViewVisible: React.Dispatch<React.SetStateAction<boolean>>;
+  searchTerm: string;
+  setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   handleCreateClick: () => void;
-  // A function for the active page to register its specific "Create" action
   setHandleCreateClick: (fn: () => void) => void;
 }
 
@@ -18,12 +20,12 @@ const PageContext = createContext<PageContextType | undefined>(undefined);
 
 // The provider component that will wrap parts of our app
 export const PageProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [isSearchFilterVisible, setSearchFilterVisible] = useState(false);
+  const [isSearchOverlayVisible, setSearchOverlayVisible] = useState(false);
+  const [isFilterViewVisible, setFilterViewVisible] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
   
-  // State to hold the current page's "Create" action handler
   const [createHandler, setCreateHandler] = useState<() => void>(() => () => console.log("Default create handler called."));
 
-  // useCallback to memoize the function that sets the handler
   const setHandleCreateClick = useCallback((fn: () => void) => {
     setCreateHandler(() => fn);
   }, []);
@@ -31,8 +33,12 @@ export const PageProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   return (
     <PageContext.Provider 
       value={{ 
-        isSearchFilterVisible, 
-        setSearchFilterVisible, 
+        isSearchOverlayVisible, 
+        setSearchOverlayVisible,
+        isFilterViewVisible,
+        setFilterViewVisible,
+        searchTerm,
+        setSearchTerm,
         handleCreateClick: createHandler, 
         setHandleCreateClick 
       }}

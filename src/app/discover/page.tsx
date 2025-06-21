@@ -19,13 +19,13 @@ import { Label } from '@/components/ui/label';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { detailedSectorsData } from '@/components/layout/MainLayout';
 import { useIsMobile } from '@/hooks/use-mobile';
-import { usePage } from '@/contexts/PageContext'; // Import context
-import { useRouter } from 'next/navigation'; // Import router
+import { usePage } from '@/contexts/PageContext';
+import { useRouter } from 'next/navigation';
 
 const DiscoverPage = () => {
   const { user } = useAuth();
   const router = useRouter();
-  const { isSearchFilterVisible, setHandleCreateClick } = usePage();
+  const { isFilterViewVisible, setHandleCreateClick, searchTerm, setSearchTerm } = usePage();
   
   const { data: plans, isLoading, error } = useQuery<ClientPlan[], Error>({
     queryKey: ['recentPlansDiscoverPage'],
@@ -34,11 +34,9 @@ const DiscoverPage = () => {
   });
   const isMobile = useIsMobile();
 
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
   const [activePlanView, setActivePlanView] = useState<'all' | 'my_plans'>('all');
 
-  // Register this page's create action with the context
   useEffect(() => {
     setHandleCreateClick(() => router.push('/plan/create'));
   }, [setHandleCreateClick, router]);
@@ -59,7 +57,7 @@ const DiscoverPage = () => {
     setSearchTerm('');
     setSelectedSectors([]);
     setActivePlanView('all');
-  }, []);
+  }, [setSearchTerm]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -107,17 +105,7 @@ const DiscoverPage = () => {
 
   const FilterContent = () => (
     <div className="space-y-4 p-4 border-b">
-       <div className="relative">
-          <Input
-              type="search"
-              placeholder="Search plans by keyword..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-9 text-xs pl-8"
-              aria-label="Search plans"
-          />
-          <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-       </div>
+       {/* Search Input is now in the main header */}
 
        <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">View</Label>
@@ -171,10 +159,10 @@ const DiscoverPage = () => {
   );
 
   return (
-    <div className="container mx-auto p-4 md:p-6 min-h-screen">
+    <div className="container mx-auto p-4 md:px-6 min-h-screen flex flex-col relative">
       {/* Desktop Filter Bar */}
       {!isMobile && (
-        <div className="flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
+        <div className="flex items-center gap-2 sticky top-[56px] z-30 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
           <Popover>
             <PopoverTrigger asChild>
               <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
@@ -207,10 +195,13 @@ const DiscoverPage = () => {
         </div>
       )}
 
-      {/* Mobile Filter View */}
-      {isMobile && isSearchFilterVisible && <FilterContent />}
+      {isMobile && isFilterViewVisible && (
+        <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
+          <FilterContent />
+        </div>
+      )}
 
-      <div className="mt-6">
+      <div className={cn("mt-6 flex-grow", isMobile && isFilterViewVisible && "hidden")}>
         {isLoading && (
           <div className="flex justify-center items-center py-10">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />

@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Newspaper, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Search, X, Handshake, Bookmark } from "lucide-react";
+import { Home, Compass, MessageSquare, Newspaper, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Search, X, Handshake, Bookmark, ListFilter } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,7 +29,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import dynamic from 'next/dynamic';
 import { cn } from '@/lib/utils';
 import { fetchFullUserProfile } from '@/services/connectionService';
-import { usePage } from '@/contexts/PageContext'; // Import the new context hook
+import { usePage } from '@/contexts/PageContext';
+import { Input } from '@/components/ui/input';
 
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
@@ -88,12 +89,21 @@ export default function MainLayout({
   const pathname = usePathname();
   const isMobile = useIsMobile();
   const queryClient = useQueryClient();
-  const { isSearchFilterVisible, setSearchFilterVisible, handleCreateClick } = usePage(); // Use the new context
+  const { 
+    isSearchOverlayVisible, 
+    setSearchOverlayVisible, 
+    isFilterViewVisible, 
+    setFilterViewVisible, 
+    searchTerm,
+    setSearchTerm,
+    handleCreateClick 
+  } = usePage();
 
-  // Reset search/filter view when pathname changes
   useEffect(() => {
-    setSearchFilterVisible(false);
-  }, [pathname, setSearchFilterVisible]);
+    setSearchOverlayVisible(false);
+    setFilterViewVisible(false);
+    setSearchTerm('');
+  }, [pathname, setSearchOverlayVisible, setFilterViewVisible, setSearchTerm]);
 
 
   const handlePrefetchSettings = useCallback(() => {
@@ -149,15 +159,41 @@ export default function MainLayout({
 
   const hideAppChrome = false;
   
-  // Determine if the current page should show the contextual header icons
   const showContextualHeaderIcons = user && ['/', '/discover', '/news'].some(p => pathname === p || pathname.startsWith(p + '/'));
 
   return (
     <div className={rootLayoutClasses}>
       {!hideAppChrome && (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center px-4">
-            <div className="mr-4 flex items-center">
+          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center px-4 relative">
+            {/* Mobile Search Overlay */}
+            {isMobile && isSearchOverlayVisible && (
+              <div className="absolute inset-0 bg-background z-10 flex items-center gap-2 px-2 sm:px-4">
+                <Input
+                  placeholder="Search..."
+                  className="h-9 text-sm flex-grow"
+                  autoFocus
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                />
+                <Button variant="outline" size="sm" className="h-9 px-2.5" onClick={() => setFilterViewVisible(prev => !prev)}>
+                  <ListFilter className="h-4 w-4 mr-1.5" />
+                  Filters
+                </Button>
+                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => {
+                  setSearchOverlayVisible(false);
+                  setFilterViewVisible(false);
+                  setSearchTerm('');
+                }}>
+                  <X className="h-5 w-5" />
+                </Button>
+              </div>
+            )}
+
+            <div className={cn(
+              "mr-4 flex items-center",
+              isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
+            )}>
               <Link href="/" className="mr-2 flex items-center space-x-2" aria-label="Go to homepage">
                 <Handshake className="h-6 w-6 text-primary" />
                  <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
@@ -181,7 +217,10 @@ export default function MainLayout({
               </nav>
             </div>
 
-            <div className="flex flex-1 items-center justify-end space-x-2 md:space-x-3">
+            <div className={cn(
+              "flex flex-1 items-center justify-end space-x-2 md:space-x-3",
+              isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
+            )}>
               {authLoading ? (
                 <div className="flex items-center space-x-2">
                   <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
@@ -189,12 +228,11 @@ export default function MainLayout({
                 </div>
               ) : user ? (
                 <>
-                  {/* --- Mobile Contextual Header Icons --- */}
                   {isMobile && showContextualHeaderIcons && (
                     <div className="flex items-center gap-1">
-                       <Button variant="ghost" size="icon" onClick={() => setSearchFilterVisible(prev => !prev)} className="h-8 w-8">
-                         {isSearchFilterVisible ? <X className="h-5 w-5"/> : <Search className="h-5 w-5"/>}
-                         <span className="sr-only">{isSearchFilterVisible ? 'Close Search & Filters' : 'Open Search & Filters'}</span>
+                       <Button variant="ghost" size="icon" onClick={() => setSearchOverlayVisible(true)} className="h-8 w-8">
+                         <Search className="h-5 w-5"/>
+                         <span className="sr-only">Search</span>
                        </Button>
                        <Button variant="ghost" size="icon" onClick={handleCreateClick} className="h-8 w-8">
                          <PlusCircle className="h-5 w-5"/>
@@ -243,7 +281,7 @@ export default function MainLayout({
           </div>
         </header>
       )}
-      <main className={cn("flex-1 flex flex-col", isMobile ? "pb-14" : "pb-0")}>
+      <main className={cn("flex-1 flex flex-col relative", isMobile ? "pb-14" : "pb-0")}>
         {children}
       </main>
       {!hideAppChrome && isMobile && (

@@ -48,7 +48,7 @@ const BoardPageContent = () => {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const { setHandleCreateClick } = usePage();
+  const { handleCreateClick, setHandleCreateClick, isFilterViewVisible } = usePage();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
@@ -222,9 +222,8 @@ const BoardPageContent = () => {
     }
   }, [user, toast, setSelectedPost, setShowCreatePostFormInline]);
 
-  // Register this page's create action with the context
   useEffect(() => {
-    setHandleCreateClick(() => handleOpenCreatePostForm());
+    setHandleCreateClick(() => handleOpenCreatePostForm);
   }, [setHandleCreateClick, handleOpenCreatePostForm]);
 
   const renderPostDetailPanel = () => {
@@ -241,8 +240,24 @@ const BoardPageContent = () => {
   };
 
   return (
-    <div className="container mx-auto p-4 pt-6 flex flex-col flex-grow">
-      <div className={cn("flex-grow", isMobile ? "grid grid-cols-1" : "md:flex md:flex-row")}>
+    <div className="container mx-auto px-4 pt-0 md:pt-6 flex flex-col flex-grow">
+      {/* The filter UI will now be controlled by the main header and PageContext */}
+      {isMobile && isFilterViewVisible && (
+        <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
+          {/* We'll place a placeholder or the actual filter UI component from PostList here */}
+          <div className="p-4 border-b">
+            <h2 className="font-semibold">Filters</h2>
+            {/* The full filter UI from PostList will live here, but for now a placeholder */}
+            <p className="text-sm text-muted-foreground">Filter options will appear here.</p>
+          </div>
+        </div>
+      )}
+
+      <div className={cn(
+          "flex-grow", 
+          isMobile ? "grid grid-cols-1" : "md:flex md:flex-row",
+          isMobile && isFilterViewVisible && "hidden" // Hide main content on mobile when filters are open
+        )}>
         <div className={cn("flex flex-col overflow-hidden", isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:flex-1 md:min-w-0", !isMobile && "md:pr-4")}>
           <PostList
             posts={posts}

@@ -28,15 +28,13 @@ const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const { isSearchFilterVisible, setHandleCreateClick } = usePage();
+  const { isFilterViewVisible, setHandleCreateClick, searchTerm, setSearchTerm } = usePage();
   const router = useRouter();
 
   const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
-  const [searchTerm, setSearchTerm] = useState('');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearchInput, setTagSearchInput] = useState('');
 
-  // Register this page's create action with the context
   useEffect(() => {
     setHandleCreateClick(() => router.push('/news/create'));
   }, [setHandleCreateClick, router]);
@@ -135,7 +133,7 @@ const NewsPage = () => {
     setTagSearchInput('');
     setActiveArticleView('all');
     setSearchTerm('');
-  }, []);
+  }, [setSearchTerm]);
   
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -146,18 +144,6 @@ const NewsPage = () => {
 
   const FilterContent = () => (
     <div className="space-y-4 p-4 border-b">
-      <div className="relative">
-        <Input
-          type="search"
-          placeholder="Search articles by keyword..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="h-9 text-xs pl-8"
-          aria-label="Search articles"
-        />
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-      </div>
-
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">View</Label>
         <div className="flex items-center gap-2 flex-shrink-0">
@@ -205,10 +191,9 @@ const NewsPage = () => {
   );
 
   return (
-    <div className="container mx-auto px-4 md:px-6 lg:px-8 py-6 flex flex-col flex-1">
-      {/* Desktop Filter Bar */}
+    <div className="container mx-auto px-4 md:px-6 lg:px-8 py-0 md:py-6 flex flex-col flex-1 relative">
       {!isMobile && (
-        <div className="flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
+        <div className="flex items-center gap-2 sticky top-[56px] z-30 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
           <Popover>
             <PopoverTrigger asChild>
               <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
@@ -229,10 +214,13 @@ const NewsPage = () => {
         </div>
       )}
 
-      {/* Mobile Filter View */}
-      {isMobile && isSearchFilterVisible && <FilterContent />}
+      {isMobile && isFilterViewVisible && (
+        <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
+          <FilterContent />
+        </div>
+      )}
 
-      <div className={cn("flex-1", isMobile ? (isSearchFilterVisible ? "" : "mt-2") : "mt-6")}>
+      <div className={cn("flex-1 mt-6", isMobile && "mt-0", isMobile && isFilterViewVisible && "hidden")}>
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-10"><Loader2 className="h-10 w-10 animate-spin text-primary" /><p className="ml-2 text-sm text-muted-foreground mt-2">Loading articles...</p></div>
         )}

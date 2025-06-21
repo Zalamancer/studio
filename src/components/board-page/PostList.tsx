@@ -17,7 +17,7 @@ import type { SectorWithSubSectors, SubSector, Industry } from '@/components/lay
 import { cn } from '@/lib/utils';
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { User as FirebaseUser } from 'firebase/auth';
-import { usePage } from '@/contexts/PageContext'; // Import context
+import { usePage } from '@/contexts/PageContext';
 
 interface PostListProps {
   posts: Post[];
@@ -43,14 +43,13 @@ export const PostList: React.FC<PostListProps> = ({
   currentUser,
 }) => {
   const isMobile = useIsMobile();
-  const { isSearchFilterVisible } = usePage(); // Use context
+  const { isFilterViewVisible, searchTerm, setSearchTerm } = usePage();
 
   const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string | undefined>(undefined);
   const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string | undefined>(undefined);
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
-  const [searchTerm, setSearchTerm] = useState('');
   
   const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
   const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
@@ -93,7 +92,7 @@ export const PostList: React.FC<PostListProps> = ({
     setSelectedTags([]);
     setSelectedSectorFilter(undefined);
     setSearchTerm('');
-  }, []);
+  }, [setSearchTerm]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
@@ -164,18 +163,6 @@ export const PostList: React.FC<PostListProps> = ({
 
   const FilterContent = () => (
     <div className="space-y-4 p-4 border-b">
-      <div className="relative">
-        <Input
-          type="search"
-          placeholder="Search posts by keyword..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="h-9 text-xs pl-8"
-          aria-label="Search posts"
-        />
-        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-      </div>
-
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Post Type</Label>
         <Select value={selectedPostType} onValueChange={(value) => setSelectedPostType(value as PostTypeFilter)}>
@@ -232,10 +219,7 @@ export const PostList: React.FC<PostListProps> = ({
   );
 
   return (
-    <div className="flex flex-col h-full">
-      {isMobile && isSearchFilterVisible && <FilterContent />}
-      
-      {/* Desktop Filter Bar */}
+    <div className="flex flex-col h-full relative">
       {!isMobile && (
         <div className="mb-4 p-1 flex items-center gap-2 border-b pb-3">
           <Popover>
@@ -259,7 +243,13 @@ export const PostList: React.FC<PostListProps> = ({
         </div>
       )}
 
-      <ScrollArea className="flex-grow overflow-y-auto min-h-0 pr-2">
+      {isMobile && isFilterViewVisible && (
+        <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
+          <FilterContent />
+        </div>
+      )}
+
+      <ScrollArea className={cn("flex-grow overflow-y-auto min-h-0 pr-2", isMobile && isFilterViewVisible && "hidden")}>
         <div className="columns-1 md:columns-2 gap-4 space-y-4">
           {filteredPosts.length > 0 ? (
             filteredPosts.map((post, index) => (
