@@ -115,7 +115,7 @@ const MyCollectionsPage = () => {
   }
 
   return (
-    <div className="mx-auto md:container md:py-8">
+    <div className="md:container md:mx-auto md:py-8">
       {isMobile && selectedCollection ? (
         <div className="mb-4 px-4">
           <Button variant="ghost" size="sm" onClick={() => setSelectedCollection(null)}>
