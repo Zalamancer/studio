@@ -115,16 +115,16 @@ const MyCollectionsPage = () => {
   }
 
   return (
-    <div className="container mx-auto p-4 md:p-8">
+    <div className="mx-auto md:container md:py-8">
       {isMobile && selectedCollection ? (
-        <div className="mb-4">
+        <div className="mb-4 px-4">
           <Button variant="ghost" size="sm" onClick={() => setSelectedCollection(null)}>
             <ArrowLeft className="mr-2 h-4 w-4" />
             Back to Collections
           </Button>
         </div>
       ) : (
-        <header className="mb-8">
+        <header className="mb-8 px-4 md:px-0">
           <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center">
             <FolderOpen className="mr-3 h-8 w-8 text-primary" />
             My Collections
@@ -136,9 +136,9 @@ const MyCollectionsPage = () => {
       )}
 
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 md:gap-6">
         <div className={cn(
-          "md:col-span-1 space-y-4",
+          "md:col-span-1 space-y-4 px-4 md:px-0",
           isMobile && selectedCollection && "hidden"
         )}>
           <h2 className="text-xl font-semibold text-foreground">Your Saved Collections</h2>
