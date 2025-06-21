@@ -561,7 +561,7 @@ export default function MainLayout({
           </div>
         </header>
       )}
-      <main className={cn("flex-1 flex flex-col relative", isMobile ? "pb-14" : "pb-0")}>
+      <main className={cn("flex-1 flex flex-col relative mt-4", isMobile ? "pb-14" : "pb-0")}>
         {children}
       </main>
       {!hideAppChrome && isMobile && (
