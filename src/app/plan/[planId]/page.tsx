@@ -72,7 +72,7 @@ export default function PlanDetailPage() {
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
     initialPanelDataRef,
     onNodeDetailPanelSubmit,
-    handleNodeDetailUpdate, handleChildItemDetailUpdateInPanel,
+    handleChildItemDetailUpdateInPanel,
     nodeToDelete, setNodeToDelete, confirmDeleteNode,
     handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
     handleGlobalMove, handleGlobalPointerUp, isPointerDown,
@@ -99,8 +99,8 @@ export default function PlanDetailPage() {
     handleRemoveUserFromEditors, 
     forceRender,
     handleInitiateAddNode,
-    handleEditCanvasNode,
     setIsChildItemDialogSubmitting, 
+    handleEditCanvasNode,
   } = usePlanLogic();
 
   const router = useRouter();
@@ -254,6 +254,17 @@ export default function PlanDetailPage() {
     return lines;
   }, [editableRoadmap, controlOffset]);
 
+  const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
+    if (event.target === event.currentTarget) {
+        if (diffTarget) return;
+        if (!canEditPlan) return;
+        const canvasRect = event.currentTarget.getBoundingClientRect();
+        const x = event.clientX - canvasRect.left + event.currentTarget.scrollLeft;
+        const y = event.clientY - canvasRect.top + event.currentTarget.scrollTop;
+        handleInitiateAddNode({ coords: { x, y } });
+    }
+  };
+
   if (authLoading || (isLoadingPlan && isValidPlanId && !planData)) {
     return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
@@ -279,10 +290,8 @@ export default function PlanDetailPage() {
         ownerProfile={ownerProfile}
         isLoadingOwnerProfile={isLoadingOwnerProfile}
         canEditPlan={canEditPlan}
-        isSaving={isSaving || restorePlanMutation.isPending || savePlanSettingsMutation.isPending}
         onOpenHistory={() => setIsVersionHistorySheetOpen(true)}
         onOpenInfo={() => setIsPlanInfoDialogOpen(true)}
-        onInitiateAddNode={() => handleInitiateAddNode(null)}
         diffTargetActive={!!diffTarget}
       />
 
@@ -290,6 +299,7 @@ export default function PlanDetailPage() {
         <ScrollArea className="w-full h-full">
           <div
             ref={canvasRef}
+            onClick={handleCanvasClick}
             style={{ width: '1920px', minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'visible' }}
             className="bg-muted grid-background"
           >
@@ -333,7 +343,7 @@ export default function PlanDetailPage() {
           ownerProfile={ownerProfile}
           isPlanOwner={canEditPlan}
           onSaveSettings={handleSavePlanSettings}
-          isSavingSettings={savePlanSettingsMutation.isPending}
+          isSavingSettings={isSaving || savePlanSettingsMutation.isPending}
           viewPermissionsSearch={viewPermissionsSearch}
           setViewPermissionsSearch={setViewPermissionsSearch}
           editPermissionsSearch={editPermissionsSearch}

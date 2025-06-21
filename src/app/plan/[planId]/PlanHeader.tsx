@@ -6,20 +6,17 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
-import { ChevronLeft, History, Info, PlusCircle, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, History, Info, AlertTriangle } from 'lucide-react';
 import type { ClientPlan } from '@/types/plan';
 import type { UserProfileBasic } from '@/types/connection';
-import { cn } from '@/lib/utils';
 
 interface PlanHeaderProps {
   planData: ClientPlan | null;
   ownerProfile: UserProfileBasic | null;
   isLoadingOwnerProfile: boolean;
   canEditPlan: boolean;
-  isSaving: boolean;
   onOpenHistory: () => void;
   onOpenInfo: () => void;
-  onInitiateAddNode: () => void;
   diffTargetActive: boolean;
 }
 
@@ -28,10 +25,8 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
   ownerProfile,
   isLoadingOwnerProfile,
   canEditPlan,
-  isSaving,
   onOpenHistory,
   onOpenInfo,
-  onInitiateAddNode,
   diffTargetActive,
 }) => {
   const router = useRouter();
@@ -76,11 +71,7 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
           >
             <Info className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Info
           </Button>
-          {planData && canEditPlan && !diffTargetActive && (
-            <Button variant="default" size="sm" onClick={onInitiateAddNode} className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
-              <PlusCircle className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">Add Step</span><span className="sm:hidden">Add</span>
-            </Button>
-          )}
+          {/* Add Step button has been removed */}
         </div>
       </div>
     </div>

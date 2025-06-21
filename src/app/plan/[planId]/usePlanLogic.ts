@@ -43,6 +43,24 @@ export const sanitizeRoadmapStep = (step: Partial<RoadmapStep>, defaultParentId?
   };
 };
 
+const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number => {
+    let height = NODE_HEADER_HEIGHT;
+    let contentAreaHeight = 0;
+    let childrenDataListHeight = 0;
+    if (Array.isArray(step.childrenData) && step.childrenData.length > 0) {
+      childrenDataListHeight += 8;
+      childrenDataListHeight += step.childrenData.length * CHILD_ITEM_HEIGHT;
+      childrenDataListHeight += 8;
+    }
+    contentAreaHeight = childrenDataListHeight;
+    if (contentAreaHeight === 0 && (!step.description || step.description.trim().length === 0) && (!Array.isArray(step.childrenData) || step.childrenData.length === 0)) {
+        contentAreaHeight = 20;
+    }
+    height += contentAreaHeight;
+    height += 8; // FINAL_BUFFER_CARD_HEIGHT
+    return Math.max(NODE_BASE_MIN_HEIGHT, height);
+};
+
 export const usePlanLogic = () => {
   const params = useParams();
   const router = useRouter();
@@ -70,6 +88,7 @@ export const usePlanLogic = () => {
   const [isAddNodeDialogOpen, setIsAddNodeDialogOpen] = useState(false);
   const [targetParentIdForDialog, setTargetParentIdForDialog] = useState<string | null>(null);
   const [initiatingDotTypeForDialog, setInitiatingDotTypeForDialog] = useState<'N' | 'E' | 'S' | null>(null);
+  const [newNodeCoordinates, setNewNodeCoordinates] = useState<{x: number, y: number} | null>(null); // State for click coordinates
   const childItemManagementContextRef = useRef<{ operation: 'createGrandchild'; targetChildToBecomeParentId: string; currentParentOfTargetChildId: string; } | { operation: 'createChild'; targetParentNodeId: string; } | { operation: 'edit'; itemToEditId: string; parentNodeId: string; } | null>(null);
   const [isEditChildItemDialogOpen, setIsEditChildItemDialogOpen] = useState(false);
   const [isChildItemDialogSubmitting, setIsChildItemDialogSubmitting] = useState(false); // Added this state
@@ -85,7 +104,6 @@ export const usePlanLogic = () => {
   const [planData, setPlanData] = useState<ClientPlan | null>(null);
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
   const [planError, setPlanError] = useState<Error | null>(null);
-  const [isSaving, setIsSaving] = useState(false);
   
   const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
   const [isPlanInfoDialogOpen, setIsPlanInfoDialogOpen] = useState(false);
@@ -126,6 +144,15 @@ export const usePlanLogic = () => {
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
+  const savePlanSettingsMutation = useMutation({
+    mutationFn: (payload: { planId: string; currentUserId: string; updates: UpdatePlanData }) =>
+      updatePlanDetails(payload.planId, payload.currentUserId, payload.updates),
+    onSuccess: async (_, variables) => {
+      toast({ title: "Plan Settings Saved", description: "Your plan settings have been updated." });
+    },
+    onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan settings." })
+  });
+  
   useEffect(() => {
     if (!planId || !isValidPlanId) {
       setIsLoadingPlan(false);
@@ -155,7 +182,11 @@ export const usePlanLogic = () => {
           editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []),
         };
         setPlanData(clientPlan);
-        setEditableRoadmap(clientPlan.roadmap);
+        // Only update editableRoadmap if not in a diff view
+        if (!diffTarget) {
+            setEditableRoadmap(clientPlan.roadmap);
+        }
+        setPlanDataForDialog(clientPlan); // Always update dialog data
         setPlanError(null);
       } else {
         setPlanData(null);
@@ -169,7 +200,7 @@ export const usePlanLogic = () => {
     });
 
     return () => unsubscribe();
-  }, [planId, isValidPlanId]);
+  }, [planId, isValidPlanId, diffTarget]);
 
 
   const { data: ownerProfile, isLoading: isLoadingOwnerProfile } = useQuery<UserProfileBasic | null>({
@@ -185,27 +216,14 @@ export const usePlanLogic = () => {
   });
 
   const saveCurrentRoadmap = useCallback(async (newRoadmap: RoadmapStep[]) => {
-    if (!planId || !user || isSaving) return;
-
-    setIsSaving(true);
+    if (!planId || !user) return;
     try {
         await updatePlanDetails(planId, user.uid, { roadmap: newRoadmap });
     } catch (error: any) {
         toast({ variant: "destructive", title: "Sync Error", description: error.message });
         // Snapshot listener will auto-revert to last good state on error
-    } finally {
-        setIsSaving(false);
     }
-  }, [planId, user, isSaving, toast]);
-
-  const savePlanSettingsMutation = useMutation({
-    mutationFn: (payload: { planId: string; currentUserId: string; updates: UpdatePlanData }) =>
-      updatePlanDetails(payload.planId, payload.currentUserId, payload.updates),
-    onSuccess: async (_, variables) => {
-      toast({ title: "Plan Settings Saved", description: "Your plan settings have been updated." });
-    },
-    onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan settings." })
-  });
+  }, [planId, user, toast]);
   
   const restorePlanMutation = useMutation({
     mutationFn: (payload: { planId: string; versionIdToRestore: string; currentUserId: string; }) =>
@@ -219,32 +237,6 @@ export const usePlanLogic = () => {
     onError: (error: Error) => toast({ variant: "destructive", title: "Restore Failed", description: error.message || "Could not restore plan." }),
   });
 
-  useEffect(() => {
-    if (diffTarget) {
-      const currentRoadmap = (diffTarget.current.roadmap || []).map(s => sanitizeRoadmapStep(s));
-      const previousRoadmap = diffTarget.previous ? (diffTarget.previous.roadmap || []).map(s => sanitizeRoadmapStep(s)) : [];
-      setEditableRoadmap(currentRoadmap);
-      const currentIds = new Set(currentRoadmap.map(n => n.id));
-      const previousIds = new Set(previousRoadmap.map(n => n.id));
-      const added = new Set<string>();
-      currentRoadmap.forEach(node => { if (!previousIds.has(node.id)) added.add(node.id); });
-      setAddedNodeIds(added);
-      const persisted = new Set<string>();
-      currentRoadmap.forEach(node => { if (previousIds.has(node.id)) persisted.add(node.id); });
-      setPersistedNodeIds(persisted);
-      const removedTitlesList: string[] = [];
-      previousRoadmap.forEach(node => { if (!currentIds.has(node.id)) removedTitlesList.push(node.title || `Unnamed Node (ID: ${node.id})`); });
-      setRemovedNodeTitles(removedTitlesList);
-    } else if (planData) {
-      setEditableRoadmap((planData.roadmap || []).map(s => sanitizeRoadmapStep(s)));
-      setAddedNodeIds(new Set());
-      setPersistedNodeIds(new Set());
-      setRemovedNodeTitles([]);
-    } else {
-      setEditableRoadmap([]);
-    }
-  }, [planData, diffTarget]);
-
   const canEditPlan = useMemo(() => {
     if (!user || !planData) return false;
     if (planData.ownerId === user.uid) return true;
@@ -253,6 +245,69 @@ export const usePlanLogic = () => {
     return false;
   }, [user, planData]);
 
+  const handleInitiateAddNode = useCallback((details: {
+    sourceNodeId?: string | null;
+    initiatingDot?: 'N' | 'E' | 'S';
+    coords?: { x: number; y: number };
+  }) => {
+    if (!canEditPlan || diffTarget) return;
+    setTargetParentIdForDialog(details.sourceNodeId ?? null);
+    setInitiatingDotTypeForDialog(details.initiatingDot ?? null);
+    setNewNodeCoordinates(details.coords ?? null);
+    setIsAddNodeDialogOpen(true);
+  }, [canEditPlan, diffTarget]);
+
+  const handleAddNode = useCallback((data: { title: string }, canvasRefCurrent: HTMLDivElement | null) => {
+    if (!canEditPlan || !canvasRefCurrent || diffTarget) return;
+
+    const newId = `step-${Date.now()}-${uuidv4().substring(0, 8)}`;
+    let newStepX, newStepY;
+    const sourceNodeForPeerLink = targetParentIdForDialog ? editableRoadmap.find(s => s.id === targetParentIdForDialog) : null;
+
+    if (newNodeCoordinates) {
+      newStepX = Math.max(MIN_CANVAS_PADDING, newNodeCoordinates.x - (NODE_BASE_WIDTH / 2));
+      newStepY = Math.max(MIN_CANVAS_PADDING, newNodeCoordinates.y - (NODE_BASE_MIN_HEIGHT / 2));
+    } else if (sourceNodeForPeerLink && initiatingDotTypeForDialog) {
+      const sourceHeight = calculateNodeHeight(sourceNodeForPeerLink, editableRoadmap);
+      switch (initiatingDotTypeForDialog) {
+        case 'N': newStepX = sourceNodeForPeerLink.x; newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y - NODE_BASE_MIN_HEIGHT - DEFAULT_SPACING_Y); break;
+        case 'E': newStepX = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X); newStepY = sourceNodeForPeerLink.y; break;
+        case 'S': newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y + sourceHeight + DEFAULT_SPACING_Y); newStepX = sourceNodeForPeerLink.x; break;
+        default:
+          newStepX = Math.max(MIN_CANVAS_PADDING, canvasRefCurrent.scrollLeft + canvasRefCurrent.clientWidth / 2 - NODE_BASE_WIDTH / 2);
+          newStepY = Math.max(MIN_CANVAS_PADDING, canvasRefCurrent.scrollTop + canvasRefCurrent.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
+      }
+    } else {
+      newStepX = Math.max(MIN_CANVAS_PADDING, canvasRefCurrent.scrollLeft + canvasRefCurrent.clientWidth / 2 - NODE_BASE_WIDTH / 2);
+      newStepY = Math.max(MIN_CANVAS_PADDING, canvasRefCurrent.scrollTop + canvasRefCurrent.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
+    }
+
+    const newNode: RoadmapStep = sanitizeRoadmapStep({ id: newId, title: data.title, x: newStepX, y: newStepY });
+    let newRoadmap: RoadmapStep[];
+    
+    if (sourceNodeForPeerLink && initiatingDotTypeForDialog) {
+      const newPeerConnection: PeerConnection = { 
+        targetNodeId: newNode.id, 
+        sourceDot: initiatingDotTypeForDialog, 
+        targetDot: initiatingDotTypeForDialog === 'N' ? 'S' : (initiatingDotTypeForDialog === 'S' ? 'N' : 'W')
+      };
+      newRoadmap = editableRoadmap.map(s => s.id === sourceNodeForPeerLink.id ? {...s, peerConnections: [...(s.peerConnections || []), newPeerConnection]} : s);
+      newRoadmap.push(newNode);
+    } else {
+      newRoadmap = [...editableRoadmap, newNode];
+    }
+
+    setEditableRoadmap(newRoadmap);
+    saveCurrentRoadmap(newRoadmap);
+    toast({ title: "Node Added" });
+    setIsAddNodeDialogOpen(false);
+    setTargetParentIdForDialog(null);
+    setInitiatingDotTypeForDialog(null);
+    setNewNodeCoordinates(null);
+  }, [canEditPlan, diffTarget, editableRoadmap, targetParentIdForDialog, initiatingDotTypeForDialog, saveCurrentRoadmap, toast, newNodeCoordinates]);
+
+  // All other hook logic remains... (getPointerCoords, handleNodeInteractionStart, handleGlobalMove, handleGlobalPointerUp, etc.)
+  
   const getPointerCoords = useCallback((event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent): { clientX: number; clientY: number } => {
     if ('touches' in event && event.touches.length > 0) return { clientX: event.touches[0].clientX, clientY: event.touches[0].clientY };
     if ('changedTouches' in event && event.changedTouches.length > 0) return { clientX: event.changedTouches[0].clientX, clientY: event.changedTouches[0].clientY };
@@ -294,7 +349,6 @@ export const usePlanLogic = () => {
   const handleNodeDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
     if (!canEditPlan || diffTarget) return;
     const newRoadmap = editableRoadmap.map(s => s.id === updatedStep.id ? { ...s, ...updatedStep, childrenData: updatedStep.childrenData || (s.childrenData || []) } : s );
-    setEditableRoadmap(newRoadmap);
     saveCurrentRoadmap(newRoadmap);
   }, [canEditPlan, diffTarget, editableRoadmap, saveCurrentRoadmap]);
 
@@ -308,61 +362,9 @@ export const usePlanLogic = () => {
         : node
       );
     }
-    setEditableRoadmap(newRoadmap);
     saveCurrentRoadmap(newRoadmap);
   }, [canEditPlan, diffTarget, editableRoadmap, saveCurrentRoadmap]);
-
-  const handleInitiateAddNode = useCallback((sourceNodeId: string | null, initiatingDot?: 'N' | 'E' | 'S') => {
-    if (!canEditPlan || diffTarget) return;
-    setTargetParentIdForDialog(sourceNodeId);
-    setInitiatingDotTypeForDialog(initiatingDot || null);
-    setIsAddNodeDialogOpen(true);
-  }, [canEditPlan, diffTarget]);
-
-  const handleAddNode = useCallback((data: { title: string }, canvasRefCurrent: HTMLDivElement | null) => {
-    if (!canEditPlan || !canvasRefCurrent || diffTarget) return;
-    const newId = `step-${Date.now()}-${uuidv4().substring(0, 8)}`;
-    let newStepX, newStepY;
-    const sourceNodeForPeerLink = targetParentIdForDialog ? editableRoadmap.find(s => s.id === targetParentIdForDialog) : null;
-
-    if (sourceNodeForPeerLink && initiatingDotTypeForDialog) {
-      const sourceHeight = NODE_BASE_MIN_HEIGHT;
-      switch (initiatingDotTypeForDialog) {
-        case 'N': newStepX = sourceNodeForPeerLink.x; newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y - NODE_BASE_MIN_HEIGHT - DEFAULT_SPACING_Y); break;
-        case 'E': newStepX = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.x + NODE_BASE_WIDTH + DEFAULT_SPACING_X); newStepY = sourceNodeForPeerLink.y; break;
-        case 'S': newStepY = Math.max(MIN_CANVAS_PADDING, sourceNodeForPeerLink.y + sourceHeight + DEFAULT_SPACING_Y); newStepX = sourceNodeForPeerLink.x; break;
-        default:
-          newStepX = Math.max(MIN_CANVAS_PADDING, canvasRefCurrent.scrollLeft + canvasRefCurrent.clientWidth / 2 - NODE_BASE_WIDTH / 2);
-          newStepY = Math.max(MIN_CANVAS_PADDING, canvasRefCurrent.scrollTop + canvasRefCurrent.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
-      }
-    } else {
-      newStepX = Math.max(MIN_CANVAS_PADDING, canvasRefCurrent.scrollLeft + canvasRefCurrent.clientWidth / 2 - NODE_BASE_WIDTH / 2);
-      newStepY = Math.max(MIN_CANVAS_PADDING, canvasRefCurrent.scrollTop + canvasRefCurrent.clientHeight / 2 - NODE_BASE_MIN_HEIGHT / 2);
-    }
-
-    const newNode: RoadmapStep = sanitizeRoadmapStep({ id: newId, title: data.title, x: newStepX, y: newStepY });
-    let newRoadmap: RoadmapStep[];
-    
-    if (sourceNodeForPeerLink && initiatingDotTypeForDialog) {
-      const newPeerConnection: PeerConnection = { 
-        targetNodeId: newNode.id, 
-        sourceDot: initiatingDotTypeForDialog, 
-        targetDot: initiatingDotTypeForDialog === 'N' ? 'S' : (initiatingDotTypeForDialog === 'S' ? 'N' : 'W')
-      };
-      newRoadmap = editableRoadmap.map(s => s.id === sourceNodeForPeerLink.id ? {...s, peerConnections: [...(s.peerConnections || []), newPeerConnection]} : s);
-      newRoadmap.push(newNode);
-    } else {
-      newRoadmap = [...editableRoadmap, newNode];
-    }
-
-    setEditableRoadmap(newRoadmap);
-    saveCurrentRoadmap(newRoadmap);
-    toast({ title: "Node Added" });
-    setIsAddNodeDialogOpen(false);
-    setTargetParentIdForDialog(null);
-    setInitiatingDotTypeForDialog(null);
-  }, [canEditPlan, toast, editableRoadmap, targetParentIdForDialog, initiatingDotTypeForDialog, diffTarget, saveCurrentRoadmap]);
-
+  
   const handleSpawnChildDataItemAsCanvasNode = useCallback((
     currentRoadmap: RoadmapStep[],
     childItemId: string,
@@ -493,7 +495,6 @@ export const usePlanLogic = () => {
         }
 
         if (modificationSuccessful) {
-          setEditableRoadmap(newRoadmapCandidate);
           saveCurrentRoadmap(newRoadmapCandidate);
           toast({ title: "Item Action Complete" });
           setIsEditChildItemDialogOpen(false);
@@ -540,7 +541,6 @@ export const usePlanLogic = () => {
         newRoadmap = newRoadmap.map(rn => ({ ...rn, peerConnections: (rn.peerConnections || []).filter(pc => pc.targetNodeId !== canvasNodeIdThatWasRepresentedByDeletedItem) }));
     }
     
-    setEditableRoadmap(newRoadmap);
     saveCurrentRoadmap(newRoadmap);
 
     if (editingTarget?.type === 'childItem' && editingTarget.data.id === childItemIdToDelete) {
@@ -553,7 +553,6 @@ export const usePlanLogic = () => {
     if (!nodeToDelete || !canEditPlan || diffTarget) return;
     const idToDelete = nodeToDelete.id;
     const newRoadmap = editableRoadmap.filter(s => s.id !== idToDelete).map(rn => ({ ...rn, childrenData: (rn.childrenData || []).map(ci => ci.canvasNodeIdForThisItem === idToDelete ? { ...ci, canvasNodeIdForThisItem: null } : ci), peerConnections: (rn.peerConnections || []).filter(pc => pc.targetNodeId !== idToDelete) }));
-    setEditableRoadmap(newRoadmap);
     saveCurrentRoadmap(newRoadmap);
     if (editingTarget?.type === 'node' && editingTarget.data.id === idToDelete) { setIsStepDetailSheetOpen(false); setEditingTarget(null); }
     toast({ title: `Node "${nodeToDelete.title}" Deleted` });
@@ -573,7 +572,6 @@ export const usePlanLogic = () => {
       return;
     }
     const updates: UpdatePlanData = {
-        updatedAt: serverTimestamp(),
         name: settings.name,
         description: settings.description,
         visibility: settings.visibility,
@@ -596,39 +594,27 @@ export const usePlanLogic = () => {
 
   const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
     if (planDataForDialog && userProfile.userId !== planDataForDialog.ownerId) {
-      setPlanDataForDialog(prev => prev ? ({
-        ...prev,
-        viewUserIds: Array.from(new Set([...(prev.viewUserIds || []), userProfile.userId])),
-      }) : null);
+      setCurrentViewUserIds(prev => Array.from(new Set([...(prev || []), userProfile.userId])));
     }
   }, [planDataForDialog]);
 
   const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
     if (planDataForDialog && userIdToRemove !== planDataForDialog.ownerId) {
-      setPlanDataForDialog(prev => prev ? ({
-        ...prev,
-        viewUserIds: (prev.viewUserIds || []).filter(uid => uid !== userIdToRemove),
-        editUserIds: (prev.editUserIds || []).filter(uid => uid !== userIdToRemove), 
-      }) : null);
+      setCurrentViewUserIds(prev => (prev || []).filter(uid => uid !== userIdToRemove));
+      setCurrentEditUserIds(prev => (prev || []).filter(uid => uid !== userIdToRemove)); 
     }
   }, [planDataForDialog]);
 
   const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
     if (planDataForDialog && userProfile.userId !== planDataForDialog.ownerId) {
-      setPlanDataForDialog(prev => prev ? ({
-        ...prev,
-        editUserIds: Array.from(new Set([...(prev.editUserIds || []), userProfile.userId])),
-        viewUserIds: Array.from(new Set([...(prev.viewUserIds || []), userProfile.userId])), 
-      }) : null);
+      setCurrentEditUserIds(prev => Array.from(new Set([...(prev || []), userProfile.userId])));
+      setCurrentViewUserIds(prev => Array.from(new Set([...(prev || []), userProfile.userId]))); 
     }
   }, [planDataForDialog]);
 
   const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
     if (planDataForDialog && userIdToRemove !== planDataForDialog.ownerId) {
-      setPlanDataForDialog(prev => prev ? ({
-        ...prev,
-        editUserIds: (prev.editUserIds || []).filter(uid => uid !== userIdToRemove),
-      }) : null);
+      setCurrentEditUserIds(prev => (prev || []).filter(uid => uid !== userIdToRemove));
     }
   }, [planDataForDialog]);
 
@@ -686,7 +672,7 @@ export const usePlanLogic = () => {
           if (!sourceNode) return;
           const sourceDotType = nodeDragInfoRef.current!.dotType;
           let startX: number, startY: number;
-          const sourceNodeHeight = NODE_BASE_MIN_HEIGHT;
+          const sourceNodeHeight = calculateNodeHeight(sourceNode, editableRoadmap);
           switch(sourceDotType) {
               case 'N': startX = sourceNode.x + NODE_BASE_WIDTH / 2; startY = sourceNode.y; break;
               case 'E': startX = sourceNode.x + NODE_BASE_WIDTH; startY = sourceNode.y + sourceNodeHeight / 2; break;
@@ -743,7 +729,7 @@ export const usePlanLogic = () => {
                 }
             }
         } else {
-            handleInitiateAddNode(sourceNodeId, sourceDotType);
+            handleInitiateAddNode({ sourceNodeId, initiatingDot: sourceDotType });
         }
     } else if (isConsideredDrag) {
         hasChanged = true;
@@ -751,7 +737,7 @@ export const usePlanLogic = () => {
         const finalCoords = getPointerCoords(event);
         if ((finalCoords.clientX - clickInfo.clientX)**2 + (finalCoords.clientY - clickInfo.clientY)**2 < 25 && (Date.now() - clickInfo.timestamp) < 300) {
             if (isDotDrag && sourceDotType) {
-                handleInitiateAddNode(sourceNodeId, sourceDotType);
+                handleInitiateAddNode({ sourceNodeId, initiatingDot: sourceDotType });
             } else {
                 const clickedStep = editableRoadmap.find(s => s.id === sourceNodeId);
                 if (clickedStep) handleEditCanvasNode(clickedStep);
@@ -784,14 +770,13 @@ export const usePlanLogic = () => {
     } else {
         return;
     }
-    setEditableRoadmap(newRoadmap);
-    await saveCurrentRoadmap(newRoadmap);
+    saveCurrentRoadmap(newRoadmap);
   }, [editingTarget, editableRoadmap, saveCurrentRoadmap]);
 
   return {
     user, authLoading, planId, isValidPlanId,
     planData, isLoadingPlan, planError, ownerProfile, isLoadingOwnerProfile,
-    editableRoadmap, setEditableRoadmap,
+    editableRoadmap, 
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
     initialPanelDataRef,
     onNodeDetailPanelSubmit,
@@ -802,7 +787,7 @@ export const usePlanLogic = () => {
     isVersionHistorySheetOpen, setIsVersionHistorySheetOpen, planVersionsData, isLoadingVersions, refetchPlanVersions,
     handleViewChangesClick, handleExitDiffView, diffTarget, addedNodeIds, persistedNodeIds, removedNodeTitles, diffDetailsVersionId,
     isRestoreConfirmOpen, setIsRestoreConfirmOpen, versionToRestore, handleRestoreVersion, confirmRestore, restorePlanMutation,
-    isAddNodeDialogOpen, setIsAddNodeDialogOpen, targetParentIdForDialog, initiatingDotTypeForDialog, handleAddNode,
+    isAddNodeDialogOpen, setIsAddNodeDialogOpen, handleAddNode,
     childItemManagementContextRef, isEditChildItemDialogOpen, setIsEditChildItemDialogOpen, isChildItemDialogSubmitting, dynamicChildDialogTitle,
     defaultChildDialogTitle, setDefaultChildDialogTitle, defaultChildDialogDescription, setDefaultChildDialogDescription,
     handleChildItemDialogSubmit, handleEditChildItemText, handleDeleteChildItem,
@@ -810,17 +795,21 @@ export const usePlanLogic = () => {
     onAddChildItemToNode: handleAddChildItemToNode,
     onChildItemTitleClick: handleChildItemCanvasNodeFocus,
     canEditPlan,
-    isSaving,
-    savePlanSettingsMutation, handleSavePlanSettings,
+    isSaving: savePlanSettingsMutation.isPending, // Now directly reflects the mutation status for settings
+    savePlanSettingsMutation,
+    handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
     planDataForDialog,
-    originalEditingChildItemData, setOriginalEditingChildItemData,
+    originalEditingChildItemData, setOriginalEditingChildItemData, 
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
-    handleAddUserToViewers, handleRemoveUserFromViewers, handleAddUserToEditors, handleRemoveUserFromEditors,
+    handleAddUserToViewers, 
+    handleRemoveUserFromViewers, 
+    handleAddUserToEditors, 
+    handleRemoveUserFromEditors, 
     forceRender,
     handleInitiateAddNode,
-    setIsChildItemDialogSubmitting,
+    setIsChildItemDialogSubmitting, 
     handleEditCanvasNode, 
   };
 };
