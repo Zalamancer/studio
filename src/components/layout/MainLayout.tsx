@@ -426,7 +426,7 @@ export default function MainLayout({
     <div className={rootLayoutClasses}>
       {!hideAppChrome && (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center px-4 relative">
+          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-4 relative">
             {/* Mobile Search Overlay */}
             {isMobile && isSearchOverlayVisible && (
               <div className="absolute inset-0 bg-background z-10 flex items-center gap-2 px-2 sm:px-4">
@@ -452,35 +452,66 @@ export default function MainLayout({
               </div>
             )}
 
+            {/* Left-aligned items */}
             <div className={cn(
-              "mr-4 flex items-center",
+              "flex items-center",
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
-              <Link href="/" className="mr-2 flex items-center space-x-2" aria-label="Go to homepage">
-                <Handshake className="h-6 w-6 text-primary" />
-                 <span className="hidden font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
-                  AnonyCollab
-                </span>
-              </Link>
-              <nav className="hidden md:flex items-center gap-4 text-sm lg:gap-6 ml-4">
-                {navItems.map((item) => (
-                  <Link
-                    key={item.title}
-                    href={item.href}
-                    className={cn(
-                      "transition-colors hover:text-foreground/80 flex items-center",
-                      pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
-                    )}
-                  >
-                    <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
-                    {item.title}
-                  </Link>
-                ))}
-              </nav>
+              {/* Mobile Left Group: Search and Create Icons */}
+              <div className="flex items-center gap-1 md:hidden">
+                {user && showContextualHeaderIcons && (
+                  <>
+                    <Button variant="ghost" size="icon" onClick={() => setSearchOverlayVisible(true)} className="h-8 w-8">
+                      <Search className="h-5 w-5"/>
+                      <span className="sr-only">Search</span>
+                    </Button>
+                    <Button variant="ghost" size="icon" onClick={handleCreateClick} className="h-8 w-8">
+                      <PlusCircle className="h-5 w-5"/>
+                      <span className="sr-only">Create New</span>
+                    </Button>
+                  </>
+                )}
+              </div>
+
+              {/* Desktop Left Group: Logo and Nav Links */}
+              <div className="hidden md:flex items-center">
+                <Link href="/" className="mr-6 flex items-center space-x-2" aria-label="Go to homepage">
+                  <Handshake className="h-6 w-6 text-primary" />
+                  <span className="font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
+                    AnonyCollab
+                  </span>
+                </Link>
+                <nav className="flex items-center gap-4 text-sm lg:gap-6">
+                  {navItems.map((item) => (
+                    <Link
+                      key={item.title}
+                      href={item.href}
+                      className={cn(
+                        "transition-colors hover:text-foreground/80 flex items-center",
+                        pathname === item.href ? 'text-foreground font-semibold' : 'text-foreground/60'
+                      )}
+                    >
+                      <item.icon className="mr-1 h-4 w-4" aria-hidden="true" />
+                      {item.title}
+                    </Link>
+                  ))}
+                </nav>
+              </div>
             </div>
 
+            {/* Center-aligned Logo for Mobile */}
             <div className={cn(
-              "flex flex-1 items-center justify-end space-x-2 md:space-x-3",
+              "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 md:hidden",
+              isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
+            )}>
+              <Link href="/" className="flex items-center" aria-label="Go to homepage">
+                <Handshake className="h-6 w-6 text-primary" />
+              </Link>
+            </div>
+
+            {/* Right-aligned items */}
+            <div className={cn(
+              "flex items-center space-x-2 md:space-x-3",
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
               {authLoading ? (
@@ -490,19 +521,6 @@ export default function MainLayout({
                 </div>
               ) : user ? (
                 <>
-                  {isMobile && showContextualHeaderIcons && (
-                    <div className="flex items-center gap-1">
-                       <Button variant="ghost" size="icon" onClick={() => setSearchOverlayVisible(true)} className="h-8 w-8">
-                         <Search className="h-5 w-5"/>
-                         <span className="sr-only">Search</span>
-                       </Button>
-                       <Button variant="ghost" size="icon" onClick={handleCreateClick} className="h-8 w-8">
-                         <PlusCircle className="h-5 w-5"/>
-                         <span className="sr-only">Create New</span>
-                       </Button>
-                    </div>
-                  )}
-
                   {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
