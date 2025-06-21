@@ -111,19 +111,6 @@ const DiscoverPage = () => {
 
   return (
     <div className="container mx-auto p-4 md:p-6 min-h-screen">
-      <header className="mb-4 pb-3 border-b">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
-          <div>
-            <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center">
-              <Compass className="mr-3 h-8 w-8 text-primary" />
-              Discover Collaboration Plans
-            </h1>
-            <p className="text-lg text-muted-foreground mt-1">
-              Explore and manage collaboration plans.
-            </p>
-          </div>
-        </div>
-      </header>
 
       {/* Sticky Filter Bar */}
       <div className="mb-6 flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b -mx-4 md:-mx-6 px-4 md:px-6">
@@ -312,4 +299,3 @@ const DiscoverPage = () => {
 };
 
 export default DiscoverPage;
-
