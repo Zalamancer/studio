@@ -26,6 +26,7 @@ import { Badge } from '../ui/badge';
 import { cn } from '@/lib/utils';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface SelectedCollectionPostsProps {
   collection: ClientCollection;
@@ -43,44 +44,44 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
 
   return (
     <div className="p-3">
-      <div className="grid grid-cols-12 gap-3 md:gap-4 items-start">
-        {hasImage && (
-            <Link href={`/?postId=${post.id}`} className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted block" target="_blank" rel="noopener noreferrer">
-                <Image 
-                    src={post.imageUrls![0]} 
-                    alt="Post image" 
-                    fill 
-                    style={{ objectFit: "cover" }} 
-                    data-ai-hint="abstract illustration" 
-                    sizes="(max-width: 768px) 33vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" 
-                />
-            </Link>
-        )}
-        <div className={cn(hasImage ? "col-span-8 md:col-span-8 lg:col-span-9" : "col-span-12", "flex flex-col h-full")}>
-            <div className="flex justify-between items-start gap-2">
-                <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0">
-                    <h3 className="text-base font-semibold text-foreground hover:text-primary line-clamp-3" title={post.question}>
-                        {post.question}
-                    </h3>
+        <div className="grid grid-cols-12 gap-3 md:gap-4 items-start">
+            {hasImage && (
+                <Link href={`/?postId=${post.id}`} className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted block" target="_blank" rel="noopener noreferrer">
+                    <Image 
+                        src={post.imageUrls![0]} 
+                        alt="Post image" 
+                        fill 
+                        style={{ objectFit: "cover" }} 
+                        data-ai-hint="abstract illustration" 
+                        sizes="(max-width: 768px) 33vw, (max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" 
+                    />
                 </Link>
-                <div className="flex-shrink-0">
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" 
-                        onClick={(e) => { e.stopPropagation(); onRemove(post); }} 
-                        disabled={removeMutationPending} 
-                        title="Remove from collection"
-                    >
-                        {removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                    </Button>
+            )}
+            <div className={cn(hasImage ? "col-span-8 md:col-span-8 lg:col-span-9" : "col-span-12", "flex flex-col h-full")}>
+                <div className="flex justify-between items-start gap-2">
+                    <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0">
+                        <h3 className="text-base font-semibold text-foreground hover:text-primary line-clamp-3" title={post.question}>
+                            {post.question}
+                        </h3>
+                    </Link>
+                    <div className="flex-shrink-0">
+                        <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" 
+                            onClick={(e) => { e.stopPropagation(); onRemove(post); }} 
+                            disabled={removeMutationPending} 
+                            title="Remove from collection"
+                        >
+                            {removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                        </Button>
+                    </div>
+                </div>
+                <div className="flex flex-wrap gap-1 mt-1.5">
+                    {post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
                 </div>
             </div>
-            <div className="flex flex-wrap gap-1 mt-1.5">
-                {post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
-            </div>
         </div>
-      </div>
     </div>
   );
 };
