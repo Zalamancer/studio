@@ -1,8 +1,7 @@
-
 // src/components/board-page/PostList.tsx
 "use client";
 
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -20,13 +19,13 @@ import {
   DialogClose,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search, PlusCircle } from "lucide-react";
+import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search, PlusCircle, X } from "lucide-react";
 import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from "@/hooks/use-mobile";
-import type { User as FirebaseUser } from 'firebase/auth'; // Import FirebaseUser type
+import type { User as FirebaseUser } from 'firebase/auth';
 
 interface PostListProps {
   posts: Post[];
@@ -35,8 +34,8 @@ interface PostListProps {
   selectedPostId?: string | null;
   availableTags: string[];
   detailedSectorsData: SectorWithSubSectors[];
-  onInitiateCreatePost?: () => void; // New prop to handle opening create post form
-  currentUser: FirebaseUser | null; // New prop for current user
+  onInitiateCreatePost?: () => void;
+  currentUser: FirebaseUser | null;
 }
 
 type PostTypeFilter = 'all' | 'help_request' | 'post';
@@ -48,8 +47,8 @@ export const PostList: React.FC<PostListProps> = ({
   selectedPostId,
   availableTags,
   detailedSectorsData,
-  onInitiateCreatePost, // Destructure new prop
-  currentUser, // Destructure new prop
+  onInitiateCreatePost,
+  currentUser,
 }) => {
   const isMobile = useIsMobile();
   const [isFilterContainerOpen, setIsFilterContainerOpen] = useState(false);
@@ -60,9 +59,27 @@ export const PostList: React.FC<PostListProps> = ({
   const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string | undefined>(undefined);
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState('');
+  
+  const [isSearchActive, setIsSearchActive] = useState(false);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
   const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
+
+  const toggleSearch = () => {
+    setIsSearchActive(prev => {
+        if (prev) {
+            setSearchTerm(''); // Clear search on close
+        }
+        return !prev;
+    });
+  };
+
+  useEffect(() => {
+    if (isSearchActive) {
+        setTimeout(() => searchInputRef.current?.focus(), 0);
+    }
+  }, [isSearchActive]);
 
   useEffect(() => {
     if (selectedSectorFilter) {
@@ -103,16 +120,17 @@ export const PostList: React.FC<PostListProps> = ({
     setSelectedTags([]);
     setSelectedSectorFilter(undefined);
     setSearchTerm('');
-  }, []);
+    if (isSearchActive) setIsSearchActive(false);
+  }, [isSearchActive]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedPostType !== "all") count++;
     if (selectedTags.length > 0) count++;
     if (selectedSectorFilter) count++;
-    if (searchTerm.trim() !== '') count++;
+    // Search term is not counted in the "clearable" filter badge
     return count;
-  }, [selectedPostType, selectedTags, selectedSectorFilter, searchTerm]);
+  }, [selectedPostType, selectedTags, selectedSectorFilter]);
 
   const filteredPosts = useMemo(() => {
     if (!Array.isArray(posts)) return [];
@@ -233,81 +251,83 @@ export const PostList: React.FC<PostListProps> = ({
 
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-4 p-1 flex flex-col sm:flex-row flex-wrap items-stretch sm:items-center gap-2 border-b pb-3">
-        <div className="flex w-full sm:w-auto gap-2"> {/* Group buttons on mobile */}
-          {isMobile && (
-            <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
-              <DialogTrigger asChild>
-                <Button
-                  size="sm"
-                  variant="outline" // Changed from default to outline for consistency
-                  className="text-xs flex-1 h-9" // flex-1 to share space
-                >
-                  <Filter className="h-3.5 w-3.5 mr-1.5" />
-                  Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
-                </Button>
-              </DialogTrigger>
-              <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
-                <DialogHeader className="p-4 border-b">
-                  <DialogTitle>Filter Posts</DialogTitle>
-                  <DialogDescription>Refine posts by type, tags, or industry.</DialogDescription>
-                </DialogHeader>
-                <ScrollArea className="flex-grow min-h-0"><FilterContent /></ScrollArea>
-                <DialogFooter className="p-4 border-t">
-                  <DialogClose asChild>
-                    <Button type="button" variant="default" size="sm">Done</Button>
-                  </DialogClose>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          )}
-          {isMobile && currentUser && onInitiateCreatePost && (
-            <Button
-              size="sm"
-              variant="default"
-              className="text-xs flex-1 h-9" // flex-1 to share space
-              onClick={onInitiateCreatePost}
-              type="button"
-            >
-              <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
-              Create Post
-            </Button>
-          )}
-        </div>
+      <div className="mb-4 p-1 flex items-center gap-2 border-b pb-3">
+        <Button variant="ghost" size="icon" onClick={toggleSearch} className="h-9 w-9 p-2 flex-shrink-0">
+            {isSearchActive ? <X className="h-5 w-5"/> : <Search className="h-5 w-5"/>}
+        </Button>
 
-        {/* Desktop Filter Popover */}
-        {!isMobile && (
-          <Popover open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                size="sm"
-                variant="default"
-                className="text-xs h-9"
-              >
-                <Filter className="h-3.5 w-3.5 mr-1.5" />
-                Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
-          </Popover>
-        )}
-
-        <div className="relative flex items-center flex-grow w-full sm:w-auto">
-          <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            placeholder="Search posts..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-9 pr-3 h-9 text-xs w-full rounded-md border-input focus:ring-primary focus:border-primary"
-            aria-label="Search posts"
-          />
-        </div>
-
-        {activeFilterCount > 0 && (
-          <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0 w-full sm:w-auto">
-            <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All ({activeFilterCount})
-          </Button>
+        {isSearchActive ? (
+            <Input
+                ref={searchInputRef}
+                type="search"
+                placeholder="Search posts..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="h-9 text-xs flex-grow rounded-md border-input"
+                aria-label="Search posts"
+            />
+        ) : (
+            <>
+                {/* Mobile Filter & Create Buttons */}
+                {isMobile && (
+                    <div className="flex w-full items-center gap-2">
+                        <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
+                            <DialogTrigger asChild>
+                                <Button size="sm" variant="outline" className="text-xs flex-1 h-9">
+                                    <Filter className="h-3.5 w-3.5 mr-1.5" />
+                                    Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+                                </Button>
+                            </DialogTrigger>
+                            <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
+                                <DialogHeader className="p-4 border-b">
+                                    <DialogTitle>Filter Posts</DialogTitle>
+                                    <DialogDescription>Refine posts by type, tags, or industry.</DialogDescription>
+                                </DialogHeader>
+                                <ScrollArea className="flex-grow min-h-0"><FilterContent /></ScrollArea>
+                                <DialogFooter className="p-4 border-t">
+                                    <DialogClose asChild>
+                                        <Button type="button" variant="default" size="sm">Done</Button>
+                                    </DialogClose>
+                                </DialogFooter>
+                            </DialogContent>
+                        </Dialog>
+                        {currentUser && onInitiateCreatePost && (
+                            <Button size="sm" variant="default" className="text-xs flex-1 h-9" onClick={onInitiateCreatePost} type="button">
+                                <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
+                                Create Post
+                            </Button>
+                        )}
+                    </div>
+                )}
+                
+                {/* Desktop Filter & Create Buttons */}
+                {!isMobile && (
+                    <>
+                        <Popover open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
+                            <PopoverTrigger asChild>
+                                <Button size="sm" variant="outline" className="text-xs h-9">
+                                    <Filter className="h-3.5 w-3.5 mr-1.5" />
+                                    Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
+                        </Popover>
+                        
+                        {activeFilterCount > 0 && (
+                            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0">
+                                <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All ({activeFilterCount})
+                            </Button>
+                        )}
+                        <div className="flex-grow"></div>
+                        {currentUser && onInitiateCreatePost && (
+                            <Button size="sm" variant="default" className="text-xs h-9 flex-shrink-0" onClick={onInitiateCreatePost} type="button">
+                                <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
+                                Create Post
+                            </Button>
+                        )}
+                    </>
+                )}
+            </>
         )}
       </div>
 
@@ -326,7 +346,7 @@ export const PostList: React.FC<PostListProps> = ({
           ) : (
             <div className="col-span-full text-center py-10">
               <p className="text-muted-foreground">
-                {isLoading ? "Loading..." : (activeFilterCount > 0 ? "No posts found matching your filters." : "No posts available yet.")}
+                {isLoading ? "Loading..." : (searchTerm.trim() ? `No posts found matching "${searchTerm}".` : (activeFilterCount > 0 ? "No posts found matching your filters." : "No posts available yet."))}
               </p>
             </div>
           )}
@@ -337,4 +357,3 @@ export const PostList: React.FC<PostListProps> = ({
 };
 
 PostList.displayName = "PostList";
-
