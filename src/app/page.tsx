@@ -173,18 +173,36 @@ const BoardPageContent = () => {
     <div className="space-y-4 p-4 border-b">
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Post Type</Label>
-        <Select value={selectedPostType} onValueChange={(value) => setSelectedPostType(value as PostTypeFilter)}>
-          <SelectTrigger className="w-full h-9 text-xs"><SelectValue placeholder="Filter by Post Type" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all" className="text-xs"><LayoutGrid className="h-3.5 w-3.5 mr-1.5 inline-block" />All Posts</SelectItem>
-            <SelectItem value="help_request" className="text-xs"><HandHelping className="h-3.5 w-3.5 mr-1.5 inline-block" />Help Requests</SelectItem>
-            <SelectItem value="post" className="text-xs"><Briefcase className="h-3.5 w-3.5 mr-1.5 inline-block" />Opportunities</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          <Button
+            variant={selectedPostType === 'all' ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setSelectedPostType('all')}
+            className={cn("h-9 px-3 text-xs flex-1 rounded-md", selectedPostType === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+          >
+            <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> All Posts
+          </Button>
+          <Button
+            variant={selectedPostType === 'help_request' ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setSelectedPostType('help_request')}
+            className={cn("h-9 px-3 text-xs flex-1 rounded-md", selectedPostType === 'help_request' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+          >
+            <HandHelping className="mr-1.5 h-3.5 w-3.5" /> Requests
+          </Button>
+          <Button
+            variant={selectedPostType === 'post' ? "secondary" : "ghost"}
+            size="sm"
+            onClick={() => setSelectedPostType('post')}
+            className={cn("h-9 px-3 text-xs flex-1 rounded-md", selectedPostType === 'post' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
+          >
+            <Briefcase className="mr-1.5 h-3.5 w-3.5" /> Opportunities
+          </Button>
+        </div>
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Tags</Label>
-        <ScrollArea className="h-[120px] rounded-md border p-2.5">
+        <ScrollArea className="h-[120px] p-2.5">
           <div className="flex flex-wrap gap-2">
             {availableTags.map((tag) => (
               <Button
@@ -192,7 +210,7 @@ const BoardPageContent = () => {
                 type="button"
                 variant={selectedTags.includes(tag) ? 'secondary' : 'outline'}
                 size="xs"
-                className="h-7 rounded-full px-3 text-xs font-normal"
+                className="h-7 rounded-md px-3 text-xs font-normal"
                 onClick={() => handleTagToggle(tag)}
               >
                 {tag}
