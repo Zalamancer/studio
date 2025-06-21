@@ -9,11 +9,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2, PlusCircle, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search, ListFilter
+  Loader2, PlusCircle, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
@@ -26,11 +25,8 @@ import dynamic from 'next/dynamic';
 import { PostList } from '@/components/board-page/PostList';
 import type { CreatePostFormData, CreatePostFormProps } from '@/components/CreatePostForm';
 import { uploadPostImage } from '@/services/storageService';
-import { createNotification } from '@/services/notificationService';
-import { getReviewsForProfile } from '@/services/reviewService';
 import { Timestamp } from 'firebase/firestore';
 import { usePage } from '@/contexts/PageContext';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { MessageSquare } from 'lucide-react';
 
 const DynamicPostDetailPanel = dynamic(() =>
@@ -55,12 +51,11 @@ const BoardPageContent = () => {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const { handleCreateClick, setHandleCreateClick, isFilterViewVisible, searchTerm, setSearchTerm } = usePage();
+  const { handleCreateClick, setHandleCreateClick, isFilterViewVisible, searchTerm } = usePage();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
 
-  // --- START: Lifted Filter State ---
   const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string | undefined>(undefined);
@@ -69,7 +64,6 @@ const BoardPageContent = () => {
   
   const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
   const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
-  // --- END: Lifted Filter State ---
 
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -78,19 +72,15 @@ const BoardPageContent = () => {
     refetchOnWindowFocus: true,
   });
 
-  // --- START: Lifted Filter Logic ---
   useEffect(() => {
     if (selectedSectorFilter) {
       const sector = detailedSectorsData.find(s => s.code === selectedSectorFilter);
       setAvailableSubSectors(sector?.subSectors || []);
       setSelectedSubSectorFilter(undefined);
-      setAvailableIndustries([]);
-      setSelectedIndustryFilter(undefined);
+      setSelectedIndustryFilter(undefined); // Reset industry when sector changes
     } else {
       setAvailableSubSectors([]);
-      setAvailableIndustries([]);
       setSelectedSubSectorFilter(undefined);
-      setSelectedIndustryFilter(undefined);
     }
   }, [selectedSectorFilter]);
 
@@ -98,11 +88,12 @@ const BoardPageContent = () => {
     if (selectedSubSectorFilter) {
       const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorFilter);
       setAvailableIndustries(subSector?.industries || []);
-      setSelectedIndustryFilter(undefined);
+      setSelectedIndustryFilter(undefined); // Reset industry when sub-sector changes
     } else {
       setAvailableIndustries([]);
     }
   }, [selectedSubSectorFilter, availableSubSectors]);
+
 
   const handleTagToggle = useCallback((tag: string) => {
     setSelectedTags(prevTags =>
@@ -116,7 +107,6 @@ const BoardPageContent = () => {
     setSelectedPostType("all");
     setSelectedTags([]);
     setSelectedSectorFilter(undefined);
-    // Note: searchTerm is managed globally by usePage, not cleared here
   }, []);
 
   const activeFilterCount = useMemo(() => {
@@ -142,7 +132,7 @@ const BoardPageContent = () => {
     }
 
     if (selectedIndustryFilter) {
-      filtered = filtered.filter(post => post.naicsCode === selectedIndustryFilter);
+        filtered = filtered.filter(post => post.naicsCode === selectedIndustryFilter);
     } else if (selectedSubSectorFilter) {
         const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorFilter);
         const industryCodesInSubSector = subSector?.industries.map(ind => ind.code) || [];
@@ -174,7 +164,7 @@ const BoardPageContent = () => {
       const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() || 0);
       return timeB - timeA;
     });
-  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, detailedSectorsData, availableSubSectors, searchTerm]);
+  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, searchTerm, detailedSectorsData, availableSubSectors, availableIndustries]);
 
   const FilterContent = () => (
     <div className="space-y-4 p-4 border-b">
@@ -189,46 +179,70 @@ const BoardPageContent = () => {
           </SelectContent>
         </Select>
       </div>
-
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Tags</Label>
-        <div className="flex flex-wrap gap-2 pt-1">
-          {availableTags.map((tag) => (
-            <Button
-              key={tag}
-              type="button"
-              variant={selectedTags.includes(tag) ? 'secondary' : 'outline'}
-              size="xs"
-              className="h-7 rounded-full px-3 text-xs font-normal"
-              onClick={() => handleTagToggle(tag)}
-            >
-              {tag}
-            </Button>
-          ))}
-        </div>
+        <ScrollArea className="h-[120px] rounded-md border p-2.5">
+          <div className="flex flex-wrap gap-2">
+            {availableTags.map((tag) => (
+              <Button
+                key={tag}
+                type="button"
+                variant={selectedTags.includes(tag) ? 'secondary' : 'outline'}
+                size="xs"
+                className="h-7 rounded-full px-3 text-xs font-normal"
+                onClick={() => handleTagToggle(tag)}
+              >
+                {tag}
+              </Button>
+            ))}
+          </div>
+        </ScrollArea>
       </div>
 
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Industry</Label>
         <Select value={selectedSectorFilter} onValueChange={setSelectedSectorFilter}>
-          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select Sector" /></SelectTrigger>
+          <SelectTrigger className="w-full h-9 text-xs">
+            <SelectValue placeholder="Select Sector" />
+          </SelectTrigger>
           <SelectContent>
-            {detailedSectorsData.map(sector => <SelectItem key={sector.code} value={sector.code} className="text-xs">{sector.name}</SelectItem>)}
+            {detailedSectorsData.map(sector => (
+              <SelectItem key={sector.code} value={sector.code} className="text-xs">
+                {sector.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
-        <Select value={selectedSubSectorFilter} onValueChange={setSelectedSubSectorFilter} disabled={availableSubSectors.length === 0}>
-          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={availableSubSectors.length > 0 ? "Select Sub-Sector" : "N/A"} /></SelectTrigger>
-          <SelectContent>
-            {availableSubSectors.map(sub => <SelectItem key={sub.code} value={sub.code} className="text-xs">{sub.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
-        <Select value={selectedIndustryFilter} onValueChange={setSelectedIndustryFilter} disabled={availableIndustries.length === 0}>
-          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={availableIndustries.length > 0 ? "Select Industry" : "N/A"} /></SelectTrigger>
-          <SelectContent>
-            {availableIndustries.map(ind => <SelectItem key={ind.code} value={ind.code} className="text-xs">{ind.name}</SelectItem>)}
-          </SelectContent>
-        </Select>
+        {selectedSectorFilter && availableSubSectors.length > 0 && (
+          <Select value={selectedSubSectorFilter} onValueChange={setSelectedSubSectorFilter}>
+            <SelectTrigger className="w-full h-9 text-xs">
+              <SelectValue placeholder="Select Sub-Sector" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableSubSectors.map(sub => (
+                <SelectItem key={sub.code} value={sub.code} className="text-xs">
+                  {sub.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        {selectedSubSectorFilter && availableIndustries.length > 0 && (
+          <Select value={selectedIndustryFilter} onValueChange={setSelectedIndustryFilter}>
+            <SelectTrigger className="w-full h-9 text-xs">
+              <SelectValue placeholder="Select Industry" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableIndustries.map(ind => (
+                <SelectItem key={ind.code} value={ind.code} className="text-xs">
+                  {ind.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
       </div>
+
       {activeFilterCount > 0 && (
         <Button variant="ghost" size="sm" onClick={clearAllFilters} className="w-full h-9 text-xs text-primary hover:underline">
           <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All Filters ({activeFilterCount})
@@ -236,9 +250,7 @@ const BoardPageContent = () => {
       )}
     </div>
   );
-  // --- END: Lifted Filter Logic ---
-
-  // --- START: Existing component logic ---
+  
   const addPostMutation = useMutation({
     mutationFn: addPostToFirestore,
     onSuccess: () => {
@@ -336,8 +348,6 @@ const BoardPageContent = () => {
     const newParams = new URLSearchParams(searchParams?.toString());
     newParams.delete('postId');
     router.replace(`/?${newParams.toString()}`, { scroll: false });
-    // This will trigger the useEffect for postIdFromUrl to set selectedPost to null
-    // setSelectedPost(null); 
     setShowCreatePostFormInline(false);
   }, [searchParams, router]);
 
@@ -399,7 +409,6 @@ const BoardPageContent = () => {
       />
     );
   };
-  // --- END: Existing component logic ---
 
   return (
     <div className="container mx-auto px-4 pt-0 md:pt-6 flex flex-col flex-grow">
@@ -415,26 +424,6 @@ const BoardPageContent = () => {
           isMobile && isFilterViewVisible && "hidden"
         )}>
         <div className={cn("flex flex-col overflow-hidden", isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:flex-1 md:min-w-0", !isMobile && "md:pr-4")}>
-           <div className="mb-4 hidden md:flex items-center gap-2 border-b pb-3">
-             <Popover>
-               <PopoverTrigger asChild>
-                 <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
-                   <ListFilter className="h-5 w-5" />
-                   <span className="sr-only">Filters</span>
-                   {activeFilterCount > 0 && (
-                     <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
-                       {activeFilterCount}
-                     </span>
-                   )}
-                 </Button>
-               </PopoverTrigger>
-               <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
-             </Popover>
-             <div className="relative flex-grow">
-               <Input type="search" placeholder="Search posts..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-9 text-xs pl-8" aria-label="Search posts"/>
-               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-             </div>
-           </div>
           <PostList
             posts={filteredPosts}
             isLoading={isLoadingPosts}
