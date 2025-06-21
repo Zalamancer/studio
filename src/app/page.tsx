@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2, PlusCircle, MessageSquare, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search, ListFilter
+  Loader2, PlusCircle, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search, ListFilter
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
@@ -31,6 +31,7 @@ import { getReviewsForProfile } from '@/services/reviewService';
 import { Timestamp } from 'firebase/firestore';
 import { usePage } from '@/contexts/PageContext';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { MessageSquare } from 'lucide-react';
 
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
@@ -58,7 +59,7 @@ const BoardPageContent = () => {
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
-  
+
   // --- START: Lifted Filter State ---
   const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -173,7 +174,7 @@ const BoardPageContent = () => {
       const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() || 0);
       return timeB - timeA;
     });
-  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, detailedSectorsData, availableSubSectors, searchTerm]);
+  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, detailedSectorsData, availableSubSectors, searchTerm]);
 
   const FilterContent = () => (
     <div className="space-y-4 p-4 border-b">
@@ -190,17 +191,21 @@ const BoardPageContent = () => {
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs font-medium text-muted-foreground">Tags {selectedTags.length > 0 && `(${selectedTags.length})`}</Label>
-        <ScrollArea className="h-[120px] rounded-md border p-2.5">
-          <div className="space-y-1.5">
-            {availableTags.map((tag) => (
-              <div key={tag} className="flex items-center space-x-2">
-                <Checkbox id={`tag-filter-${tag}`} checked={selectedTags.includes(tag)} onCheckedChange={() => handleTagToggle(tag)} />
-                <Label htmlFor={`tag-filter-${tag}`} className="text-xs font-normal">{tag}</Label>
-              </div>
-            ))}
-          </div>
-        </ScrollArea>
+        <Label className="text-xs font-medium text-muted-foreground">Tags</Label>
+        <div className="flex flex-wrap gap-2 pt-1">
+          {availableTags.map((tag) => (
+            <Button
+              key={tag}
+              type="button"
+              variant={selectedTags.includes(tag) ? 'secondary' : 'outline'}
+              size="xs"
+              className="h-7 rounded-full px-3 text-xs font-normal"
+              onClick={() => handleTagToggle(tag)}
+            >
+              {tag}
+            </Button>
+          ))}
+        </div>
       </div>
 
       <div className="space-y-1.5">
@@ -234,11 +239,107 @@ const BoardPageContent = () => {
   // --- END: Lifted Filter Logic ---
 
   // --- START: Existing component logic ---
-  const deletePostMutation = useMutation({ /* ... */ });
-  const addPostMutation = useMutation({ /* ... */ });
-  const handleCreatePostSubmit = useCallback((formData: CreatePostFormData) => { /* ... */ }, [user, toast, addPostMutation]);
-  const handleDeletePost = useCallback((postId: string | undefined) => { /* ... */ }, [user, deletePostMutation, toast]);
-  const handleCloseDetailView = useCallback(() => { /* ... */ }, [searchParams, router, selectedPost, setSelectedPost, setShowCreatePostFormInline]);
+  const addPostMutation = useMutation({
+    mutationFn: addPostToFirestore,
+    onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
+        toast({
+            title: "Post Created",
+            description: "Your post is now live on the board.",
+        });
+        setShowCreatePostFormInline(false);
+    },
+    onError: (error: Error) => {
+        toast({
+            variant: "destructive",
+            title: "Error Creating Post",
+            description: error.message,
+        });
+    }
+  });
+
+  const deletePostMutation = useMutation({
+    mutationFn: (postId: string) => deletePostFromFirestore(postId),
+    onSuccess: (_, postId) => {
+        queryClient.invalidateQueries({ queryKey: ['posts'] });
+        toast({
+            title: "Post Deleted",
+            description: "Your post has been successfully removed.",
+        });
+        if (selectedPost?.id === postId) {
+            handleCloseDetailView();
+        }
+    },
+    onError: (error: Error) => {
+        toast({
+            variant: "destructive",
+            title: "Error Deleting Post",
+            description: error.message,
+        });
+    }
+  });
+
+  const handleCreatePostSubmit = useCallback(async (formData: CreatePostFormData) => {
+    if (!user) {
+        toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to create a post." });
+        return;
+    }
+    const uploadedImageUrls: string[] = [];
+    if (formData.imageFiles && formData.imageFiles.length > 0) {
+        toast({ title: "Uploading Images...", description: "Please wait while your images are uploaded." });
+        for (const file of formData.imageFiles) {
+            try {
+                const url = await uploadPostImage(file, user.uid);
+                uploadedImageUrls.push(url);
+            } catch (error) {
+                toast({ variant: "destructive", title: "Image Upload Failed", description: `Could not upload ${file.name}. Please try again.` });
+                return;
+            }
+        }
+    }
+
+    const sectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
+    const subSectorDetails = sectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
+    const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
+
+    const newPost: NewPostData = {
+        userId: user.uid,
+        question: formData.question,
+        descriptionDetails: formData.descriptionDetails,
+        descriptionTried: formData.descriptionTried || null,
+        descriptionOutcome: formData.descriptionOutcome || null,
+        tags: formData.tags,
+        sector: sectorDetails?.name || formData.sector,
+        subSector: subSectorDetails?.name || null,
+        industry: industryDetails?.name || null,
+        naicsCode: formData.industry || formData.subSector || formData.sector,
+        ratingScore: 0,
+        imageUrls: uploadedImageUrls,
+        mentionedUserIds: formData.mentionedUserIds || [],
+        requestType: formData.requestType,
+        maxBudget: formData.maxBudget,
+        deadline: formData.deadline
+    };
+    addPostMutation.mutate(newPost);
+  }, [user, toast, addPostMutation]);
+
+  const handleDeletePost = useCallback((postId: string | undefined) => {
+    if (!postId) return;
+    if (user && posts.find(p => p.id === postId)?.userId === user.uid) {
+        deletePostMutation.mutate(postId);
+    } else {
+        toast({ variant: "destructive", title: "Permission Denied", description: "You can only delete your own posts." });
+    }
+  }, [user, posts, deletePostMutation, toast]);
+
+  const handleCloseDetailView = useCallback(() => {
+    const newParams = new URLSearchParams(searchParams?.toString());
+    newParams.delete('postId');
+    router.replace(`/?${newParams.toString()}`, { scroll: false });
+    // This will trigger the useEffect for postIdFromUrl to set selectedPost to null
+    // setSelectedPost(null); 
+    setShowCreatePostFormInline(false);
+  }, [searchParams, router]);
 
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
