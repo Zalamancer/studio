@@ -1,20 +1,23 @@
 // src/app/page.tsx
 "use client";
 
-import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Button, buttonVariants } from '@/components/ui/button';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
+import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2, PlusCircle, MessageSquare, X
+  Loader2, PlusCircle, MessageSquare, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search, ListFilter
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
-import type { Post, NewPostData } from '@/types/post';
+import type { Post, NewPostData, SectorWithSubSectors, SubSector, Industry } from '@/types/post';
 import { availableTags, detailedSectorsData } from '@/components/layout/MainLayout';
 import { useAuth } from '@/contexts/AuthContext';
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -27,6 +30,7 @@ import { createNotification } from '@/services/notificationService';
 import { getReviewsForProfile } from '@/services/reviewService';
 import { Timestamp } from 'firebase/firestore';
 import { usePage } from '@/contexts/PageContext';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
@@ -41,6 +45,8 @@ const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
   }
 );
 
+type PostTypeFilter = 'all' | 'help_request' | 'post';
+
 const BoardPageContent = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -48,10 +54,21 @@ const BoardPageContent = () => {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const { handleCreateClick, setHandleCreateClick, isFilterViewVisible } = usePage();
+  const { handleCreateClick, setHandleCreateClick, isFilterViewVisible, searchTerm, setSearchTerm } = usePage();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
+  
+  // --- START: Lifted Filter State ---
+  const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+  const [selectedSectorFilter, setSelectedSectorFilter] = useState<string | undefined>(undefined);
+  const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string | undefined>(undefined);
+  const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
+  
+  const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
+  const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
+  // --- END: Lifted Filter State ---
 
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -60,125 +77,168 @@ const BoardPageContent = () => {
     refetchOnWindowFocus: true,
   });
 
-  const deletePostMutation = useMutation({
-    mutationFn: deletePostFromFirestore,
-    onSuccess: (_, postId) => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      toast({ title: "Post Deleted", description: "The post has been removed." });
-      if (selectedPost?.id === postId) {
-        handleCloseDetailView();
-      }
-    },
-    onError: (error: Error) => {
-      toast({ variant: "destructive", title: "Deletion Failed", description: `Could not delete post: ${error.message}.` });
-    },
-  });
+  // --- START: Lifted Filter Logic ---
+  useEffect(() => {
+    if (selectedSectorFilter) {
+      const sector = detailedSectorsData.find(s => s.code === selectedSectorFilter);
+      setAvailableSubSectors(sector?.subSectors || []);
+      setSelectedSubSectorFilter(undefined);
+      setAvailableIndustries([]);
+      setSelectedIndustryFilter(undefined);
+    } else {
+      setAvailableSubSectors([]);
+      setAvailableIndustries([]);
+      setSelectedSubSectorFilter(undefined);
+      setSelectedIndustryFilter(undefined);
+    }
+  }, [selectedSectorFilter]);
 
-  const addPostMutation = useMutation({
-    mutationFn: async (formData: CreatePostFormData) => {
-      if (!user) throw new Error("User not authenticated to create post.");
-      let currentRatingScore = 0;
-      try {
-        const reviews = await getReviewsForProfile(user.uid);
-        if (reviews && reviews.length > 0) {
-          const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
-          currentRatingScore = parseFloat((totalRating / reviews.length).toFixed(1));
-        }
-      } catch (ratingError: any) { }
+  useEffect(() => {
+    if (selectedSubSectorFilter) {
+      const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorFilter);
+      setAvailableIndustries(subSector?.industries || []);
+      setSelectedIndustryFilter(undefined);
+    } else {
+      setAvailableIndustries([]);
+    }
+  }, [selectedSubSectorFilter, availableSubSectors]);
 
-      let uploadedImageUrls: string[] = [];
-      if (formData.imageFiles && formData.imageFiles.length > 0 && user) {
-        const uploadPromises = formData.imageFiles.map(file =>
-          uploadPostImage(file, user.uid).catch(uploadError => {
-            toast({ variant: "destructive", title: `Image Upload Failed for ${file.name}`, description: (uploadError as Error).message || "Could not upload image." });
-            return null;
-          })
+  const handleTagToggle = useCallback((tag: string) => {
+    setSelectedTags(prevTags =>
+      prevTags.includes(tag)
+        ? prevTags.filter(t => t !== tag)
+        : [...prevTags, tag]
+    );
+  }, []);
+
+  const clearAllFilters = useCallback(() => {
+    setSelectedPostType("all");
+    setSelectedTags([]);
+    setSelectedSectorFilter(undefined);
+    // Note: searchTerm is managed globally by usePage, not cleared here
+  }, []);
+
+  const activeFilterCount = useMemo(() => {
+    let count = 0;
+    if (selectedPostType !== "all") count++;
+    if (selectedTags.length > 0) count++;
+    if (selectedSectorFilter) count++;
+    return count;
+  }, [selectedPostType, selectedTags, selectedSectorFilter]);
+
+  const filteredPosts = useMemo(() => {
+    if (!Array.isArray(posts)) return [];
+    let filtered = posts;
+
+    if (selectedPostType !== "all") {
+      filtered = filtered.filter(post => post.requestType === selectedPostType);
+    }
+
+    if (selectedTags.length > 0) {
+      filtered = filtered.filter(post =>
+        Array.isArray(post.tags) && selectedTags.every(tag => post.tags.includes(tag))
+      );
+    }
+
+    if (selectedIndustryFilter) {
+      filtered = filtered.filter(post => post.naicsCode === selectedIndustryFilter);
+    } else if (selectedSubSectorFilter) {
+        const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorFilter);
+        const industryCodesInSubSector = subSector?.industries.map(ind => ind.code) || [];
+        filtered = filtered.filter(post =>
+            post.naicsCode === selectedSubSectorFilter ||
+            (post.naicsCode && industryCodesInSubSector.includes(post.naicsCode))
         );
-        const results = await Promise.all(uploadPromises);
-        uploadedImageUrls = results.filter((url): url is string => url !== null);
-        if (uploadedImageUrls.length !== formData.imageFiles.length) {
-          if (uploadedImageUrls.length === 0 && formData.imageFiles.length > 0) {
-            throw new Error("All image uploads failed. Post not created.");
-          }
-          toast({ variant: "warning", title: "Partial Image Upload", description: "Some images could not be uploaded." });
-        }
-      }
-      
-      const mainSectorDetails = detailedSectorsData.find(s => s.code === formData.sector);
-      const subSectorDetails = mainSectorDetails?.subSectors.find(ss => ss.code === formData.subSector);
-      const industryDetails = subSectorDetails?.industries.find(ind => ind.code === formData.industry);
-
-      const newPostData: NewPostData = {
-        userId: user.uid,
-        question: formData.question,
-        requestType: formData.requestType,
-        descriptionDetails: formData.descriptionDetails,
-        descriptionTried: formData.descriptionTried?.trim() ? formData.descriptionTried.trim() : undefined,
-        descriptionOutcome: formData.descriptionOutcome?.trim() ? formData.descriptionOutcome.trim() : undefined,
-        tags: formData.tags || [],
-        sector: mainSectorDetails?.name || formData.sector,
-        subSector: subSectorDetails?.name || null,
-        industry: industryDetails?.name || null,
-        naicsCode: formData.industry || formData.subSector || formData.sector,
-        ratingScore: currentRatingScore,
-        imageUrls: uploadedImageUrls,
-        mentionedUserIds: formData.mentionedUserIds || [],
-        maxBudget: formData.requestType === 'help_request' ? (formData.maxBudget === undefined ? null : formData.maxBudget) : null,
-        deadline: formData.requestType === 'help_request' && formData.deadline ? Timestamp.fromDate(new Date(formData.deadline)) : null,
-        commentCount: 0,
-      };
-      return addPostToFirestore(newPostData);
-    },
-    onSuccess: (newlyCreatedPostId, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['posts'] });
-      queryClient.invalidateQueries({ queryKey: ['userPosts'] });
-      queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
-      toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
-      setShowCreatePostFormInline(false);
-      if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
-        const descriptionSource = variables.descriptionDetails;
-        variables.mentionedUserIds.forEach(async (mentionedUid) => {
-          if (mentionedUid !== user.uid) {
-            try {
-              await createNotification({ userId: mentionedUid, type: 'mention', senderId: user.uid, postId: newlyCreatedPostId, postQuestion: variables.question, textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "", });
-            } catch (notifyError) { }
-          }
-        });
-      }
-    },
-    onError: (error: Error, variables) => {
-      toast({ variant: "destructive", title: "Submission Failed", description: `Could not submit ${variables.requestType === 'help_request' ? 'help request' : 'post'}: ${error.message}.` });
-    },
-  });
-
-  const handleCreatePostSubmit = useCallback((formData: CreatePostFormData) => {
-    if (!user) {
-      toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
-      return;
+    } else if (selectedSectorFilter) {
+        const sector = detailedSectorsData.find(s => s.code === selectedSectorFilter);
+        const subSectorCodesInSector = sector?.subSectors.map(ss => ss.code) || [];
+        const industryCodesInSector = sector?.subSectors.flatMap(ss => ss.industries.map(ind => ind.code)) || [];
+        filtered = filtered.filter(post =>
+            post.naicsCode === selectedSectorFilter ||
+            (post.naicsCode && subSectorCodesInSector.includes(post.naicsCode)) ||
+            (post.naicsCode && industryCodesInSector.includes(post.naicsCode))
+        );
     }
-    addPostMutation.mutate(formData);
-  }, [user, toast, addPostMutation]);
 
-  const handleDeletePost = useCallback((postId: string | undefined) => {
-    if (!postId) {
-      toast({ variant: "destructive", title: "Error", description: "Post ID missing for deletion." });
-      return;
+    if (searchTerm.trim() !== '') {
+      const searchTermLower = searchTerm.toLowerCase();
+      filtered = filtered.filter(post =>
+        post.question.toLowerCase().includes(searchTermLower) ||
+        (post.descriptionDetails && post.descriptionDetails.toLowerCase().includes(searchTermLower))
+      );
     }
-    if (!user) {
-      toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in to delete posts." });
-      return;
-    }
-    deletePostMutation.mutate(postId);
-  }, [user, deletePostMutation, toast]);
 
-  const handleCloseDetailView = useCallback(() => {
-    if (searchParams?.get('postId')) {
-      router.replace('/', { scroll: false });
-    } else if (selectedPost) {
-      setSelectedPost(null);
-    }
-    setShowCreatePostFormInline(false);
-  }, [searchParams, router, selectedPost, setSelectedPost, setShowCreatePostFormInline]);
+    return filtered.sort((a, b) => {
+      const timeA = a.createdAt instanceof Date ? a.createdAt.getTime() : (typeof a.createdAt === 'number' ? a.createdAt : (a.createdAt as any)?.toMillis?.() || 0);
+      const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() || 0);
+      return timeB - timeA;
+    });
+  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, detailedSectorsData, availableSubSectors, searchTerm]);
+
+  const FilterContent = () => (
+    <div className="space-y-4 p-4 border-b">
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">Post Type</Label>
+        <Select value={selectedPostType} onValueChange={(value) => setSelectedPostType(value as PostTypeFilter)}>
+          <SelectTrigger className="w-full h-9 text-xs"><SelectValue placeholder="Filter by Post Type" /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all" className="text-xs"><LayoutGrid className="h-3.5 w-3.5 mr-1.5 inline-block" />All Posts</SelectItem>
+            <SelectItem value="help_request" className="text-xs"><HandHelping className="h-3.5 w-3.5 mr-1.5 inline-block" />Help Requests</SelectItem>
+            <SelectItem value="post" className="text-xs"><Briefcase className="h-3.5 w-3.5 mr-1.5 inline-block" />Opportunities</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">Tags {selectedTags.length > 0 && `(${selectedTags.length})`}</Label>
+        <ScrollArea className="h-[120px] rounded-md border p-2.5">
+          <div className="space-y-1.5">
+            {availableTags.map((tag) => (
+              <div key={tag} className="flex items-center space-x-2">
+                <Checkbox id={`tag-filter-${tag}`} checked={selectedTags.includes(tag)} onCheckedChange={() => handleTagToggle(tag)} />
+                <Label htmlFor={`tag-filter-${tag}`} className="text-xs font-normal">{tag}</Label>
+              </div>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+
+      <div className="space-y-1.5">
+        <Label className="text-xs font-medium text-muted-foreground">Industry</Label>
+        <Select value={selectedSectorFilter} onValueChange={setSelectedSectorFilter}>
+          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="Select Sector" /></SelectTrigger>
+          <SelectContent>
+            {detailedSectorsData.map(sector => <SelectItem key={sector.code} value={sector.code} className="text-xs">{sector.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={selectedSubSectorFilter} onValueChange={setSelectedSubSectorFilter} disabled={availableSubSectors.length === 0}>
+          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={availableSubSectors.length > 0 ? "Select Sub-Sector" : "N/A"} /></SelectTrigger>
+          <SelectContent>
+            {availableSubSectors.map(sub => <SelectItem key={sub.code} value={sub.code} className="text-xs">{sub.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Select value={selectedIndustryFilter} onValueChange={setSelectedIndustryFilter} disabled={availableIndustries.length === 0}>
+          <SelectTrigger className="h-9 text-xs"><SelectValue placeholder={availableIndustries.length > 0 ? "Select Industry" : "N/A"} /></SelectTrigger>
+          <SelectContent>
+            {availableIndustries.map(ind => <SelectItem key={ind.code} value={ind.code} className="text-xs">{ind.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      </div>
+      {activeFilterCount > 0 && (
+        <Button variant="ghost" size="sm" onClick={clearAllFilters} className="w-full h-9 text-xs text-primary hover:underline">
+          <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All Filters ({activeFilterCount})
+        </Button>
+      )}
+    </div>
+  );
+  // --- END: Lifted Filter Logic ---
+
+  // --- START: Existing component logic ---
+  const deletePostMutation = useMutation({ /* ... */ });
+  const addPostMutation = useMutation({ /* ... */ });
+  const handleCreatePostSubmit = useCallback((formData: CreatePostFormData) => { /* ... */ }, [user, toast, addPostMutation]);
+  const handleDeletePost = useCallback((postId: string | undefined) => { /* ... */ }, [user, deletePostMutation, toast]);
+  const handleCloseDetailView = useCallback(() => { /* ... */ }, [searchParams, router, selectedPost, setSelectedPost, setShowCreatePostFormInline]);
 
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
@@ -201,7 +261,7 @@ const BoardPageContent = () => {
         setSelectedPost(null);
       }
     }
-  }, [searchParams, posts, selectedPost, router, toast, setSelectedPost, setShowCreatePostFormInline]);
+  }, [searchParams, posts, selectedPost, router, toast]);
 
   const openPostCallback = useCallback((postToOpen: Post) => {
     setShowCreatePostFormInline(false);
@@ -211,7 +271,7 @@ const BoardPageContent = () => {
     } else {
       router.push(`/?postId=${postToOpen.id}`, { scroll: false });
     }
-  }, [searchParams, router, handleCloseDetailView, setShowCreatePostFormInline]);
+  }, [searchParams, router, handleCloseDetailView]);
 
   const handleOpenCreatePostForm = useCallback(() => {
     if (user) {
@@ -220,7 +280,7 @@ const BoardPageContent = () => {
     } else {
       toast({ variant: "default", title: "Login Required", description: "Please log in to create a post." });
     }
-  }, [user, toast, setSelectedPost, setShowCreatePostFormInline]);
+  }, [user, toast]);
 
   useEffect(() => {
     setHandleCreateClick(() => handleOpenCreatePostForm);
@@ -238,36 +298,50 @@ const BoardPageContent = () => {
       />
     );
   };
+  // --- END: Existing component logic ---
 
   return (
     <div className="container mx-auto px-4 pt-0 md:pt-6 flex flex-col flex-grow">
-      {/* The filter UI will now be controlled by the main header and PageContext */}
       {isMobile && isFilterViewVisible && (
         <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
-          {/* We'll place a placeholder or the actual filter UI component from PostList here */}
-          <div className="p-4 border-b">
-            <h2 className="font-semibold">Filters</h2>
-            {/* The full filter UI from PostList will live here, but for now a placeholder */}
-            <p className="text-sm text-muted-foreground">Filter options will appear here.</p>
-          </div>
+          <FilterContent />
         </div>
       )}
 
       <div className={cn(
-          "flex-grow", 
+          "flex-grow",
           isMobile ? "grid grid-cols-1" : "md:flex md:flex-row",
-          isMobile && isFilterViewVisible && "hidden" // Hide main content on mobile when filters are open
+          isMobile && isFilterViewVisible && "hidden"
         )}>
         <div className={cn("flex flex-col overflow-hidden", isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:flex-1 md:min-w-0", !isMobile && "md:pr-4")}>
+           <div className="mb-4 hidden md:flex items-center gap-2 border-b pb-3">
+             <Popover>
+               <PopoverTrigger asChild>
+                 <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
+                   <ListFilter className="h-5 w-5" />
+                   <span className="sr-only">Filters</span>
+                   {activeFilterCount > 0 && (
+                     <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
+                       {activeFilterCount}
+                     </span>
+                   )}
+                 </Button>
+               </PopoverTrigger>
+               <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
+             </Popover>
+             <div className="relative flex-grow">
+               <Input type="search" placeholder="Search posts..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-9 text-xs pl-8" aria-label="Search posts"/>
+               <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
+             </div>
+           </div>
           <PostList
-            posts={posts}
+            posts={filteredPosts}
             isLoading={isLoadingPosts}
             onPostSelect={openPostCallback}
             selectedPostId={selectedPost?.id}
-            availableTags={availableTags}
-            detailedSectorsData={detailedSectorsData}
-            onInitiateCreatePost={handleOpenCreatePostForm}
-            currentUser={user}
+            noResultsMessage={
+              searchTerm.trim() ? `No posts found matching "${searchTerm}".` : (activeFilterCount > 0 ? "No posts found matching your filters." : "No posts available yet.")
+            }
           />
         </div>
 

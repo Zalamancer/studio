@@ -169,6 +169,14 @@ export default function MainLayout({
             {/* Mobile Search Overlay */}
             {isMobile && isSearchOverlayVisible && (
               <div className="absolute inset-0 bg-background z-10 flex items-center gap-2 px-2 sm:px-4">
+                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0" onClick={() => {
+                  setSearchOverlayVisible(false);
+                  setFilterViewVisible(false);
+                  setSearchTerm('');
+                }}>
+                  <X className="h-5 w-5" />
+                  <span className="sr-only">Close Search</span>
+                </Button>
                 <Input
                   placeholder="Search..."
                   className="h-9 text-sm flex-grow"
@@ -176,16 +184,9 @@ export default function MainLayout({
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                 />
-                <Button variant="outline" size="sm" className="h-9 px-2.5" onClick={() => setFilterViewVisible(prev => !prev)}>
-                  <ListFilter className="h-4 w-4 mr-1.5" />
-                  Filters
-                </Button>
-                <Button variant="ghost" size="icon" className="h-9 w-9" onClick={() => {
-                  setSearchOverlayVisible(false);
-                  setFilterViewVisible(false);
-                  setSearchTerm('');
-                }}>
-                  <X className="h-5 w-5" />
+                <Button variant="ghost" size="icon" className="h-9 w-9 flex-shrink-0" onClick={() => setFilterViewVisible(prev => !prev)}>
+                  <ListFilter className="h-5 w-5" />
+                  <span className="sr-only">Toggle Filters</span>
                 </Button>
               </div>
             )}
