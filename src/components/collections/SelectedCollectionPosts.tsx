@@ -1,3 +1,4 @@
+
 // src/components/collections/SelectedCollectionPosts.tsx
 "use client";
 
@@ -41,12 +42,15 @@ interface ItemToRemove {
 
 const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMutationPending: boolean }> = ({ post, onRemove, removeMutationPending }) => {
   const hasImage = post.imageUrls && post.imageUrls.length > 0;
+  const postDate = post.createdAt instanceof Date 
+    ? post.createdAt.toLocaleDateString() 
+    : (post.createdAt as any)?.toDate?.().toLocaleDateString() || 'Date unavailable';
 
   return (
     <div className="p-3">
         <div className="grid grid-cols-12 gap-3 md:gap-4 items-start">
             {hasImage && (
-                <Link href={`/?postId=${post.id}`} className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted block" target="_blank" rel="noopener noreferrer">
+                <Link href={`/?postId=${post.id}`} className="col-span-4 md:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted block" target="_blank" rel="noopener noreferrer">
                     <Image 
                         src={post.imageUrls![0]} 
                         alt="Post image" 
@@ -57,7 +61,7 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
                     />
                 </Link>
             )}
-            <div className={cn(hasImage ? "col-span-8 md:col-span-8 lg:col-span-9" : "col-span-12", "flex flex-col h-full")}>
+            <div className={cn(hasImage ? "col-span-8 md:col-span-9" : "col-span-12", "flex flex-col h-full")}>
                 <div className="flex justify-between items-start gap-2">
                     <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0">
                         <h3 className="text-base font-semibold text-foreground hover:text-primary line-clamp-3" title={post.question}>
@@ -80,6 +84,7 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
                 <div className="flex flex-wrap gap-1 mt-1.5">
                     {post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
                 </div>
+                <div className="flex-grow"></div>
             </div>
         </div>
     </div>
@@ -89,12 +94,13 @@ PostItem.displayName = "PostItem";
 
 const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: ClientNewsArticle) => void, removeMutationPending: boolean }> = ({ article, onRemove, removeMutationPending }) => {
     const hasImage = !!article.coverImageUrl;
+    const publishedDate = article.publishedAt ? new Date(article.publishedAt).toLocaleDateString() : 'Draft';
   
     return (
       <div className="p-3">
         <div className="grid grid-cols-12 gap-3 md:gap-4 items-start">
           {hasImage && (
-            <Link href={`/news/article/${article.id}`} className="col-span-4 md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted block" target="_blank" rel="noopener noreferrer">
+            <Link href={`/news/article/${article.id}`} className="col-span-4 md:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted block" target="_blank" rel="noopener noreferrer">
               <Image 
                 src={article.coverImageUrl!} 
                 alt={article.title} 
@@ -105,7 +111,7 @@ const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: Cl
               />
             </Link>
           )}
-          <div className={cn(hasImage ? "col-span-8 md:col-span-8 lg:col-span-9" : "col-span-12", "flex flex-col h-full")}>
+          <div className={cn(hasImage ? "col-span-8 md:col-span-9" : "col-span-12", "flex flex-col h-full")}>
             <div className="flex justify-between items-start gap-2">
               <Link href={`/news/article/${article.id}`} target="_blank" rel="noopener noreferrer" className="flex-grow min-w-0">
                 <h3 className="text-base font-semibold text-foreground hover:text-primary line-clamp-3" title={article.title}>
@@ -128,6 +134,7 @@ const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: Cl
             <div className="flex flex-wrap gap-1 mt-1.5">
               {article.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}
             </div>
+             <div className="flex-grow"></div>
           </div>
         </div>
       </div>
@@ -180,10 +187,7 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
 
   return (
     <div className="h-full flex flex-col">
-      <div className="mb-4 px-4 md:px-0 flex-shrink-0">
-        <h2 className="text-2xl font-bold truncate text-foreground">{collection.name}</h2>
-        <p className="text-sm text-muted-foreground truncate">{collection.description || `Items saved in this collection.`}</p>
-      </div>
+      {/* This header is removed to avoid duplication. The header in collections/page.tsx is now the single source. */}
 
       <Tabs defaultValue="posts" className="w-full flex-grow flex flex-col min-h-0">
         <TabsList className="grid w-full grid-cols-2 mb-4 flex-shrink-0">
@@ -196,13 +200,13 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
             {postsError && <div className="text-destructive flex items-center gap-2 text-sm p-4 bg-destructive/5 rounded-md justify-center"><AlertTriangle className="h-5 w-5 flex-shrink-0" /><div>Error loading posts: {postsError.message}</div></div>}
             {!isLoadingPosts && !postsError && posts.length === 0 && <div className="text-center py-10"><FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">No posts saved in this collection.</p></div>}
             {!isLoadingPosts && !postsError && posts.length > 0 && (
-                <div className="space-y-0 md:space-y-4">
+                <div className="space-y-0">
                 {posts.map((post, index) => (
                     <React.Fragment key={post.id}>
-                    <div className="md:rounded-lg md:border md:shadow-sm md:hover:shadow-md transition-shadow bg-background">
+                    <div className="md:rounded-lg md:border md:shadow-sm md:hover:shadow-md transition-shadow bg-card">
                         <PostItem post={post} onRemove={() => setItemToRemove({ id: post.id, title: post.question, type: 'post' })} removeMutationPending={removeMutation.isPending && itemToRemove?.id === post.id} />
                     </div>
-                    {index < posts.length - 1 && <Separator className="md:hidden" />}
+                    {index < posts.length - 1 && <Separator />}
                     </React.Fragment>
                 ))}
                 </div>
@@ -215,13 +219,13 @@ export const SelectedCollectionPosts: React.FC<SelectedCollectionPostsProps> = (
             {articlesError && <div className="text-destructive flex items-center gap-2 text-sm p-4 bg-destructive/5 rounded-md justify-center"><AlertTriangle className="h-5 w-5 flex-shrink-0" /><div>Error loading articles: {articlesError.message}</div></div>}
             {!isLoadingArticles && !articlesError && articles.length === 0 && <div className="text-center py-10"><FolderOpen className="h-12 w-12 text-muted-foreground mx-auto mb-3" /><p className="text-muted-foreground">No articles saved in this collection.</p></div>}
             {!isLoadingArticles && !articlesError && articles.length > 0 && (
-                <div className="space-y-0 md:space-y-4">
+                <div className="space-y-0">
                 {articles.map((article, index) => (
                     <React.Fragment key={article.id}>
-                    <div className="md:rounded-lg md:border md:shadow-sm md:hover:shadow-md transition-shadow bg-background">
+                    <div className="md:rounded-lg md:border md:shadow-sm md:hover:shadow-md transition-shadow bg-card">
                         <ArticleItem article={article} onRemove={() => setItemToRemove({ id: article.id, title: article.title, type: 'article' })} removeMutationPending={removeMutation.isPending && itemToRemove?.id === article.id} />
                     </div>
-                    {index < articles.length - 1 && <Separator className="md:hidden" />}
+                    {index < articles.length - 1 && <Separator />}
                     </React.Fragment>
                 ))}
                 </div>
