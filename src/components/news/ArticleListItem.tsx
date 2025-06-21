@@ -66,92 +66,103 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
     }
   };
 
+  const authorAndTagsRow = (
+    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+      <span className="font-medium text-foreground">{authorName}</span>
+      {article.tags && article.tags.length > 0 && (
+        <>
+          <span className="text-muted-foreground/70">in</span>
+          <span className="flex flex-wrap gap-1">
+            {article.tags.slice(0, 2).map(tag => (
+               <Badge key={tag} variant="outline" className="text-xs px-1.5 py-0.5 cursor-default">
+                 #{tag}
+               </Badge>
+            ))}
+            {article.tags.length > 2 && (
+                <span className="text-muted-foreground/70 text-[10px] self-center">
+                    +{article.tags.length - 2} more
+                </span>
+            )}
+          </span>
+        </>
+      )}
+    </div>
+  );
+  
+  const mainContentAndActions = (
+    <>
+        <Link href={`/news/article/${article.id}`} className="group">
+            <h2 className="text-xl md:text-2xl font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-tight">
+            {article.title}
+            </h2>
+            {excerpt && (
+            <p className="mt-1 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
+                {excerpt}
+            </p>
+            )}
+        </Link>
+        <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
+            <div className="flex items-center gap-3">
+            <span>{displayDate}</span>
+            <span className="flex items-center gap-1">
+                <MessageSquareText className="h-3.5 w-3.5" />
+                {article.commentCount || 0}
+            </span>
+            </div>
+            <div className="flex items-center gap-0.5 sm:gap-1">
+            {isOwnArticle && (
+                <Button variant="ghost" size="icon" className="h-7 w-7 p-1" asChild>
+                    <Link href={`/news/article/${article.id}`} title="Edit Article" onClick={(e) => e.stopPropagation()}>
+                        <Edit3 className="h-4 w-4"/>
+                    </Link>
+                </Button>
+            )}
+            {currentUserId && (
+                <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 p-1"
+                title={isSaved ? "Unsave Article" : "Save Article"}
+                onClick={handleSaveClick}
+                aria-pressed={isSaved}
+                >
+                <Bookmark className={cn("h-4 w-4", isSaved ? "fill-primary text-primary" : "")} />
+                </Button>
+            )}
+            <Button variant="ghost" size="icon" className="h-7 w-7 p-1" title="More options (placeholder)" onClick={(e) => e.stopPropagation()}>
+                <MoreHorizontal className="h-4 w-4" />
+            </Button>
+            </div>
+        </div>
+    </>
+  );
+
+  const imageColumn = article.coverImageUrl && (
+    <Link href={`/news/article/${article.id}`} className="block flex-shrink-0 ml-4">
+      <div className="relative w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-24 rounded-md overflow-hidden bg-muted">
+        <Image
+          src={article.coverImageUrl}
+          alt={article.title}
+          fill
+          sizes="(max-width: 640px) 96px, (max-width: 768px) 112px, 128px"
+          className="object-cover"
+          data-ai-hint="article summary event"
+        />
+      </div>
+    </Link>
+  );
+
   return (
     <>
       <article className="py-6 border-b border-border last:border-b-0">
+        <div className="mb-2">
+            {authorAndTagsRow}
+        </div>
         <div className="flex justify-between items-start gap-4">
           <div className="flex-grow min-w-0">
-            <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1.5">
-              <span className="font-medium text-foreground">{authorName}</span>
-              {article.tags && article.tags.length > 0 && (
-                <>
-                  <span className="text-muted-foreground/70">in</span>
-                  <span className="flex flex-wrap gap-1">
-                    {article.tags.slice(0, 2).map(tag => (
-                       <Badge key={tag} variant="outline" className="text-xs px-1.5 py-0.5 cursor-default">
-                         #{tag}
-                       </Badge>
-                    ))}
-                    {article.tags.length > 2 && (
-                        <span className="text-muted-foreground/70 text-[10px] self-center">
-                            +{article.tags.length - 2} more
-                        </span>
-                    )}
-                  </span>
-                </>
-              )}
-            </div>
-
-            <Link href={`/news/article/${article.id}`} className="group">
-              <h2 className="text-xl md:text-2xl font-bold text-foreground group-hover:text-primary transition-colors line-clamp-2 leading-tight">
-                {article.title}
-              </h2>
-              {excerpt && (
-                <p className="mt-1 text-sm text-muted-foreground line-clamp-2 leading-relaxed">
-                  {excerpt}
-                </p>
-              )}
-            </Link>
-
-            <div className="mt-3 flex items-center justify-between text-xs text-muted-foreground">
-              <div className="flex items-center gap-3">
-                <span>{displayDate}</span>
-                <span className="flex items-center gap-1">
-                  <MessageSquareText className="h-3.5 w-3.5" />
-                  {article.commentCount || 0}
-                </span>
-              </div>
-              <div className="flex items-center gap-0.5 sm:gap-1">
-                {isOwnArticle && (
-                  <Button variant="ghost" size="icon" className="h-7 w-7 p-1" asChild>
-                      <Link href={`/news/article/${article.id}`} title="Edit Article" onClick={(e) => e.stopPropagation()}>
-                          <Edit3 className="h-4 w-4"/>
-                      </Link>
-                  </Button>
-                )}
-                {currentUserId && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 p-1"
-                    title={isSaved ? "Unsave Article" : "Save Article"}
-                    onClick={handleSaveClick}
-                    aria-pressed={isSaved}
-                  >
-                    <Bookmark className={cn("h-4 w-4", isSaved ? "fill-primary text-primary" : "")} />
-                  </Button>
-                )}
-                <Button variant="ghost" size="icon" className="h-7 w-7 p-1" title="More options (placeholder)" onClick={(e) => e.stopPropagation()}>
-                  <MoreHorizontal className="h-4 w-4" />
-                </Button>
-              </div>
-            </div>
+            {mainContentAndActions}
           </div>
-
-          {article.coverImageUrl && (
-            <Link href={`/news/article/${article.id}`} className="block flex-shrink-0 ml-4">
-              <div className="relative w-24 h-24 sm:w-28 sm:h-28 md:w-32 md:h-24 rounded-md overflow-hidden bg-muted">
-                <Image
-                  src={article.coverImageUrl}
-                  alt={article.title}
-                  fill
-                  sizes="(max-width: 640px) 96px, (max-width: 768px) 112px, 128px"
-                  className="object-cover"
-                  data-ai-hint="article summary event"
-                />
-              </div>
-            </Link>
-          )}
+          {imageColumn}
         </div>
       </article>
       {currentUserId && (
