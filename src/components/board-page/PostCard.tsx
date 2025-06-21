@@ -35,7 +35,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
       className={cn(
         "overflow-hidden transition-shadow duration-200 cursor-pointer bg-card",
         "md:break-inside-avoid",
-        "mb-2 md:mb-0", // Smaller, consistent bottom margin on mobile, removed on desktop
+        "mb-2 md:mb-4", // smaller on mobile, larger on desktop to match column gap
         "md:border-border border-b",
         post.requestType === 'help_request' && "border-amber-500/70 hover:border-amber-500",
         isSelected && "ring-2 ring-primary ring-offset-2",
