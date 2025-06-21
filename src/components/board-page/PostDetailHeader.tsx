@@ -36,8 +36,8 @@ interface PostDetailHeaderProps {
   onDelete: (postId: string) => void;
   deletePostMutationIsPending: boolean;
   connectionStatus?: ConnectionStatus | null;
-  isPostSaved: boolean; // New prop
-  onSaveClick: () => void; // New prop
+  isPostSaved: boolean;
+  onSaveClick: () => void;
 }
 
 export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
@@ -85,81 +85,81 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
 
   return (
     <CardHeader className="p-4 border-b flex-shrink-0 bg-card space-y-2">
-      {/* Top Row: Badges and Action Buttons */}
-      <div className="flex justify-between items-center gap-2">
-        <div className="flex flex-wrap items-center gap-2 min-w-0">
-          {post.requestType === 'help_request' && (
-            <Badge variant="outline" className="text-xs cursor-default border-amber-500 text-amber-600 bg-amber-500/10">
-              <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
-            </Badge>
-          )}
-          {post.requestType === 'help_request' && post.maxBudget != null && (
-            <Badge variant="secondary" className="text-xs cursor-default">
-              <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
-            </Badge>
-          )}
-          {post.tags?.map((tag, index) => (
-            <Badge key={`${post.id}-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
-          ))}
-        </div>
-        <div className="flex items-center flex-shrink-0">
-          {isOwnPost && (
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button variant="ghost" size="icon" disabled={deletePostMutationIsPending} className="text-destructive hover:text-destructive h-7 w-7 p-1">
-                  {deletePostMutationIsPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
-                  <span className="sr-only">Delete Post</span>
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    This action cannot be undone. This will permanently delete your post and all associated comments and bids.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel disabled={deletePostMutationIsPending}>Cancel</AlertDialogCancel>
-                  <AlertDialogAction onClick={() => onDelete(post.id)} disabled={deletePostMutationIsPending} className="bg-destructive hover:bg-destructive/90">
-                    {deletePostMutationIsPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</> : 'Continue'}
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
-          )}
-          {currentUser && !isOwnPost && (
-              <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 p-1"
-                  title={isPostSaved ? "Unsave Post" : "Save to Collection"}
-                  onClick={(e) => {
-                      e.stopPropagation();
-                      onSaveClick();
-                  }}
-                  aria-pressed={isPostSaved}
-                  disabled={deletePostMutationIsPending}
-              >
-                  <Bookmark className={cn("h-4 w-4 text-muted-foreground", isPostSaved && "fill-primary text-primary")} />
+      {/* Top Row for action buttons */}
+      <div className="flex justify-end items-center gap-2 -mt-2 -mr-2">
+        {isOwnPost && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" disabled={deletePostMutationIsPending} className="text-destructive hover:text-destructive h-7 w-7 p-1">
+                {deletePostMutationIsPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+                <span className="sr-only">Delete Post</span>
               </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={(e) => {
-              e.stopPropagation();
-              onClose();
-            }}
-            aria-label="Close post details"
-            className="h-7 w-7 p-1"
-          >
-            <X className="h-5 w-5" />
-          </Button>
-        </div>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  This action cannot be undone. This will permanently delete your post and all associated comments and bids.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel disabled={deletePostMutationIsPending}>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onDelete(post.id)} disabled={deletePostMutationIsPending} className="bg-destructive hover:bg-destructive/90">
+                  {deletePostMutationIsPending ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Deleting...</> : 'Continue'}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+        {currentUser && !isOwnPost && (
+            <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 p-1"
+                title={isPostSaved ? "Unsave Post" : "Save to Collection"}
+                onClick={(e) => {
+                    e.stopPropagation();
+                    onSaveClick();
+                }}
+                aria-pressed={isPostSaved}
+                disabled={deletePostMutationIsPending}
+            >
+                <Bookmark className={cn("h-4 w-4 text-muted-foreground", isPostSaved && "fill-primary text-primary")} />
+            </Button>
+        )}
+        <Button
+          variant="ghost"
+          size="icon"
+          onClick={(e) => {
+            e.stopPropagation();
+            onClose();
+          }}
+          aria-label="Close post details"
+          className="h-7 w-7 p-1"
+        >
+          <X className="h-5 w-5" />
+        </Button>
+      </div>
+
+      {/* Row with Badges */}
+      <div className="flex flex-wrap items-center gap-2 min-w-0">
+        {post.requestType === 'help_request' && (
+          <Badge variant="outline" className="text-xs cursor-default border-amber-500 text-amber-600 bg-amber-500/10">
+            <HandHelping className="mr-1.5 h-3 w-3" /> Help Request
+          </Badge>
+        )}
+        {post.requestType === 'help_request' && post.maxBudget != null && (
+          <Badge variant="secondary" className="text-xs cursor-default">
+            <DollarSign className="mr-1 h-3 w-3 text-green-600" /> Max Budget: ${post.maxBudget.toLocaleString()}
+          </Badge>
+        )}
+        {post.tags?.map((tag, index) => (
+          <Badge key={`${post.id}-detail-tag-${index}`} variant="secondary" className="text-xs cursor-default">{tag}</Badge>
+        ))}
       </div>
 
       {/* Title */}
-      <CardTitle className="text-xl font-semibold line-clamp-3">{post.question}</CardTitle>
+      <CardTitle className="text-xl font-semibold line-clamp-3 pt-1">{post.question}</CardTitle>
 
       {/* Description */}
       <CardDescription className="text-sm pt-1 flex flex-wrap items-center gap-x-3 gap-y-1">
