@@ -44,6 +44,7 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
 
   return (
     <div className="p-3">
+      {/* Mobile Layout */}
       <div className="md:hidden">
         <h3 className="text-base font-semibold text-foreground hover:text-primary mb-1 line-clamp-3" title={post.question}>
           <Link href={`/?postId=${post.id}`} target="_blank" rel="noopener noreferrer">{post.question}</Link>
@@ -63,11 +64,11 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
         <div className="grid grid-cols-12 gap-3 items-start">
           {hasImage && <div className="col-span-4 relative aspect-square rounded-md overflow-hidden bg-muted"><Image src={post.imageUrls![0]} alt="Post image" fill style={{ objectFit: "cover" }} data-ai-hint="abstract illustration" sizes="(max-width: 768px) 33vw, 100px" /></div>}
           <div className={cn(hasImage ? "col-span-8" : "col-span-12")}>
-            <p className="text-sm text-muted-foreground line-clamp-3">{post.descriptionDetails || 'No additional details provided.'}</p>
             <p className="text-xs text-muted-foreground/80 mt-2">Added on: {postDate}</p>
           </div>
         </div>
       </div>
+      {/* Desktop Layout */}
       <div className="hidden md:grid md:grid-cols-12 md:gap-4 md:items-start">
         {hasImage && <div className="md:col-span-4 lg:col-span-3 relative aspect-square rounded-md overflow-hidden bg-muted"><Image src={post.imageUrls![0]} alt="Post image" fill style={{ objectFit: "cover" }} data-ai-hint="abstract illustration" sizes="(max-width: 1024px) 33vw, (max-width: 1280px) 25vw, 200px" /></div>}
         <div className={cn(hasImage ? "md:col-span-8 lg:col-span-9" : "md:col-span-12", "flex flex-col h-full")}>
@@ -76,7 +77,7 @@ const PostItem: React.FC<{ post: Post, onRemove: (post: Post) => void, removeMut
             <div className="flex-shrink-0"><Button variant="ghost" size="icon" className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(post); }} disabled={removeMutationPending} title="Remove from collection">{removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</Button></div>
           </div>
           <div className="flex flex-wrap gap-1.5 mt-1.5">{post.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}</div>
-          <p className="text-sm text-muted-foreground line-clamp-2 mt-2 flex-grow">{post.descriptionDetails || 'No additional details provided.'}</p>
+          <div className="flex-grow"></div> {/* Spacer to push footer down */}
           <div className="flex justify-between items-center mt-2 pt-2 border-t"><p className="text-xs text-muted-foreground/80">Added on: {postDate}</p><Link href={`/?postId=${post.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">View Post <ExternalLink className="h-3 w-3" /></Link></div>
         </div>
       </div>
@@ -111,7 +112,6 @@ const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: Cl
           <div className="grid grid-cols-12 gap-3 items-start">
             {hasImage && <div className="col-span-4 relative aspect-square rounded-md overflow-hidden bg-muted"><Image src={article.coverImageUrl!} alt={article.title} fill style={{ objectFit: "cover" }} data-ai-hint="news cover" sizes="(max-width: 768px) 33vw, 100px" /></div>}
             <div className={cn(hasImage ? "col-span-8" : "col-span-12")}>
-              <p className="text-sm text-muted-foreground line-clamp-3">{article.content ? article.content.substring(0, 150) + "..." : 'No preview available.'}</p>
               <p className="text-xs text-muted-foreground/80 mt-2">Published on: {articleDate}</p>
             </div>
           </div>
@@ -126,7 +126,7 @@ const ArticleItem: React.FC<{ article: ClientNewsArticle, onRemove: (article: Cl
               <div className="flex-shrink-0"><Button variant="ghost" size="icon" className="h-7 w-7 p-1 text-destructive/80 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(article); }} disabled={removeMutationPending} title="Remove from collection">{removeMutationPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}</Button></div>
             </div>
             <div className="flex flex-wrap gap-1.5 mt-1.5">{article.tags?.map(tag => <Badge key={tag} variant="secondary" className="text-xs">{tag}</Badge>)}</div>
-            <p className="text-sm text-muted-foreground line-clamp-2 mt-2 flex-grow">{article.content ? article.content.substring(0, 200) + "..." : 'No preview available.'}</p>
+            <div className="flex-grow"></div> {/* Spacer to push footer down */}
             <div className="flex justify-between items-center mt-2 pt-2 border-t"><p className="text-xs text-muted-foreground/80">Published on: {articleDate}</p><Link href={`/news/article/${article.id}`} className="text-xs text-primary hover:underline flex items-center gap-1" target="_blank" rel="noopener noreferrer">View Article <ExternalLink className="h-3 w-3" /></Link></div>
           </div>
         </div>
