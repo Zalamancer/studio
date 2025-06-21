@@ -14,7 +14,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Home, Compass, MessageSquare, Newspaper, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Search, X } from "lucide-react"; // Removed unnecessary icons, added Search and X
+import { Home, Compass, MessageSquare, Newspaper, LogOut, PlusCircle, Settings, User, CreditCard, Bell, Search, X, Handshake, Bookmark } from "lucide-react";
 import { signOut } from '@/lib/firebase/auth';
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from '@/contexts/AuthContext';
