@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Label } from '@/components/ui/label';
 import { useToast } from "@/hooks/use-toast";
 import {
-  Loader2, PlusCircle, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search
+  Loader2, PlusCircle, X, FilterX, Briefcase, LayoutGrid, HandHelping, Search, MessageSquare
 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
@@ -27,7 +27,6 @@ import type { CreatePostFormData, CreatePostFormProps } from '@/components/Creat
 import { uploadPostImage } from '@/services/storageService';
 import { Timestamp } from 'firebase/firestore';
 import { usePage } from '@/contexts/PageContext';
-import { MessageSquare } from 'lucide-react';
 
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
@@ -51,7 +50,7 @@ const BoardPageContent = () => {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const { handleCreateClick, setHandleCreateClick, isFilterViewVisible, searchTerm } = usePage();
+  const { isFilterViewVisible, searchTerm, setHandleCreateClick } = usePage();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
@@ -77,7 +76,7 @@ const BoardPageContent = () => {
       const sector = detailedSectorsData.find(s => s.code === selectedSectorFilter);
       setAvailableSubSectors(sector?.subSectors || []);
       setSelectedSubSectorFilter(undefined);
-      setSelectedIndustryFilter(undefined); // Reset industry when sector changes
+      setSelectedIndustryFilter(undefined);
     } else {
       setAvailableSubSectors([]);
       setSelectedSubSectorFilter(undefined);
@@ -88,7 +87,7 @@ const BoardPageContent = () => {
     if (selectedSubSectorFilter) {
       const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorFilter);
       setAvailableIndustries(subSector?.industries || []);
-      setSelectedIndustryFilter(undefined); // Reset industry when sub-sector changes
+      setSelectedIndustryFilter(undefined);
     } else {
       setAvailableIndustries([]);
     }
@@ -107,6 +106,8 @@ const BoardPageContent = () => {
     setSelectedPostType("all");
     setSelectedTags([]);
     setSelectedSectorFilter(undefined);
+    setSelectedSubSectorFilter(undefined);
+    setSelectedIndustryFilter(undefined);
   }, []);
 
   const activeFilterCount = useMemo(() => {
@@ -114,8 +115,10 @@ const BoardPageContent = () => {
     if (selectedPostType !== "all") count++;
     if (selectedTags.length > 0) count++;
     if (selectedSectorFilter) count++;
+    if (selectedSubSectorFilter) count++;
+    if (selectedIndustryFilter) count++;
     return count;
-  }, [selectedPostType, selectedTags, selectedSectorFilter]);
+  }, [selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter]);
 
   const filteredPosts = useMemo(() => {
     if (!Array.isArray(posts)) return [];
@@ -164,7 +167,7 @@ const BoardPageContent = () => {
       const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() || 0);
       return timeB - timeA;
     });
-  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, searchTerm, detailedSectorsData, availableSubSectors, availableIndustries]);
+  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, searchTerm, availableSubSectors, availableIndustries]);
 
   const FilterContent = () => (
     <div className="space-y-4 p-4 border-b">
@@ -215,7 +218,7 @@ const BoardPageContent = () => {
         </Select>
         {selectedSectorFilter && availableSubSectors.length > 0 && (
           <Select value={selectedSubSectorFilter} onValueChange={setSelectedSubSectorFilter}>
-            <SelectTrigger className="w-full h-9 text-xs">
+            <SelectTrigger className="w-full h-9 text-xs mt-2">
               <SelectValue placeholder="Select Sub-Sector" />
             </SelectTrigger>
             <SelectContent>
@@ -229,7 +232,7 @@ const BoardPageContent = () => {
         )}
         {selectedSubSectorFilter && availableIndustries.length > 0 && (
           <Select value={selectedIndustryFilter} onValueChange={setSelectedIndustryFilter}>
-            <SelectTrigger className="w-full h-9 text-xs">
+            <SelectTrigger className="w-full h-9 text-xs mt-2">
               <SelectValue placeholder="Select Industry" />
             </SelectTrigger>
             <SelectContent>
