@@ -309,24 +309,24 @@ export const PostList: React.FC<PostListProps> = ({
                     <>
                         <Popover open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
                             <PopoverTrigger asChild>
-                                <Button size="sm" variant="outline" className="text-xs h-9">
-                                    <Filter className="h-3.5 w-3.5 mr-1.5" />
-                                    Filters {activeFilterCount > 0 && `(${activeFilterCount})`}
+                                <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
+                                    <ListFilter className="h-5 w-5" />
+                                    <span className="sr-only">Filters</span>
+                                    {activeFilterCount > 0 && (
+                                        <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
+                                            {activeFilterCount}
+                                        </span>
+                                    )}
                                 </Button>
                             </PopoverTrigger>
                             <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
                         </Popover>
+
+                        <div className="flex-grow"></div>
                         
                         {activeFilterCount > 0 && (
                             <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0">
                                 <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All ({activeFilterCount})
-                            </Button>
-                        )}
-                        <div className="flex-grow"></div>
-                        {currentUser && onInitiateCreatePost && (
-                            <Button size="sm" variant="default" className="text-xs h-9 flex-shrink-0" onClick={onInitiateCreatePost} type="button">
-                                <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
-                                Create Post
                             </Button>
                         )}
                     </>
