@@ -84,7 +84,9 @@ export default function PlanDetailPage() {
     defaultChildDialogTitle, setDefaultChildDialogTitle, defaultChildDialogDescription, setDefaultChildDialogDescription,
     handleChildItemDialogSubmit, handleEditChildItemText, handleDeleteChildItem,
     onAddGrandchildToChildDataItem, onAddChildItemToNode, onChildItemTitleClick,
-    canEditPlan, saveRoadmapChanges, savePlanSettingsMutation, saveRoadmapMutation,
+    canEditPlan,
+    isSaving,
+    savePlanSettingsMutation,
     handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
     planDataForDialog,
@@ -114,6 +116,18 @@ export default function PlanDetailPage() {
   
   const { toast } = useToast();
   
+  const handlePanelFieldBlur = () => {
+    if (initialPanelDataRef.current && editingTarget && (editingTarget.type === 'node' || editingTarget.type === 'childItem')) {
+      const currentValues = nodeDetailForm.getValues();
+      if (currentValues.title !== initialPanelDataRef.current.title || (currentValues.description || '') !== (initialPanelDataRef.current.description || '')) {
+        if (canEditPlan && !diffTarget) {
+          nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)();
+          // Update the ref to prevent re-saving if focus moves between fields without changes
+          initialPanelDataRef.current = { title: currentValues.title, description: currentValues.description || '' };
+        }
+      }
+    }
+  };
 
   useEffect(() => {
     if (editingTarget?.type === 'node') {
@@ -265,8 +279,7 @@ export default function PlanDetailPage() {
         ownerProfile={ownerProfile}
         isLoadingOwnerProfile={isLoadingOwnerProfile}
         canEditPlan={canEditPlan}
-        onSavePlan={saveRoadmapChanges}
-        isSavingPlan={savePlanSettingsMutation.isPending || restorePlanMutation.isPending || saveRoadmapMutation.isPending}
+        isSaving={isSaving || restorePlanMutation.isPending || savePlanSettingsMutation.isPending}
         onOpenHistory={() => setIsVersionHistorySheetOpen(true)}
         onOpenInfo={() => setIsPlanInfoDialogOpen(true)}
         onInitiateAddNode={() => handleInitiateAddNode(null)}
@@ -337,7 +350,7 @@ export default function PlanDetailPage() {
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
         onSubmit={(data) => handleAddNode(data, canvasRef.current)}
-        isSubmitting={false} 
+        isSubmitting={isSaving} 
       />
       <EditChildItemDialog
         isOpen={isEditChildItemDialogOpen}
@@ -435,23 +448,7 @@ export default function PlanDetailPage() {
         open={isStepDetailSheetOpen && (editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && !!editingTarget.data.canvasNodeIdForThisItem) || (editingTarget?.type === 'childItem' && !editingTarget.data.canvasNodeIdForThisItem))}
         onOpenChange={async (open) => {
           if (!open) {
-            if (initialPanelDataRef.current && editingTarget && (editingTarget.type === 'node' || editingTarget.type === 'childItem')) {
-                const currentValues = nodeDetailForm.getValues();
-                if (currentValues.title !== initialPanelDataRef.current.title || (currentValues.description || '') !== (initialPanelDataRef.current.description || '')) {
-                   if (canEditPlan && !diffTarget) {
-                       try {
-                           await nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)();
-                       } catch (submitError) {
-                           console.error("Error submitting node details on panel close:", submitError);
-                           toast({ variant: "destructive", title: "Save Error", description: "Could not auto-save step details." });
-                       }
-                   } else if (!canEditPlan) {
-                       toast({ variant: "default", title: "Changes Not Saved", description: "You do not have permission to edit this plan." });
-                   } else if (diffTarget) {
-                       toast({ variant: "default", title: "Changes Not Saved", description: "Cannot edit while viewing a historical version."});
-                   }
-                }
-            }
+            handlePanelFieldBlur(); // Trigger save on blur when closing
             setIsStepDetailSheetOpen(false);
             setEditingTarget(null);
             initialPanelDataRef.current = null; 
@@ -507,20 +504,19 @@ export default function PlanDetailPage() {
                 <div className="p-4 space-y-4">
                    <Form {...nodeDetailForm}>
                      <form 
-                        onSubmit={nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)} // This submit is now primarily for auto-save
                         className="space-y-4"
                      >
                        <FormField control={nodeDetailForm.control} name="title" render={({ field }) => (
                          <FormItem>
                            <FormLabel>Title <span className="text-destructive">*</span></FormLabel>
-                           <FormControl><Input {...field} disabled={!canEditPlan || diffTarget} /></FormControl>
+                           <FormControl><Input {...field} disabled={!canEditPlan || diffTarget} onBlur={handlePanelFieldBlur} /></FormControl>
                            <FormMessage />
                          </FormItem>
                        )} />
                        <FormField control={nodeDetailForm.control} name="description" render={({ field }) => (
                          <FormItem>
                            <FormLabel>Description</FormLabel>
-                           <FormControl><Textarea {...field} rows={5} disabled={!canEditPlan || diffTarget} placeholder="Provide more details about this step..." /></FormControl>
+                           <FormControl><Textarea {...field} rows={5} disabled={!canEditPlan || diffTarget} placeholder="Provide more details about this step..." onBlur={handlePanelFieldBlur} /></FormControl>
                            <FormMessage />
                          </FormItem>
                        )} />
@@ -575,14 +571,3 @@ export default function PlanDetailPage() {
     </div>
   );
 }
-    
-    
-
-
-
-
-
-
-
-
-
