@@ -1,4 +1,3 @@
-
 // Tip: If this component becomes too large or complex,
 // consider further splitting its internal sections (like Bidding, Comments, etc.)
 // into their own dedicated components within this 'board-page' sub-directory.
@@ -42,6 +41,9 @@ import { PostDetailComments } from './PostDetailComments';
 
 import { aiConnectionMatcher, type AIConnectionMatcherInput, type AIConnectionMatcherOutput } from '@/ai/flows/ai-connection-matcher';
 
+import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
+import { getUserCollections } from '@/services/collectionService';
+import type { ClientCollection } from '@/types/collection';
 
 interface PostDetailPanelProps {
   post: Post;
@@ -86,6 +88,31 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   const [aiSuggestions, setAiSuggestions] = useState<AIConnectionMatcherOutput | null>(null);
   const [isLoadingAISuggestions, setIsLoadingAISuggestions] = useState<boolean>(false);
   const [aiSuggestionsError, setAiSuggestionsError] = useState<string | null>(null);
+
+  // --- Collection State ---
+  const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
+  const { data: userCollections = [] } = useQuery<ClientCollection[]>({
+    queryKey: ['userCollections', currentUser?.uid],
+    queryFn: () => currentUser ? getUserCollections(currentUser.uid) : Promise.resolve([]),
+    enabled: !!currentUser,
+  });
+
+  const savedPostIds = useMemo(() => {
+    if (!userCollections || userCollections.length === 0) return new Set<string>();
+    const ids = new Set<string>();
+    userCollections.forEach(collection => {
+      (collection.postIds || []).forEach(id => ids.add(id));
+    });
+    return ids;
+  }, [userCollections]);
+
+  const isPostSaved = useMemo(() => savedPostIds.has(post.id), [savedPostIds, post.id]);
+
+  const handleCollectionUpdate = useCallback(() => {
+    if (currentUser) {
+      queryClient.invalidateQueries({ queryKey: ['userCollections', currentUser.uid] });
+    }
+  }, [currentUser, queryClient]);
 
 
   // --- Data Fetching ---
@@ -265,7 +292,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
     }
     setShowNewCommentSuggestions(false);
     setNewCommentMentionQuery('');
-  }, [newComment, setNewComment, setShowNewCommentSuggestions, setNewCommentMentionQuery, newCommentInputRef]);
+  }, [newComment]);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -295,13 +322,12 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
 
     if (debouncedNewCommentMentionQuery.trim() !== "" && source.length > 0) {
         const queryLower = debouncedNewCommentMentionQuery.toLowerCase();
-        source = source.filter(p =>
-            p.mentionName.toLowerCase().includes(queryLower) ||
-            (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
-            (p.companyName && p.companyName.toLowerCase().includes(queryLower))
+        source = source.filter(p => 
+        p.mentionName.toLowerCase().includes(queryLower) ||
+        (p.displayName && p.displayName.toLowerCase().includes(queryLower)) ||
+        (p.companyName && p.companyName.toLowerCase().includes(queryLower))
         );
     }
-
     if (source.length === 0 && debouncedNewCommentMentionQuery.trim() !== '') return [{ userId: 'no-match-main-comment', mentionName: 'no-match-main-comment', displayName: `No users matching "@${debouncedNewCommentMentionQuery}"` } as UserProfileBasic];
     if (source.length === 0) return [{ userId: 'no-users-main-comment', mentionName: 'no-users-main-comment', displayName: 'No users to suggest.' } as UserProfileBasic];
     return source.slice(0, 10);
@@ -410,6 +436,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
   }
 
   return (
+    <>
     <Card className="flex flex-col flex-1 overflow-hidden bg-card border-border rounded-lg shadow-xl md:sticky md:top-20 md:h-[calc(100vh-6.5rem)] md:max-h-[calc(100vh-6.5rem)]">
       <PostDetailHeader
         post={post}
@@ -418,6 +445,8 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
         onDelete={() => onDelete(post.id)}
         deletePostMutationIsPending={deletePostMutationIsPending}
         connectionStatus={connectionStatus}
+        isPostSaved={isPostSaved}
+        onSaveClick={() => setIsSaveToCollectionDialogOpen(true)}
       />
       <ScrollArea className="flex-grow bg-background">
         <PostDetailContentBody post={post} />
@@ -588,7 +617,7 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
               {filteredNewCommentSuggestions.map(profile => {
                 const displayableName = profile.companyName || profile.displayName || profile.mentionName; 
                 const showSecondaryNameLine = (profile.companyName || profile.displayName) && (profile.companyName || profile.displayName)?.toLowerCase() !== profile.mentionName.toLowerCase();
-
+                
                 return (
                   (profile.userId === 'loading-main-comment' || profile.userId === 'no-users-main-comment' || profile.userId === 'no-match-main-comment') ? (
                     <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
@@ -622,8 +651,20 @@ export const PostDetailPanel: React.FC<PostDetailPanelProps> = React.memo(({
         )}
       </CardFooter>
     </Card>
+    {currentUser && (
+        <SaveToCollectionDialog
+            isOpen={isSaveToCollectionDialogOpen}
+            onOpenChange={(open) => {
+                setIsSaveToCollectionDialogOpen(open);
+                if (!open) handleCollectionUpdate();
+            }}
+            itemId={post.id}
+            itemTitle={post.question}
+            itemType="post"
+        />
+    )}
+    </>
   );
 });
 
 PostDetailPanel.displayName = "PostDetailPanel";
-    

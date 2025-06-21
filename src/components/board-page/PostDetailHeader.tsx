@@ -1,8 +1,7 @@
-
 // src/components/board-page/PostDetailHeader.tsx
 "use client";
 
-import React, { useState } from 'react'; // Removed useMemo as isPostSaved is removed
+import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
@@ -29,7 +28,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import type { ConnectionStatus } from '@/types/connection';
-// SaveToCollectionDialog and related imports (useQuery, getUserCollections, ClientCollection) are removed
 
 interface PostDetailHeaderProps {
   post: Post;
@@ -38,6 +36,8 @@ interface PostDetailHeaderProps {
   onDelete: (postId: string) => void;
   deletePostMutationIsPending: boolean;
   connectionStatus?: ConnectionStatus | null;
+  isPostSaved: boolean; // New prop
+  onSaveClick: () => void; // New prop
 }
 
 export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
@@ -46,12 +46,13 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
   onClose,
   onDelete,
   deletePostMutationIsPending,
-  connectionStatus
+  connectionStatus,
+  isPostSaved,
+  onSaveClick,
 }) => {
   const router = useRouter();
   const { toast } = useToast();
   const [isStartingChat, setIsStartingChat] = React.useState(false);
-  // Removed isSaveToCollectionOpen, userCollections query, and isPostSaved logic
 
   const postDate = post.createdAt instanceof Timestamp
     ? post.createdAt.toDate().toLocaleDateString()
@@ -161,7 +162,22 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
                 </AlertDialogContent>
               </AlertDialog>
             )}
-            {/* Removed Save to Collection Button and Dialog Trigger */}
+            {currentUser && !isOwnPost && (
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 p-1"
+                    title={isPostSaved ? "Unsave Post" : "Save to Collection"}
+                    onClick={(e) => {
+                        e.stopPropagation();
+                        onSaveClick();
+                    }}
+                    aria-pressed={isPostSaved}
+                    disabled={deletePostMutationIsPending}
+                >
+                    <Bookmark className={cn("h-4 w-4 text-muted-foreground", isPostSaved && "fill-primary text-primary")} />
+                </Button>
+            )}
             <Button
               variant="ghost"
               size="icon"
@@ -177,7 +193,6 @@ export const PostDetailHeader: React.FC<PostDetailHeaderProps> = React.memo(({
           </div>
         </div>
       </CardHeader>
-      {/* Removed SaveToCollectionDialog instance */}
     </>
   );
 });
