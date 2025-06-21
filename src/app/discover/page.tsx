@@ -132,18 +132,18 @@ const DiscoverPage = () => {
        <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">View</Label>
             <div className="flex items-center gap-2 flex-shrink-0">
-                <Button 
+                <Button
                     variant={activePlanView === 'all' ? "secondary" : "ghost"}
-                    size="sm" 
+                    size="sm"
                     onClick={() => setActivePlanView('all')}
                     className={cn("h-9 px-3 text-xs rounded-full flex-1", activePlanView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
                 >
                     <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> All Plans
                 </Button>
                 {user && (
-                    <Button 
+                    <Button
                         variant={activePlanView === 'my_plans' ? "secondary" : "ghost"}
-                        size="sm" 
+                        size="sm"
                         onClick={() => setActivePlanView('my_plans')}
                         className={cn("h-9 px-3 text-xs rounded-full flex-1", activePlanView === 'my_plans' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
                     >
@@ -232,18 +232,18 @@ const DiscoverPage = () => {
             ) : (
                 <>
                     <div className="flex items-center gap-2 flex-shrink-0">
-                    <Button 
+                    <Button
                         variant={activePlanView === 'all' ? "secondary" : "ghost"}
-                        size="sm" 
+                        size="sm"
                         onClick={() => setActivePlanView('all')}
                         className={cn("h-9 px-3 text-xs rounded-full", activePlanView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
                     >
                         <LayoutGrid className="mr-1.5 h-3.5 w-3.5" /> All Plans
                     </Button>
                     {user && (
-                        <Button 
+                        <Button
                             variant={activePlanView === 'my_plans' ? "secondary" : "ghost"}
-                            size="sm" 
+                            size="sm"
                             onClick={() => setActivePlanView('my_plans')}
                             className={cn("h-9 px-3 text-xs rounded-full", activePlanView === 'my_plans' && "font-semibold bg-primary/10 text-primary border border-primary/30")}
                         >
@@ -251,9 +251,9 @@ const DiscoverPage = () => {
                         </Button>
                     )}
                     </div>
-    
+
                     <div className="flex-grow"></div> {/* Spacer */}
-    
+
                     <div className="flex items-center gap-2 flex-shrink-0">
                     <Popover open={isSectorFilterOpen} onOpenChange={setIsSectorFilterOpen}>
                         <PopoverTrigger asChild>
@@ -264,14 +264,14 @@ const DiscoverPage = () => {
                         </PopoverTrigger>
                         <PopoverContent className="w-72 p-0" align="end"><FilterContent /></PopoverContent>
                     </Popover>
-    
+
                     {activeFilterCount > 0 && (
                         <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline">
                         <FilterX className="mr-1.5 h-3.5 w-3.5" /> Clear All ({activeFilterCount})
                         </Button>
                     )}
                     </div>
-    
+
                     {user && (
                     <Button asChild size="sm" className="ml-2 h-9 px-3 text-xs flex-shrink-0">
                         <Link href="/plan/create"><PlusCircle className="mr-2 h-4 w-4" /> Create Plan</Link>
@@ -383,3 +383,5 @@ const DiscoverPage = () => {
 };
 
 export default DiscoverPage;
+
+    
