@@ -9,23 +9,15 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Input } from "@/components/ui/input";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-  DialogFooter,
-  DialogClose,
-  DialogTrigger,
-} from "@/components/ui/dialog";
-import { Loader2, Filter, FilterX, Tag, Briefcase, LayoutGrid, HandHelping, Search, PlusCircle, X, ListFilter } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from "@/components/ui/dialog";
+import { Loader2, FilterX, Briefcase, LayoutGrid, HandHelping, Search } from "lucide-react"; // Removed unnecessary icons
 import { PostCard } from './PostCard';
 import type { Post } from '@/types/post';
 import type { SectorWithSubSectors, SubSector, Industry } from '@/components/layout/MainLayout';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from "@/hooks/use-mobile";
 import type { User as FirebaseUser } from 'firebase/auth';
+import { usePage } from '@/contexts/PageContext'; // Import context
 
 interface PostListProps {
   posts: Post[];
@@ -51,7 +43,7 @@ export const PostList: React.FC<PostListProps> = ({
   currentUser,
 }) => {
   const isMobile = useIsMobile();
-  const [isFilterContainerOpen, setIsFilterContainerOpen] = useState(false);
+  const { isSearchFilterVisible } = usePage(); // Use context
 
   const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
@@ -60,26 +52,8 @@ export const PostList: React.FC<PostListProps> = ({
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
   const [searchTerm, setSearchTerm] = useState('');
   
-  const [isSearchActive, setIsSearchActive] = useState(false);
-  const searchInputRef = useRef<HTMLInputElement>(null);
-
   const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
   const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
-
-  const toggleSearch = () => {
-    setIsSearchActive(prev => {
-        if (prev) {
-            setSearchTerm(''); // Clear search on close
-        }
-        return !prev;
-    });
-  };
-
-  useEffect(() => {
-    if (isSearchActive) {
-        setTimeout(() => searchInputRef.current?.focus(), 0);
-    }
-  }, [isSearchActive]);
 
   useEffect(() => {
     if (selectedSectorFilter) {
@@ -119,15 +93,13 @@ export const PostList: React.FC<PostListProps> = ({
     setSelectedTags([]);
     setSelectedSectorFilter(undefined);
     setSearchTerm('');
-    if (isSearchActive) setIsSearchActive(false);
-  }, [isSearchActive]);
+  }, []);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedPostType !== "all") count++;
     if (selectedTags.length > 0) count++;
     if (selectedSectorFilter) count++;
-    // Search term is not counted in the "clearable" filter badge
     return count;
   }, [selectedPostType, selectedTags, selectedSectorFilter]);
 
@@ -191,13 +163,23 @@ export const PostList: React.FC<PostListProps> = ({
   }
 
   const FilterContent = () => (
-    <div className={cn("space-y-4", isMobile ? "p-4" : "p-3 w-72")}>
+    <div className="space-y-4 p-4 border-b">
+      <div className="relative">
+        <Input
+          type="search"
+          placeholder="Search posts by keyword..."
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          className="h-9 text-xs pl-8"
+          aria-label="Search posts"
+        />
+        <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+      </div>
+
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Post Type</Label>
         <Select value={selectedPostType} onValueChange={(value) => setSelectedPostType(value as PostTypeFilter)}>
-          <SelectTrigger className="w-full h-9 text-xs">
-            <SelectValue placeholder="Filter by Post Type" />
-          </SelectTrigger>
+          <SelectTrigger className="w-full h-9 text-xs"><SelectValue placeholder="Filter by Post Type" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all" className="text-xs"><LayoutGrid className="h-3.5 w-3.5 mr-1.5 inline-block" />All Posts</SelectItem>
             <SelectItem value="help_request" className="text-xs"><HandHelping className="h-3.5 w-3.5 mr-1.5 inline-block" />Help Requests</SelectItem>
@@ -212,11 +194,7 @@ export const PostList: React.FC<PostListProps> = ({
           <div className="space-y-1.5">
             {availableTags.map((tag) => (
               <div key={tag} className="flex items-center space-x-2">
-                <Checkbox
-                  id={`tag-filter-${tag}`}
-                  checked={selectedTags.includes(tag)}
-                  onCheckedChange={() => handleTagToggle(tag)}
-                />
+                <Checkbox id={`tag-filter-${tag}`} checked={selectedTags.includes(tag)} onCheckedChange={() => handleTagToggle(tag)} />
                 <Label htmlFor={`tag-filter-${tag}`} className="text-xs font-normal">{tag}</Label>
               </div>
             ))}
@@ -245,107 +223,47 @@ export const PostList: React.FC<PostListProps> = ({
           </SelectContent>
         </Select>
       </div>
+      {activeFilterCount > 0 && (
+        <Button variant="ghost" size="sm" onClick={clearAllFilters} className="w-full h-9 text-xs text-primary hover:underline">
+          <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All Filters ({activeFilterCount})
+        </Button>
+      )}
     </div>
   );
 
   return (
     <div className="flex flex-col h-full">
-      <div className="mb-4 p-1 flex items-center gap-2 border-b pb-3">
-        <Button variant="ghost" size="icon" onClick={toggleSearch} className="h-9 w-9 p-2 flex-shrink-0">
-            {isSearchActive ? <X className="h-5 w-5"/> : <Search className="h-5 w-5"/>}
-        </Button>
-
-        {isSearchActive ? (
-            <Input
-                ref={searchInputRef}
-                type="search"
-                placeholder="Search posts..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="h-9 text-xs flex-grow rounded-md border-input"
-                aria-label="Search posts"
-            />
-        ) : (
-            <>
-                {/* Mobile Filter & Create Buttons */}
-                {isMobile && (
-                    <div className="flex w-full items-center gap-2">
-                        <Dialog open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
-                            <DialogTrigger asChild>
-                                <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
-                                    <ListFilter className="h-5 w-5" />
-                                    <span className="sr-only">Filters</span>
-                                    {activeFilterCount > 0 && (
-                                        <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
-                                            {activeFilterCount}
-                                        </span>
-                                    )}
-                                </Button>
-                            </DialogTrigger>
-                            <DialogContent className="sm:max-w-[425px] p-0 flex flex-col h-[85vh] sm:h-auto">
-                                <DialogHeader className="p-4 border-b">
-                                    <DialogTitle>Filter Posts</DialogTitle>
-                                    <DialogDescription>Refine posts by type, tags, or industry.</DialogDescription>
-                                </DialogHeader>
-                                <ScrollArea className="flex-grow min-h-0"><FilterContent /></ScrollArea>
-                                <DialogFooter className="p-4 border-t">
-                                    <DialogClose asChild>
-                                        <Button type="button" variant="default" size="sm">Done</Button>
-                                    </DialogClose>
-                                </DialogFooter>
-                            </DialogContent>
-                        </Dialog>
-                        {currentUser && onInitiateCreatePost && (
-                            <Button size="sm" variant="default" className="text-xs flex-1 h-9" onClick={onInitiateCreatePost} type="button">
-                                <PlusCircle className="h-3.5 w-3.5 mr-1.5" />
-                                Create Post
-                            </Button>
-                        )}
-                    </div>
+      {isMobile && isSearchFilterVisible && <FilterContent />}
+      
+      {/* Desktop Filter Bar */}
+      {!isMobile && (
+        <div className="mb-4 p-1 flex items-center gap-2 border-b pb-3">
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
+                <ListFilter className="h-5 w-5" />
+                <span className="sr-only">Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
+                    {activeFilterCount}
+                  </span>
                 )}
-                
-                {/* Desktop Filter & Create Buttons */}
-                {!isMobile && (
-                    <>
-                        <Popover open={isFilterContainerOpen} onOpenChange={setIsFilterContainerOpen}>
-                            <PopoverTrigger asChild>
-                                <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
-                                    <ListFilter className="h-5 w-5" />
-                                    <span className="sr-only">Filters</span>
-                                    {activeFilterCount > 0 && (
-                                        <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
-                                            {activeFilterCount}
-                                        </span>
-                                    )}
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
-                        </Popover>
-
-                        <div className="flex-grow"></div>
-                        
-                        {activeFilterCount > 0 && (
-                            <Button variant="ghost" size="sm" onClick={clearAllFilters} className="h-9 text-xs text-primary hover:underline flex-shrink-0">
-                                <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All ({activeFilterCount})
-                            </Button>
-                        )}
-                    </>
-                )}
-            </>
-        )}
-      </div>
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-80 p-0" align="start"><FilterContent /></PopoverContent>
+          </Popover>
+          <div className="relative flex-grow">
+            <Input type="search" placeholder="Search posts..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-9 text-xs pl-8" aria-label="Search posts"/>
+            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
+          </div>
+        </div>
+      )}
 
       <ScrollArea className="flex-grow overflow-y-auto min-h-0 pr-2">
         <div className="columns-1 md:columns-2 gap-4 space-y-4">
           {filteredPosts.length > 0 ? (
             filteredPosts.map((post, index) => (
-              <PostCard
-                key={post.id}
-                post={post}
-                onOpen={onPostSelect}
-                isSelected={selectedPostId === post.id}
-                isPriority={index < 2}
-              />
+              <PostCard key={post.id} post={post} onOpen={onPostSelect} isSelected={selectedPostId === post.id} isPriority={index < 2}/>
             ))
           ) : (
             <div className="col-span-full text-center py-10">

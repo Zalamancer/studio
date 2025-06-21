@@ -1,4 +1,3 @@
-
 // src/app/page.tsx
 "use client";
 
@@ -7,68 +6,27 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { Button, buttonVariants } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription as AlertDialogPrimitiveDescription, // Aliased to avoid conflict if DialogDescription is also imported
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle as AlertDialogPrimitiveTitle,
-} from "@/components/ui/alert-dialog";
-import { DialogDescription } from "@/components/ui/dialog"; // Added DialogDescription import
-// Dialog components for Create Post are removed from here as it's now inline
-import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Label } from '@/components/ui/label';
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from "@/components/ui/sheet";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
-import { useForm } from 'react-hook-form';
 import {
-  Loader2, Trash2, MessageSquare, Sparkles, HandHelping, Briefcase, Link as LinkIcon,
-  X, DollarSign, CalendarDays, Star, User, FileText, Compass, Home, Network, CornerDownRight, Send, AtSign, PlusCircle
+  Loader2, PlusCircle
 } from "lucide-react";
-import { zodResolver } from '@hookform/resolvers/zod';
-import * as z from 'zod';
-import { addBidToPost, getBidsForPost } from '@/services/bidService';
-import type { ClientBid, NewBidData } from '@/types/bid';
-import { formatDistanceToNow } from 'date-fns';
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { useIsMobile } from "@/hooks/use-mobile";
-
-import { cn } from "@/lib/utils";
-import type { Post, NewPostData } from '@/types/post';
-import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } from '@/services/postService';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Timestamp } from 'firebase/firestore';
-import { findOrCreateConversation } from '@/services/messagingService';
-import { ConnectionButton } from '@/components/ConnectionButton';
-import { addCommentToPost, getCommentsForPost, deleteCommentFromPost, getSubCommentsForComment, addSubCommentToComment, deleteSubCommentFromComment, toggleLikeComment, toggleLikeSubComment } from '@/services/commentService';
-import type { NewCommentData, ClientComment, ClientSubComment, NewSubCommentData } from '@/types/comment';
-import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectionService';
-import { getReviewsForProfile } from '@/services/reviewService'; // Corrected import
-import type { UserProfileBasic } from '@/types/connection';
+import type { Post, NewPostData } from '@/types/post';
 import { availableTags, detailedSectorsData } from '@/components/layout/MainLayout';
-import { generateAnonymousName, getInitials as getSharedInitials } from '@/lib/pseudonymUtils';
-import { IS_VALID_FIREBASE_UID_REGEX as IS_UID_REGEX_PAGE } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 import dynamic from 'next/dynamic';
 import { PostList } from '@/components/board-page/PostList';
 import type { CreatePostFormData, CreatePostFormProps } from '@/components/CreatePostForm';
 import { uploadPostImage } from '@/services/storageService';
 import { createNotification } from '@/services/notificationService';
-
+import { getReviewsForProfile } from '@/services/reviewService';
+import { Timestamp } from 'firebase/firestore';
+import { usePage } from '@/contexts/PageContext';
 
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
@@ -90,6 +48,7 @@ const BoardPageContent = () => {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const isMobile = useIsMobile();
+  const { setHandleCreateClick } = usePage();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
@@ -100,7 +59,6 @@ const BoardPageContent = () => {
     staleTime: 1000 * 60 * 1,
     refetchOnWindowFocus: true,
   });
-
 
   const deletePostMutation = useMutation({
     mutationFn: deletePostFromFirestore,
@@ -119,7 +77,6 @@ const BoardPageContent = () => {
   const addPostMutation = useMutation({
     mutationFn: async (formData: CreatePostFormData) => {
       if (!user) throw new Error("User not authenticated to create post.");
-
       let currentRatingScore = 0;
       try {
         const reviews = await getReviewsForProfile(user.uid);
@@ -127,9 +84,7 @@ const BoardPageContent = () => {
           const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
           currentRatingScore = parseFloat((totalRating / reviews.length).toFixed(1));
         }
-      } catch (ratingError: any) {
-        // console.error("Error fetching reviews for rating score:", ratingError.message);
-      }
+      } catch (ratingError: any) { }
 
       let uploadedImageUrls: string[] = [];
       if (formData.imageFiles && formData.imageFiles.length > 0 && user) {
@@ -141,12 +96,11 @@ const BoardPageContent = () => {
         );
         const results = await Promise.all(uploadPromises);
         uploadedImageUrls = results.filter((url): url is string => url !== null);
-
         if (uploadedImageUrls.length !== formData.imageFiles.length) {
           if (uploadedImageUrls.length === 0 && formData.imageFiles.length > 0) {
             throw new Error("All image uploads failed. Post not created.");
           }
-          toast({ variant: "warning", title: "Partial Image Upload", description: "Some images could not be uploaded. The post will be created with the successfully uploaded images."});
+          toast({ variant: "warning", title: "Partial Image Upload", description: "Some images could not be uploaded." });
         }
       }
       
@@ -180,24 +134,14 @@ const BoardPageContent = () => {
       queryClient.invalidateQueries({ queryKey: ['userPosts'] });
       queryClient.invalidateQueries({ queryKey: ['allPostsForSectorPage'] });
       toast({ title: variables.requestType === 'help_request' ? "Help Request Submitted" : "Post Created", description: "Your submission has been added." });
-      setShowCreatePostFormInline(false); 
-
+      setShowCreatePostFormInline(false);
       if (user && newlyCreatedPostId && variables.mentionedUserIds && variables.mentionedUserIds.length > 0) {
         const descriptionSource = variables.descriptionDetails;
         variables.mentionedUserIds.forEach(async (mentionedUid) => {
           if (mentionedUid !== user.uid) {
             try {
-              await createNotification({
-                userId: mentionedUid,
-                type: 'mention',
-                senderId: user.uid,
-                postId: newlyCreatedPostId,
-                postQuestion: variables.question,
-                textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "",
-              });
-            } catch (notifyError) {
-              // console.error("Failed to create mention notification:", notifyError);
-            }
+              await createNotification({ userId: mentionedUid, type: 'mention', senderId: user.uid, postId: newlyCreatedPostId, postQuestion: variables.question, textSnippet: descriptionSource ? descriptionSource.substring(0, 100) : "", });
+            } catch (notifyError) { }
           }
         });
       }
@@ -207,17 +151,13 @@ const BoardPageContent = () => {
     },
   });
 
-  const handleCreatePostSubmit = useCallback(
-    (formData: CreatePostFormData) => {
-      if (!user) {
-        toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
-        return;
-      }
-      addPostMutation.mutate(formData);
-    },
-    [user, toast, addPostMutation]
-  );
-
+  const handleCreatePostSubmit = useCallback((formData: CreatePostFormData) => {
+    if (!user) {
+      toast({ variant: "destructive", title: "Authentication Required", description: "You must be logged in." });
+      return;
+    }
+    addPostMutation.mutate(formData);
+  }, [user, toast, addPostMutation]);
 
   const handleDeletePost = useCallback((postId: string | undefined) => {
     if (!postId) {
@@ -231,7 +171,6 @@ const BoardPageContent = () => {
     deletePostMutation.mutate(postId);
   }, [user, deletePostMutation, toast]);
 
-
   const handleCloseDetailView = useCallback(() => {
     if (searchParams?.get('postId')) {
       router.replace('/', { scroll: false });
@@ -241,12 +180,10 @@ const BoardPageContent = () => {
     setShowCreatePostFormInline(false);
   }, [searchParams, router, selectedPost, setSelectedPost, setShowCreatePostFormInline]);
 
-
   useEffect(() => {
     const postIdFromUrl = searchParams?.get('postId');
-
     if (postIdFromUrl) {
-      setShowCreatePostFormInline(false); 
+      setShowCreatePostFormInline(false);
       if (!selectedPost || selectedPost.id !== postIdFromUrl) {
         if (posts.length > 0) {
           const postToOpen = posts.find(p => p.id === postIdFromUrl);
@@ -266,9 +203,8 @@ const BoardPageContent = () => {
     }
   }, [searchParams, posts, selectedPost, router, toast, setSelectedPost, setShowCreatePostFormInline]);
 
-
   const openPostCallback = useCallback((postToOpen: Post) => {
-    setShowCreatePostFormInline(false); 
+    setShowCreatePostFormInline(false);
     const currentPostIdInUrl = searchParams?.get('postId');
     if (currentPostIdInUrl === postToOpen.id) {
       handleCloseDetailView();
@@ -279,13 +215,17 @@ const BoardPageContent = () => {
 
   const handleOpenCreatePostForm = useCallback(() => {
     if (user) {
-      setSelectedPost(null); // Ensure no post is selected when opening create form
+      setSelectedPost(null);
       setShowCreatePostFormInline(true);
     } else {
       toast({ variant: "default", title: "Login Required", description: "Please log in to create a post." });
     }
   }, [user, toast, setSelectedPost, setShowCreatePostFormInline]);
 
+  // Register this page's create action with the context
+  useEffect(() => {
+    setHandleCreateClick(() => handleOpenCreatePostForm());
+  }, [setHandleCreateClick, handleOpenCreatePostForm]);
 
   const renderPostDetailPanel = () => {
     if (!selectedPost) return null;
@@ -302,15 +242,8 @@ const BoardPageContent = () => {
 
   return (
     <div className="container mx-auto p-4 pt-6 flex flex-col flex-grow">
-      <div className={cn(
-        "flex-grow",
-        isMobile ? "grid grid-cols-1" : "md:flex md:flex-row" 
-      )}>
-        <div className={cn(
-          "flex flex-col overflow-hidden", 
-          isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:flex-1 md:min-w-0", 
-          !isMobile && "md:pr-4" 
-        )}>
+      <div className={cn("flex-grow", isMobile ? "grid grid-cols-1" : "md:flex md:flex-row")}>
+        <div className={cn("flex flex-col overflow-hidden", isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:flex-1 md:min-w-0", !isMobile && "md:pr-4")}>
           <PostList
             posts={posts}
             isLoading={isLoadingPosts}
@@ -325,114 +258,54 @@ const BoardPageContent = () => {
 
         {isMobile ? (
           <>
-            <Sheet
-              open={!!selectedPost && !showCreatePostFormInline} 
-              onOpenChange={(isOpen) => {
-                if (!isOpen) {
-                  handleCloseDetailView();
-                }
-              }}
-            >
-              <SheetContent
-                side="right"
-                className="w-full h-full p-0 flex flex-col sm:max-w-full"
-                showCloseButton={false} 
-              >
-                <SheetTitle className="sr-only">
-                  {selectedPost ? `Details for post: ${selectedPost.question.substring(0, 50)}${selectedPost.question.length > 50 ? '...' : ''}` : "Post Details"}
-                </SheetTitle>
-                <div className="flex-1 overflow-y-auto">
-                  {selectedPost && renderPostDetailPanel()}
-                </div>
+            <Sheet open={!!selectedPost && !showCreatePostFormInline} onOpenChange={(isOpen) => { if (!isOpen) handleCloseDetailView(); }}>
+              <SheetContent side="right" className="w-full h-full p-0 flex flex-col sm:max-w-full" showCloseButton={false}>
+                <SheetTitle className="sr-only">{selectedPost ? `Details for post: ${selectedPost.question.substring(0, 50)}...` : "Post Details"}</SheetTitle>
+                <div className="flex-1 overflow-y-auto">{selectedPost && renderPostDetailPanel()}</div>
               </SheetContent>
             </Sheet>
-             <Sheet
-              open={showCreatePostFormInline && !selectedPost} 
-              onOpenChange={(isOpen) => {
-                if (!isOpen) {
-                  setShowCreatePostFormInline(false);
-                }
-              }}
-            >
-              <SheetContent
-                side="right"
-                className="w-full h-full p-0 flex flex-col sm:max-w-full"
-                showCloseButton={false}
-              >
-                <SheetHeader className="p-4 border-b">
-                   <div className="flex justify-between items-center">
-                    <SheetTitle>Create New Post</SheetTitle>
-                     <Button variant="ghost" size="icon" onClick={() => setShowCreatePostFormInline(false)}><X className="h-4 w-4"/></Button>
-                   </div>
-                   <DialogDescription> 
-                     Share your idea, question, or request help from the community.
-                   </DialogDescription>
+            <Sheet open={showCreatePostFormInline && !selectedPost} onOpenChange={(isOpen) => { if (!isOpen) setShowCreatePostFormInline(false); }}>
+              <SheetContent side="right" className="w-full h-full p-0 flex flex-col sm:max-w-full" showCloseButton={false}>
+                <SheetHeader className="p-4 border-b flex flex-row justify-between items-center">
+                  <SheetTitle>Create New Post</SheetTitle>
+                  <Button variant="ghost" size="icon" onClick={() => setShowCreatePostFormInline(false)}><X className="h-4 w-4" /></Button>
                 </SheetHeader>
                 <ScrollArea className="flex-1">
                   <div className="p-6">
-                    {user && (
-                      <DynamicCreatePostForm
-                        onSubmit={handleCreatePostSubmit}
-                        availableTags={availableTags}
-                        detailedSectorsData={detailedSectorsData}
-                        isSubmitting={addPostMutation.isPending}
-                        currentUserId={user.uid}
-                        onDialogClose={() => setShowCreatePostFormInline(false)}
-                      />
-                    )}
+                    {user && (<DynamicCreatePostForm onSubmit={handleCreatePostSubmit} availableTags={availableTags} detailedSectorsData={detailedSectorsData} isSubmitting={addPostMutation.isPending} currentUserId={user.uid} onDialogClose={() => setShowCreatePostFormInline(false)} />)}
                   </div>
                 </ScrollArea>
               </SheetContent>
             </Sheet>
           </>
-        ) : ( 
+        ) : (
           (selectedPost || showCreatePostFormInline) ? (
-             <div className="md:flex-1 md:min-w-0 md:border-l md:border-border md:pl-4 flex flex-col">
+            <div className="md:flex-1 md:min-w-0 md:border-l md:border-border md:pl-4 flex flex-col">
               {selectedPost && !showCreatePostFormInline && renderPostDetailPanel()}
               {showCreatePostFormInline && !selectedPost && user && (
                 <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
                   <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
                     <div className="text-lg font-semibold text-foreground">Create New Post</div>
-                     <Button variant="outline" size="sm" onClick={() => setShowCreatePostFormInline(false)}>Cancel</Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowCreatePostFormInline(false)}>Cancel</Button>
                   </div>
                   <ScrollArea className="flex-grow">
                     <div className="p-6">
-                      <DynamicCreatePostForm
-                          onSubmit={handleCreatePostSubmit}
-                          availableTags={availableTags}
-                          detailedSectorsData={detailedSectorsData}
-                          isSubmitting={addPostMutation.isPending}
-                          currentUserId={user.uid}
-                          onDialogClose={() => setShowCreatePostFormInline(false)}
-                      />
+                      <DynamicCreatePostForm onSubmit={handleCreatePostSubmit} availableTags={availableTags} detailedSectorsData={detailedSectorsData} isSubmitting={addPostMutation.isPending} currentUserId={user.uid} onDialogClose={() => setShowCreatePostFormInline(false)} />
                     </div>
                   </ScrollArea>
                 </Card>
               )}
             </div>
-          ) : ( 
+          ) : (
             <div className="hidden md:flex md:flex-1 md:min-w-0 md:pl-4 md:border-l md:border-border flex-col">
-                <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
-                  <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
-                    <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
-                    {user && (
-                        <Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleOpenCreatePostForm}>
-                            <PlusCircle className="mr-2 h-4 w-4" />
-                            Create Post
-                        </Button>
-                    )}
-                  </div>
-                  <ScrollArea className="flex-grow bg-background">
-                    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                      <MessageSquare className="h-16 w-16 mb-4 text-muted-foreground opacity-30" />
-                      <p className="text-lg font-medium text-muted-foreground">Select a post to view details</p>
-                      <p className="text-sm mt-1 text-muted-foreground">Or create a new post to share with the community.</p>
-                    </div>
-                  </ScrollArea>
-                  <div className="p-3 border-t flex-shrink-0">
-                    <div className="h-9"></div>
-                  </div>
-                </Card>
+              <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
+                <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
+                  <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
+                  {user && (<Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleOpenCreatePostForm}><PlusCircle className="mr-2 h-4 w-4" />Create Post</Button>)}
+                </div>
+                <ScrollArea className="flex-grow bg-background"><div className="flex flex-col items-center justify-center h-full p-8 text-center"><MessageSquare className="h-16 w-16 mb-4 text-muted-foreground opacity-30" /><p className="text-lg font-medium text-muted-foreground">Select a post to view details</p><p className="text-sm mt-1 text-muted-foreground">Or create a new post to share with the community.</p></div></ScrollArea>
+                <div className="p-3 border-t flex-shrink-0"><div className="h-9"></div></div>
+              </Card>
             </div>
           )
         )}
@@ -442,18 +315,3 @@ const BoardPageContent = () => {
 };
 
 export default BoardPageContent;
-    
-    
-
-    
-
-
-
-    
-
-
-
-
-    
-
-
