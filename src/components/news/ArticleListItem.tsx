@@ -1,4 +1,3 @@
-
 // src/components/news/ArticleListItem.tsx
 "use client";
 
@@ -162,8 +161,9 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
             setIsSaveToCollectionDialogOpen(open);
             if (!open) onCollectionUpdate();
           }}
-          postId={article.id}
-          postTitle={article.title}
+          itemId={article.id}
+          itemTitle={article.title}
+          itemType="article"
         />
       )}
     </>

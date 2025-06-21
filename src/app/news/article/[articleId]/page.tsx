@@ -1,4 +1,3 @@
-
 // src/app/news/article/[articleId]/page.tsx
 "use client";
 
@@ -154,7 +153,10 @@ const ArticlePage = () => {
   const savedItemIds = useMemo(() => {
     if (!userCollections || userCollections.length === 0) return new Set<string>();
     const ids = new Set<string>();
-    userCollections.forEach(collection => collection.postIds?.forEach(id => ids.add(id)));
+    userCollections.forEach(collection => {
+        (collection.postIds || []).forEach(id => ids.add(id));
+        (collection.articleIds || []).forEach(id => ids.add(id));
+    });
     return ids;
   }, [userCollections]);
 
@@ -705,8 +707,9 @@ const ArticlePage = () => {
             handleCollectionUpdate();
           }
         }}
-        postId={article.id}
-        postTitle={article.title}
+        itemId={article.id}
+        itemTitle={article.title}
+        itemType="article"
       />
     )}
     </>

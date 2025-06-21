@@ -1,7 +1,7 @@
 // src/components/collections/SaveToCollectionDialog.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react'; // Added useRef
+import React, { useState, useEffect, useRef } from 'react';
 import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -28,6 +28,8 @@ import {
   createCollection,
   addPostToCollection,
   removePostFromCollection,
+  addArticleToCollection,
+  removeArticleFromCollection,
 } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
 import { cn } from '@/lib/utils';
@@ -35,8 +37,9 @@ import { cn } from '@/lib/utils';
 interface SaveToCollectionDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
-  postId: string;
-  postTitle: string;
+  itemId: string;
+  itemTitle: string;
+  itemType: 'post' | 'article';
 }
 
 const saveToCollectionSchema = z.object({
@@ -50,14 +53,15 @@ type SaveToCollectionFormData = z.infer<typeof saveToCollectionSchema>;
 export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
   isOpen,
   onOpenChange,
-  postId,
-  postTitle,
+  itemId,
+  itemTitle,
+  itemType,
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [showCreateNewCollection, setShowCreateNewCollection] = useState(false);
-  const prevIsOpenRef = useRef<boolean>(isOpen); // Ref to track previous isOpen state
+  const prevIsOpenRef = useRef<boolean>(isOpen);
 
   const { data: collectionsDataFromQuery = [], isLoading: isLoadingCollections } = useQuery<ClientCollection[]>({
     queryKey: ['userCollections', user?.uid],
@@ -75,35 +79,25 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
   });
 
   useEffect(() => {
-    // Only reset the form when the dialog *opens* (isOpen becomes true from false)
     if (isOpen && !prevIsOpenRef.current && user) {
       const cachedCollections = queryClient.getQueryData<ClientCollection[]>(['userCollections', user.uid]);
       const currentCollections = cachedCollections || collectionsDataFromQuery || [];
-
+      const idArrayToCheck = itemType === 'post' ? 'postIds' : 'articleIds';
       const preselectedIds = currentCollections
-        .filter(c => c.postIds?.includes(postId))
+        .filter(c => c[idArrayToCheck]?.includes(itemId))
         .map(c => c.id);
-
       form.reset({
         selectedCollectionIds: preselectedIds,
         newCollectionName: '',
         newCollectionDescription: '',
       });
-      setShowCreateNewCollection(false); // Reset create new form visibility
+      setShowCreateNewCollection(false);
     }
-
-    // When dialog closes, ensure create new form section is hidden
-    // and optionally reset form fields if needed (though opening reset is often primary)
     if (!isOpen && prevIsOpenRef.current) {
       setShowCreateNewCollection(false);
-      // Consider if a full form.reset() is needed on every close, or if open is sufficient.
-      // For now, keeping it simple: reset create form visibility.
-      // If form state needs to be pristine on every open regardless of cache, add form.reset here too.
     }
-
-    prevIsOpenRef.current = isOpen; // Update the ref after logic has run
-  }, [isOpen, user, postId, queryClient, form, collectionsDataFromQuery]);
-
+    prevIsOpenRef.current = isOpen;
+  }, [isOpen, user, itemId, itemType, queryClient, form, collectionsDataFromQuery]);
 
   const manageCollectionsMutation = useMutation({
     mutationFn: async (data: SaveToCollectionFormData) => {
@@ -115,37 +109,42 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
           user.uid,
           data.newCollectionName.trim(),
           data.newCollectionDescription?.trim() || undefined,
-          postId
+          itemId,
+          itemType
         );
       }
 
+      const idArrayToCheck = itemType === 'post' ? 'postIds' : 'articleIds';
       const currentSelections = data.selectedCollectionIds;
-      const initialSelections = collectionsDataFromQuery.filter(c => c.postIds?.includes(postId)).map(c => c.id);
+      const initialSelections = collectionsDataFromQuery.filter(c => c[idArrayToCheck]?.includes(itemId)).map(c => c.id);
 
-      const collectionsToAddPostTo = currentSelections.filter(id => !initialSelections.includes(id));
-      const collectionsToRemovePostFrom = initialSelections.filter(id => !currentSelections.includes(id));
+      const collectionsToAddItemTo = currentSelections.filter(id => !initialSelections.includes(id));
+      const collectionsToRemoveItemFrom = initialSelections.filter(id => !currentSelections.includes(id));
 
       if (newCollectionId) {
-        const idx = collectionsToAddPostTo.indexOf(newCollectionId);
-        if (idx > -1) collectionsToAddPostTo.splice(idx, 1);
+        const idx = collectionsToAddItemTo.indexOf(newCollectionId);
+        if (idx > -1) collectionsToAddItemTo.splice(idx, 1);
       }
 
-      for (const collectionId of collectionsToAddPostTo) {
-        await addPostToCollection(collectionId, postId, user.uid);
+      const addFn = itemType === 'post' ? addPostToCollection : addArticleToCollection;
+      const removeFn = itemType === 'post' ? removePostFromCollection : removeArticleFromCollection;
+
+      for (const collectionId of collectionsToAddItemTo) {
+        await addFn(collectionId, itemId, user.uid);
       }
-      for (const collectionId of collectionsToRemovePostFrom) {
-        await removePostFromCollection(collectionId, postId, user.uid);
+      for (const collectionId of collectionsToRemoveItemFrom) {
+        await removeFn(collectionId, itemId, user.uid);
       }
-      return { newCollectionId, added: collectionsToAddPostTo.length, removed: collectionsToRemovePostFrom.length };
+      return { newCollectionId, added: collectionsToAddItemTo.length, removed: collectionsToRemoveItemFrom.length };
     },
     onSuccess: ({ newCollectionId, added, removed }) => {
       queryClient.invalidateQueries({ queryKey: ['userCollections', user?.uid] });
       queryClient.invalidateQueries({ queryKey: ['collectionDetails'] });
-      let message = "Post saved to collections.";
-      if (newCollectionId) message = `Post saved to new collection and updated in others.`;
+      let message = "Item saved to collections.";
+      if (newCollectionId) message = `Item saved to new collection and updated in others.`;
       else if (added > 0 && removed > 0) message = "Collection selections updated.";
-      else if (added > 0) message = "Post added to selected collections.";
-      else if (removed > 0) message = "Post removed from deselected collections.";
+      else if (added > 0) message = `Item added to selected collections.`;
+      else if (removed > 0) message = "Item removed from deselected collections.";
       toast({ title: "Success", description: message });
       onOpenChange(false);
     },
@@ -170,7 +169,7 @@ export const SaveToCollectionDialog: React.FC<SaveToCollectionDialogProps> = ({
         <DialogHeader className="p-6 pb-4 border-b">
           <DialogTitle className="flex items-center gap-2"><Bookmark className="h-5 w-5 text-primary" /> Save to Collection</DialogTitle>
           <DialogDescription>
-            Save "{postTitle.substring(0, 50)}{postTitle.length > 50 ? '...' : ''}" to one or more collections.
+            Save "{itemTitle.substring(0, 50)}{itemTitle.length > 50 ? '...' : ''}" to one or more collections.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={form.handleSubmit(onSubmit)}>
