@@ -1,4 +1,3 @@
-
 // src/components/board-page/PostCard.tsx
 "use client";
 
@@ -44,24 +43,22 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
       tabIndex={0}
       onKeyDown={(e) => e.key === 'Enter' && onOpen(post)}
     >
-      <div className={cn("flex flex-row md:flex-col")}>
+      <div className={cn("flex flex-col")}>
         {hasImage && (
-          <div className="relative flex-shrink-0 bg-muted 
-                        w-24 h-24 sm:w-28 sm:h-28 md:w-full md:h-auto md:aspect-[4/3]
-                        m-3 md:m-0 rounded-md md:rounded-none md:rounded-t-lg overflow-hidden">
+          <div className="relative w-full aspect-[16/9] bg-muted">
             <Image
               src={post.imageUrls![0]}
               alt={post.question}
               fill
-              sizes="(max-width: 767px) 112px, (min-width: 768px) 50vw"
-              className="object-cover"
+              sizes="(max-width: 768px) 100vw, (min-width: 768px) 50vw"
+              className="object-cover md:rounded-t-lg"
               data-ai-hint={post.tags && post.tags.length > 0 ? post.tags.slice(0, 2).join(' ') : 'abstract'}
               priority={isPriority}
             />
           </div>
         )}
 
-        <div className={cn("flex flex-col flex-grow p-3 md:p-4 min-w-0 justify-between", !hasImage && "w-full")}>
+        <div className={cn("flex flex-col flex-grow p-4 min-w-0 justify-between")}>
           <div>
             <div className="flex flex-wrap items-center gap-2 mb-2">
               {post.requestType === 'help_request' && (
@@ -82,7 +79,7 @@ export const PostCard: React.FC<PostCardProps> = React.memo(({ post, onOpen, isS
             </div>
             <h3 className="text-base font-semibold leading-snug text-card-foreground line-clamp-3 md:line-clamp-2">{post.question}</h3>
             {descriptionToDisplay && (
-              <p className="text-sm text-muted-foreground line-clamp-2 mt-1 md:block">
+              <p className="text-sm text-muted-foreground line-clamp-2 mt-1">
                 <TextWithMentions text={descriptionToDisplay} mentionedUserIds={post.mentionedUserIds || []} />
               </p>
             )}
