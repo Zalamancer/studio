@@ -178,8 +178,8 @@ const DiscoverPage = () => {
   return (
     <div className="container mx-auto p-4 md:p-6 min-h-screen">
 
-      {/* Sticky Filter Bar */}
-      <div className="mb-6 flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
+      {/* Sticky Filter Bar - REMOVED mb-6 class */}
+      <div className="flex items-center gap-2 sticky top-[56px] z-40 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
         <Button variant="ghost" size="icon" onClick={toggleHeaderSearch} className="flex-shrink-0 h-9 w-9 p-2">
           {isHeaderSearchActive ? <X className="h-5 w-5" /> : <Search className="h-5 w-5" />}
         </Button>
