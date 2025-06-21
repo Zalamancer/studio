@@ -1,3 +1,4 @@
+
 // src/app/collections/page.tsx
 "use client";
 
@@ -7,7 +8,6 @@ import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
 import { getUserCollections, deleteCollection } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
 import { CollectionCard } from '@/components/collections/CollectionCard';
-import { EditCollectionDialog } from '@/components/collections/EditCollectionDialog';
 import { SelectedCollectionPosts } from '@/components/collections/SelectedCollectionPosts';
 import { Button } from '@/components/ui/button';
 import { Loader2, FolderOpen, AlertTriangle, ArrowLeft } from 'lucide-react'; // Added ArrowLeft
@@ -115,16 +115,17 @@ const MyCollectionsPage = () => {
   }
 
   return (
-    <div className="md:container md:mx-auto md:py-8">
+    <div className="md:container md:mx-auto md:py-8 h-full flex flex-col">
       {isMobile && selectedCollection ? (
-        <div className="mb-4 px-4">
-          <Button variant="ghost" size="sm" onClick={() => setSelectedCollection(null)}>
-            <ArrowLeft className="mr-2 h-4 w-4" />
-            Back to Collections
+        <div className="mb-4 px-4 flex items-center gap-2 flex-shrink-0">
+          <Button variant="ghost" size="icon" onClick={() => setSelectedCollection(null)} className="h-8 w-8 flex-shrink-0">
+            <ArrowLeft className="h-5 w-5" />
+            <span className="sr-only">Back to Collections</span>
           </Button>
+          <h2 className="text-lg font-semibold truncate text-foreground">{selectedCollection.name}</h2>
         </div>
       ) : (
-        <header className="mb-8 px-4 md:px-0">
+        <header className="mb-8 px-4 md:px-0 flex-shrink-0">
           <h1 className="text-3xl md:text-4xl font-bold text-foreground flex items-center">
             <FolderOpen className="mr-3 h-8 w-8 text-primary" />
             My Collections
@@ -136,7 +137,7 @@ const MyCollectionsPage = () => {
       )}
 
 
-      <div className="grid grid-cols-1 md:grid-cols-3 md:gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-3 md:gap-6 flex-grow min-h-0">
         <div className={cn(
           "md:col-span-1 space-y-4 px-4 md:px-0",
           isMobile && selectedCollection && "hidden"
@@ -168,8 +169,9 @@ const MyCollectionsPage = () => {
         </div>
 
         <div className={cn(
-          "md:col-span-2",
-          isMobile && !selectedCollection && "hidden"
+          "md:col-span-2 flex flex-col min-h-0", // Added flex flex-col and min-h-0 for flex children to scroll
+          isMobile && !selectedCollection && "hidden",
+          isMobile && "px-0" // Remove horizontal padding on mobile for full width
         )}>
           {selectedCollection ? (
             <SelectedCollectionPosts
