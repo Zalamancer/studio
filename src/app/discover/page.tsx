@@ -21,6 +21,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePage } from '@/contexts/PageContext';
 import { useRouter } from 'next/navigation';
 
+const EMPTY_SECTOR_ARRAY: { code: string; name: string }[] = [];
+
 const DiscoverPage = () => {
   const { user } = useAuth();
   const router = useRouter();
@@ -37,6 +39,7 @@ const DiscoverPage = () => {
   const [activePlanView, setActivePlanView] = useState<'all' | 'my_plans'>('all');
 
   const availableSectorsForFilter = useMemo(() => {
+    if (!detailedSectorsData) return EMPTY_SECTOR_ARRAY;
     return detailedSectorsData.map(sector => ({ code: sector.code, name: sector.name }));
   }, []);
 
@@ -153,7 +156,7 @@ const DiscoverPage = () => {
   
   useEffect(() => {
     setFilterContent(<FilterContent />);
-    setHandleCreateClick(() => () => router.push('/plan/create'));
+    setHandleCreateClick(() => router.push('/plan/create'));
   }, [setFilterContent, setHandleCreateClick, router, FilterContent]);
 
   return (

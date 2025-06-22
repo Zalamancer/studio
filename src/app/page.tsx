@@ -43,6 +43,9 @@ const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
 
 type PostTypeFilter = 'all' | 'help_request' | 'post';
 
+const EMPTY_SUBSECTOR_ARRAY: SubSector[] = [];
+const EMPTY_INDUSTRY_ARRAY: Industry[] = [];
+
 const BoardPageContent = () => {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -61,8 +64,8 @@ const BoardPageContent = () => {
   const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string | undefined>(undefined);
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
   
-  const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>([]);
-  const [availableIndustries, setAvailableIndustries] = useState<Industry[]>([]);
+  const [availableSubSectors, setAvailableSubSectors] = useState<SubSector[]>(EMPTY_SUBSECTOR_ARRAY);
+  const [availableIndustries, setAvailableIndustries] = useState<Industry[]>(EMPTY_INDUSTRY_ARRAY);
 
   const { data: posts = [], isLoading: isLoadingPosts, error: postsError } = useQuery<Post[]>({
     queryKey: ['posts'],
@@ -74,12 +77,12 @@ const BoardPageContent = () => {
   useEffect(() => {
     if (selectedSectorFilter) {
       const sector = detailedSectorsData.find(s => s.code === selectedSectorFilter);
-      setAvailableSubSectors(sector?.subSectors || []);
+      setAvailableSubSectors(sector?.subSectors || EMPTY_SUBSECTOR_ARRAY);
       setSelectedSubSectorFilter(undefined);
       setSelectedIndustryFilter(undefined);
-      setAvailableIndustries([]);
+      setAvailableIndustries(EMPTY_INDUSTRY_ARRAY);
     } else {
-      setAvailableSubSectors([]);
+      setAvailableSubSectors(EMPTY_SUBSECTOR_ARRAY);
       setSelectedSubSectorFilter(undefined);
     }
   }, [selectedSectorFilter]);
@@ -87,10 +90,10 @@ const BoardPageContent = () => {
   useEffect(() => {
     if (selectedSubSectorFilter) {
       const subSector = availableSubSectors.find(ss => ss.code === selectedSubSectorFilter);
-      setAvailableIndustries(subSector?.industries || []);
+      setAvailableIndustries(subSector?.industries || EMPTY_INDUSTRY_ARRAY);
       setSelectedIndustryFilter(undefined);
     } else {
-      setAvailableIndustries([]);
+      setAvailableIndustries(EMPTY_INDUSTRY_ARRAY);
     }
   }, [selectedSubSectorFilter, availableSubSectors]);
 
