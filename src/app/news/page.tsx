@@ -119,9 +119,9 @@ const NewsPage = () => {
     }
   }, [user, queryClient]);
 
-  const handleTagToggle = (tag: string) => {
+  const handleTagToggle = useCallback((tag: string) => {
     setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
-  };
+  }, []);
 
   const clearAllFilters = useCallback(() => {
     setSelectedTags([]);

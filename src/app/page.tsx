@@ -53,7 +53,7 @@ const BoardPageContent = () => {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const { isFilterViewVisible, searchTerm, setHandleCreateClick, setFilterContent } = usePage();
+  const { isFilterViewVisible, searchTerm, setSearchTerm, setHandleCreateClick, setFilterContent } = usePage();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
@@ -116,7 +116,8 @@ const BoardPageContent = () => {
     setSelectedSectorFilter(undefined);
     setSelectedSubSectorFilter(undefined);
     setSelectedIndustryFilter(undefined);
-  }, []);
+    setSearchTerm('');
+  }, [setSearchTerm]);
 
   const activeFilterCount = useMemo(() => {
     let count = 0;
