@@ -409,12 +409,16 @@ const BoardPageContent = () => {
 
   const handleOpenCreatePostForm = useCallback(() => {
     if (user) {
-      setSelectedPost(null);
+      // Navigate to the base path to clear the 'postId' search param from the URL.
+      // The main useEffect hook will then handle closing the detail view.
+      router.push('/', { scroll: false });
+      
+      // Set state to show the create form.
       setShowCreatePostFormInline(true);
     } else {
       toast({ variant: "default", title: "Login Required", description: "Please log in to create a post." });
     }
-  }, [user, toast]);
+  }, [user, toast, router]);
   
   useEffect(() => {
     setFilterContent(<FilterContent />);
