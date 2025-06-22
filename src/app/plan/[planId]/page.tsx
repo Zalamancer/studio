@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Loader2, AlertTriangle, Info, Trash2, Edit3, PlusCircle, MessageCircle, Eye, Link as LinkIcon, CalendarDays, DollarSign, ListChecks, Layers, ExternalLinkIcon, X, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { PlanInfoDialog } from '@/components/plan/PlanInfoDialog';
+import { PlanPermissionsDialog } from '@/components/plan/PlanPermissionsDialog'; // New Import
 import RoadmapStepCard from '@/components/plan/RoadmapStepCard';
 import { AddRoadmapStepDialog } from '@/components/plan/AddRoadmapStepDialog';
 import { EditChildItemDialog } from '@/components/plan/EditChildItemDialog';
@@ -117,7 +118,7 @@ export default function PlanDetailPage() {
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
-    activeViewers, // new
+    activeViewers,
   } = usePlanLogic({ scale, setScale, canvasWrapperRef });
 
   const router = useRouter();
@@ -125,6 +126,7 @@ export default function PlanDetailPage() {
   const svgRef = useRef<SVGSVGElement>(null);
   const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const controlOffset = 100;
+  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false); // New state for permissions dialog
 
   const nodeDetailForm = useForm<NodeDetailFormData>({
     resolver: zodResolver(nodeDetailFormSchema),
@@ -344,6 +346,7 @@ export default function PlanDetailPage() {
         canEditPlan={canEditPlan}
         onOpenHistory={() => setIsVersionHistorySheetOpen(true)}
         onOpenInfo={() => setIsPlanInfoDialogOpen(true)}
+        onOpenPermissions={() => setIsPermissionsDialogOpen(true)} // Pass new handler
         diffTargetActive={!!diffTarget}
         activeViewers={activeViewers}
       />
@@ -392,19 +395,25 @@ export default function PlanDetailPage() {
           onOpenChange={setIsPlanInfoDialogOpen}
           planData={planDataForDialog}
           ownerProfile={ownerProfile}
-          isPlanOwner={canEditPlan}
-          onSaveSettings={handleSavePlanSettings}
-          isSavingSettings={isSaving || savePlanSettingsMutation.isPending}
+        />
+      )}
+      {planData && (
+        <PlanPermissionsDialog
+          isOpen={isPermissionsDialogOpen}
+          onOpenChange={setIsPermissionsDialogOpen}
+          initialVisibility={planData.visibility}
+          initialEditability={planData.editability}
+          initialViewUserIds={planData.viewUserIds}
+          initialEditUserIds={planData.editUserIds}
+          ownerId={planData.ownerId}
+          onSave={handleSavePlanSettings}
+          isSaving={isSaving || savePlanSettingsMutation.isPending}
           viewPermissionsSearch={viewPermissionsSearch}
+          setViewPermissionsSearch={setViewPermissionsSearch}
           editPermissionsSearch={editPermissionsSearch}
+          setEditPermissionsSearch={setEditPermissionsSearch}
           viewPermissionSuggestions={viewPermissionSuggestions}
           editPermissionSuggestions={editPermissionSuggestions}
-          onAddUserToViewers={handleAddUserToViewers}
-          onRemoveUserFromViewers={handleRemoveUserFromViewers}
-          onAddUserToEditors={handleAddUserToEditors}
-          onRemoveUserFromEditors={handleRemoveUserFromEditors}
-          setViewPermissionsSearch={setViewPermissionsSearch}
-          setEditPermissionsSearch={setEditPermissionsSearch}
         />
       )}
        <AddRoadmapStepDialog

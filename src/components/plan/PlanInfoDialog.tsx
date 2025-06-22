@@ -1,557 +1,101 @@
 // src/components/plan/PlanInfoDialog.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React from 'react';
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogDescription as DialogPrimitiveDescription,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { ScrollArea } from '@/components/ui/scroll-area';
-import { Avatar, AvatarImage, AvatarFallback } from '@/components/ui/avatar';
-import {
-  Loader2,
-  FileText,
-  Users,
-  User,
-  Eye,
-  Lock,
-  Link as LinkIcon,
-  ShieldQuestion,
-  Trash2,
-  Search,
-  PlusCircle,
-  X,
-  Save,
-  Globe,
-} from 'lucide-react';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import type { ClientPlan, PlanVisibility, PlanEditability } from '@/types/plan';
-import type { UserProfileBasic } from '@/types/connection';
-import { useToast } from '@/hooks/use-toast';
 import { format } from 'date-fns';
-import { getInitials, generateAnonymousName } from '@/lib/pseudonymUtils';
-import { useQuery } from '@tanstack/react-query';
-import { fetchUserProfileBasic } from '@/services/connectionService';
-import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/AuthContext';
+import type { ClientPlan } from '@/types/plan';
+import type { UserProfileBasic } from '@/types/connection';
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { X } from 'lucide-react';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 interface PlanInfoDialogProps {
   isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   planData: ClientPlan | null;
   ownerProfile: UserProfileBasic | null;
-  isPlanOwner: boolean;
-  onSaveSettings: (settings: {
-    name: string;
-    description: string;
-    visibility: PlanVisibility;
-    editability: PlanEditability;
-    viewUserIds: string[];
-    editUserIds: string[];
-  }) => void;
-  isSavingSettings: boolean;
-  viewPermissionsSearch: string;
-  editPermissionsSearch: string;
-  viewPermissionSuggestions: UserProfileBasic[];
-  editPermissionSuggestions: UserProfileBasic[];
-  onAddUserToViewers: (userProfile: UserProfileBasic) => void;
-  onRemoveUserFromViewers: (userId: string) => void;
-  onAddUserToEditors: (userProfile: UserProfileBasic) => void;
-  onRemoveUserFromEditors: (userId: string) => void;
-  setViewPermissionsSearch: (search: string) => void;
-  setEditPermissionsSearch: (search: string) => void;
 }
-
-const SkeletonListItem: React.FC = () => (
-  <div className="flex items-center justify-between py-1.5 px-2 bg-muted/30 rounded-md animate-pulse">
-    <div className="flex items-center gap-2">
-      <div className="h-6 w-6 rounded-full bg-muted-foreground/20" />
-      <div className="h-4 w-24 bg-muted-foreground/20 rounded" />
-    </div>
-  </div>
-);
 
 export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
   isOpen,
   onOpenChange,
-  planData: initialPlanData,
+  planData,
   ownerProfile,
-  isPlanOwner,
-  onSaveSettings,
-  isSavingSettings,
-  viewPermissionsSearch,
-  setViewPermissionsSearch,
-  editPermissionsSearch,
-  setEditPermissionsSearch,
-  viewPermissionSuggestions,
-  editPermissionSuggestions,
-  onAddUserToViewers,
-  onRemoveUserFromViewers,
-  onAddUserToEditors,
-  onRemoveUserFromEditors,
 }) => {
-  const { user: currentUserFromAuth } = useAuth();
-  const { toast } = useToast();
+  if (!planData) return null;
 
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [visibility, setVisibility] = useState<PlanVisibility>('private');
-  const [editability, setEditability] = useState<PlanEditability>('owner_only');
-  
-  const [currentViewUserIds, setCurrentViewUserIds] = useState<string[]>([]);
-  const [currentEditUserIds, setCurrentEditUserIds] = useState<string[]>([]);
-
-  const [isViewSuggestionsOpen, setIsViewSuggestionsOpen] = useState(false);
-  const [isEditSuggestionsOpen, setIsEditSuggestionsOpen] = useState(false);
-  const viewSearchInputRef = useRef<HTMLInputElement>(null);
-  const editSearchInputRef = useRef<HTMLInputElement>(null);
-  const viewSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
-  const editSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
-  
-  const isOwnerForUIDisplay = useMemo(() => {
-    return !!currentUserFromAuth && !!initialPlanData && initialPlanData.ownerId === currentUserFromAuth.uid;
-  }, [currentUserFromAuth, initialPlanData]);
-
-  useEffect(() => {
-    if (initialPlanData && isOpen) {
-      setName(initialPlanData.name);
-      setDescription(initialPlanData.description || '');
-      setVisibility(initialPlanData.visibility);
-      setEditability(initialPlanData.editability);
-      setCurrentViewUserIds(initialPlanData.viewUserIds?.filter(uid => uid !== initialPlanData.ownerId) || []);
-      setCurrentEditUserIds(initialPlanData.editUserIds?.filter(uid => uid !== initialPlanData.ownerId) || []);
-    }
-  }, [initialPlanData, isOpen]);
-  
-  useEffect(() => {
-    if (!isOpen || !isOwnerForUIDisplay) return;
-
-    if (visibility === 'unlisted' && editability === 'everyone') {
-      setEditability('owner_only');
-      toast({
-        title: "Editability Adjusted",
-        description: "The 'Everyone' edit option is not available for unlisted plans. Editability set to 'Owner Only'.",
-        duration: 5000,
-      });
-    } else if (visibility === 'private' && editability !== 'owner_only') {
-      setEditability('owner_only');
-      toast({
-        title: "Editability Adjusted",
-        description: "Private plans can only be edited by the owner. Editability set to 'Owner Only'.",
-        duration: 5000,
-      });
-    }
-  }, [visibility, editability, isOwnerForUIDisplay, isOpen, toast]);
-
-
-  useEffect(() => {
-    setIsViewSuggestionsOpen(!!viewPermissionsSearch && viewPermissionSuggestions.length > 0);
-  }, [viewPermissionsSearch, viewPermissionSuggestions]);
-
-  useEffect(() => {
-    setIsEditSuggestionsOpen(!!editPermissionsSearch && editPermissionSuggestions.length > 0);
-  }, [editPermissionsSearch, editPermissionSuggestions]);
-
-  const { data: viewerProfilesMap, isLoading: isLoadingViewerProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
-    queryKey: ['userProfilesBasic', 'planDialogViewers', initialPlanData?.id, currentViewUserIds.join(',')],
-    queryFn: async () => {
-      const profiles = new Map<string, UserProfileBasic | null>();
-      if (!currentViewUserIds || currentViewUserIds.length === 0) return profiles;
-      await Promise.all(currentViewUserIds.map(async uid => {
-        const profile = await fetchUserProfileBasic(uid);
-        profiles.set(uid, profile);
-      }));
-      return profiles;
-    },
-    enabled: isOpen && currentViewUserIds.length > 0 && !!initialPlanData,
-  });
-
-  const { data: editorProfilesMap, isLoading: isLoadingEditorProfiles } = useQuery<Map<string, UserProfileBasic | null>>({
-    queryKey: ['userProfilesBasic', 'planDialogEditors', initialPlanData?.id, currentEditUserIds.join(',')],
-    queryFn: async () => {
-      const profiles = new Map<string, UserProfileBasic | null>();
-      if (!currentEditUserIds || currentEditUserIds.length === 0) return profiles;
-      await Promise.all(currentEditUserIds.map(async uid => {
-        const profile = await fetchUserProfileBasic(uid);
-        profiles.set(uid, profile);
-      }));
-      return profiles;
-    },
-    enabled: isOpen && currentEditUserIds.length > 0 && !!initialPlanData,
-  });
-
-  const handleInternalAddViewer = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === initialPlanData?.ownerId) return;
-    if (currentViewUserIds.includes(userProfile.userId)) return;
-    setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    onAddUserToViewers(userProfile);
-    setViewPermissionsSearch('');
-    setIsViewSuggestionsOpen(false);
-  };
-
-  const handleInternalRemoveViewer = (userIdToRemove: string) => {
-    setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove)); 
-    onRemoveUserFromViewers(userIdToRemove);
-  };
-
-  const handleInternalAddEditor = (userProfile: UserProfileBasic) => {
-    if (userProfile.userId === initialPlanData?.ownerId) return;
-    if (currentEditUserIds.includes(userProfile.userId)) return;
-    setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-    setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId]))); 
-    onAddUserToEditors(userProfile);
-    setEditPermissionsSearch('');
-    setIsEditSuggestionsOpen(false);
-  };
-
-  const handleInternalRemoveEditor = (userIdToRemove: string) => {
-    setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    onRemoveUserFromEditors(userIdToRemove);
-  };
-
-  const handleSave = () => {
-    if (!initialPlanData || !name.trim()) {
-      toast({ variant: "destructive", title: "Validation Error", description: "Plan name is required." });
-      return;
-    }
-    if (!isPlanOwner) {
-      toast({ variant: "destructive", title: "Permission Denied", description: "You do not have permission to save these settings." });
-      return;
-    }
-    onSaveSettings({
-      name: name.trim(),
-      description: description.trim(),
-      visibility,
-      editability,
-      viewUserIds: currentViewUserIds, 
-      editUserIds: currentEditUserIds,
-    });
-  };
-  
-  const renderUserListItem = (
-    userId: string,
-    profilesMap: Map<string, UserProfileBasic | null> | undefined,
-    onRemove: (uid: string) => void,
-    roleContext: 'Viewer' | 'Editor',
-    isLoadingMap: boolean
-  ) => {
-    const profile = profilesMap?.get(userId);
-    const displayName = profile?.displayName || profile?.mentionName || generateAnonymousName(userId);
-    
-    if (userId === initialPlanData?.ownerId) return null; 
-    if (isLoadingMap && !profile) return <SkeletonListItem key={`loading-${roleContext}-${userId}`} />;
-    
-    return (
-      <div key={`${roleContext}-${userId}`} className="flex items-center justify-between py-1.5 px-2 bg-muted/30 rounded-md hover:bg-muted/60 transition-colors">
-        <div className="flex items-center gap-2 min-w-0">
-          <Avatar className="h-6 w-6">
-            <AvatarImage src={profile?.avatarUrl} alt={displayName} />
-            <AvatarFallback className="text-xs">{getInitials(displayName)}</AvatarFallback>
-          </Avatar>
-          <span className="text-xs truncate" title={displayName}>{displayName}</span>
-        </div>
-        {isOwnerForUIDisplay && (
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-5 w-5 p-0 text-destructive hover:text-destructive/80"
-            onClick={() => onRemove(userId)}
-            disabled={isSavingSettings}
-            title={`Remove ${roleContext.toLowerCase()} `}
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </Button>
-        )}
-      </div>
-    );
-  };
-
-  const renderPermissionSection = (
-    title: string,
-    currentUserIdsForSection: string[],
-    profilesMapForSection: Map<string, UserProfileBasic | null> | undefined,
-    isLoadingProfilesMapForSection: boolean,
-    searchVal: string,
-    setSearchVal: (val: string) => void,
-    suggestionList: UserProfileBasic[],
-    onAddToListInternal: (profile: UserProfileBasic) => void,
-    onRemoveFromListInternal: (uid: string) => void,
-    roleContext: 'Viewer' | 'Editor',
-    isSuggestionsOpenState: boolean,
-    setIsSuggestionsOpenState: (open: boolean) => void,
-    inputRef: React.RefObject<HTMLInputElement>,
-    popoverContentRef: React.RefObject<HTMLDivElement>
-  ) => (
-    <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col md:flex-grow md:min-h-0">
-      <Label className="text-sm font-semibold text-foreground flex-shrink-0">{title}</Label>
-      {isOwnerForUIDisplay && (
-        <Popover open={isSuggestionsOpenState} onOpenChange={setIsSuggestionsOpenState}>
-          <PopoverTrigger asChild>
-            <div className="relative flex-shrink-0">
-              <Input
-                ref={inputRef}
-                type="search"
-                placeholder="Search by @mentionName or name..."
-                value={searchVal}
-                onChange={(e) => {
-                  setSearchVal(e.target.value);
-                  if (e.target.value.trim() === '') setIsSuggestionsOpenState(false);
-                  else setIsSuggestionsOpenState(true); 
-                }}
-                onFocus={() => { if (searchVal.trim() !== '' && suggestionList.length > 0) setIsSuggestionsOpenState(true);}}
-                onBlurCapture={() => setTimeout(() => { if (popoverContentRef.current && !popoverContentRef.current.contains(document.activeElement as Node) && inputRef.current !== document.activeElement) { setIsSuggestionsOpenState(false); } }, 150)}
-                className="text-xs h-8 pr-8"
-                disabled={isSavingSettings}
-              />
-              <Search className="absolute right-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground pointer-events-none" />
-            </div>
-          </PopoverTrigger>
-          {isSuggestionsOpenState && (
-            <PopoverContent 
-                ref={popoverContentRef}
-                className="w-[var(--radix-popover-trigger-width)] p-1 mt-1 max-h-36 overflow-y-auto" 
-                side="bottom" 
-                align="start"
-                onOpenAutoFocus={(e) => e.preventDefault()}
-            >
-              {suggestionList.length > 0 ? (
-                suggestionList
-                  .filter(sugg => sugg.userId !== initialPlanData?.ownerId && !currentUserIdsForSection.includes(sugg.userId))
-                  .map(sugg => (
-                    <Button key={`sugg-${roleContext}-${sugg.userId}`} variant="ghost" size="sm" className="w-full justify-start text-xs h-auto py-1.5 px-2 hover:bg-accent" 
-                      onClick={() => onAddToListInternal(sugg)}
-                      onMouseDown={(e) => e.preventDefault()}
-                    >
-                      <Avatar className="h-5 w-5 mr-1.5"><AvatarImage src={sugg.avatarUrl} /><AvatarFallback className="text-xs">{getInitials(sugg.displayName || sugg.mentionName)}</AvatarFallback></Avatar>
-                      <div className="flex flex-col items-start text-left min-w-0">
-                        <span className="truncate font-medium">{sugg.displayName || sugg.mentionName}</span>
-                        <span className="text-muted-foreground text-[11px] truncate">@{sugg.mentionName}</span>
-                      </div>
-                      <PlusCircle className="h-4 w-4 ml-auto text-primary flex-shrink-0"/>
-                    </Button>
-                  ))
-              ) : (
-                searchVal && <p className="text-xs text-muted-foreground text-center p-2">No users found matching "{searchVal}".</p>
-              )}
-              {suggestionList.filter(sugg => sugg.userId !== initialPlanData?.ownerId && !currentUserIdsForSection.includes(sugg.userId)).length === 0 && searchVal && (
-                 <p className="text-xs text-muted-foreground text-center p-2">No new users found matching "{searchVal}".</p>
-              )}
-            </PopoverContent>
-          )}
-        </Popover>
-      )}
-      <ScrollArea
-        className="space-y-1 py-1 md:flex-grow md:min-h-[6rem]"
-      >
-        {isLoadingProfilesMapForSection && currentUserIdsForSection.length > 0 && !profilesMapForSection?.size ? (
-          Array.from({length: Math.min(3, currentUserIdsForSection.length)}).map((_,idx) => <SkeletonListItem key={`loading-${roleContext}-${idx}`} />)
-        ) : currentUserIdsForSection.length > 0 ? (
-          currentUserIdsForSection.map(uid => renderUserListItem(uid, profilesMapForSection, onRemoveFromListInternal, roleContext, isLoadingProfilesMapForSection))
-        ) : (
-          <p className="text-xs text-muted-foreground text-center py-2">No specific {roleContext.toLowerCase()}s added (besides owner).</p>
-        )}
-      </ScrollArea>
-    </div>
-  );
-  
-  const renderStaticSetting = (label: string, value: string | undefined, icon?: React.ElementType) => {
-    const IconComponent = icon;
-    let displayValue = 'Not set';
-    if (value) {
+  const renderStaticSetting = (label: string, value: string | undefined | null) => {
+    let displayValue = value || 'Not set';
+    if (label === 'Visibility') {
         switch (value) {
             case 'private': displayValue = 'Private (Owner only)'; break;
             case 'unlisted': displayValue = 'Unlisted (With link)'; break;
             case 'public': displayValue = 'Public (Discoverable)'; break;
+        }
+    } else if (label === 'Editability') {
+        switch (value) {
             case 'owner_only': displayValue = 'Owner Only'; break;
             case 'collaborators': displayValue = 'Collaborators'; break;
             case 'everyone': displayValue = 'All Authenticated Users'; break;
-            default: displayValue = value.charAt(0).toUpperCase() + value.slice(1);
         }
     }
-
     return (
       <div className="space-y-1">
-        <Label className="text-sm flex items-center gap-1">
-          {IconComponent && <IconComponent className="h-4 w-4 text-muted-foreground" />}
-          {label}
-        </Label>
-        <p className="text-sm text-foreground bg-muted/30 px-3 py-2 rounded-md h-9 flex items-center">
-          {displayValue}
-        </p>
+        <Label className="text-sm text-muted-foreground">{label}</Label>
+        <p className="text-sm text-foreground">{displayValue}</p>
       </div>
     );
   };
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="w-[95vw] sm:max-w-xl md:max-w-3xl lg:max-w-5xl xl:max-w-6xl h-[90vh] max-h-[90vh] flex flex-col p-0" showCloseButton={false}>
-        <DialogHeader className="pt-6 px-6 pb-4 border-b flex flex-row justify-between items-center">
-            <div className="flex items-center gap-2 min-w-0">
-                <FileText className="h-5 w-5 text-primary flex-shrink-0" />
-                <div className="flex flex-col min-w-0">
-                    <DialogTitle className="truncate text-lg">
-                        {name || initialPlanData?.name || 'Plan Details'}
-                    </DialogTitle>
-                    <DialogPrimitiveDescription className="text-xs text-muted-foreground mt-0.5 truncate">
-                        Owned by {ownerProfile?.displayName || generateAnonymousName(initialPlanData?.ownerId || '')}, created {initialPlanData ? format(new Date(initialPlanData.createdAt), 'PP') : '...'}
-                    </DialogPrimitiveDescription>
-                </div>
+      <DialogContent className="w-[95vw] sm:max-w-lg p-0 flex flex-col h-auto max-h-[80vh]" showCloseButton={false}>
+        <DialogHeader className="p-6 pb-4 border-b">
+          <div className="flex justify-between items-center">
+            <div>
+              <DialogTitle className="text-xl">{planData.name}</DialogTitle>
+              <DialogDescription>
+                Owned by {ownerProfile?.displayName || generateAnonymousName(planData.ownerId)}
+              </DialogDescription>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              {isOwnerForUIDisplay && ( 
-                <Button onClick={handleSave} disabled={isSavingSettings || isLoadingViewerProfiles || isLoadingEditorProfiles} size="sm">
-                  {isSavingSettings ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
-                  Save Settings
-                </Button>
-              )}
-              <DialogPrimitive.Close asChild>
+            <DialogPrimitive.Close asChild>
                 <Button variant="ghost" size="icon" className="h-8 w-8">
                   <X className="h-4 w-4" />
                   <span className="sr-only">Close</span>
                 </Button>
               </DialogPrimitive.Close>
-            </div>
-        </DialogHeader>
-        
-        {!initialPlanData && isOpen ? (
-          <div className="flex-grow flex flex-col items-center justify-center p-6">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mb-3" />
-            <p className="text-sm text-muted-foreground">Loading plan details...</p>
           </div>
-        ) : initialPlanData ? (
-          <ScrollArea className="flex-grow min-h-0">
-            <div className="p-6 h-full flex flex-col">
-              <div className="flex flex-col md:flex-row md:gap-x-6 gap-y-6 flex-grow">
-                {/* Left Column */}
-                <div className="md:w-1/2 flex flex-col">
-                  <div className="mb-4 flex-shrink-0">
-                    <Label htmlFor="plan-name" className="text-sm">Plan Name</Label>
-                    <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9 mt-1"/>
-                  </div>
-                  
-                  <div className="flex flex-col md:flex-grow md:min-h-0 mb-4">
-                    <Label htmlFor="plan-description" className="text-sm flex-shrink-0 mb-1">Description</Label>
-                    <Textarea
-                      id="plan-description"
-                      value={description}
-                      onChange={(e) => setDescription(e.target.value)}
-                      disabled={!isOwnerForUIDisplay || isSavingSettings}
-                      placeholder="A brief overview of this plan's purpose."
-                      className={cn(
-                        "text-sm overflow-y-auto resize-none",
-                        "min-h-[10rem] max-h-[20rem] md:max-h-none",
-                        "md:flex-grow md:min-h-0"
-                      )}
-                    />
-                  </div>
-                  
-                  <div className="space-y-3 mt-auto flex-shrink-0">
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                          {isOwnerForUIDisplay ? (
-                          <>
-                              <div>
-                              <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
-                              <Select value={visibility} onValueChange={(v) => {
-                                const newVisibility = v as PlanVisibility;
-                                setVisibility(newVisibility);
-                              }} disabled={isSavingSettings}>
-                                  <SelectTrigger id="plan-visibility" className="text-sm h-9 mt-1">
-                                  <SelectValue placeholder="Select visibility" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                  <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private (Owner only)</div></SelectItem>
-                                  <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted (With link)</div></SelectItem>
-                                  <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public (Discoverable)</div></SelectItem>
-                                  </SelectContent>
-                              </Select>
-                              </div>
-                              <div>
-                              <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
-                              <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSavingSettings}>
-                                  <SelectTrigger id="plan-editability" className="text-sm h-9 mt-1">
-                                  <SelectValue placeholder="Select editability" />
-                                  </SelectTrigger>
-                                  <SelectContent>
-                                  <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
-                                  <SelectItem value="collaborators" disabled={visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                                  <SelectItem value="everyone" disabled={visibility === 'unlisted' || visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
-                                  </SelectContent>
-                              </Select>
-                              </div>
-                          </>
-                          ) : ( 
-                          <>
-                              {renderStaticSetting("Visibility", initialPlanData.visibility, ShieldQuestion)}
-                              {renderStaticSetting("Editability", initialPlanData.editability, Users)}
-                          </>
-                          )}
-                      </div>
-                      <div className="space-y-1 border-t pt-3 text-xs text-muted-foreground">
-                          <p><strong className="text-foreground">Owner:</strong> {ownerProfile?.displayName || generateAnonymousName(initialPlanData.ownerId || '')}</p>
-                          <p><strong className="text-foreground">Created:</strong> {format(new Date(initialPlanData.createdAt), 'PPp')}</p>
-                          <p><strong className="text-foreground">Last Updated:</strong> {format(new Date(initialPlanData.updatedAt), 'PPp')}</p>
-                          <p><strong className="text-foreground">Version:</strong> {initialPlanData.version}</p>
-                      </div>
-                  </div>
-                </div>
-
-                {isOwnerForUIDisplay && (
-                  <div className="md:w-1/2 space-y-4 flex flex-col"> 
-                    {visibility !== 'public' && renderPermissionSection(
-                      "Manage View Access (Private/Unlisted)",
-                      currentViewUserIds,
-                      viewerProfilesMap,
-                      isLoadingViewerProfiles,
-                      viewPermissionsSearch,
-                      setViewPermissionsSearch,
-                      viewPermissionSuggestions,
-                      handleInternalAddViewer,
-                      handleInternalRemoveViewer,
-                      "Viewer",
-                      isViewSuggestionsOpen,
-                      setIsViewSuggestionsOpen,
-                      viewSearchInputRef,
-                      viewSuggestionsPopoverRef
-                    )}
-                    {editability === 'collaborators' && renderPermissionSection(
-                      "Manage Edit Access (Collaborators)",
-                      currentEditUserIds,
-                      editorProfilesMap,
-                      isLoadingEditorProfiles,
-                      editPermissionsSearch,
-                      setEditPermissionsSearch,
-                      editPermissionSuggestions,
-                      handleInternalAddEditor,
-                      handleInternalRemoveEditor,
-                      "Editor",
-                      isEditSuggestionsOpen,
-                      setIsEditSuggestionsOpen,
-                      editSearchInputRef,
-                      editSuggestionsPopoverRef
-                    )}
-                    {(visibility === 'public' && (editability === 'owner_only' || editability === 'everyone')) && <div className="flex-grow"></div>}
-                  </div>
-                )}
+        </DialogHeader>
+        <ScrollArea className="flex-1">
+          <div className="p-6 space-y-4">
+            {planData.description && (
+              <div>
+                <Label className="text-sm text-muted-foreground">Description</Label>
+                <p className="text-sm text-foreground whitespace-pre-wrap">{planData.description}</p>
               </div>
+            )}
+            {renderStaticSetting("Visibility", planData.visibility)}
+            {renderStaticSetting("Editability", planData.editability)}
+            {renderStaticSetting("Sector", planData.sector)}
+            {renderStaticSetting("Sub-Sector", planData.subSector)}
+            {renderStaticSetting("Industry", planData.industry)}
+            <div className="pt-2 border-t text-xs text-muted-foreground space-y-1">
+              <p>Version: {planData.version}</p>
+              <p>Created: {format(new Date(planData.createdAt), 'PPp')}</p>
+              <p>Last Updated: {format(new Date(planData.updatedAt), 'PPp')}</p>
             </div>
-          </ScrollArea>
-        ) : null}
+          </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   );

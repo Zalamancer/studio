@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
-import { ChevronLeft, History, Info, AlertTriangle } from 'lucide-react';
+import { ChevronLeft, History, Info, AlertTriangle, PlusCircle } from 'lucide-react';
 import type { ClientPlan } from '@/types/plan';
 import type { UserProfileBasic } from '@/types/connection';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -24,8 +24,9 @@ interface PlanHeaderProps {
   canEditPlan: boolean;
   onOpenHistory: () => void;
   onOpenInfo: () => void;
+  onOpenPermissions: () => void; // New prop for permissions dialog
   diffTargetActive: boolean;
-  activeViewers: UserProfileBasic[]; // New prop
+  activeViewers: UserProfileBasic[];
 }
 
 export const PlanHeader: React.FC<PlanHeaderProps> = ({
@@ -35,8 +36,9 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
   canEditPlan,
   onOpenHistory,
   onOpenInfo,
+  onOpenPermissions, // New prop
   diffTargetActive,
-  activeViewers, // New prop
+  activeViewers,
 }) => {
   const router = useRouter();
 
@@ -64,9 +66,8 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
-          {/* New Avatar Group for active viewers */}
           {activeViewers.length > 0 && (
-            <div className="flex items-center -space-x-2 mr-2 border-r pr-4">
+            <div className="flex items-center -space-x-2">
               {activeViewers.slice(0, 3).map(viewer => (
                 <TooltipProvider key={viewer.userId} delayDuration={100}>
                   <Tooltip>
@@ -89,6 +90,15 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
               )}
             </div>
           )}
+
+          {canEditPlan && (
+            <Button variant="outline" size="icon" onClick={onOpenPermissions} className="h-8 w-8 ml-2" title="Manage Permissions">
+              <PlusCircle className="h-4 w-4" />
+              <span className="sr-only">Manage Permissions</span>
+            </Button>
+          )}
+
+          <div className="h-6 w-px bg-border mx-1"></div>
 
           {diffTargetActive && (
             <Button variant="destructive" size="sm" onClick={onOpenHistory} className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
