@@ -295,7 +295,7 @@ export default function PlanDetailPage() {
         diffTargetActive={!!diffTarget}
       />
 
-      <div className="container mx-auto px-4 max-w-screen-2xl flex-1 overflow-auto relative">
+      <div className="container mx-auto px-4 max-w-screen-2xl flex-1 relative">
         <ScrollArea className="w-full h-full">
           <div
             ref={canvasRef}
