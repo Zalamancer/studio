@@ -23,6 +23,30 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePage } from '@/contexts/PageContext';
 import { useRouter } from 'next/navigation';
 
+// A new sub-component to encapsulate the debounced input logic, preventing the parent's useCallback from changing on every keystroke.
+const DebouncedTagSearchInput = ({ setDebouncedQuery }: { setDebouncedQuery: (query: string) => void }) => {
+  const [localQuery, setLocalQuery] = useState('');
+
+  useEffect(() => {
+    const handler = setTimeout(() => {
+      setDebouncedQuery(localQuery);
+    }, 300); // 300ms debounce delay
+    return () => {
+      clearTimeout(handler);
+    };
+  }, [localQuery, setDebouncedQuery]);
+
+  return (
+    <Input
+      type="search"
+      placeholder="Search tags..."
+      value={localQuery}
+      onChange={(e) => setLocalQuery(e.target.value)}
+      className="h-8 text-xs border-0 focus-visible:ring-0 shadow-none"
+    />
+  );
+};
+
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
@@ -32,7 +56,7 @@ const NewsPage = () => {
 
   const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [tagSearchInput, setTagSearchInput] = useState('');
+  const [tagSearchInput, setTagSearchInput] = useState(''); // This state will now be the *debounced* one
 
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticlesAll'],
@@ -54,7 +78,7 @@ const NewsPage = () => {
   });
 
   const { data: availableTagsForFilter = [], isLoading: isLoadingTagsForFilter } = useQuery<ClientTag[]>({
-    queryKey: ['searchTagsForFilter', tagSearchInput],
+    queryKey: ['searchTagsForFilter', tagSearchInput], // This query uses the debounced state
     queryFn: () => searchTags(tagSearchInput, 20),
     staleTime: 1000 * 60 * 1,
   });
@@ -125,7 +149,7 @@ const NewsPage = () => {
 
   const clearAllFilters = useCallback(() => {
     setSelectedTags([]);
-    setTagSearchInput('');
+    setTagSearchInput(''); // This will also clear the debounced input component's state via prop re-render if needed, but it manages its own state now.
     setActiveArticleView('all');
     setSearchTerm('');
   }, [setSearchTerm]);
@@ -155,7 +179,8 @@ const NewsPage = () => {
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}</Label>
         <div className="p-1 border-b">
-          <Input type="search" placeholder="Search tags..." value={tagSearchInput} onChange={(e) => setTagSearchInput(e.target.value)} className="h-8 text-xs border-0 focus-visible:ring-0 shadow-none"/>
+          {/* Use the new debounced input component here */}
+          <DebouncedTagSearchInput setDebouncedQuery={setTagSearchInput} />
         </div>
         <div className="h-48 overflow-y-auto">
           <div className="p-3 space-y-1.5">
@@ -183,9 +208,11 @@ const NewsPage = () => {
         </Button>
       )}
     </div>
-  ), [user, activeArticleView, selectedTags, tagSearchInput, isLoadingTagsForFilter, availableTagsForFilter, activeFilterCount, clearAllFilters, handleTagToggle]);
+  ), [user, activeArticleView, selectedTags, isLoadingTagsForFilter, availableTagsForFilter, activeFilterCount, clearAllFilters, handleTagToggle, tagSearchInput]);
 
   useEffect(() => {
+    // The dependency on FilterContent is what caused the loop.
+    // By making FilterContent more stable (by moving the live input state out), this useEffect becomes much safer.
     setFilterContent(<FilterContent />);
     setHandleCreateClick(() => router.push('/news/create'));
   }, [setFilterContent, setHandleCreateClick, router, FilterContent]);
@@ -206,7 +233,7 @@ const NewsPage = () => {
            <div className="text-destructive flex flex-col items-center gap-2 text-sm p-6 bg-destructive/5 rounded-md justify-center border border-destructive/20 mb-6"><AlertTriangle className="h-8 w-8 flex-shrink-0" /><p className="font-semibold">Error Loading Articles</p><p>{allArticlesError?.message || userArticlesError?.message || "An unexpected error occurred."}</p></div>
         )}
         {!isLoading && !allArticlesError && filteredArticles.length === 0 && (
-          <div className="text-center py-10"><Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" /><p className="text-lg font-medium text-muted-foreground">{searchTerm ? `No articles found for "${searchTerm}"` : selectedTags.length > 0 ? "No articles found with the selected tags." : activeArticleView === 'my_articles' ? "You haven't created any articles yet." : "No articles to show right now."}</p>
+          <div className="text-center py-10"><Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" /><p className="text-lg font-medium text-muted-foreground">{searchTerm ? `No articles found for "${searchTerm}".` : selectedTags.length > 0 ? "No articles found with the selected tags." : activeArticleView === 'my_articles' ? "You haven't created any articles yet." : "No articles to show right now."}</p>
             {activeArticleView === 'my_articles' && !searchTerm && selectedTags.length === 0 && user && (
                <Button asChild size="sm" className="mt-4"><Link href="/news/create"><PlusCircle className="mr-2 h-4 w-4"/>Create Your First Article</Link></Button>
             )}
