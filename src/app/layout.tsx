@@ -4,7 +4,6 @@ import { Inter } from 'next/font/google'; // Use Inter font as specified
 import './globals.css';
 import Providers from '@/components/Providers'; // Import the Providers component
 import MainLayout from '@/components/layout/MainLayout'; // Import the new MainLayout
-import { ThemeProvider } from 'next-themes'; // Import ThemeProvider
 
 const inter = Inter({
   variable: '--font-inter', // Define CSS variable if needed
