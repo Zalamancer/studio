@@ -23,6 +23,8 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePage } from '@/contexts/PageContext';
 import { useRouter } from 'next/navigation';
 
+const EMPTY_TAG_ARRAY: ClientTag[] = []; // Stable reference for an empty array
+
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
@@ -53,12 +55,12 @@ const NewsPage = () => {
   });
 
   // Simplified query: Fetch top tags, no more search term.
-  const { data: availableTagsForFilter = [], isLoading: isLoadingTagsForFilter } = useQuery<ClientTag[]>({
+  const { data: fetchedTags, isLoading: isLoadingTagsForFilter } = useQuery<ClientTag[]>({
     queryKey: ['searchTagsForFilter', ''], // Static key to fetch popular tags
     queryFn: () => searchTags('', 20),
     staleTime: 1000 * 60 * 1,
   });
-
+  const availableTagsForFilter = fetchedTags || EMPTY_TAG_ARRAY; // Use stable empty array
 
   const savedItemIds = useMemo(() => {
     if (!userCollections || userCollections.length === 0) return new Set<string>();
