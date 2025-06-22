@@ -28,16 +28,12 @@ const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const { isFilterViewVisible, setHandleCreateClick, searchTerm, setSearchTerm } = usePage();
+  const { isFilterViewVisible, setHandleCreateClick, searchTerm, setSearchTerm, setFilterContent } = usePage();
   const router = useRouter();
 
   const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [tagSearchInput, setTagSearchInput] = useState('');
-
-  useEffect(() => {
-    setHandleCreateClick(() => router.push('/news/create'));
-  }, [setHandleCreateClick, router]);
 
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticlesAll'],
@@ -142,7 +138,7 @@ const NewsPage = () => {
     return count;
   }, [selectedTags, activeArticleView]);
 
-  const FilterContent = () => (
+  const FilterContent = useCallback(() => (
     <div className="space-y-4 p-4 border-b">
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">View</Label>
@@ -188,39 +184,22 @@ const NewsPage = () => {
         </Button>
       )}
     </div>
-  );
+  ), [user, activeArticleView, selectedTags, tagSearchInput, isLoadingTagsForFilter, availableTagsForFilter, activeFilterCount, clearAllFilters, handleTagToggle]);
+
+  useEffect(() => {
+    setFilterContent(<FilterContent />);
+    setHandleCreateClick(() => () => router.push('/news/create'));
+  }, [setFilterContent, setHandleCreateClick, router, FilterContent]);
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-0 md:py-6 flex flex-col flex-1 relative">
-      {!isMobile && (
-        <div className="flex items-center gap-2 sticky top-[56px] z-30 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
-                <ListFilter className="h-5 w-5" />
-                <span className="sr-only">Filters</span>
-                {activeFilterCount > 0 && (<span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">{activeFilterCount}</span>)}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="start"><FilterContent/></PopoverContent>
-          </Popover>
-          <div className="relative flex-grow">
-            <Input type="search" placeholder="Search articles..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="h-9 text-xs pl-8" aria-label="Search articles"/>
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-          </div>
-          {user && (
-            <Button asChild size="sm" className="ml-2 h-9 px-3 text-xs flex-shrink-0"><Link href="/news/create"><Edit2 className="mr-2 h-4 w-4" /> Create Article</Link></Button>
-          )}
-        </div>
-      )}
-
       {isMobile && isFilterViewVisible && (
         <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
           <FilterContent />
         </div>
       )}
 
-      <div className={cn("flex-1 mt-6", isMobile && "mt-0", isMobile && isFilterViewVisible && "hidden")}>
+      <div className={cn("flex-1 mt-2", isMobile && "mt-0", isMobile && isFilterViewVisible && "hidden")}>
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-10"><Loader2 className="h-10 w-10 animate-spin text-primary" /><p className="ml-2 text-sm text-muted-foreground mt-2">Loading articles...</p></div>
         )}

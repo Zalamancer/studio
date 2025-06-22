@@ -1,4 +1,3 @@
-
 // src/app/page.tsx
 "use client";
 
@@ -51,7 +50,7 @@ const BoardPageContent = () => {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const isMobile = useIsMobile();
-  const { isFilterViewVisible, searchTerm, setHandleCreateClick } = usePage();
+  const { isFilterViewVisible, searchTerm, setHandleCreateClick, setFilterContent } = usePage();
 
   const [selectedPost, setSelectedPost] = useState<Post | null>(null);
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
@@ -175,7 +174,7 @@ const BoardPageContent = () => {
     });
   }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, searchTerm, availableSubSectors, detailedSectorsData]);
 
-  const FilterContent = () => (
+  const FilterContent = useCallback(() => (
     <div className="space-y-4 p-4 border-b">
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Post Type</Label>
@@ -268,7 +267,7 @@ const BoardPageContent = () => {
         </Button>
       )}
     </div>
-  );
+  ), [selectedPostType, handlePostTypeToggle, selectedTags, handleTagToggle, selectedSectorFilter, setSelectedSectorFilter, availableSubSectors, selectedSubSectorFilter, setSelectedSubSectorFilter, availableIndustries, selectedIndustryFilter, setSelectedIndustryFilter, activeFilterCount, clearAllFilters]);
   
   const addPostMutation = useMutation({
     mutationFn: addPostToFirestore,
@@ -411,10 +410,12 @@ const BoardPageContent = () => {
       toast({ variant: "default", title: "Login Required", description: "Please log in to create a post." });
     }
   }, [user, toast]);
-
+  
   useEffect(() => {
-    setHandleCreateClick(() => handleOpenCreatePostForm);
-  }, [setHandleCreateClick, handleOpenCreatePostForm]);
+    setFilterContent(<FilterContent />);
+    setHandleCreateClick(handleOpenCreatePostForm);
+  }, [setFilterContent, setHandleCreateClick, handleOpenCreatePostForm, FilterContent]);
+
 
   const renderPostDetailPanel = () => {
     if (!selectedPost) return null;

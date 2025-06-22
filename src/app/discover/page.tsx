@@ -25,7 +25,7 @@ import { useRouter } from 'next/navigation';
 const DiscoverPage = () => {
   const { user } = useAuth();
   const router = useRouter();
-  const { isFilterViewVisible, setHandleCreateClick, searchTerm, setSearchTerm } = usePage();
+  const { isFilterViewVisible, setHandleCreateClick, searchTerm, setSearchTerm, setFilterContent } = usePage();
   
   const { data: plans, isLoading, error } = useQuery<ClientPlan[], Error>({
     queryKey: ['recentPlansDiscoverPage'],
@@ -36,10 +36,6 @@ const DiscoverPage = () => {
 
   const [selectedSectors, setSelectedSectors] = useState<string[]>([]);
   const [activePlanView, setActivePlanView] = useState<'all' | 'my_plans'>('all');
-
-  useEffect(() => {
-    setHandleCreateClick(() => router.push('/plan/create'));
-  }, [setHandleCreateClick, router]);
 
   const availableSectorsForFilter = useMemo(() => {
     return detailedSectorsData.map(sector => ({ code: sector.code, name: sector.name }));
@@ -103,10 +99,8 @@ const DiscoverPage = () => {
     return { numNodes, numChildren };
   };
 
-  const FilterContent = () => (
+  const FilterContent = useCallback(() => (
     <div className="space-y-4 p-4 border-b">
-       {/* Search Input is now in the main header */}
-
        <div className="space-y-1.5">
             <Label className="text-xs font-medium text-muted-foreground">View</Label>
             <div className="flex items-center gap-2 flex-shrink-0">
@@ -156,52 +150,22 @@ const DiscoverPage = () => {
           </Button>
         )}
     </div>
-  );
+  ), [user, activePlanView, selectedSectors, availableSectorsForFilter, handleSectorToggle, activeFilterCount, clearAllFilters]);
+  
+  useEffect(() => {
+    setFilterContent(<FilterContent />);
+    setHandleCreateClick(() => () => router.push('/plan/create'));
+  }, [setFilterContent, setHandleCreateClick, router, FilterContent]);
 
   return (
     <div className="container mx-auto p-4 md:px-6 min-h-screen flex flex-col relative">
-      {/* Desktop Filter Bar */}
-      {!isMobile && (
-        <div className="flex items-center gap-2 sticky top-[56px] z-30 bg-background py-3 border-b -mx-4 md:mx-0 px-4">
-          <Popover>
-            <PopoverTrigger asChild>
-              <Button size="icon" variant="outline" className="h-9 w-9 p-2 flex-shrink-0 relative">
-                <ListFilter className="h-5 w-5" />
-                <span className="sr-only">Filters</span>
-                {activeFilterCount > 0 && (
-                  <span className="absolute -top-1 -right-1 h-4 min-w-[1rem] px-1 flex items-center justify-center text-xs font-bold rounded-full bg-primary text-primary-foreground">
-                    {activeFilterCount}
-                  </span>
-                )}
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent className="w-80 p-0" align="start">
-              <div className="p-3">
-                <FilterContent />
-              </div>
-            </PopoverContent>
-          </Popover>
-          <div className="relative flex-grow">
-            <Input
-              type="search"
-              placeholder="Search plans by keyword..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="h-9 text-xs pl-8"
-              aria-label="Search plans"
-            />
-            <Search className="absolute left-2 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          </div>
-        </div>
-      )}
-
       {isMobile && isFilterViewVisible && (
         <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
           <FilterContent />
         </div>
       )}
 
-      <div className={cn("mt-6 flex-grow", isMobile && isFilterViewVisible && "hidden")}>
+      <div className={cn("mt-2 flex-grow", isMobile && isFilterViewVisible && "hidden")}>
         {isLoading && (
           <div className="flex justify-center items-center py-10">
             <Loader2 className="h-10 w-10 animate-spin text-primary" />

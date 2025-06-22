@@ -31,6 +31,7 @@ import { cn } from '@/lib/utils';
 import { fetchFullUserProfile } from '@/services/connectionService';
 import { usePage } from '@/contexts/PageContext';
 import { Input } from '@/components/ui/input';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 
 export const availableTags = [
   "Legal", "Product", "Supplier", "Collaboration", "Marketing", "Ads", "Audience"
@@ -357,7 +358,8 @@ export default function MainLayout({
     setFilterViewVisible, 
     searchTerm,
     setSearchTerm,
-    handleCreateClick 
+    handleCreateClick,
+    filterContent,
   } = usePage();
 
   useEffect(() => {
@@ -421,6 +423,11 @@ export default function MainLayout({
   const hideAppChrome = false;
   
   const showContextualHeaderIcons = user && ['/', '/discover', '/news'].some(p => pathname === p || pathname.startsWith(p + '/'));
+  const createButtonText = useMemo(() => {
+    if (pathname.startsWith('/news')) return 'Create Article';
+    if (pathname.startsWith('/discover')) return 'Create Plan';
+    return 'Create Post';
+  }, [pathname]);
 
   return (
     <div className={rootLayoutClasses}>
@@ -514,6 +521,40 @@ export default function MainLayout({
               "flex items-center space-x-2 md:space-x-3",
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
+              {/* Desktop Contextual Controls */}
+              <div className="hidden md:flex items-center gap-2">
+                {showContextualHeaderIcons && (
+                  <>
+                    <div className="relative">
+                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
+                      <Input 
+                        placeholder="Search..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="h-9 pl-8 w-40 lg:w-64"
+                      />
+                    </div>
+                    {filterContent && (
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" size="sm" className="h-9">
+                            <ListFilter className="mr-2 h-4 w-4" /> Filters
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80 p-0" align="start">
+                          {filterContent}
+                        </PopoverContent>
+                      </Popover>
+                    )}
+                    <Button onClick={handleCreateClick} size="sm" className="h-9">
+                      <PlusCircle className="mr-2 h-4 w-4" />
+                      {createButtonText}
+                    </Button>
+                    <div className="w-px h-6 bg-border mx-2"></div>
+                  </>
+                )}
+              </div>
+              
               {authLoading ? (
                 <div className="flex items-center space-x-2">
                   <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
@@ -561,7 +602,7 @@ export default function MainLayout({
           </div>
         </header>
       )}
-      <main className="flex-1 flex flex-col relative mt-4 bg-background pb-14 md:pb-0">
+      <main className="flex-1 flex flex-col relative bg-background pb-14 md:pb-0">
         {children}
       </main>
       {!hideAppChrome && isMobile && (

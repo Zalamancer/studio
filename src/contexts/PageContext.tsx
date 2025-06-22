@@ -13,6 +13,8 @@ interface PageContextType {
   setSearchTerm: React.Dispatch<React.SetStateAction<string>>;
   handleCreateClick: () => void;
   setHandleCreateClick: (fn: () => void) => void;
+  filterContent: React.ReactNode;
+  setFilterContent: (content: React.ReactNode) => void;
 }
 
 // Create the context with an undefined initial value
@@ -23,6 +25,7 @@ export const PageProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const [isSearchOverlayVisible, setSearchOverlayVisible] = useState(false);
   const [isFilterViewVisible, setFilterViewVisible] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [filterContent, setFilterContent] = useState<React.ReactNode>(null);
   
   const [createHandler, setCreateHandler] = useState<() => void>(() => () => console.log("Default create handler called."));
 
@@ -40,7 +43,9 @@ export const PageProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         searchTerm,
         setSearchTerm,
         handleCreateClick: createHandler, 
-        setHandleCreateClick 
+        setHandleCreateClick,
+        filterContent,
+        setFilterContent,
       }}
     >
       {children}
