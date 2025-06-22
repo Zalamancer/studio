@@ -122,7 +122,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
   const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
 
-  const [activeViewers, setActiveViewers] = useState<UserProfileBasic[]>([]); // New state for presence
+  const [activeViewers, setActiveViewers] = useState<UserProfileBasic[]>([]);
 
   useEffect(() => {
     if (!isPlanInfoDialogOpen) {
@@ -243,14 +243,18 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     if (!planId || !user || !isValidPlanId) return;
 
     const viewingUsersRef = collection(db, 'plans', planId, 'viewingUsers');
-    const twoMinutesAgo = Timestamp.fromMillis(Date.now() - 2 * 60 * 1000);
-
-    const q = query(viewingUsersRef, where('lastSeen', '>', twoMinutesAgo));
+    
+    // Listen to all documents in the subcollection without a time-based where clause
+    const q = query(viewingUsersRef);
 
     const unsubscribe = onSnapshot(q, async (snapshot) => {
+        // Calculate the cutoff time *inside* the listener callback
+        const twoMinutesAgo = Date.now() - 2 * 60 * 1000;
+
         const viewerIds = snapshot.docs
-            .map(d => d.id)
-            .filter(id => id !== user.uid); // Exclude self
+            .map(d => ({ id: d.id, lastSeen: (d.data().lastSeen as Timestamp)?.toMillis() || 0 }))
+            .filter(viewer => viewer.lastSeen > twoMinutesAgo && viewer.id !== user.uid) // Filter by time and exclude self
+            .map(viewer => viewer.id);
 
         if (viewerIds.length > 0) {
             const profiles = await Promise.all(
@@ -262,6 +266,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
         }
     }, (error) => {
         console.error("Error listening to viewing users:", error);
+        // Don't clear viewers on error, might be temporary
     });
 
     return () => unsubscribe();
