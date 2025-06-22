@@ -267,7 +267,7 @@ const BoardPageContent = () => {
         </Button>
       )}
     </div>
-  ), [selectedPostType, handlePostTypeToggle, selectedTags, handleTagToggle, selectedSectorFilter, setSelectedSectorFilter, availableSubSectors, selectedSubSectorFilter, setSelectedSubSectorFilter, availableIndustries, selectedIndustryFilter, setSelectedIndustryFilter, activeFilterCount, clearAllFilters]);
+  ), [selectedPostType, handlePostTypeToggle, selectedTags, handleTagToggle, selectedSectorFilter, availableSubSectors, selectedSubSectorFilter, availableIndustries, selectedIndustryFilter, activeFilterCount, clearAllFilters]);
   
   const addPostMutation = useMutation({
     mutationFn: addPostToFirestore,

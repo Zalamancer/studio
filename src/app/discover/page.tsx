@@ -16,7 +16,6 @@ import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { detailedSectorsData } from '@/components/layout/MainLayout';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePage } from '@/contexts/PageContext';

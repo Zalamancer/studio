@@ -12,7 +12,6 @@ import type { ClientNewsArticle } from '@/types/news';
 import { cn } from '@/lib/utils';
 import { ArticleListItem } from '@/components/news/ArticleListItem';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
@@ -188,7 +187,7 @@ const NewsPage = () => {
 
   useEffect(() => {
     setFilterContent(<FilterContent />);
-    setHandleCreateClick(() => () => router.push('/news/create'));
+    setHandleCreateClick(() => router.push('/news/create'));
   }, [setFilterContent, setHandleCreateClick, router, FilterContent]);
 
   return (
