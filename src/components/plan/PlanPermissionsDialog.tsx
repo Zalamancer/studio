@@ -50,7 +50,7 @@ import { useQuery } from '@tanstack/react-query';
 import { fetchUserProfileBasic } from '@/services/connectionService';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
-import { ConnectionButton } from '@/components/ConnectionButton';
+import { ConnectionButton } from '@/components/connect/ConnectionButton';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
 
@@ -109,56 +109,55 @@ const UserListItem: React.FC<{
   const displayName = profile?.displayName || generateAnonymousName(userId);
 
   return (
-    <div className="group/memberitem flex items-center justify-between py-1.5 px-2 hover:bg-muted/50 rounded-md transition-colors">
-      <div className="flex items-center gap-2 min-w-0 flex-grow">
-        <Link href={`/profile/${userId}`} passHref onClick={(e) => e.stopPropagation()}>
-          <Avatar className="h-6 w-6 flex-shrink-0">
-            <AvatarImage src={profile?.avatarUrl} alt={displayName} />
-            <AvatarFallback className="text-xs">{getInitials(displayName)}</AvatarFallback>
-          </Avatar>
-        </Link>
-        
-        {/* Default View (Name) */}
-        <div className="group-hover/memberitem:hidden min-w-0 flex-grow">
-          <Link href={`/profile/${userId}`} passHref onClick={(e) => e.stopPropagation()}>
-            <p className="text-xs truncate" title={displayName}>{displayName}</p>
+    <>
+      <div className="group/memberitem flex items-center justify-between py-1.5 px-2 hover:bg-muted/50 rounded-md transition-colors">
+        <div className="flex items-center gap-2 min-w-0 flex-grow">
+          <Link href={`/profile/${userId}`} passHref onClick={(e) => e.stopPropagation()} className="flex-shrink-0" title={`Visit profile for ${displayName}`}>
+            <Avatar className="h-6 w-6 flex-shrink-0">
+              <AvatarImage src={profile?.avatarUrl} alt={displayName} />
+              <AvatarFallback className="text-xs">{getInitials(displayName)}</AvatarFallback>
+            </Avatar>
           </Link>
-        </div>
+          
+          <div className="min-w-0 flex-grow group-hover/memberitem:hidden">
+            <p className="text-xs truncate" title={displayName}>{displayName}</p>
+          </div>
 
-        {/* Hover View (Action Buttons) */}
-        <div className="hidden group-hover/memberitem:flex items-center gap-1">
-            <Button asChild variant="ghost" size="icon" className="h-6 w-6" title="Visit Profile" onClick={(e) => e.stopPropagation()}>
-                <Link href={`/profile/${userId}`} target="_blank"><ExternalLink className="h-3.5 w-3.5" /></Link>
-            </Button>
-            
+          <div className="hidden group-hover/memberitem:flex items-center gap-1 min-w-0 flex-grow">
             {currentUser && currentUser.uid !== userId && (
-                <ConnectionButton targetUserId={userId} size="xs" variant="ghost" className="h-6 px-1.5" />
+                <ConnectionButton
+                  targetUserId={userId}
+                  size="xs"
+                  variant="ghost"
+                  className="h-6 w-6 p-1"
+                  iconOnly
+                />
             )}
             
             {isAdmin && (
-                <Button variant="ghost" size="icon" className="h-6 w-6" title="View User's Changes" onClick={(e) => e.stopPropagation()}>
+                <Button variant="ghost" size="icon" className="h-6 w-6 p-1" title="View User's Changes" onClick={(e) => e.stopPropagation()}>
                     <History className="h-3.5 w-3.5" />
                 </Button>
             )}
         </div>
-      </div>
-      
-      {/* Right side for badges and remove button */}
-      <div className="flex-shrink-0 ml-2">
-        <div className="group-hover/memberitem:hidden flex items-center gap-1">
-          {isOwner && <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-amber-500 text-amber-600">Owner</Badge>}
-          {isAdmin && !isOwner && <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">Admin</Badge>}
         </div>
         
-        {canBeRemoved && (
-          <div className="hidden group-hover/memberitem:flex">
-            <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(userId); }} disabled={isSaving} title="Remove User">
-              <Trash2 className="h-3.5 w-3.5" />
-            </Button>
+        <div className="flex-shrink-0 ml-2">
+          <div className="group-hover/memberitem:hidden flex items-center gap-1">
+            {isOwner && <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-amber-500 text-amber-600">Owner</Badge>}
+            {isAdmin && !isOwner && <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">Admin</Badge>}
           </div>
-        )}
+          
+          {canBeRemoved && (
+            <div className="hidden group-hover/memberitem:flex">
+              <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(userId); }} disabled={isSaving} title="Remove User">
+                <Trash2 className="h-3.5 w-3.5" />
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+    </>
   );
 };
   

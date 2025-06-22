@@ -35,6 +35,7 @@ interface ConnectionButtonProps {
   size?: 'sm' | 'default' | 'lg' | 'xs'; // Added 'xs'
   variant?: 'default' | 'outline' | 'secondary' | 'ghost' | 'link'; // Button variant
   className?: string; // Additional styling
+  iconOnly?: boolean; // New prop for icon-only display
 }
 
 export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
@@ -44,6 +45,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
   size = 'sm',
   variant = 'default',
   className,
+  iconOnly = false, // Default to false
 }) => {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -141,7 +143,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
       return;
     }
      // connectionId might be null if not 'pending' or 'connected' status, generate if needed for accept/reject/remove
-    const currentConnectionId = connectionId || (currentAuthUserId && resolvedTargetUserId ? getConnectionDocId(currentAuthUserId, resolvedTargetUserId) : null);
+    const currentConnectionId = connectionId || (currentAuthUserId && resolvedTargetUserId ? [currentAuthUserId, resolvedTargetUserId].sort().join('_') : null);
     if (!currentConnectionId && (successStatus === 'connected' || successStatus === 'not_connected')) { // Actions like accept/reject/remove need it
         toast({ variant: "destructive", title: "Error", description: "Connection identifier is missing." });
         return;
@@ -211,7 +213,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
 
 
   if (isLoading) {
-    return <Button size={size} variant="outline" disabled className={cn("flex items-center", className)}> <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading...</Button>;
+    return <Button size={size} variant="outline" disabled className={cn("flex items-center", className)}> <Loader2 className={cn(iconOnly ? '' : 'mr-2', 'h-4 w-4 animate-spin')} /> {!iconOnly && 'Loading...'}</Button>;
   }
 
   if (status === 'self' || !resolvedTargetUserId) { // Also hide if targetId couldn't be resolved
@@ -219,7 +221,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
   }
 
   if (status === 'blocked') {
-    return <Button size={size} variant="destructive" disabled className={cn("flex items-center", className)}> <Ban className="mr-2 h-4 w-4" /> Blocked</Button>;
+    return <Button size={size} variant="destructive" disabled className={cn("flex items-center", className)}> <Ban className={cn(iconOnly ? '' : 'mr-2', 'h-4 w-4')} /> {!iconOnly && 'Blocked'}</Button>;
   }
 
   let buttonContent: React.ReactNode = null;
@@ -232,7 +234,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
       buttonProps.variant = 'default';
       buttonProps.className = cn(buttonProps.className, "bg-accent hover:bg-accent/90 text-accent-foreground");
       buttonContent = (
-        <> {isActing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserPlus className="mr-2 h-4 w-4" />} Connect </>
+        <> {isActing ? <Loader2 className={cn(iconOnly ? '' : 'mr-2', 'h-4 w-4 animate-spin')} /> : <UserPlus className={cn(iconOnly ? '' : 'mr-2', 'h-4 w-4')} />} {!iconOnly && 'Connect'} </>
       );
       break;
     case 'pending_sent':
@@ -240,7 +242,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
       buttonProps.disabled = isActing;
       buttonProps.variant = 'outline';
       buttonContent = (
-        <> {isActing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Hourglass className="mr-2 h-4 w-4" />} Request Sent </>
+        <> {isActing ? <Loader2 className={cn(iconOnly ? '' : 'mr-2', 'h-4 w-4 animate-spin')} /> : <Hourglass className={cn(iconOnly ? '' : 'mr-2', 'h-4 w-4')} />} {!iconOnly && 'Request Sent'} </>
       );
       break;
     case 'pending_received':
@@ -262,7 +264,7 @@ export const ConnectionButton: React.FC<ConnectionButtonProps> = ({
          <AlertDialog>
             <AlertDialogTrigger asChild>
                 <Button size={size} variant={buttonProps.variant} disabled={isActing} className={cn("flex items-center w-full", buttonProps.className)}>
-                    {isActing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <UserCheck className="mr-2 h-4 w-4 text-green-600" />} Connected
+                    {isActing ? <Loader2 className={cn(iconOnly ? '' : 'mr-2', 'h-4 w-4 animate-spin')} /> : <UserCheck className={cn(iconOnly ? '' : 'mr-2', 'h-4 w-4 text-green-600')} />} {!iconOnly && 'Connected'}
                 </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
