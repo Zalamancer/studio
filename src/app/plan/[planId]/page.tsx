@@ -25,7 +25,7 @@ import * as z from 'zod';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic';
+import { usePlanLogic } from './usePlanLogic';
 import type { RoadmapStep, ClientPlanVersion, ChildDataItem, PeerConnection } from '@/types/plan';
 import { PlanHeader } from './PlanHeader';
 import { useToast } from '@/hooks/use-toast';
@@ -65,24 +65,21 @@ type NodeDetailFormData = z.infer<typeof nodeDetailFormSchema>;
 
 
 export default function PlanDetailPage() {
-  const [scale, setScale] = useState(1.0);
+  const [scale, setScale] = useState(1.0); // Default to 100% zoom
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
 
   const calculateAndSetFitScreenScale = useCallback(() => {
     if (canvasWrapperRef.current) {
       const containerWidth = canvasWrapperRef.current.clientWidth;
-      // The canvas has a fixed design width of 1920px.
-      // We scale it down to fit the container width.
       const newScale = containerWidth > 0 ? containerWidth / 1920 : 0;
       setScale(newScale);
     }
   }, []);
 
+  // Removed useEffect that set initial scale, now defaults to 1.0
   useEffect(() => {
-    const timeoutId = setTimeout(calculateAndSetFitScreenScale, 50);
     window.addEventListener('resize', calculateAndSetFitScreenScale);
     return () => {
-      clearTimeout(timeoutId);
       window.removeEventListener('resize', calculateAndSetFitScreenScale);
     };
   }, [calculateAndSetFitScreenScale]);
@@ -127,6 +124,7 @@ export default function PlanDetailPage() {
     handleInitiateAddNode,
     setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
+    handleCanvasPointerDown, // New handler from the hook
   } = usePlanLogic({ scale: scale });
 
   const router = useRouter();
@@ -178,20 +176,22 @@ export default function PlanDetailPage() {
 
 
   useEffect(() => {
-    if (isPointerDown && canvasRef.current) {
-      const currentCanvasRef = canvasRef.current;
-      const moveHandler = (event: MouseEvent | TouchEvent) => handleGlobalMove(event, currentCanvasRef);
+    if (isPointerDown) {
+      const moveHandler = (event: MouseEvent | TouchEvent) => handleGlobalMove(event, canvasWrapperRef.current);
+      const upHandler = (event: MouseEvent | TouchEvent) => handleGlobalPointerUp(event, canvasWrapperRef.current);
+
       window.addEventListener('mousemove', moveHandler);
       window.addEventListener('touchmove', moveHandler, { passive: false });
-      window.addEventListener('mouseup', handleGlobalPointerUp);
-      window.addEventListener('touchend', handleGlobalPointerUp);
-      window.addEventListener('touchcancel', handleGlobalPointerUp);
+      window.addEventListener('mouseup', upHandler);
+      window.addEventListener('touchend', upHandler);
+      window.addEventListener('touchcancel', upHandler);
+
       return () => {
         window.removeEventListener('mousemove', moveHandler);
         window.removeEventListener('touchmove', moveHandler);
-        window.removeEventListener('mouseup', handleGlobalPointerUp);
-        window.removeEventListener('touchend', handleGlobalPointerUp);
-        window.removeEventListener('touchcancel', handleGlobalPointerUp);
+        window.removeEventListener('mouseup', upHandler);
+        window.removeEventListener('touchend', upHandler);
+        window.removeEventListener('touchcancel', upHandler);
       };
     }
   }, [isPointerDown, handleGlobalMove, handleGlobalPointerUp]);
@@ -279,21 +279,6 @@ export default function PlanDetailPage() {
     return lines;
   }, [editableRoadmap, controlOffset]);
 
-  const handleCanvasClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (event.target === event.currentTarget) {
-        if (diffTarget) return;
-        if (!canEditPlan) return;
-        const canvasRect = event.currentTarget.getBoundingClientRect();
-        
-        const scaleFactor = scale;
-        if (scaleFactor === 0) return;
-
-        const x = (event.clientX - canvasRect.left) / scaleFactor + event.currentTarget.scrollLeft;
-        const y = (event.clientY - canvasRect.top) / scaleFactor + event.currentTarget.scrollTop;
-        handleInitiateAddNode({ coords: { x, y } });
-    }
-  };
-
   if (authLoading || (isLoadingPlan && isValidPlanId && !planData)) {
     return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
@@ -361,11 +346,11 @@ export default function PlanDetailPage() {
       
       <div
         ref={canvasWrapperRef}
-        className="container mx-auto px-4 max-w-screen-2xl flex-1 relative overflow-hidden"
+        className="container mx-auto px-4 max-w-screen-2xl flex-1 relative overflow-auto"
       >
         <div
           ref={canvasRef}
-          onClick={handleCanvasClick}
+          onPointerDown={handleCanvasPointerDown}
           className="bg-muted grid-background"
           style={{
             width: '1920px',
@@ -375,6 +360,7 @@ export default function PlanDetailPage() {
             left: 0,
             transform: `scale(${scale})`,
             transformOrigin: 'top left',
+            cursor: 'grab',
           }}
         >
           <CanvasContent />
@@ -418,7 +404,7 @@ export default function PlanDetailPage() {
        <AddRoadmapStepDialog
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
-        onSubmit={(data) => handleAddNode(data, canvasRef.current)}
+        onSubmit={(data) => handleAddNode(data)}
         isSubmitting={isSaving}
       />
       <EditChildItemDialog
