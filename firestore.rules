@@ -30,9 +30,9 @@ service cloud.firestore {
                          'avatarUrl', 'industry', 'description', 'descriptionVisibility',
                          'sectorName', 'subSectorName', 'industryName', 'naicsCode',
                          'tags', 'established', 'verified', 'isBotAccount', 'incomeRange',
-                         'createdAt', 'lastLoginAt', 'updatedAt'
+                         'createdAt', 'lastLoginAt', 'updatedAt', 'avatarVisibility' // Added avatarVisibility
                        ]) &&
-                       request.resource.data.size() == 20; // Adjust size based on exact fields
+                       request.resource.data.size() == 21; // Adjust size based on exact fields
 
       allow update: if isAuthenticated() && request.auth.uid == userId &&
                        request.resource.data.uid == resource.data.uid && // UID cannot change
@@ -46,7 +46,7 @@ service cloud.firestore {
                        request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                          'avatarUrl', 'industry', 'description', 'descriptionVisibility', 'established', 'incomeRange',
                          'sectorName', 'subSectorName', 'industryName', 'naicsCode',
-                         'tags', 'lastLoginAt', 'updatedAt', 'avatarVisibility' // avatarVisibility was added
+                         'tags', 'lastLoginAt', 'updatedAt', 'avatarVisibility'
                        ]);
       allow delete: if false; // Users should not be able to delete their own user document directly
     }
@@ -73,10 +73,7 @@ service cloud.firestore {
                        request.resource.data.status == 'pending' &&
                        request.resource.data.requesterId != request.resource.data.userIds.removeAll([request.auth.uid])[0] && // Requester isn't the other person
                        request.resource.data.requestedAt == request.time &&
-                       request.resource.data.updatedAt == request.time &&
-                       !exists(/databases/$(database)/documents/mutuals/$(connectionId)) && // Ensure it's a new request
-                       request.resource.data.keys().hasAll(['userIds', 'status', 'requesterId', 'requestedAt', 'updatedAt']) &&
-                       request.resource.data.size() == 5;
+                       !exists(/databases/$(database)/documents/mutuals/$(connectionId)); // Ensure it's a new request
 
 
       allow update: if isAuthenticated() && isUserInConnection() &&
@@ -135,8 +132,7 @@ service cloud.firestore {
                          || // Case 2: Any authenticated user updating commentCount by creating/deleting a comment
                          (
                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'updatedAt']) &&
-                           (request.resource.data.commentCount == resource.data.commentCount + 1 || request.resource.data.commentCount == resource.data.commentCount - 1) &&
-                           request.resource.data.updatedAt == request.time // Ensure updatedAt is also set
+                           (request.resource.data.commentCount == resource.data.commentCount + 1 || request.resource.data.commentCount == resource.data.commentCount - 1)
                          )
                        );
 
@@ -156,8 +152,8 @@ service cloud.firestore {
                          request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
                          request.resource.data.mentionedUserIds is list &&
                          request.resource.data.isShadowBanned == false && // Default to false for post comments
-                         request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
-                         request.resource.data.size() == 9;
+                         request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned', 'parentCommentId', 'replies']) &&
+                         request.resource.data.size() == 11;
         allow update: if isAuthenticated() &&
                          request.resource.data.updatedAt == request.time && // Must be part of any update
                          ( // Case 1: Liking/Unliking
@@ -183,8 +179,8 @@ service cloud.firestore {
                            request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
                            request.resource.data.mentionedUserIds is list &&
                            request.resource.data.isShadowBanned == false &&
-                           request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
-                           request.resource.data.size() == 9;
+                           request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned', 'parentCommentId']) &&
+                           request.resource.data.size() == 10;
           allow update: if isAuthenticated() &&
                            request.resource.data.updatedAt == request.time && // Must be part of any update
                            ( // Case 1: Liking/Unliking
@@ -245,8 +241,8 @@ service cloud.firestore {
                           request.resource.data.groupAvatarUrl == null &&
                           request.resource.data.ownerId == null &&
                           request.resource.data.adminIds.size() == 0 &&
-                          request.resource.data.keys().hasAll(['participants', 'type', 'postId', 'lastMessage', 'lastMessageTimestamp', 'createdAt', 'updatedAt', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds']) &&
-                          request.resource.data.size() == 11 // All fields for direct
+                          request.resource.data.keys().hasAll(['participants', 'type', 'postId', 'lastMessage', 'lastMessageTimestamp', 'createdAt', 'updatedAt', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds', 'lastMessageSenderId']) &&
+                          request.resource.data.size() == 12 // All fields for direct
                        ) : ( // Group chat
                           request.resource.data.type == 'group' &&
                           request.resource.data.participants.size() >= 2 && // Groups must have at least 2 members (owner + 1 other)
@@ -255,8 +251,8 @@ service cloud.firestore {
                           request.resource.data.ownerId == request.auth.uid && // Creator is owner
                           request.resource.data.adminIds.hasAll([request.auth.uid]) && // Creator is admin
                           request.resource.data.postId == null && // Groups are not tied to posts
-                          request.resource.data.keys().hasAll(['participants', 'type', 'postId', 'lastMessage', 'lastMessageTimestamp', 'createdAt', 'updatedAt', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds']) &&
-                          request.resource.data.size() == 11 // All fields for group
+                          request.resource.data.keys().hasAll(['participants', 'type', 'postId', 'lastMessage', 'lastMessageTimestamp', 'createdAt', 'updatedAt', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds', 'lastMessageSenderId']) &&
+                          request.resource.data.size() == 12 // All fields for group
                        ));
 
         allow update: if request.auth.uid in resource.data.participants &&
@@ -404,13 +400,13 @@ service cloud.firestore {
     }
 
     match /plans/{planId} {
-      function canRead() {
+      function canViewPlan() {
         return resource.data.visibility in ['public', 'unlisted'] ||
-              (request.auth != null && request.auth.uid == resource.data.ownerId) ||
-              (request.auth != null && resource.data.viewUserIds.hasAny([request.auth.uid]));
+               (request.auth != null && (
+                 request.auth.uid == resource.data.ownerId ||
+                 request.auth.uid in resource.data.viewUserIds
+               ));
       }
-      allow get: if canRead();
-      allow list: if isAuthenticated(); // Allow listing for discovery page etc. Client must filter if needed.
 
       allow create: if request.auth != null &&
                        request.auth.uid == request.resource.data.ownerId &&
@@ -436,10 +432,23 @@ service cloud.firestore {
                        ]) &&
                        request.resource.data.size() == 15;
 
+      allow list: if (request.query.filters.size() > 0 &&
+                 request.query.filters[0].field == 'visibility' &&
+                 request.query.filters[0].operator == 'in' &&
+                 (request.query.filters[0].value.hasAny(['public', 'unlisted'])) &&
+                 (request.query.limit == null || request.query.limit <= 50)
+                ) || request.auth != null;
+
+			allow get: if canViewPlan();
+
+
+      function isOwner() {
+        return request.auth.uid == resource.data.ownerId;
+      }
       function isPlanEditor() {
         return request.auth.uid == resource.data.ownerId ||
                (resource.data.editability == 'collaborators' && resource.data.editUserIds.hasAny([request.auth.uid])) ||
-               (resource.data.editability == 'everyone' && canRead()); // Everyone who can read can also edit
+               (resource.data.editability == 'everyone' && canViewPlan());
       }
       function isValidSettingsUpdate(requestData, resourceData) {
         let allowedKeys = ['name', 'description', 'sector', 'subSector', 'industry', 'naicsCode', 'visibility', 'editability', 'viewUserIds', 'editUserIds', 'updatedAt'];
@@ -464,6 +473,7 @@ service cloud.firestore {
         return changedKeys.hasOnly(allowedKeys) &&
                requestData.roadmap is list;
       }
+
       allow update: if request.auth != null &&
                        request.resource.data.ownerId == resource.data.ownerId &&
                        request.resource.data.createdAt == resource.data.createdAt &&
@@ -484,53 +494,37 @@ service cloud.firestore {
                          request.resource.data.timestamp == request.time &&
                          request.resource.data.keys().hasAll(['planId', 'editorUid', 'roadmap', 'versionNumber', 'timestamp']) &&
                          request.resource.data.size() == 5;
-        allow list, get: if canRead();
+        allow list, get: if request.auth != null && canViewPlan();
         allow update, delete: if false;
       }
-
-      // Rules for viewingUsers subcollection
-      match /viewingUsers/{userId} {
-        allow read: if isAuthenticated();
-        allow create, update: if isAuthenticated() && request.auth.uid == userId;
-        allow delete: if isAuthenticated() && request.auth.uid == userId;
+      
+      match /viewingUsers/{viewerId} {
+        allow read, list: if request.auth != null && canViewPlan();
+        allow write, delete: if isAuthenticated() && request.auth.uid == viewerId;
       }
     }
 
-    // --- User Preferences Collection ---
-    match /userPreferences/{userId} {
-        allow read: if isAuthenticated() && request.auth.uid == userId;
-        allow create: if isAuthenticated() && request.auth.uid == userId &&
-                         request.resource.data.userId == userId &&
-                         request.resource.data.createdAt == request.time &&
-                         request.resource.data.updatedAt == request.time &&
-                         // Ensure all expected fields are present, even if default
-                         request.resource.data.keys().hasAll([
-                           'userId',
-                           'notifyOnReply', 'notifyOnMention', 'notifyOnNewConnectionRequest',
-                           'notifyOnConnectionAccepted', 'notifyOnNewMessage', 'notifyOnPlatformUpdates',
-                           'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
-                           'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
-                           'paymentMethods', 'createdAt', 'updatedAt'
-                         ]) &&
-                         // Be flexible with size due to optional Stripe fields potentially being null vs not present
-                         request.resource.data.size() >= 15; // Min size if no stripe fields
+    // --- Article Tags Collection ---
+    match /articleTags/{tagId} {
+        allow read: if true;
+        allow list: if true;
 
-        allow update: if isAuthenticated() && request.auth.uid == userId &&
-                         request.resource.data.userId == resource.data.userId && // userId cannot change
-                         request.resource.data.createdAt == resource.data.createdAt && // createdAt immutable
-                         request.resource.data.updatedAt == request.time && // Must be new server time
-                         // Allow only defined preference fields and stripe fields to be updated
-                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                           'notifyOnReply', 'notifyOnMention', 'notifyOnNewConnectionRequest',
-                           'notifyOnConnectionAccepted', 'notifyOnNewMessage', 'notifyOnPlatformUpdates',
-                           'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
-                           'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
-                           'paymentMethods', 'updatedAt'
-                         ]);
-        allow delete: if false; // Users should not delete their preferences doc
+        allow create: if isAuthenticated() &&
+                         request.resource.data.createdBy == request.auth.uid &&
+                         request.resource.data.name is string && request.resource.data.name.size() > 0 &&
+                         request.resource.data.nameLowercase == request.resource.data.name.lower() &&
+                         request.resource.data.usageCount >= 0 &&
+                         request.resource.data.createdAt == request.time &&
+                         request.resource.data.keys().hasAll(['name', 'nameLowercase', 'usageCount', 'createdAt', 'createdBy', 'updatedAt']) &&
+                         request.resource.data.size() == 6;
+
+       	allow update: if isAuthenticated() &&
+ 					request.resource.data.updatedAt == request.time;
+
+        allow delete: if false;
     }
 
-    // --- News Articles and Comments ---
+    // --- News Articles Collection ---
     match /newsArticles/{articleId} {
         function isNewsArticleOwner() {
           return isAuthenticated() && request.auth.uid == resource.data.userId;
@@ -563,12 +557,10 @@ service cloud.firestore {
                          isNewsArticleOwner() &&
                          request.resource.data.userId == resource.data.userId &&
                          request.resource.data.createdAt == resource.data.createdAt &&
-                         request.resource.data.commentCount == resource.data.commentCount &&
-                         request.resource.data.likeCount == resource.data.likeCount &&
-                         request.resource.data.likedBy == resource.data.likedBy &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly([
                            'title', 'content', 'tags', 'status', 'coverImageUrl',
-                           'draftContent', 'hasUnpublishedChanges', 'publishedAt', 'updatedAt'
+                           'draftContent', 'hasUnpublishedChanges', 'publishedAt', 'updatedAt',
+                           'likeCount', 'likedBy', 'commentCount'
                          ]) &&
                          ( (request.resource.data.status == 'published' && resource.data.status == 'draft' && request.resource.data.publishedAt == request.time) ||
                            (request.resource.data.status == 'published' && resource.data.status == 'published' && request.resource.data.publishedAt == resource.data.publishedAt) ||
@@ -608,6 +600,7 @@ service cloud.firestore {
 
         allow delete: if isNewsArticleOwner();
 
+       // --- News Comments Subcollection (for 'newsArticles') ---
         match /newsComments/{commentId} {
             function isArticleCommentOwner() {
                 return isAuthenticated() && request.auth.uid == resource.data.userId;
@@ -644,6 +637,7 @@ service cloud.firestore {
 
             allow delete: if isArticleCommentOwner();
 
+            // --- News SubComments Subcollection ---
             match /newsSubcomments/{subCommentId} {
                 function isArticleSubCommentOwner() {
                     return isAuthenticated() && request.auth.uid == resource.data.userId;
@@ -678,7 +672,39 @@ service cloud.firestore {
             }
         }
     }
+
+    // --- User Preferences Collection ---
+    match /userPreferences/{userId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow create: if isAuthenticated() && request.auth.uid == userId &&
+                         request.resource.data.userId == userId &&
+                         request.resource.data.createdAt == request.time &&
+                         request.resource.data.updatedAt == request.time &&
+                         // Ensure all expected fields are present, even if default
+                         request.resource.data.keys().hasAll([
+                           'userId',
+                           'notifyOnReply', 'notifyOnMention', 'notifyOnNewConnectionRequest',
+                           'notifyOnConnectionAccepted', 'notifyOnNewMessage', 'notifyOnPlatformUpdates',
+                           'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
+                           'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
+                           'paymentMethods', 'createdAt', 'updatedAt'
+                         ]) &&
+                         // Be flexible with size due to optional Stripe fields potentially being null vs not present
+                         request.resource.data.size() >= 15; // Min size if no stripe fields
+
+        allow update: if isAuthenticated() && request.auth.uid == userId &&
+                         request.resource.data.userId == resource.data.userId && // userId cannot change
+                         request.resource.data.createdAt == resource.data.createdAt && // createdAt immutable
+                         request.resource.data.updatedAt == request.time && // Must be new server time
+                         // Allow only defined preference fields and stripe fields to be updated
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                           'notifyOnReply', 'notifyOnMention', 'notifyOnNewConnectionRequest',
+                           'notifyOnConnectionAccepted', 'notifyOnNewMessage', 'notifyOnPlatformUpdates',
+                           'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
+                           'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
+                           'paymentMethods', 'updatedAt'
+                         ]);
+        allow delete: if false; // Users should not delete their preferences doc
+    }
   }
 }
-
-    
