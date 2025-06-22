@@ -1,4 +1,3 @@
-
 // src/components/plan/PlanInfoDialog.tsx
 "use client";
 
@@ -67,9 +66,7 @@ interface PlanInfoDialogProps {
   }) => void;
   isSavingSettings: boolean;
   viewPermissionsSearch: string;
-  setViewPermissionsSearch: (value: string) => void;
   editPermissionsSearch: string;
-  setEditPermissionsSearch: (value: string) => void;
   viewPermissionSuggestions: UserProfileBasic[];
   editPermissionSuggestions: UserProfileBasic[];
   onAddUserToViewers: (userProfile: UserProfileBasic) => void;
@@ -136,14 +133,9 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
       setEditability(initialPlanData.editability);
       setCurrentViewUserIds(initialPlanData.viewUserIds?.filter(uid => uid !== initialPlanData.ownerId) || []);
       setCurrentEditUserIds(initialPlanData.editUserIds?.filter(uid => uid !== initialPlanData.ownerId) || []);
-    } else if (!isOpen) {
-      setViewPermissionsSearch('');
-      setEditPermissionsSearch('');
-      setIsViewSuggestionsOpen(false);
-      setIsEditSuggestionsOpen(false);
     }
-  }, [initialPlanData, isOpen, setViewPermissionsSearch, setEditPermissionsSearch]);
-
+  }, [initialPlanData, isOpen]);
+  
   useEffect(() => {
     if (!isOpen || !isOwnerForUIDisplay) return;
 

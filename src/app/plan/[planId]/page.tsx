@@ -345,9 +345,7 @@ export default function PlanDetailPage() {
           onSaveSettings={handleSavePlanSettings}
           isSavingSettings={isSaving || savePlanSettingsMutation.isPending}
           viewPermissionsSearch={viewPermissionsSearch}
-          setViewPermissionsSearch={setViewPermissionsSearch}
           editPermissionsSearch={editPermissionsSearch}
-          setEditPermissionsSearch={setEditPermissionsSearch}
           viewPermissionSuggestions={viewPermissionSuggestions}
           editPermissionSuggestions={editPermissionSuggestions}
           onAddUserToViewers={handleAddUserToViewers}

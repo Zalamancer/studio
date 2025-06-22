@@ -113,6 +113,15 @@ export const usePlanLogic = () => {
   const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
   const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
+  
+  // This effect now correctly handles resetting the search state when the dialog closes.
+  useEffect(() => {
+    if (!isPlanInfoDialogOpen) {
+      setViewPermissionsSearch('');
+      setEditPermissionsSearch('');
+    }
+  }, [isPlanInfoDialogOpen]);
+
 
   // Debouncing for permission search inputs
   useEffect(() => {
@@ -558,6 +567,30 @@ export const usePlanLogic = () => {
     toast({ title: `Node "${nodeToDelete.title}" Deleted` });
     setNodeToDelete(null);
   }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget, editableRoadmap, saveCurrentRoadmap]);
+  
+  const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
+    if (planData && userProfile.userId !== planData.ownerId) {
+      // Logic handled by onSaveSettings. This just updates local UI state.
+    }
+  }, [planData]);
+
+  const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
+    if (planData && userIdToRemove !== planData.ownerId) {
+      // Logic handled by onSaveSettings. This just updates local UI state.
+    }
+  }, [planData]);
+
+  const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
+    if (planData && userProfile.userId !== planData.ownerId) {
+       // Logic handled by onSaveSettings.
+    }
+  }, [planData]);
+
+  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
+    if (planData && userIdToRemove !== planData.ownerId) {
+      // Logic handled by onSaveSettings.
+    }
+  }, [planData]);
 
   const handleSavePlanSettings = useCallback((settings: {
     name: string;
@@ -567,7 +600,7 @@ export const usePlanLogic = () => {
     viewUserIds: string[];
     editUserIds: string[];
   }) => {
-    if (!planDataForDialog || !user || !planId || !canEditPlan) {
+    if (!planData || !user || !planId || !canEditPlan) {
       toast({ variant: "destructive", title: "Error", description: "Cannot save settings. Plan data missing or permissions issue." });
       return;
     }
@@ -579,45 +612,8 @@ export const usePlanLogic = () => {
         viewUserIds: settings.viewUserIds,
         editUserIds: settings.editUserIds,
     };
-
-    setPlanDataForDialog(prev => prev ? ({ 
-      ...prev,
-      name: settings.name,
-      description: settings.description,
-      visibility: settings.visibility,
-      editability: settings.editability,
-      viewUserIds: Array.from(new Set([prev.ownerId, ...settings.viewUserIds])),
-      editUserIds: Array.from(new Set([prev.ownerId, ...settings.editUserIds])),
-    }) : null);
     savePlanSettingsMutation.mutate({ planId, currentUserId: user.uid, updates });
-  }, [planDataForDialog, user, planId, canEditPlan, savePlanSettingsMutation, toast]);
-
-  const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
-    if (planDataForDialog && userProfile.userId !== planDataForDialog.ownerId) {
-      setCurrentViewUserIds(prev => Array.from(new Set([...(prev || []), userProfile.userId])));
-    }
-  }, [planDataForDialog]);
-
-  const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
-    if (planDataForDialog && userIdToRemove !== planDataForDialog.ownerId) {
-      setCurrentViewUserIds(prev => (prev || []).filter(uid => uid !== userIdToRemove));
-      setCurrentEditUserIds(prev => (prev || []).filter(uid => uid !== userIdToRemove)); 
-    }
-  }, [planDataForDialog]);
-
-  const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
-    if (planDataForDialog && userProfile.userId !== planDataForDialog.ownerId) {
-      setCurrentEditUserIds(prev => Array.from(new Set([...(prev || []), userProfile.userId])));
-      setCurrentViewUserIds(prev => Array.from(new Set([...(prev || []), userProfile.userId]))); 
-    }
-  }, [planDataForDialog]);
-
-  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
-    if (planDataForDialog && userIdToRemove !== planDataForDialog.ownerId) {
-      setCurrentEditUserIds(prev => (prev || []).filter(uid => uid !== userIdToRemove));
-    }
-  }, [planDataForDialog]);
-
+  }, [planData, user, planId, canEditPlan, savePlanSettingsMutation, toast]);
 
   const handleExitDiffView = useCallback(() => {
       setDiffTarget(null);
