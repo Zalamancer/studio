@@ -5,10 +5,17 @@ import React from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
-import { generateAnonymousName } from '@/lib/pseudonymUtils';
+import { generateAnonymousName, getInitials } from '@/lib/pseudonymUtils';
 import { ChevronLeft, History, Info, AlertTriangle } from 'lucide-react';
 import type { ClientPlan } from '@/types/plan';
 import type { UserProfileBasic } from '@/types/connection';
+import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface PlanHeaderProps {
   planData: ClientPlan | null;
@@ -18,6 +25,7 @@ interface PlanHeaderProps {
   onOpenHistory: () => void;
   onOpenInfo: () => void;
   diffTargetActive: boolean;
+  activeViewers: UserProfileBasic[]; // New prop
 }
 
 export const PlanHeader: React.FC<PlanHeaderProps> = ({
@@ -28,6 +36,7 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
   onOpenHistory,
   onOpenInfo,
   diffTargetActive,
+  activeViewers, // New prop
 }) => {
   const router = useRouter();
 
@@ -55,6 +64,32 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
 
         {/* Action Buttons */}
         <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+          {/* New Avatar Group for active viewers */}
+          {activeViewers.length > 0 && (
+            <div className="flex items-center -space-x-2 mr-2 border-r pr-4">
+              {activeViewers.slice(0, 3).map(viewer => (
+                <TooltipProvider key={viewer.userId} delayDuration={100}>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Avatar className="h-7 w-7 border-2 border-background cursor-pointer">
+                        <AvatarImage src={viewer.avatarUrl} alt={viewer.displayName} />
+                        <AvatarFallback className="text-xs">{getInitials(viewer.displayName)}</AvatarFallback>
+                      </Avatar>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      <p>{viewer.displayName} is viewing</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              ))}
+              {activeViewers.length > 3 && (
+                <div className="h-7 w-7 rounded-full bg-muted text-muted-foreground flex items-center justify-center text-xs font-medium border-2 border-background z-10">
+                  +{activeViewers.length - 3}
+                </div>
+              )}
+            </div>
+          )}
+
           {diffTargetActive && (
             <Button variant="destructive" size="sm" onClick={onOpenHistory} className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
               <AlertTriangle className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Exit Diff
@@ -71,7 +106,6 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
           >
             <Info className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Info
           </Button>
-          {/* Add Step button has been removed */}
         </div>
       </div>
     </div>

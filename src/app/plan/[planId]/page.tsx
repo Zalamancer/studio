@@ -15,7 +15,7 @@ import { Card, CardContent } from '@/components/ui/card';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
-import { Input } from "@/components/ui/input";
+import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { FormLabel } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
@@ -114,9 +114,10 @@ export default function PlanDetailPage() {
     setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
     handleCanvasPointerDown,
-    handleTouchStart, // New touch handler
-    handleTouchMove,  // New touch handler
-    handleTouchEnd,   // New touch handler
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
+    activeViewers, // new
   } = usePlanLogic({ scale, setScale, canvasWrapperRef });
 
   const router = useRouter();
@@ -344,6 +345,7 @@ export default function PlanDetailPage() {
         onOpenHistory={() => setIsVersionHistorySheetOpen(true)}
         onOpenInfo={() => setIsPlanInfoDialogOpen(true)}
         diffTargetActive={!!diffTarget}
+        activeViewers={activeViewers}
       />
       
       <div

@@ -1,4 +1,3 @@
-
 // src/app/plan/[planId]/usePlanLogic.ts
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -12,9 +11,9 @@ import { fetchUserProfileBasic, getSuggestibleUsers } from '@/services/connectio
 import type { UserProfileBasic } from '@/types/connection';
 import { v4 as uuidv4 } from 'uuid';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
-import { serverTimestamp, onSnapshot, doc } from 'firebase/firestore';
+import { serverTimestamp, onSnapshot, doc, collection, where, query, Timestamp, deleteDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
-import type { Timestamp } from 'firebase/firestore';
+import type { FieldValue } from 'firebase/firestore';
 
 
 const MIN_CANVAS_PADDING = 20;
@@ -123,6 +122,8 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
   const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
 
+  const [activeViewers, setActiveViewers] = useState<UserProfileBasic[]>([]); // New state for presence
+
   useEffect(() => {
     if (!isPlanInfoDialogOpen) {
       setViewPermissionsSearch('');
@@ -215,6 +216,56 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
 
     return () => unsubscribe();
   }, [planId, isValidPlanId, diffTarget]);
+
+  // Presence management effect (user signals they are viewing)
+  useEffect(() => {
+    if (!planId || !user || !isValidPlanId) return;
+
+    const viewingUserRef = doc(db, 'plans', planId, 'viewingUsers', user.uid);
+    let presenceInterval: NodeJS.Timeout;
+
+    const setPresence = () => {
+        setDoc(viewingUserRef, { lastSeen: serverTimestamp() }, { merge: true });
+    };
+
+    setPresence();
+    presenceInterval = setInterval(setPresence, 60 * 1000); // Update every 60 seconds
+
+    return () => {
+      clearInterval(presenceInterval);
+      // This is a "best effort" attempt for cleanup.
+      deleteDoc(viewingUserRef);
+    };
+  }, [planId, user, isValidPlanId]);
+
+  // Listener for other viewers
+  useEffect(() => {
+    if (!planId || !user || !isValidPlanId) return;
+
+    const viewingUsersRef = collection(db, 'plans', planId, 'viewingUsers');
+    const twoMinutesAgo = Timestamp.fromMillis(Date.now() - 2 * 60 * 1000);
+
+    const q = query(viewingUsersRef, where('lastSeen', '>', twoMinutesAgo));
+
+    const unsubscribe = onSnapshot(q, async (snapshot) => {
+        const viewerIds = snapshot.docs
+            .map(d => d.id)
+            .filter(id => id !== user.uid); // Exclude self
+
+        if (viewerIds.length > 0) {
+            const profiles = await Promise.all(
+                viewerIds.map(id => fetchUserProfileBasic(id))
+            );
+            setActiveViewers(profiles.filter((p): p is UserProfileBasic => p !== null));
+        } else {
+            setActiveViewers([]);
+        }
+    }, (error) => {
+        console.error("Error listening to viewing users:", error);
+    });
+
+    return () => unsubscribe();
+  }, [planId, user, isValidPlanId]);
 
 
   const { data: ownerProfile, isLoading: isLoadingOwnerProfile } = useQuery<UserProfileBasic | null>({
@@ -868,5 +919,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
+    activeViewers,
   };
 };
