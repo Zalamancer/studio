@@ -76,6 +76,7 @@ interface PlanPermissionsDialogProps {
   setEditPermissionsSearch: (search: string) => void;
   viewPermissionSuggestions: UserProfileBasic[];
   editPermissionSuggestions: UserProfileBasic[];
+  onViewUserChanges: (userId: string) => void; // New prop for viewing changes
 }
 
 const SkeletonListItem: React.FC = () => (
@@ -90,74 +91,81 @@ const SkeletonListItem: React.FC = () => (
 const UserListItem: React.FC<{
   userId: string;
   onRemove: (uid: string) => void;
+  onViewChanges: () => void;
   canBeRemoved: boolean;
   isSaving: boolean;
   isOwner: boolean;
-  isAdmin: boolean; // Indicates edit access
-}> = ({ userId, onRemove, canBeRemoved, isSaving, isOwner, isAdmin }) => {
+  isAdmin: boolean;
+}> = ({ userId, onRemove, onViewChanges, canBeRemoved, isSaving, isOwner, isAdmin }) => {
   const { user: currentUser } = useAuth();
 
   const { data: profile, isLoading } = useQuery<UserProfileBasic | null>({
     queryKey: ['userProfileBasic', userId, 'planPermissionsMember'],
-    queryFn: () => fetchUserProfileBasic(userId),
+    fn: () => fetchUserProfileBasic(userId),
     enabled: !!userId,
     staleTime: Infinity,
   });
 
   if (isLoading) return <SkeletonListItem />;
 
-  const displayName = profile?.displayName || generateAnonymousName(userId);
+  if (!profile) {
+    return (
+      <div className="flex items-center gap-3 p-2">
+        <Avatar className="h-6 w-6"><AvatarFallback>?</AvatarFallback></Avatar>
+        <span className="text-sm text-muted-foreground">User not found ({userId.substring(0,6)}...)</span>
+      </div>
+    );
+  }
+
+  const displayName = profile.displayName || generateAnonymousName(userId);
 
   return (
-    <>
-      <div className="group/memberitem flex items-center justify-between py-1.5 px-2 hover:bg-muted/50 rounded-md transition-colors">
-        <div className="flex items-center gap-2 min-w-0 flex-grow">
+    <div className="group/memberitem flex items-center justify-between py-1.5 px-2 hover:bg-muted/50 rounded-md transition-colors">
+      <div className="flex items-center gap-2 min-w-0 flex-grow">
           <Link href={`/profile/${userId}`} passHref onClick={(e) => e.stopPropagation()} className="flex-shrink-0" title={`Visit profile for ${displayName}`}>
-            <Avatar className="h-6 w-6 flex-shrink-0">
-              <AvatarImage src={profile?.avatarUrl} alt={displayName} />
-              <AvatarFallback className="text-xs">{getInitials(displayName)}</AvatarFallback>
-            </Avatar>
+              <Avatar className="h-6 w-6 flex-shrink-0">
+                  <AvatarImage src={profile?.avatarUrl} alt={displayName} />
+                  <AvatarFallback className="text-xs">{getInitials(displayName)}</AvatarFallback>
+              </Avatar>
           </Link>
-          
-          <div className="min-w-0 flex-grow group-hover/memberitem:hidden">
-            <p className="text-xs truncate" title={displayName}>{displayName}</p>
+          <div className="min-w-0 flex-grow relative h-5">
+              <div className="absolute inset-0 flex items-center transition-opacity opacity-100 group-hover/memberitem:opacity-0 group-hover/memberitem:pointer-events-none">
+                  <p className="text-xs truncate" title={displayName}>{displayName}</p>
+              </div>
+              <div className="absolute inset-0 flex items-center gap-1 transition-opacity opacity-0 group-hover/memberitem:opacity-100">
+                  {currentUser && currentUser.uid !== userId && (
+                      <ConnectionButton
+                          targetUserId={userId}
+                          size="xs"
+                          variant="ghost"
+                          className="h-6 w-6 p-1"
+                          iconOnly
+                      />
+                  )}
+                  {isAdmin && (
+                      <Button variant="ghost" size="icon" className="h-6 w-6 p-1" title="View User's Changes" onClick={(e) => { e.stopPropagation(); onViewChanges(); }}>
+                          <History className="h-3.5 w-3.5" />
+                      </Button>
+                  )}
+              </div>
           </div>
-
-          <div className="hidden group-hover/memberitem:flex items-center gap-1 min-w-0 flex-grow">
-            {currentUser && currentUser.uid !== userId && (
-                <ConnectionButton
-                  targetUserId={userId}
-                  size="xs"
-                  variant="ghost"
-                  className="h-6 w-6 p-1"
-                  iconOnly
-                />
-            )}
-            
-            {isAdmin && (
-                <Button variant="ghost" size="icon" className="h-6 w-6 p-1" title="View User's Changes" onClick={(e) => e.stopPropagation()}>
-                    <History className="h-3.5 w-3.5" />
-                </Button>
-            )}
-        </div>
-        </div>
-        
-        <div className="flex-shrink-0 ml-2">
-          <div className="group-hover/memberitem:hidden flex items-center gap-1">
-            {isOwner && <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-amber-500 text-amber-600">Owner</Badge>}
-            {isAdmin && !isOwner && <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">Admin</Badge>}
-          </div>
-          
-          {canBeRemoved && (
-            <div className="hidden group-hover/memberitem:flex">
-              <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(userId); }} disabled={isSaving} title="Remove User">
-                <Trash2 className="h-3.5 w-3.5" />
-              </Button>
-            </div>
-          )}
-        </div>
       </div>
-    </>
+      <div className="flex-shrink-0 ml-2">
+          <div className="relative h-5 w-12 text-right">
+              <div className="absolute inset-0 flex items-center justify-end transition-opacity opacity-100 group-hover/memberitem:opacity-0 group-hover/memberitem:pointer-events-none">
+                  {isOwner && <Badge variant="outline" className="text-[10px] px-1.5 py-0.5 border-amber-500 text-amber-600">Owner</Badge>}
+                  {isAdmin && !isOwner && <Badge variant="outline" className="text-[10px] px-1.5 py-0.5">Admin</Badge>}
+              </div>
+              {canBeRemoved && (
+                  <div className="absolute inset-0 flex items-center justify-end transition-opacity opacity-0 group-hover/memberitem:opacity-100">
+                      <Button variant="ghost" size="icon" className="h-6 w-6 p-0 text-destructive/70 hover:text-destructive" onClick={(e) => { e.stopPropagation(); onRemove(userId); }} disabled={isSaving} title="Remove User">
+                          <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                  </div>
+              )}
+          </div>
+      </div>
+    </div>
   );
 };
   
@@ -177,6 +185,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
   setEditPermissionsSearch,
   viewPermissionSuggestions,
   editPermissionSuggestions,
+  onViewUserChanges,
 }) => {
   const { toast } = useToast();
   const { user: currentUser } = useAuth(); // Get current user for owner check
@@ -287,8 +296,8 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
           )}
         </Popover>
         <ScrollArea className="space-y-1 py-1 md:flex-grow md:min-h-[6rem]">
-            <UserListItem userId={ownerId} onRemove={() => {}} canBeRemoved={false} isSaving={isSaving} isOwner={true} isAdmin={true} />
-            {currentUserIds.map(uid => <UserListItem key={`item-${title}-${uid}`} userId={uid} onRemove={onRemoveInternal} canBeRemoved={true} isSaving={isSaving} isOwner={false} isAdmin={isEditorList || currentEditUserIds.includes(uid)} />)}
+            <UserListItem userId={ownerId} onRemove={() => {}} onViewChanges={() => onViewUserChanges(ownerId)} canBeRemoved={false} isSaving={isSaving} isOwner={true} isAdmin={true} />
+            {currentUserIds.map(uid => <UserListItem key={`item-${title}-${uid}`} userId={uid} onRemove={onRemoveInternal} onViewChanges={() => onViewUserChanges(uid)} canBeRemoved={true} isSaving={isSaving} isOwner={false} isAdmin={isEditorList || currentEditUserIds.includes(uid)} />)}
             {currentUserIds.length === 0 && (<p className="text-xs text-muted-foreground text-center py-2">No specific users added.</p>)}
         </ScrollArea>
       </div>
@@ -328,7 +337,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
             {visibility !== 'public' && renderUserManagementSection("View Access", currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)}
-            {editability === 'collaborators' && renderUserManagementSection("Edit Access (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsViewSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)}
+            {editability === 'collaborators' && renderUserManagementSection("Edit Access (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)}
           </div>
         </div>
         <DialogFooter className="p-6 pt-4 border-t">

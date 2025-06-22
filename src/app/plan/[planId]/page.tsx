@@ -1,7 +1,7 @@
 // src/app/plan/[planId]/page.tsx
 "use client";
 
-import React, { useEffect, useRef, useCallback, useState } from 'react';
+import React, { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -90,6 +90,7 @@ export default function PlanDetailPage() {
     handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
     handleGlobalMove, handleGlobalPointerUp, isPointerDown,
     isVersionHistorySheetOpen, setIsVersionHistorySheetOpen, planVersionsData, isLoadingVersions, refetchPlanVersions,
+    historyFilterByUserId, historyFilterByUserName, setHistoryFilterByUserId, setHistoryFilterByUserName, handleOpenHistoryForUser,
     handleViewChangesClick, handleExitDiffView, diffTarget, addedNodeIds, persistedNodeIds, removedNodeTitles, diffDetailsVersionId,
     isRestoreConfirmOpen, setIsRestoreConfirmOpen, versionToRestore, handleRestoreVersion, confirmRestore, restorePlanMutation,
     isAddNodeDialogOpen, setIsAddNodeDialogOpen, handleAddNode,
@@ -102,6 +103,7 @@ export default function PlanDetailPage() {
     savePlanSettingsMutation,
     handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
+    isPermissionsDialogOpen, setIsPermissionsDialogOpen,
     planDataForDialog,
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
@@ -126,8 +128,7 @@ export default function PlanDetailPage() {
   const svgRef = useRef<SVGSVGElement>(null);
   const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
   const controlOffset = 100;
-  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false); // New state for permissions dialog
-
+  
   const nodeDetailForm = useForm<NodeDetailFormData>({
     resolver: zodResolver(nodeDetailFormSchema),
     defaultValues: { title: '', description: '' },
@@ -304,6 +305,13 @@ export default function PlanDetailPage() {
     return { ...version, previousVersion };
   });
 
+  const filteredVersions = useMemo(() => {
+    if (!historyFilterByUserId) {
+        return augmentedPlanVersions;
+    }
+    return augmentedPlanVersions.filter(v => v.editorUid === historyFilterByUserId);
+  }, [augmentedPlanVersions, historyFilterByUserId]);
+
   const CanvasContent = () => (
     <>
       {diffTarget && (
@@ -346,7 +354,7 @@ export default function PlanDetailPage() {
         canEditPlan={canEditPlan}
         onOpenHistory={() => setIsVersionHistorySheetOpen(true)}
         onOpenInfo={() => setIsPlanInfoDialogOpen(true)}
-        onOpenPermissions={() => setIsPermissionsDialogOpen(true)} // Pass new handler
+        onOpenPermissions={() => setIsPermissionsDialogOpen(true)}
         diffTargetActive={!!diffTarget}
         activeViewers={activeViewers}
       />
@@ -414,6 +422,7 @@ export default function PlanDetailPage() {
           setEditPermissionsSearch={setEditPermissionsSearch}
           viewPermissionSuggestions={viewPermissionSuggestions}
           editPermissionSuggestions={editPermissionSuggestions}
+          onViewUserChanges={handleOpenHistoryForUser}
         />
       )}
        <AddRoadmapStepDialog
@@ -437,21 +446,44 @@ export default function PlanDetailPage() {
            }
         }}
       />
-      <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen} disableAnimation={true}>
+      <Sheet 
+        open={isVersionHistorySheetOpen} 
+        onOpenChange={(open) => {
+          setIsVersionHistorySheetOpen(open);
+          if (!open) {
+            handleExitDiffView();
+            setHistoryFilterByUserId(null);
+            setHistoryFilterByUserName(null);
+          }
+        }} 
+        disableAnimation={true}
+      >
         <SheetContent
           className="sm:max-w-[600px] w-[90vw] p-0 flex flex-col"
           side="left"
           disableAnimation={true}
         >
            <SheetHeader className="p-4 border-b">
-             <SheetTitle>Plan Version History</SheetTitle>
-             <SheetDescription>Review past versions of this plan. You can view changes or restore a previous version.</SheetDescription>
+             <SheetTitle>
+              {historyFilterByUserName
+                ? `History for ${historyFilterByUserName}`
+                : "Plan Version History"}
+             </SheetTitle>
+             <SheetDescription>
+              {historyFilterByUserName
+                ? `Showing changes made by this user.`
+                : "Review past versions of this plan. You can view changes or restore a previous version."}
+             </SheetDescription>
            </SheetHeader>
            <ScrollArea className="flex-1">
              <div className="p-4 space-y-3">
                 {isLoadingVersions && <div className="flex justify-center py-4"><Loader2 className="h-6 w-6 animate-spin text-primary"/></div>}
-                {!isLoadingVersions && augmentedPlanVersions.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No version history available.</p>}
-                {augmentedPlanVersions.map((version) => (
+                {!isLoadingVersions && filteredVersions.length === 0 && (
+                  <p className="text-sm text-muted-foreground text-center py-4">
+                    {historyFilterByUserId ? "No versions found for this user." : "No version history available."}
+                  </p>
+                )}
+                {filteredVersions.map((version) => (
                   <Card key={version.id} className={cn("p-3", diffDetailsVersionId === version.id && "ring-2 ring-primary")}>
                     <div className="flex justify-between items-center mb-1">
                       <p className="text-sm font-medium">Version {version.versionNumber}</p>

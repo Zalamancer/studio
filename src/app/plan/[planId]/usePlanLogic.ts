@@ -14,6 +14,7 @@ import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { serverTimestamp, onSnapshot, doc, collection, where, query, Timestamp, deleteDoc, setDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
 import type { FieldValue } from 'firebase/firestore';
+import { generateAnonymousName } from '@/lib/pseudonymUtils';
 
 
 const MIN_CANVAS_PADDING = 20;
@@ -113,8 +114,9 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
   const [planError, setPlanError] = useState<Error | null>(null);
 
-  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
   const [isPlanInfoDialogOpen, setIsPlanInfoDialogOpen] = useState(false);
+  const [isPermissionsDialogOpen, setIsPermissionsDialogOpen] = useState(false);
+  const [planDataForDialog, setPlanDataForDialog] = useState<ClientPlan | null>(null);
   const [originalEditingChildItemData, setOriginalEditingChildItemData] = useState<ChildDataItem | null>(null);
 
   const [viewPermissionsSearch, setViewPermissionsSearch] = useState('');
@@ -123,6 +125,17 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
 
   const [activeViewers, setActiveViewers] = useState<UserProfileBasic[]>([]);
+
+  const [historyFilterByUserId, setHistoryFilterByUserId] = useState<string | null>(null);
+  const [historyFilterByUserName, setHistoryFilterByUserName] = useState<string | null>(null);
+
+  const handleOpenHistoryForUser = useCallback(async (userId: string) => {
+    const profile = await fetchUserProfileBasic(userId);
+    const displayName = profile?.displayName || generateAnonymousName(userId);
+    setHistoryFilterByUserName(displayName);
+    setHistoryFilterByUserId(userId);
+    setIsVersionHistorySheetOpen(true);
+  }, [setIsVersionHistorySheetOpen]);
 
   useEffect(() => {
     if (!isPlanInfoDialogOpen) {
@@ -910,6 +923,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
     handleGlobalMove, handleGlobalPointerUp, isPointerDown,
     isVersionHistorySheetOpen, setIsVersionHistorySheetOpen, planVersionsData, isLoadingVersions, refetchPlanVersions,
+    historyFilterByUserId, historyFilterByUserName, setHistoryFilterByUserId, setHistoryFilterByUserName, handleOpenHistoryForUser,
     handleViewChangesClick, handleExitDiffView, diffTarget, addedNodeIds, persistedNodeIds, removedNodeTitles, diffDetailsVersionId,
     isRestoreConfirmOpen, setIsRestoreConfirmOpen, versionToRestore, handleRestoreVersion, confirmRestore, restorePlanMutation,
     isAddNodeDialogOpen, setIsAddNodeDialogOpen, handleAddNode,
@@ -920,10 +934,11 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     onAddChildItemToNode: handleAddChildItemToNode,
     onChildItemTitleClick: handleChildItemCanvasNodeFocus,
     canEditPlan,
-    isSaving: savePlanSettingsMutation.isPending,
+    isSaving,
     savePlanSettingsMutation,
     handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
+    isPermissionsDialogOpen, setIsPermissionsDialogOpen,
     planDataForDialog,
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
