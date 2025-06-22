@@ -13,6 +13,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { serverTimestamp, onSnapshot, doc } from 'firebase/firestore';
 import { db } from '@/lib/firebase/config';
+import type { Timestamp } from 'firebase/firestore';
 
 
 const MIN_CANVAS_PADDING = 20;
@@ -65,6 +66,7 @@ export const usePlanLogic = () => {
   const params = useParams();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
+  const { user: currentUserFromAuth } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const planId = params?.planId as string | undefined;
@@ -91,7 +93,7 @@ export const usePlanLogic = () => {
   const [newNodeCoordinates, setNewNodeCoordinates] = useState<{x: number, y: number} | null>(null); // State for click coordinates
   const childItemManagementContextRef = useRef<{ operation: 'createGrandchild'; targetChildToBecomeParentId: string; currentParentOfTargetChildId: string; } | { operation: 'createChild'; targetParentNodeId: string; } | { operation: 'edit'; itemToEditId: string; parentNodeId: string; } | null>(null);
   const [isEditChildItemDialogOpen, setIsEditChildItemDialogOpen] = useState(false);
-  const [isChildItemDialogSubmitting, setIsChildItemDialogSubmitting] = useState(false); // Added this state
+  const [isChildItemDialogSubmitting, setIsChildItemDialogSubmitting] = useState(false);
   const [dynamicChildDialogTitle, setDynamicChildDialogTitle] = useState("Manage Item");
   const [defaultChildDialogTitle, setDefaultChildDialogTitle] = useState("");
   const [defaultChildDialogDescription, setDefaultChildDialogDescription] = useState("");
@@ -138,7 +140,6 @@ export const usePlanLogic = () => {
     return () => clearTimeout(handler);
   }, [editPermissionsSearch]);
 
-  // The missing queries that define viewPermissionSuggestions and editPermissionSuggestions
   const { data: viewPermissionSuggestions = [] } = useQuery<UserProfileBasic[]>({
       queryKey: ['suggestibleUsersForPlanView', debouncedViewPermissionsSearch, user?.uid],
       queryFn: () => user ? getSuggestibleUsers(debouncedViewPermissionsSearch, 10) : Promise.resolve([]),
@@ -191,11 +192,10 @@ export const usePlanLogic = () => {
           editUserIds: data.editUserIds || (data.ownerId ? [data.ownerId] : []),
         };
         setPlanData(clientPlan);
-        // Only update editableRoadmap if not in a diff view
         if (!diffTarget) {
             setEditableRoadmap(clientPlan.roadmap);
         }
-        setPlanDataForDialog(clientPlan); // Always update dialog data
+        setPlanDataForDialog(clientPlan);
         setPlanError(null);
       } else {
         setPlanData(null);
@@ -230,7 +230,6 @@ export const usePlanLogic = () => {
         await updatePlanDetails(planId, user.uid, { roadmap: newRoadmap });
     } catch (error: any) {
         toast({ variant: "destructive", title: "Sync Error", description: error.message });
-        // Snapshot listener will auto-revert to last good state on error
     }
   }, [planId, user, toast]);
   
@@ -253,6 +252,10 @@ export const usePlanLogic = () => {
     if (planData.editability === 'everyone') return true; 
     return false;
   }, [user, planData]);
+  
+  const isOwnerForUIDisplay = useMemo(() => {
+    return !!currentUserFromAuth && !!planData && planData.ownerId === currentUserFromAuth.uid;
+  }, [currentUserFromAuth, planData]);
 
   const handleInitiateAddNode = useCallback((details: {
     sourceNodeId?: string | null;
@@ -315,8 +318,6 @@ export const usePlanLogic = () => {
     setNewNodeCoordinates(null);
   }, [canEditPlan, diffTarget, editableRoadmap, targetParentIdForDialog, initiatingDotTypeForDialog, saveCurrentRoadmap, toast, newNodeCoordinates]);
 
-  // All other hook logic remains... (getPointerCoords, handleNodeInteractionStart, handleGlobalMove, handleGlobalPointerUp, etc.)
-  
   const getPointerCoords = useCallback((event: MouseEvent | TouchEvent | React.MouseEvent | React.TouchEvent): { clientX: number; clientY: number } => {
     if ('touches' in event && event.touches.length > 0) return { clientX: event.touches[0].clientX, clientY: event.touches[0].clientY };
     if ('changedTouches' in event && event.changedTouches.length > 0) return { clientX: event.changedTouches[0].clientX, clientY: event.changedTouches[0].clientY };
@@ -570,25 +571,21 @@ export const usePlanLogic = () => {
   
   const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
     if (planData && userProfile.userId !== planData.ownerId) {
-      // Logic handled by onSaveSettings. This just updates local UI state.
     }
   }, [planData]);
 
   const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
     if (planData && userIdToRemove !== planData.ownerId) {
-      // Logic handled by onSaveSettings. This just updates local UI state.
     }
   }, [planData]);
 
   const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
     if (planData && userProfile.userId !== planData.ownerId) {
-       // Logic handled by onSaveSettings.
     }
   }, [planData]);
 
   const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
     if (planData && userIdToRemove !== planData.ownerId) {
-      // Logic handled by onSaveSettings.
     }
   }, [planData]);
 
@@ -791,7 +788,7 @@ export const usePlanLogic = () => {
     onAddChildItemToNode: handleAddChildItemToNode,
     onChildItemTitleClick: handleChildItemCanvasNodeFocus,
     canEditPlan,
-    isSaving: savePlanSettingsMutation.isPending, // Now directly reflects the mutation status for settings
+    isSaving: savePlanSettingsMutation.isPending,
     savePlanSettingsMutation,
     handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,

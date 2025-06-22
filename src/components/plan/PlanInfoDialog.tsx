@@ -73,6 +73,8 @@ interface PlanInfoDialogProps {
   onRemoveUserFromViewers: (userId: string) => void;
   onAddUserToEditors: (userProfile: UserProfileBasic) => void;
   onRemoveUserFromEditors: (userId: string) => void;
+  setViewPermissionsSearch: (search: string) => void;
+  setEditPermissionsSearch: (search: string) => void;
 }
 
 const SkeletonListItem: React.FC = () => (
@@ -443,7 +445,7 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                     <Input id="plan-name" value={name} onChange={(e) => setName(e.target.value)} disabled={!isOwnerForUIDisplay || isSavingSettings} className="text-sm h-9 mt-1"/>
                   </div>
                   
-                  <div className="flex flex-col md:flex-grow md:min-h-0 mb-4"> {/* Description Block */}
+                  <div className="flex flex-col md:flex-grow md:min-h-0 mb-4">
                     <Label htmlFor="plan-description" className="text-sm flex-shrink-0 mb-1">Description</Label>
                     <Textarea
                       id="plan-description"
@@ -453,13 +455,13 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       placeholder="A brief overview of this plan's purpose."
                       className={cn(
                         "text-sm overflow-y-auto resize-none",
-                        "min-h-[10rem] max-h-[20rem] md:max-h-none", // Mobile height constraints
-                        "md:flex-grow md:min-h-0" // Desktop flex growth
+                        "min-h-[10rem] max-h-[20rem] md:max-h-none",
+                        "md:flex-grow md:min-h-0"
                       )}
                     />
                   </div>
                   
-                  <div className="space-y-3 mt-auto flex-shrink-0"> {/* Static Info Block */}
+                  <div className="space-y-3 mt-auto flex-shrink-0">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                           {isOwnerForUIDisplay ? (
                           <>
@@ -468,8 +470,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                               <Select value={visibility} onValueChange={(v) => {
                                 const newVisibility = v as PlanVisibility;
                                 setVisibility(newVisibility);
-                                // No automatic toast for 'unlisted' change here to avoid duplicate with other effect.
-                                // The effect watching 'visibility' and 'editability' will handle adjustments.
                               }} disabled={isSavingSettings}>
                                   <SelectTrigger id="plan-visibility" className="text-sm h-9 mt-1">
                                   <SelectValue placeholder="Select visibility" />
@@ -511,7 +511,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                   </div>
                 </div>
 
-                {/* Right Column - Permissions */}
                 {isOwnerForUIDisplay && (
                   <div className="md:w-1/2 space-y-4 flex flex-col"> 
                     {visibility !== 'public' && renderPermissionSection(
@@ -546,7 +545,6 @@ export const PlanInfoDialog: React.FC<PlanInfoDialogProps> = ({
                       editSearchInputRef,
                       editSuggestionsPopoverRef
                     )}
-                    {/* Add a flexible spacer if both permission sections are hidden */}
                     {(visibility === 'public' && (editability === 'owner_only' || editability === 'everyone')) && <div className="flex-grow"></div>}
                   </div>
                 )}
