@@ -29,7 +29,7 @@ import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic';
 import type { RoadmapStep, ClientPlanVersion, ChildDataItem, PeerConnection } from '@/types/plan';
 import { PlanHeader } from './PlanHeader';
 import { useToast } from '@/hooks/use-toast';
-import { useIsMobile } from '@/hooks/use-is-mobile'; // Import the hook
+import { useIsMobile } from '@/hooks/use-mobile'; // Import the hook
 
 const NODE_BASE_WIDTH = 220;
 const NODE_HEADER_HEIGHT = 40;
