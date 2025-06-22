@@ -5,23 +5,23 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, AlertTriangle, Info, Trash2, Edit3, PlusCircle, MessageCircle, Eye, Link as LinkIcon, CalendarDays, DollarSign, ListChecks, Layers, ExternalLinkIcon, X } from 'lucide-react'; // Added X
+import { Loader2, AlertTriangle, Info, Trash2, Edit3, PlusCircle, MessageCircle, Eye, Link as LinkIcon, CalendarDays, DollarSign, ListChecks, Layers, ExternalLinkIcon, X } from 'lucide-react';
 import { PlanInfoDialog } from '@/components/plan/PlanInfoDialog';
 import RoadmapStepCard from '@/components/plan/RoadmapStepCard';
 import { AddRoadmapStepDialog } from '@/components/plan/AddRoadmapStepDialog';
 import { EditChildItemDialog } from '@/components/plan/EditChildItemDialog';
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet';
-import { Card, CardContent } from '@/components/ui/card'; 
+import { Card, CardContent } from '@/components/ui/card';
 import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
-import * as DialogPrimitive from "@radix-ui/react-dialog"; // Keep for PlanInfoDialog's explicit close if needed
-import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form"; 
-import { Input } from "@/components/ui/input"; 
-import { Label } from '@/components/ui/label'; 
-import { FormLabel } from "@/components/ui/form"; 
-import { Textarea } from "@/components/ui/textarea"; 
-import { useForm } from 'react-hook-form'; 
-import { zodResolver } from '@hookform/resolvers/zod'; 
-import * as z from 'zod'; 
+import * as DialogPrimitive from "@radix-ui/react-dialog";
+import { Form, FormControl, FormField, FormItem, FormMessage } from "@/components/ui/form";
+import { Input } from "@/components/ui/input";
+import { Label } from '@/components/ui/label';
+import { FormLabel } from "@/components/ui/form";
+import { Textarea } from "@/components/ui/textarea";
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import * as z from 'zod';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
@@ -29,6 +29,7 @@ import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic';
 import type { RoadmapStep, ClientPlanVersion, ChildDataItem, PeerConnection } from '@/types/plan';
 import { PlanHeader } from './PlanHeader';
 import { useToast } from '@/hooks/use-toast';
+import { useIsMobile } from '@/hooks/use-is-mobile'; // Import the hook
 
 const NODE_BASE_WIDTH = 220;
 const NODE_HEADER_HEIGHT = 40;
@@ -65,10 +66,38 @@ type NodeDetailFormData = z.infer<typeof nodeDetailFormSchema>;
 
 
 export default function PlanDetailPage() {
+  const isMobile = useIsMobile();
+  const [scale, setScale] = useState(1.0);
+  const canvasWrapperRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isMobile) {
+      setScale(1.0);
+      return;
+    }
+
+    const calculateScale = () => {
+      if (canvasWrapperRef.current) {
+        const containerWidth = canvasWrapperRef.current.clientWidth;
+        const newScale = containerWidth > 0 ? containerWidth / 1920 : 0;
+        setScale(newScale);
+      }
+    };
+    
+    // Recalculate on mount and resize
+    const timeoutId = setTimeout(calculateScale, 50); // Small delay for layout to stabilize
+    window.addEventListener('resize', calculateScale);
+
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', calculateScale);
+    };
+  }, [isMobile]);
+
   const {
     user, authLoading, planId, isValidPlanId,
     planData, isLoadingPlan, planError, ownerProfile, isLoadingOwnerProfile,
-    editableRoadmap, 
+    editableRoadmap,
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
     initialPanelDataRef,
     onNodeDetailPanelSubmit,
@@ -90,39 +119,38 @@ export default function PlanDetailPage() {
     handleSavePlanSettings,
     isPlanInfoDialogOpen, setIsPlanInfoDialogOpen,
     planDataForDialog,
-    originalEditingChildItemData, setOriginalEditingChildItemData, 
+    originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
-    handleAddUserToViewers, 
-    handleRemoveUserFromViewers, 
-    handleAddUserToEditors, 
-    handleRemoveUserFromEditors, 
+    handleAddUserToViewers,
+    handleRemoveUserFromViewers,
+    handleAddUserToEditors,
+    handleRemoveUserFromEditors,
     forceRender,
     handleInitiateAddNode,
-    setIsChildItemDialogSubmitting, 
+    setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
-  } = usePlanLogic();
+  } = usePlanLogic({ scale: isMobile ? scale : 1 });
 
   const router = useRouter();
   const canvasRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
-  const controlOffset = 100; 
+  const controlOffset = 100;
 
   const nodeDetailForm = useForm<NodeDetailFormData>({
     resolver: zodResolver(nodeDetailFormSchema),
     defaultValues: { title: '', description: '' },
   });
-  
+
   const { toast } = useToast();
-  
+
   const handlePanelFieldBlur = () => {
     if (initialPanelDataRef.current && editingTarget && (editingTarget.type === 'node' || editingTarget.type === 'childItem')) {
       const currentValues = nodeDetailForm.getValues();
       if (currentValues.title !== initialPanelDataRef.current.title || (currentValues.description || '') !== (initialPanelDataRef.current.description || '')) {
         if (canEditPlan && !diffTarget) {
           nodeDetailForm.handleSubmit(onNodeDetailPanelSubmit)();
-          // Update the ref to prevent re-saving if focus moves between fields without changes
           initialPanelDataRef.current = { title: currentValues.title, description: currentValues.description || '' };
         }
       }
@@ -137,15 +165,15 @@ export default function PlanDetailPage() {
       });
     } else if (editingTarget?.type === 'childItem') {
       const childItemAsNode = editableRoadmap.find(node => node.id === editingTarget.data.canvasNodeIdForThisItem);
-      if (childItemAsNode) { 
+      if (childItemAsNode) {
         nodeDetailForm.reset({
           title: childItemAsNode.title,
           description: childItemAsNode.description || '',
         });
-      } else { 
-        nodeDetailForm.reset({ 
-            title: editingTarget.data.title, 
-            description: editingTarget.data.description || '' 
+      } else {
+        nodeDetailForm.reset({
+            title: editingTarget.data.title,
+            description: editingTarget.data.description || ''
         });
       }
     }
@@ -191,14 +219,14 @@ export default function PlanDetailPage() {
           if (childItem.canvasNodeIdForThisItem) {
             const childNode = editableRoadmap.find(node => node.id === childItem.canvasNodeIdForThisItem);
             if (childNode) {
-              const startX = parentStep.x + 16; 
-              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2); 
+              const startX = parentStep.x + 16;
+              const startY = parentStep.y + NODE_HEADER_HEIGHT + 8 + (index * CHILD_ITEM_HEIGHT) + (CHILD_ITEM_HEIGHT / 2);
               const endX = childNode.x + NODE_BASE_WIDTH; // Connect to the RIGHT side of the child node
-              const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2; 
+              const endY = childNode.y + calculateNodeHeight(childNode, editableRoadmap) / 2;
               const pathKey_child = `hierarchical-${parentStep.id}-child${index}-to-${childNode.id}`;
-              const c1x = startX - controlOffset / 2; 
+              const c1x = startX - controlOffset / 2;
               const c1y = startY;
-              const c2x = endX - controlOffset / 2;   
+              const c2x = endX - controlOffset / 2;
               const c2y = endY;
               const pathD = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`;
               lines.push(
@@ -259,8 +287,12 @@ export default function PlanDetailPage() {
         if (diffTarget) return;
         if (!canEditPlan) return;
         const canvasRect = event.currentTarget.getBoundingClientRect();
-        const x = event.clientX - canvasRect.left + event.currentTarget.scrollLeft;
-        const y = event.clientY - canvasRect.top + event.currentTarget.scrollTop;
+        
+        const scaleFactor = isMobile ? scale : 1.0;
+        if (scaleFactor === 0) return;
+
+        const x = (event.clientX - canvasRect.left) / scaleFactor + event.currentTarget.scrollLeft;
+        const y = (event.clientY - canvasRect.top) / scaleFactor + event.currentTarget.scrollTop;
         handleInitiateAddNode({ coords: { x, y } });
     }
   };
@@ -282,7 +314,42 @@ export default function PlanDetailPage() {
     const previousVersion = index < array.length - 1 ? array[index + 1] : null;
     return { ...version, previousVersion };
   });
-  
+
+  const scaledCanvasHeight = canvasMinHeight * scale;
+
+  const CanvasContent = () => (
+    <>
+      {diffTarget && (
+        <div className="absolute inset-0 bg-black/60 z-20 pointer-events-auto" onClick={handleExitDiffView} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
+      )}
+      <svg ref={svgRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', display: 'block' }} className="pointer-events-none">
+        <defs>
+          <marker id="arrowhead-main" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--primary))" /></marker>
+          <marker id="arrowhead-accent" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--accent))" /></marker>
+        </defs>
+        {drawConnectionLines()}
+        {activeConnectionLinePreviewRef.current?.path && (
+          <path d={activeConnectionLinePreviewRef.current.path} stroke="hsl(var(--primary))" strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" style={{ pointerEvents: "none" }} />
+        )}
+      </svg>
+      {editableRoadmap.map((step) => (
+        <RoadmapStepCard
+          key={step.id}
+          step={step}
+          allSteps={editableRoadmap}
+          onNodeInteractionStart={handleNodeInteractionStart}
+          isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
+          onEditStep={handleEditCanvasNode}
+          onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
+          onChildItemTitleClick={onChildItemTitleClick}
+          onAddChildItemToNode={() => onAddChildItemToNode(step.id)}
+          isActuallyDraggingThisNode={nodeDragInfoRef.current?.nodeId === step.id && isDraggingRef.current}
+          diffHighlight={diffTarget ? (addedNodeIds.has(step.id) ? 'added' : (persistedNodeIds.has(step.id) ? 'persisted' : undefined)) : undefined}
+        />
+      ))}
+    </>
+  );
+
   return (
     <div className="flex flex-col flex-1 h-full">
       <PlanHeader
@@ -295,45 +362,43 @@ export default function PlanDetailPage() {
         diffTargetActive={!!diffTarget}
       />
 
-      <div className="container mx-auto px-4 max-w-screen-2xl flex-1 relative">
-        <ScrollArea className="w-full h-full">
+      {isMobile ? (
+        <div
+          ref={canvasWrapperRef}
+          className="flex-1 relative overflow-hidden"
+          style={{ height: `${scaledCanvasHeight}px` }}
+        >
           <div
             ref={canvasRef}
             onClick={handleCanvasClick}
-            style={{ width: '1920px', minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'visible' }}
             className="bg-muted grid-background"
+            style={{
+              width: '1920px',
+              height: `${canvasMinHeight}px`,
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              transform: `scale(${scale})`,
+              transformOrigin: 'top left',
+            }}
           >
-            {diffTarget && (
-              <div className="absolute inset-0 bg-black/60 z-20 pointer-events-auto" onClick={handleExitDiffView} aria-hidden="true" style={{ width: '100%', height: '100%' }} />
-            )}
-            <svg ref={svgRef} style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', pointerEvents: 'none', display: 'block' }} className="pointer-events-none">
-              <defs>
-                <marker id="arrowhead-main" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--primary))" /></marker>
-                <marker id="arrowhead-accent" viewBox="0 0 10 10" refX="5" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M 0 0 L 10 5 L 0 10 z" fill="hsl(var(--accent))" /></marker>
-              </defs>
-              {drawConnectionLines()}
-              {activeConnectionLinePreviewRef.current?.path && (
-                <path d={activeConnectionLinePreviewRef.current.path} stroke="hsl(var(--primary))" strokeWidth={CONNECTION_LINE_THICKNESS_HIERARCHY} fill="none" style={{ pointerEvents: "none" }} />
-              )}
-            </svg>
-            {editableRoadmap.map((step) => (
-              <RoadmapStepCard
-                key={step.id}
-                step={step}
-                allSteps={editableRoadmap}
-                onNodeInteractionStart={handleNodeInteractionStart}
-                isSelected={editingTarget?.type === 'node' && editingTarget.data.id === step.id && !diffTarget}
-                onEditStep={handleEditCanvasNode} 
-                onAddGrandchildToChildDataItem={onAddGrandchildToChildDataItem}
-                onChildItemTitleClick={onChildItemTitleClick}
-                onAddChildItemToNode={() => onAddChildItemToNode(step.id)}
-                isActuallyDraggingThisNode={nodeDragInfoRef.current?.nodeId === step.id && isDraggingRef.current}
-                diffHighlight={diffTarget ? (addedNodeIds.has(step.id) ? 'added' : (persistedNodeIds.has(step.id) ? 'persisted' : undefined)) : undefined}
-              />
-            ))}
+            <CanvasContent />
           </div>
-        </ScrollArea>
-      </div>
+        </div>
+      ) : (
+        <div ref={canvasWrapperRef} className="container mx-auto px-4 max-w-screen-2xl flex-1 relative">
+          <ScrollArea className="w-full h-full">
+            <div
+              ref={canvasRef}
+              onClick={handleCanvasClick}
+              style={{ width: '1920px', minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'visible' }}
+              className="bg-muted grid-background"
+            >
+              <CanvasContent />
+            </div>
+          </ScrollArea>
+        </div>
+      )}
 
       {planDataForDialog && (
         <PlanInfoDialog
@@ -358,7 +423,7 @@ export default function PlanDetailPage() {
         isOpen={isAddNodeDialogOpen}
         onOpenChange={setIsAddNodeDialogOpen}
         onSubmit={(data) => handleAddNode(data, canvasRef.current)}
-        isSubmitting={isSaving} 
+        isSubmitting={isSaving}
       />
       <EditChildItemDialog
         isOpen={isEditChildItemDialogOpen}
@@ -376,8 +441,8 @@ export default function PlanDetailPage() {
         }}
       />
       <Sheet open={isVersionHistorySheetOpen} onOpenChange={setIsVersionHistorySheetOpen} disableAnimation={true}>
-        <SheetContent 
-          className="sm:max-w-[600px] w-[90vw] p-0 flex flex-col" 
+        <SheetContent
+          className="sm:max-w-[600px] w-[90vw] p-0 flex flex-col"
           side="left"
           disableAnimation={true}
         >
@@ -459,12 +524,12 @@ export default function PlanDetailPage() {
             handlePanelFieldBlur(); // Trigger save on blur when closing
             setIsStepDetailSheetOpen(false);
             setEditingTarget(null);
-            initialPanelDataRef.current = null; 
+            initialPanelDataRef.current = null;
           } else {
             setIsStepDetailSheetOpen(true);
           }
         }}
-        disableAnimation={true} 
+        disableAnimation={true}
       >
         <SheetContent className="w-[400px] sm:w-[540px] p-0 flex flex-col" side="right" disableAnimation={true} showCloseButton={false}>
           {(editingTarget?.type === 'node' || (editingTarget?.type === 'childItem' && editingTarget.data.canvasNodeIdForThisItem) || (editingTarget?.type === 'childItem' && !editingTarget.data.canvasNodeIdForThisItem) ) && (
@@ -511,7 +576,7 @@ export default function PlanDetailPage() {
               <ScrollArea className="flex-1">
                 <div className="p-4 space-y-4">
                    <Form {...nodeDetailForm}>
-                     <form 
+                     <form
                         className="space-y-4"
                      >
                        <FormField control={nodeDetailForm.control} name="title" render={({ field }) => (
