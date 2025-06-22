@@ -5,7 +5,7 @@ import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Loader2, AlertTriangle, Info, Trash2, Edit3, PlusCircle, MessageCircle, Eye, Link as LinkIcon, CalendarDays, DollarSign, ListChecks, Layers, ExternalLinkIcon, X } from 'lucide-react';
+import { Loader2, AlertTriangle, Info, Trash2, Edit3, PlusCircle, MessageCircle, Eye, Link as LinkIcon, CalendarDays, DollarSign, ListChecks, Layers, ExternalLinkIcon, X, ZoomIn, ZoomOut, Maximize } from 'lucide-react';
 import { PlanInfoDialog } from '@/components/plan/PlanInfoDialog';
 import RoadmapStepCard from '@/components/plan/RoadmapStepCard';
 import { AddRoadmapStepDialog } from '@/components/plan/AddRoadmapStepDialog';
@@ -68,26 +68,28 @@ export default function PlanDetailPage() {
   const [scale, setScale] = useState(1.0);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const calculateScale = () => {
-      if (canvasWrapperRef.current) {
-        const containerWidth = canvasWrapperRef.current.clientWidth;
-        // The canvas has a fixed design width of 1920px.
-        // We scale it down to fit the container width.
-        const newScale = containerWidth > 0 ? containerWidth / 1920 : 0;
-        setScale(newScale);
-      }
-    };
-    
-    // Recalculate on mount and on every resize
-    const timeoutId = setTimeout(calculateScale, 50); // Small delay for layout to stabilize
-    window.addEventListener('resize', calculateScale);
+  const calculateAndSetFitScreenScale = useCallback(() => {
+    if (canvasWrapperRef.current) {
+      const containerWidth = canvasWrapperRef.current.clientWidth;
+      // The canvas has a fixed design width of 1920px.
+      // We scale it down to fit the container width.
+      const newScale = containerWidth > 0 ? containerWidth / 1920 : 0;
+      setScale(newScale);
+    }
+  }, []);
 
+  useEffect(() => {
+    const timeoutId = setTimeout(calculateAndSetFitScreenScale, 50);
+    window.addEventListener('resize', calculateAndSetFitScreenScale);
     return () => {
       clearTimeout(timeoutId);
-      window.removeEventListener('resize', calculateScale);
+      window.removeEventListener('resize', calculateAndSetFitScreenScale);
     };
-  }, []); // Empty dependency array, so it sets up once and cleans up on unmount.
+  }, [calculateAndSetFitScreenScale]);
+
+  const zoomIn = useCallback(() => setScale(s => Math.min(s * 1.2, 2)), []);
+  const zoomOut = useCallback(() => setScale(s => Math.max(s / 1.2, 0.1)), []);
+  const resetZoom = useCallback(() => calculateAndSetFitScreenScale(), [calculateAndSetFitScreenScale]);
 
   const {
     user, authLoading, planId, isValidPlanId,
@@ -125,7 +127,7 @@ export default function PlanDetailPage() {
     handleInitiateAddNode,
     setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
-  } = usePlanLogic({ scale: scale }); // Always pass the dynamic scale
+  } = usePlanLogic({ scale: scale });
 
   const router = useRouter();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -283,7 +285,7 @@ export default function PlanDetailPage() {
         if (!canEditPlan) return;
         const canvasRect = event.currentTarget.getBoundingClientRect();
         
-        const scaleFactor = scale; // Always use the dynamic scale
+        const scaleFactor = scale;
         if (scaleFactor === 0) return;
 
         const x = (event.clientX - canvasRect.left) / scaleFactor + event.currentTarget.scrollLeft;
@@ -376,6 +378,19 @@ export default function PlanDetailPage() {
           }}
         >
           <CanvasContent />
+        </div>
+
+        {/* Zoom Controls */}
+        <div className="absolute bottom-4 right-4 z-40 flex flex-col gap-2">
+            <Button variant="outline" size="icon" onClick={zoomIn} title="Zoom In" className="bg-card hover:bg-muted">
+                <ZoomIn className="h-5 w-5" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={zoomOut} title="Zoom Out" className="bg-card hover:bg-muted">
+                <ZoomOut className="h-5 w-5" />
+            </Button>
+            <Button variant="outline" size="icon" onClick={resetZoom} title="Fit to Screen" className="bg-card hover:bg-muted">
+                <Maximize className="h-5 w-5" />
+            </Button>
         </div>
       </div>
 
