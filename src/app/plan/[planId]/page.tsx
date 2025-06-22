@@ -35,6 +35,7 @@ const NODE_HEADER_HEIGHT = 40;
 const CHILD_ITEM_HEIGHT = 28;
 const NODE_BASE_MIN_HEIGHT = 80;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
+const CANVAS_WIDTH = 1600; // Decreased canvas width
 
 const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
 const CONNECTION_LINE_THICKNESS_PEER = 1.5;
@@ -71,29 +72,10 @@ export default function PlanDetailPage() {
   const calculateAndSetFitScreenScale = useCallback(() => {
     if (canvasWrapperRef.current) {
       const containerWidth = canvasWrapperRef.current.clientWidth;
-      const newScale = containerWidth > 0 ? containerWidth / 1800 : 0.1; // Added fallback
+      const newScale = containerWidth > 0 ? containerWidth / CANVAS_WIDTH : 0.1;
       setScale(newScale);
     }
   }, []);
-
-  useEffect(() => {
-    window.addEventListener('resize', calculateAndSetFitScreenScale);
-    return () => {
-      window.removeEventListener('resize', calculateAndSetFitScreenScale);
-    };
-  }, [calculateAndSetFitScreenScale]);
-
-  const zoomIn = useCallback(() => setScale(s => Math.min(s * 1.2, 1.0)), []);
-  
-  const zoomOut = useCallback(() => {
-    if (canvasWrapperRef.current) {
-      const containerWidth = canvasWrapperRef.current.clientWidth;
-      const minScaleValue = containerWidth > 0 ? containerWidth / 1800 : 0.1; // Use 0.1 as a failsafe
-      setScale(s => Math.max(s / 1.2, minScaleValue));
-    }
-  }, []); // canvasWrapperRef is stable
-  
-  const resetZoom = useCallback(() => calculateAndSetFitScreenScale(), [calculateAndSetFitScreenScale]);
 
   const {
     user, authLoading, planId, isValidPlanId,
@@ -131,7 +113,7 @@ export default function PlanDetailPage() {
     handleInitiateAddNode,
     setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
-    handleCanvasPointerDown, // New handler from the hook
+    handleCanvasPointerDown,
   } = usePlanLogic({ scale: scale });
 
   const router = useRouter();
@@ -158,6 +140,18 @@ export default function PlanDetailPage() {
       }
     }
   };
+
+  const zoomIn = useCallback(() => setScale(s => Math.min(s * 1.2, 1.0)), []);
+  
+  const zoomOut = useCallback(() => {
+    if (canvasWrapperRef.current) {
+      const containerWidth = canvasWrapperRef.current.clientWidth;
+      const minScaleValue = containerWidth > 0 ? containerWidth / CANVAS_WIDTH : 0.1;
+      setScale(s => Math.max(s / 1.2, minScaleValue));
+    }
+  }, []);
+  
+  const resetZoom = useCallback(() => calculateAndSetFitScreenScale(), [calculateAndSetFitScreenScale]);
 
   useEffect(() => {
     if (editingTarget?.type === 'node') {
@@ -360,7 +354,7 @@ export default function PlanDetailPage() {
           onPointerDown={handleCanvasPointerDown}
           className="bg-muted grid-background"
           style={{
-            width: '1800px',
+            width: `${CANVAS_WIDTH}px`,
             height: `${canvasMinHeight}px`,
             position: 'absolute',
             top: 0,
@@ -374,7 +368,6 @@ export default function PlanDetailPage() {
         </div>
       </div>
       
-      {/* Zoom Controls - Now using fixed positioning */}
       <div className="fixed bottom-4 right-4 z-40 flex flex-col gap-2">
           <Button variant="outline" size="icon" onClick={zoomIn} title="Zoom In" className="bg-card hover:bg-muted">
               <ZoomIn className="h-5 w-5" />
