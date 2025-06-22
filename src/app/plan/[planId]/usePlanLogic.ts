@@ -308,9 +308,25 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
 
   const canEditPlan = useMemo(() => {
     if (!user || !planData) return false;
+    // Owner can always edit.
     if (planData.ownerId === user.uid) return true;
-    if (planData.editability === 'collaborators' && (planData.editUserIds || []).includes(user.uid)) return true;
-    if (planData.editability === 'everyone') return true;
+    
+    // Check for collaborator role
+    if (planData.editability === 'collaborators' && (planData.editUserIds || []).includes(user.uid)) {
+      return true;
+    }
+
+    // Check for 'everyone' role, which requires view access.
+    if (planData.editability === 'everyone') {
+      if (planData.visibility === 'public' || planData.visibility === 'unlisted') {
+        return true;
+      }
+      // For private plans with 'everyone' editability, they must be in the view list.
+      if (planData.visibility === 'private' && (planData.viewUserIds || []).includes(user.uid)) {
+        return true;
+      }
+    }
+    
     return false;
   }, [user, planData]);
 
