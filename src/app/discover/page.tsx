@@ -1,3 +1,4 @@
+
 // src/app/discover/page.tsx
 "use client";
 
@@ -8,7 +9,7 @@ import { getRecentPlans } from '@/services/planService';
 import type { ClientPlan } from '@/types/plan';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button, buttonVariants } from '@/components/ui/button';
-import { Loader2, AlertTriangle, MapPin, Layers, FilterX, Tag, PlusCircle, Search, X, ListFilter, Users, LayoutGrid } from 'lucide-react';
+import { Loader2, AlertTriangle, MapPin, Layers, FilterX, Tag, PlusCircle, Search, X, ListFilter, Users, LayoutGrid, RefreshCw } from 'lucide-react';
 import { formatDistanceToNow } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { useAuth } from '@/contexts/AuthContext';
@@ -94,12 +95,6 @@ const DiscoverPage = () => {
     }
     return currentPlans.sort((a,b) => (b.createdAt || 0) - (a.createdAt || 0));
   }, [plans, selectedSectors, searchTerm, activePlanView, user]);
-
-  const calculateNodeCounts = (plan: ClientPlan) => {
-    const numNodes = plan.roadmap?.length || 0;
-    const numChildren = plan.roadmap?.reduce((acc, step) => acc + (step.childrenData?.length || 0), 0) || 0;
-    return { numNodes, numChildren };
-  };
 
   const FilterContent = useCallback(() => (
     <div className="space-y-4 p-4 border-b">
@@ -203,7 +198,8 @@ const DiscoverPage = () => {
         {!isLoading && !error && filteredPlans && filteredPlans.length > 0 && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredPlans.map((plan) => {
-              const { numNodes, numChildren } = calculateNodeCounts(plan);
+              const numNodes = plan.roadmap?.length || 0;
+              const numContributors = new Set([plan.ownerId, ...(plan.editUserIds || [])]).size;
               return (
                 <Card key={plan.id} className="flex flex-col shadow-md hover:shadow-lg transition-shadow duration-200 rounded-lg border-border">
                   <CardHeader className="pb-3">
@@ -215,8 +211,9 @@ const DiscoverPage = () => {
                   <CardContent className="flex-grow space-y-2 text-sm pt-2">
                     <div className="flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><MapPin className="h-3.5 w-3.5 text-primary/70" />Sector:</span><span className="font-medium text-foreground truncate">{plan.sector || 'N/A'}</span></div>
                     {plan.industry && (<div className="flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><Layers className="h-3.5 w-3.5 text-primary/70" />Industry:</span><span className="font-medium text-foreground truncate">{plan.industry}</span></div>)}
-                    <div className="flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><Layers className="h-3.5 w-3.5 text-primary/70" />Steps:</span><span className="font-medium text-foreground">{numNodes}</span></div>
-                    <div className="flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><Layers className="h-3.5 w-3.5 text-primary/70 opacity-70" />Child Items:</span><span className="font-medium text-foreground">{numChildren}</span></div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><Layers className="h-3.5 w-3.5 text-primary/70" />Nodes:</span><span className="font-medium text-foreground">{numNodes}</span></div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><Users className="h-3.5 w-3.5 text-primary/70" />Contributors:</span><span className="font-medium text-foreground">{numContributors}</span></div>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground"><span className="flex items-center gap-1.5"><RefreshCw className="h-3.5 w-3.5 text-primary/70" />Last Updated:</span><span className="font-medium text-foreground">{formatDistanceToNow(new Date(plan.updatedAt), { addSuffix: true })}</span></div>
                   </CardContent>
                   <CardFooter className="flex justify-between items-center pt-3 border-t mt-auto">
                     <p className="text-xs text-muted-foreground">Created: {formatDistanceToNow(new Date(plan.createdAt), { addSuffix: true })}</p>
