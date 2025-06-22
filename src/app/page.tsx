@@ -20,7 +20,7 @@ import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } fr
 import type { Post, NewPostData, SectorWithSubSectors, SubSector, Industry } from '@/types/post';
 import { availableTags, detailedSectorsData } from '@/components/layout/MainLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { useIsMobile } from "@/hooks/use-is-mobile";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import dynamic from 'next/dynamic';
 import { PostList } from '@/components/board-page/PostList';
