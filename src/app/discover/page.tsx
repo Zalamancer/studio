@@ -126,7 +126,7 @@ const DiscoverPage = () => {
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Filter by Sector {selectedSectors.length > 0 && `(${selectedSectors.length})`}</Label>
-        <ScrollArea className="h-48 rounded-md border p-2.5">
+        <div className="h-48 overflow-y-auto rounded-md border p-2.5">
           <div className="space-y-1.5">
             {availableSectorsForFilter.length > 0 ? (
               availableSectorsForFilter.map((sector) => (
@@ -137,7 +137,7 @@ const DiscoverPage = () => {
               ))
             ) : (<p className="text-xs text-muted-foreground text-center">No sectors available.</p>)}
           </div>
-        </ScrollArea>
+        </div>
         {selectedSectors.length > 0 && (
           <div className="pt-2">
             <Button variant="ghost" size="xs" onClick={() => setSelectedSectors([])} className="w-full text-primary">Clear Sector Filters</Button>

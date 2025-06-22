@@ -158,7 +158,7 @@ const NewsPage = () => {
         <div className="p-1 border-b">
           <Input type="search" placeholder="Search tags..." value={tagSearchInput} onChange={(e) => setTagSearchInput(e.target.value)} className="h-8 text-xs border-0 focus-visible:ring-0 shadow-none"/>
         </div>
-        <ScrollArea className="h-48">
+        <div className="h-48 overflow-y-auto">
           <div className="p-3 space-y-1.5">
             {isLoadingTagsForFilter ? (
               <div className="flex justify-center p-2"><Loader2 className="h-4 w-4 animate-spin"/></div>
@@ -173,7 +173,7 @@ const NewsPage = () => {
               <p className="text-xs text-muted-foreground text-center">{tagSearchInput ? `No tags matching "${tagSearchInput}".` : "No tags found."}</p>
             )}
           </div>
-        </ScrollArea>
+        </div>
         {selectedTags.length > 0 && (
           <div className="p-3 border-t"><Button variant="ghost" size="xs" onClick={() => setSelectedTags([])} className="w-full text-primary">Clear Tag Filters</Button></div>
         )}

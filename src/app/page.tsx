@@ -506,7 +506,7 @@ const BoardPageContent = () => {
                   <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
                   {user && (<Button variant="default" size="sm" className="bg-primary hover:bg-primary/90 text-primary-foreground" onClick={handleOpenCreatePostForm}><PlusCircle className="mr-2 h-4 w-4" />Create Post</Button>)}
                 </div>
-                <ScrollArea className="flex-grow bg-background"><div className="flex flex-col items-center justify-center h-full p-8 text-center"><MessageSquare className="h-16 w-16 mb-4 text-muted-foreground opacity-30" /><p className="text-lg font-medium text-muted-foreground">Select a post to view details</p><p className="text-sm mt-1 text-muted-foreground">Or create a new post to share with the community.</p></div></ScrollArea>
+                <div className="flex-grow bg-background"><div className="flex flex-col items-center justify-center h-full p-8 text-center"><MessageSquare className="h-16 w-16 mb-4 text-muted-foreground opacity-30" /><p className="text-lg font-medium text-muted-foreground">Select a post to view details</p><p className="text-sm mt-1 text-muted-foreground">Or create a new post to share with the community.</p></div></div>
                 <div className="p-3 border-t flex-shrink-0"><div className="h-9"></div></div>
               </Card>
             </div>
