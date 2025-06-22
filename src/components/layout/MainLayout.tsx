@@ -510,17 +510,35 @@ export default function MainLayout({
             {/* Center Search Area (Desktop) */}
             <div className="hidden lg:flex flex-grow items-center justify-center px-6">
               {showContextualHeaderIcons && (
-                <div className="w-full max-w-md relative">
-                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-                  <Input 
-                    placeholder="Search..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="h-9 pl-8 w-full"
-                  />
+                <div className="w-full max-w-md flex items-center gap-2">
+                  {/* Filter Button */}
+                  {filterContent && (
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <Button variant="outline" size="icon" className="h-9 w-9 flex-shrink-0">
+                          <ListFilter className="h-4 w-4" />
+                          <span className="sr-only">Filters</span>
+                        </Button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-80 p-0" align="start">
+                        {filterContent}
+                      </PopoverContent>
+                    </Popover>
+                  )}
+                  {/* Search input container */}
+                  <div className="relative flex-grow">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none"/>
+                    <Input 
+                      placeholder="Search..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="h-9 pl-8 w-full"
+                    />
+                  </div>
                 </div>
               )}
             </div>
+            
 
             {/* Center-aligned Logo for Mobile */}
             <div className={cn(
@@ -537,23 +555,10 @@ export default function MainLayout({
               "flex items-center space-x-2 lg:space-x-3 flex-shrink-0 ml-auto",
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
-              {/* Desktop Contextual Controls (Filters, Create) */}
+              {/* Desktop Contextual Controls */}
               <div className="hidden lg:flex items-center gap-2">
                 {showContextualHeaderIcons && (
                   <>
-                    {/* SEARCH MOVED TO CENTER */}
-                    {filterContent && (
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" size="sm" className="h-9">
-                            <ListFilter className="mr-2 h-4 w-4" /> Filters
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-80 p-0" align="end">
-                          {filterContent}
-                        </PopoverContent>
-                      </Popover>
-                    )}
                     <Button onClick={handleCreateClick} size="sm" className="h-9">
                       <PlusCircle className="mr-2 h-4 w-4" />
                       {createButtonText}
