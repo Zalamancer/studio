@@ -147,7 +147,6 @@ export const getPlanById = async (planId: string): Promise<ClientPlan | null> =>
   }
 };
 
-// Updated function to handle general plan details including permissions
 export const updatePlanDetails = async (planId: string, currentUserId: string, updates: UpdatePlanData): Promise<void> => {
   const user = auth.currentUser;
   if (!user || user.uid !== currentUserId) {
@@ -160,15 +159,14 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
     const currentPlanSnap = await getDoc(planDocRef);
     if (!currentPlanSnap.exists()) throw new Error(`Plan with ID ${planId} not found.`);
     const currentPlanData = currentPlanSnap.data() as Plan;
-    
-    // Check if the current user has permission to edit based on 'editability'
+
+    // Permission check logic
     let canEdit = false;
     if (currentPlanData.ownerId === currentUserId) {
-        canEdit = true; // Owner can always edit settings and roadmap
+        canEdit = true;
     } else if (currentPlanData.editability === 'collaborators' && (currentPlanData.editUserIds || []).includes(currentUserId)) {
-        canEdit = true; // Collaborator can edit if 'collaborators' is set
+        canEdit = true;
     } else if (currentPlanData.editability === 'everyone') {
-        // Check if 'everyone' also implies view access (e.g., if plan is public or unlisted or user is in viewUserIds)
         if (currentPlanData.visibility === 'public' || currentPlanData.visibility === 'unlisted') {
              canEdit = true;
         } else if (currentPlanData.visibility === 'private' && (currentPlanData.viewUserIds || []).includes(currentUserId) ) {
@@ -176,83 +174,84 @@ export const updatePlanDetails = async (planId: string, currentUserId: string, u
         }
     }
 
-    // Only allow roadmap updates if user is owner or a designated editor (collaborator or 'everyone' with view access)
     if (updates.roadmap && !canEdit) {
         throw new Error("Permission denied: You do not have permission to update the roadmap for this plan.");
     }
     
-    // Only allow settings updates (name, desc, visibility, etc.) if user is the owner
-    const settingsFieldsBeingUpdated = Object.keys(updates).some(key => key !== 'roadmap' && key !== 'updatedAt' && key !== 'version');
+    const settingsFieldsBeingUpdated = Object.keys(updates).some(key => !['roadmap', 'updatedAt', 'version'].includes(key));
     if (settingsFieldsBeingUpdated && currentPlanData.ownerId !== currentUserId) {
          throw new Error("Permission denied: Only the plan owner can change settings like name, description, or permissions.");
     }
 
-
+    // Prepare data payload
     const dataToUpdate: { [key: string]: any } = { updatedAt: serverTimestamp() };
+    const isOwner = currentPlanData.ownerId === currentUserId;
 
-    if (updates.name !== undefined) dataToUpdate.name = updates.name;
-    if (updates.description !== undefined) dataToUpdate.description = updates.description;
-    if (updates.sector !== undefined) dataToUpdate.sector = updates.sector;
-    if (updates.subSector !== undefined) dataToUpdate.subSector = updates.subSector;
-    if (updates.industry !== undefined) dataToUpdate.industry = updates.industry;
-    if (updates.naicsCode !== undefined) dataToUpdate.naicsCode = updates.naicsCode;
-    
-    const finalVisibility = updates.visibility || currentPlanData.visibility || 'private';
-    const finalEditability = updates.editability || currentPlanData.editability || 'owner_only';
-    
-    dataToUpdate.visibility = finalVisibility;
-    dataToUpdate.editability = finalEditability;
+    // Handle settings fields (only owner can change)
+    if (isOwner) {
+        if (updates.name !== undefined) dataToUpdate.name = updates.name;
+        if (updates.description !== undefined) dataToUpdate.description = updates.description;
+        if (updates.sector !== undefined) dataToUpdate.sector = updates.sector;
+        if (updates.subSector !== undefined) dataToUpdate.subSector = updates.subSector;
+        if (updates.industry !== undefined) dataToUpdate.industry = updates.industry;
+        if (updates.naicsCode !== undefined) dataToUpdate.naicsCode = updates.naicsCode;
 
-    let newViewUserIds = updates.viewUserIds !== undefined ? updates.viewUserIds : currentPlanData.viewUserIds || [];
-    let newEditUserIds = updates.editUserIds !== undefined ? updates.editUserIds : currentPlanData.editUserIds || [];
+        const finalVisibility = updates.visibility || currentPlanData.visibility || 'private';
+        const finalEditability = updates.editability || currentPlanData.editability || 'owner_only';
+        
+        dataToUpdate.visibility = finalVisibility;
+        dataToUpdate.editability = finalEditability;
 
-    // Adjust viewUserIds based on visibility
-    if (finalVisibility === 'public') {
-        newViewUserIds = []; // No specific list needed for public
-    } else { // private or unlisted
-        newViewUserIds = Array.from(new Set([currentUserId, ...newViewUserIds])); // Owner always a viewer
+        let newViewUserIds = updates.viewUserIds !== undefined ? updates.viewUserIds : currentPlanData.viewUserIds || [];
+        let newEditUserIds = updates.editUserIds !== undefined ? updates.editUserIds : currentPlanData.editUserIds || [];
+
+        if (finalVisibility === 'public') {
+            newViewUserIds = [];
+        } else {
+            newViewUserIds = Array.from(new Set([currentUserId, ...newViewUserIds]));
+        }
+
+        if (finalEditability === 'owner_only') {
+            newEditUserIds = [currentUserId];
+        } else if (finalEditability === 'collaborators') {
+            newEditUserIds = Array.from(new Set([currentUserId, ...newEditUserIds]));
+        } else if (finalEditability === 'everyone') {
+            newEditUserIds = [];
+        }
+        
+        if (finalVisibility !== 'public') {
+            newViewUserIds = Array.from(new Set([...newViewUserIds, ...newEditUserIds]));
+        }
+
+        dataToUpdate.viewUserIds = newViewUserIds;
+        dataToUpdate.editUserIds = newEditUserIds;
     }
 
-    // Adjust editUserIds based on editability
-    if (finalEditability === 'owner_only') {
-        newEditUserIds = [currentUserId]; // Only owner
-    } else if (finalEditability === 'collaborators') {
-        newEditUserIds = Array.from(new Set([currentUserId, ...newEditUserIds])); // Owner + specified collaborators
-    } else if (finalEditability === 'everyone') {
-        newEditUserIds = []; // No specific list, implies all authenticated users with view access
-    }
-    
-    // Ensure editors are always viewers (if not public visibility)
-    if (finalVisibility !== 'public') {
-        newViewUserIds = Array.from(new Set([...newViewUserIds, ...newEditUserIds]));
-    }
-
-    dataToUpdate.viewUserIds = newViewUserIds;
-    dataToUpdate.editUserIds = newEditUserIds;
-
-
-    // If roadmap is part of updates (from canvas save), increment version and save roadmap
+    // Handle roadmap update (both owner and collaborator can, but with different logic for versioning)
     if (updates.roadmap) {
         const currentVersionNumber = currentPlanData.version || 1;
-        const versionsCollectionRef = collection(db, PLANS_COLLECTION, planId, 'versions');
-        const newVersionDocRef = doc(versionsCollectionRef); // Auto-generate ID
-        const versionData: PlanVersionData = {
-          planId: planId,
-          roadmap: (currentPlanData.roadmap || []).map(step => sanitizeRoadmapStep(step)),
-          editorUid: currentUserId,
-          timestamp: serverTimestamp(),
-          versionNumber: currentVersionNumber,
-        };
-        // Add to batch later if we use batch for main update
-        await setDoc(newVersionDocRef, versionData); // For now, separate write
+        
+        // Versioning logic: only the owner's edits create a new version snapshot and increment the version number.
+        if (isOwner) {
+            const versionsCollectionRef = collection(db, PLANS_COLLECTION, planId, 'versions');
+            const newVersionDocRef = doc(versionsCollectionRef);
+            const versionData: PlanVersionData = {
+              planId: planId,
+              roadmap: (currentPlanData.roadmap || []).map(step => sanitizeRoadmapStep(step)), // Save the *current* state as a version
+              editorUid: currentUserId,
+              timestamp: serverTimestamp(),
+              versionNumber: currentVersionNumber,
+            };
+            await setDoc(newVersionDocRef, versionData);
+            dataToUpdate.version = increment(1); // Increment version number for the main plan
+        }
+        
+        // Both owner and collaborator get the roadmap updated
         dataToUpdate.roadmap = updates.roadmap.map(step => sanitizeRoadmapStep(step));
-        dataToUpdate.version = increment(1);
     }
 
-    // Firestore security rules need to allow updates to name, description, sector, subSector, industry, naicsCode,
-    // visibility, editability, viewUserIds, editUserIds, updatedAt, and potentially roadmap and version.
     await updateDoc(planDocRef, dataToUpdate);
-    console.log(`[planService] Plan details/settings updated for plan ${planId} by user ${currentUserId}`);
+    console.log(`[planService] Plan details updated for plan ${planId} by user ${currentUserId}`);
   } catch (error: any) {
     console.error(`[planService] Error updating plan settings for plan ${planId}:`, error);
     throw new Error(error.message || "Could not update plan settings.");
@@ -382,4 +381,3 @@ export const restorePlanToVersion = async (planId: string, versionIdToRestore: s
     throw new Error(error.message || "Could not restore plan.");
   }
 };
-
