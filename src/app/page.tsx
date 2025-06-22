@@ -20,7 +20,7 @@ import { getPostsFromFirestore, deletePostFromFirestore, addPostToFirestore } fr
 import type { Post, NewPostData, SectorWithSubSectors, SubSector, Industry } from '@/types/post';
 import { availableTags, detailedSectorsData } from '@/components/layout/MainLayout';
 import { useAuth } from '@/contexts/AuthContext';
-import { useIsMobile } from "@/hooks/use-mobile";
+import { useIsMobile } from "@/hooks/use-is-mobile";
 import { cn } from "@/lib/utils";
 import dynamic from 'next/dynamic';
 import { PostList } from '@/components/board-page/PostList';
@@ -60,7 +60,6 @@ const BoardPageContent = () => {
   const [showCreatePostFormInline, setShowCreatePostFormInline] = useState(false);
 
   const [selectedPostType, setSelectedPostType] = useState<PostTypeFilter>("all");
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
   const [selectedSectorFilter, setSelectedSectorFilter] = useState<string | undefined>(undefined);
   const [selectedSubSectorFilter, setSelectedSubSectorFilter] = useState<string | undefined>(undefined);
   const [selectedIndustryFilter, setSelectedIndustryFilter] = useState<string | undefined>(undefined);
@@ -98,22 +97,12 @@ const BoardPageContent = () => {
     }
   }, [selectedSubSectorFilter, availableSubSectors]);
 
-
-  const handleTagToggle = useCallback((tag: string) => {
-    setSelectedTags(prevTags =>
-      prevTags.includes(tag)
-        ? prevTags.filter(t => t !== tag)
-        : [...prevTags, tag]
-    );
-  }, []);
-
   const handlePostTypeToggle = useCallback((type: 'help_request' | 'post') => {
     setSelectedPostType(prevType => (prevType === type ? 'all' : type));
   }, []);
 
   const clearAllFilters = useCallback(() => {
     setSelectedPostType("all");
-    setSelectedTags([]);
     setSelectedSectorFilter(undefined);
     setSelectedSubSectorFilter(undefined);
     setSelectedIndustryFilter(undefined);
@@ -123,12 +112,11 @@ const BoardPageContent = () => {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (selectedPostType !== "all") count++;
-    if (selectedTags.length > 0) count++;
     if (selectedSectorFilter) count++;
     if (selectedSubSectorFilter) count++;
     if (selectedIndustryFilter) count++;
     return count;
-  }, [selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter]);
+  }, [selectedPostType, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter]);
 
   const filteredPosts = useMemo(() => {
     if (!Array.isArray(posts)) return [];
@@ -136,12 +124,6 @@ const BoardPageContent = () => {
 
     if (selectedPostType !== "all") {
       filtered = filtered.filter(post => post.requestType === selectedPostType);
-    }
-
-    if (selectedTags.length > 0) {
-      filtered = filtered.filter(post =>
-        Array.isArray(post.tags) && selectedTags.every(tag => post.tags.includes(tag))
-      );
     }
 
     if (selectedIndustryFilter) {
@@ -177,7 +159,7 @@ const BoardPageContent = () => {
       const timeB = b.createdAt instanceof Date ? b.createdAt.getTime() : (typeof b.createdAt === 'number' ? b.createdAt : (b.createdAt as any)?.toMillis?.() || 0);
       return timeB - timeA;
     });
-  }, [posts, selectedPostType, selectedTags, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, searchTerm, availableSubSectors, detailedSectorsData]);
+  }, [posts, selectedPostType, selectedSectorFilter, selectedSubSectorFilter, selectedIndustryFilter, searchTerm, availableSubSectors, detailedSectorsData]);
 
   const FilterContent = useCallback(() => (
     <div className="space-y-4 p-4 border-b">
@@ -200,25 +182,6 @@ const BoardPageContent = () => {
           >
             <Briefcase className="mr-1.5 h-3.5 w-3.5" /> Opportunities
           </Button>
-        </div>
-      </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs font-medium text-muted-foreground">Tags</Label>
-        <div className="p-1">
-          <div className="flex flex-wrap gap-2">
-            {availableTags.map((tag) => (
-              <Button
-                key={tag}
-                type="button"
-                variant={selectedTags.includes(tag) ? 'secondary' : 'outline'}
-                size="xs"
-                className="h-7 rounded-sm px-3 text-xs font-normal"
-                onClick={() => handleTagToggle(tag)}
-              >
-                {tag}
-              </Button>
-            ))}
-          </div>
         </div>
       </div>
 
@@ -272,7 +235,7 @@ const BoardPageContent = () => {
         </Button>
       )}
     </div>
-  ), [selectedPostType, handlePostTypeToggle, selectedTags, handleTagToggle, selectedSectorFilter, availableSubSectors, selectedSubSectorFilter, availableIndustries, selectedIndustryFilter, activeFilterCount, clearAllFilters]);
+  ), [selectedPostType, handlePostTypeToggle, selectedSectorFilter, availableSubSectors, selectedSubSectorFilter, availableIndustries, selectedIndustryFilter, activeFilterCount, clearAllFilters]);
   
   const addPostMutation = useMutation({
     mutationFn: addPostToFirestore,
@@ -409,11 +372,8 @@ const BoardPageContent = () => {
 
   const handleOpenCreatePostForm = useCallback(() => {
     if (user) {
-      // Navigate to the base path to clear the 'postId' search param from the URL.
-      // The main useEffect hook will then handle closing the detail view.
       router.push('/', { scroll: false });
       
-      // Set state to show the create form.
       setShowCreatePostFormInline(true);
     } else {
       toast({ variant: "default", title: "Login Required", description: "Please log in to create a post." });

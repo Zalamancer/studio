@@ -17,7 +17,6 @@ import type { ClientCollection } from '@/types/collection';
 import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { searchTags } from '@/services/tagService';
 import type { ClientTag } from '@/types/tag';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePage } from '@/contexts/PageContext';
@@ -33,7 +32,6 @@ const NewsPage = () => {
   const router = useRouter();
 
   const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
-  const [selectedTags, setSelectedTags] = useState<string[]>([]);
 
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticlesAll'],
@@ -53,14 +51,6 @@ const NewsPage = () => {
     enabled: !!user,
     staleTime: 1000 * 60 * 2,
   });
-
-  // Simplified query: Fetch top tags, no more search term.
-  const { data: fetchedTags, isLoading: isLoadingTagsForFilter } = useQuery<ClientTag[]>({
-    queryKey: ['searchTagsForFilter', ''], // Static key to fetch popular tags
-    queryFn: () => searchTags('', 20),
-    staleTime: 1000 * 60 * 1,
-  });
-  const availableTagsForFilter = fetchedTags || EMPTY_TAG_ARRAY; // Use stable empty array
 
   const savedItemIds = useMemo(() => {
     if (!userCollections || userCollections.length === 0) return new Set<string>();
@@ -92,13 +82,7 @@ const NewsPage = () => {
 
   const filteredArticles = useMemo(() => {
     let articlesToDisplay = activeArticleView === 'my_articles' && user ? userArticles : allPublishedArticles;
-    if (selectedTags.length > 0) {
-      articlesToDisplay = articlesToDisplay.filter(
-        article => article.tags && selectedTags.every(filterTag => 
-          article.tags!.map(t => t.toLowerCase()).includes(filterTag.toLowerCase())
-        )
-      );
-    }
+    
     if (searchTerm.trim() !== '') {
       const lowerSearchTerm = searchTerm.toLowerCase();
       articlesToDisplay = articlesToDisplay.filter(
@@ -112,7 +96,7 @@ const NewsPage = () => {
         return articlesToDisplay.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     }
     return articlesToDisplay.sort((a,b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0));
-  }, [allPublishedArticles, userArticles, activeArticleView, user, selectedTags, searchTerm, getCleanTextExcerpt]);
+  }, [allPublishedArticles, userArticles, activeArticleView, user, searchTerm, getCleanTextExcerpt]);
 
   const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles);
 
@@ -122,12 +106,7 @@ const NewsPage = () => {
     }
   }, [user, queryClient]);
 
-  const handleTagToggle = useCallback((tag: string) => {
-    setSelectedTags(prev => prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]);
-  }, []);
-
   const clearAllFilters = useCallback(() => {
-    setSelectedTags([]);
     setActiveArticleView('all');
     setSearchTerm('');
   }, [setSearchTerm]);
@@ -135,9 +114,8 @@ const NewsPage = () => {
   const activeFilterCount = useMemo(() => {
     let count = 0;
     if (activeArticleView !== 'all') count++;
-    if (selectedTags.length > 0) count++;
     return count;
-  }, [selectedTags, activeArticleView]);
+  }, [activeArticleView]);
 
   const FilterContent = useCallback(() => (
     <div className="space-y-4 p-4 border-b">
@@ -154,36 +132,13 @@ const NewsPage = () => {
           )}
         </div>
       </div>
-      <div className="space-y-1.5">
-        <Label className="text-xs font-medium text-muted-foreground">Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}</Label>
-        {/* Removed search input */}
-        <div className="h-48 overflow-y-auto border rounded-md">
-          <div className="p-3 space-y-1.5">
-            {isLoadingTagsForFilter ? (
-              <div className="flex justify-center p-2"><Loader2 className="h-4 w-4 animate-spin"/></div>
-            ) : availableTagsForFilter.length > 0 ? (
-              availableTagsForFilter.map((tag) => (
-                <div key={tag.id} className="flex items-center space-x-2">
-                  <Checkbox id={`tag-filter-${tag.id}`} checked={selectedTags.includes(tag.name)} onCheckedChange={() => handleTagToggle(tag.name)}/>
-                  <Label htmlFor={`tag-filter-${tag.id}`} className="text-xs font-normal flex items-center justify-between w-full"><span>{tag.name}</span><span className="text-muted-foreground text-[10px]">({tag.usageCount})</span></Label>
-                </div>
-              ))
-            ) : (
-              <p className="text-xs text-muted-foreground text-center">No tags found.</p>
-            )}
-          </div>
-        </div>
-        {selectedTags.length > 0 && (
-          <div className="pt-2 border-t"><Button variant="ghost" size="xs" onClick={() => setSelectedTags([])} className="w-full text-primary">Clear Tag Filters</Button></div>
-        )}
-      </div>
       {activeFilterCount > 0 && (
         <Button variant="ghost" size="sm" onClick={clearAllFilters} className="w-full h-9 text-xs text-primary hover:underline">
           <FilterX className="h-3.5 w-3.5 mr-1.5" /> Clear All Filters ({activeFilterCount})
         </Button>
       )}
     </div>
-  ), [user, activeArticleView, selectedTags, isLoadingTagsForFilter, availableTagsForFilter, activeFilterCount, clearAllFilters, handleTagToggle]);
+  ), [user, activeArticleView, activeFilterCount, clearAllFilters]);
 
   useEffect(() => {
     setFilterContent(<FilterContent />);
@@ -206,8 +161,8 @@ const NewsPage = () => {
            <div className="text-destructive flex flex-col items-center gap-2 text-sm p-6 bg-destructive/5 rounded-md justify-center border border-destructive/20 mb-6"><AlertTriangle className="h-8 w-8 flex-shrink-0" /><p className="font-semibold">Error Loading Articles</p><p>{allArticlesError?.message || userArticlesError?.message || "An unexpected error occurred."}</p></div>
         )}
         {!isLoading && !allArticlesError && filteredArticles.length === 0 && (
-          <div className="text-center py-10"><Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" /><p className="text-lg font-medium text-muted-foreground">{searchTerm ? `No articles found for "${searchTerm}".` : selectedTags.length > 0 ? "No articles found with the selected tags." : activeArticleView === 'my_articles' ? "You haven't created any articles yet." : "No articles to show right now."}</p>
-            {activeArticleView === 'my_articles' && !searchTerm && selectedTags.length === 0 && user && (
+          <div className="text-center py-10"><Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" /><p className="text-lg font-medium text-muted-foreground">{searchTerm ? `No articles found for "${searchTerm}".` : activeArticleView === 'my_articles' ? "You haven't created any articles yet." : "No articles to show right now."}</p>
+            {activeArticleView === 'my_articles' && !searchTerm && user && (
                <Button asChild size="sm" className="mt-4"><Link href="/news/create"><PlusCircle className="mr-2 h-4 w-4"/>Create Your First Article</Link></Button>
             )}
           </div>
