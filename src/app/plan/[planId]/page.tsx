@@ -29,7 +29,6 @@ import { usePlanLogic, sanitizeRoadmapStep } from './usePlanLogic';
 import type { RoadmapStep, ClientPlanVersion, ChildDataItem, PeerConnection } from '@/types/plan';
 import { PlanHeader } from './PlanHeader';
 import { useToast } from '@/hooks/use-toast';
-import { useIsMobile } from '@/hooks/use-mobile'; // Import the hook
 
 const NODE_BASE_WIDTH = 220;
 const NODE_HEADER_HEIGHT = 40;
@@ -66,25 +65,21 @@ type NodeDetailFormData = z.infer<typeof nodeDetailFormSchema>;
 
 
 export default function PlanDetailPage() {
-  const isMobile = useIsMobile();
   const [scale, setScale] = useState(1.0);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!isMobile) {
-      setScale(1.0);
-      return;
-    }
-
     const calculateScale = () => {
       if (canvasWrapperRef.current) {
         const containerWidth = canvasWrapperRef.current.clientWidth;
+        // The canvas has a fixed design width of 1920px.
+        // We scale it down to fit the container width.
         const newScale = containerWidth > 0 ? containerWidth / 1920 : 0;
         setScale(newScale);
       }
     };
     
-    // Recalculate on mount and resize
+    // Recalculate on mount and on every resize
     const timeoutId = setTimeout(calculateScale, 50); // Small delay for layout to stabilize
     window.addEventListener('resize', calculateScale);
 
@@ -92,7 +87,7 @@ export default function PlanDetailPage() {
       clearTimeout(timeoutId);
       window.removeEventListener('resize', calculateScale);
     };
-  }, [isMobile]);
+  }, []); // Empty dependency array, so it sets up once and cleans up on unmount.
 
   const {
     user, authLoading, planId, isValidPlanId,
@@ -130,7 +125,7 @@ export default function PlanDetailPage() {
     handleInitiateAddNode,
     setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
-  } = usePlanLogic({ scale: isMobile ? scale : 1 });
+  } = usePlanLogic({ scale: scale }); // Always pass the dynamic scale
 
   const router = useRouter();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -288,7 +283,7 @@ export default function PlanDetailPage() {
         if (!canEditPlan) return;
         const canvasRect = event.currentTarget.getBoundingClientRect();
         
-        const scaleFactor = isMobile ? scale : 1.0;
+        const scaleFactor = scale; // Always use the dynamic scale
         if (scaleFactor === 0) return;
 
         const x = (event.clientX - canvasRect.left) / scaleFactor + event.currentTarget.scrollLeft;
@@ -361,44 +356,28 @@ export default function PlanDetailPage() {
         onOpenInfo={() => setIsPlanInfoDialogOpen(true)}
         diffTargetActive={!!diffTarget}
       />
-
-      {isMobile ? (
+      
+      <div
+        ref={canvasWrapperRef}
+        className="container mx-auto px-4 max-w-screen-2xl flex-1 relative overflow-hidden"
+      >
         <div
-          ref={canvasWrapperRef}
-          className="flex-1 relative overflow-hidden"
-          style={{ height: `${scaledCanvasHeight}px` }}
+          ref={canvasRef}
+          onClick={handleCanvasClick}
+          className="bg-muted grid-background"
+          style={{
+            width: '1920px',
+            height: `${canvasMinHeight}px`,
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+          }}
         >
-          <div
-            ref={canvasRef}
-            onClick={handleCanvasClick}
-            className="bg-muted grid-background"
-            style={{
-              width: '1920px',
-              height: `${canvasMinHeight}px`,
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              transform: `scale(${scale})`,
-              transformOrigin: 'top left',
-            }}
-          >
-            <CanvasContent />
-          </div>
+          <CanvasContent />
         </div>
-      ) : (
-        <div ref={canvasWrapperRef} className="container mx-auto px-4 max-w-screen-2xl flex-1 relative">
-          <ScrollArea className="w-full h-full">
-            <div
-              ref={canvasRef}
-              onClick={handleCanvasClick}
-              style={{ width: '1920px', minHeight: `${canvasMinHeight}px`, position: 'relative', overflow: 'visible' }}
-              className="bg-muted grid-background"
-            >
-              <CanvasContent />
-            </div>
-          </ScrollArea>
-        </div>
-      )}
+      </div>
 
       {planDataForDialog && (
         <PlanInfoDialog
@@ -417,6 +396,8 @@ export default function PlanDetailPage() {
           onRemoveUserFromViewers={handleRemoveUserFromViewers}
           onAddUserToEditors={handleAddUserToEditors}
           onRemoveUserFromEditors={handleRemoveUserFromEditors}
+          setViewPermissionsSearch={setViewPermissionsSearch}
+          setEditPermissionsSearch={setEditPermissionsSearch}
         />
       )}
        <AddRoadmapStepDialog
