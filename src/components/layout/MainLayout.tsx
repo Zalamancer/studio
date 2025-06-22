@@ -434,7 +434,7 @@ export default function MainLayout({
     <div className={rootLayoutClasses}>
       {!hideAppChrome && (
         <header className="sticky top-0 z-50 w-full border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-4 relative">
+          <div className="container mx-auto flex h-14 max-w-screen-2xl items-center px-4">
             {/* Mobile Search Overlay */}
             {isMobile && isSearchOverlayVisible && (
               <div className="absolute inset-0 bg-background z-10 flex items-center gap-2 px-2 sm:px-4">
@@ -460,9 +460,9 @@ export default function MainLayout({
               </div>
             )}
 
-            {/* Left-aligned items */}
+            {/* Left-aligned items (Desktop) */}
             <div className={cn(
-              "flex items-center",
+              "flex items-center flex-shrink-0",
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
               {/* Mobile Left Group: Search and Create Icons */}
@@ -507,6 +507,21 @@ export default function MainLayout({
               </div>
             </div>
 
+            {/* Center Search Area (Desktop) */}
+            <div className="hidden lg:flex flex-grow items-center justify-center px-6">
+              {showContextualHeaderIcons && (
+                <div className="w-full max-w-md relative">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
+                  <Input 
+                    placeholder="Search..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-9 pl-8 w-full"
+                  />
+                </div>
+              )}
+            </div>
+
             {/* Center-aligned Logo for Mobile */}
             <div className={cn(
               "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 lg:hidden",
@@ -519,22 +534,14 @@ export default function MainLayout({
 
             {/* Right-aligned items */}
             <div className={cn(
-              "flex items-center space-x-2 lg:space-x-3",
+              "flex items-center space-x-2 lg:space-x-3 flex-shrink-0 ml-auto",
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
-              {/* Desktop Contextual Controls */}
+              {/* Desktop Contextual Controls (Filters, Create) */}
               <div className="hidden lg:flex items-center gap-2">
                 {showContextualHeaderIcons && (
                   <>
-                    <div className="relative">
-                      <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-                      <Input 
-                        placeholder="Search..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="h-9 pl-8 w-40 lg:w-64"
-                      />
-                    </div>
+                    {/* SEARCH MOVED TO CENTER */}
                     {filterContent && (
                       <Popover>
                         <PopoverTrigger asChild>
@@ -542,7 +549,7 @@ export default function MainLayout({
                             <ListFilter className="mr-2 h-4 w-4" /> Filters
                           </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-80 p-0" align="start">
+                        <PopoverContent className="w-80 p-0" align="end">
                           {filterContent}
                         </PopoverContent>
                       </Popover>
@@ -551,11 +558,11 @@ export default function MainLayout({
                       <PlusCircle className="mr-2 h-4 w-4" />
                       {createButtonText}
                     </Button>
-                    <div className="w-px h-6 bg-border mx-2"></div>
                   </>
                 )}
               </div>
               
+              {/* Separator and Auth Stuff */}
               {authLoading ? (
                 <div className="flex items-center space-x-2">
                   <div className="h-8 w-20 rounded-md bg-muted animate-pulse"></div>
@@ -563,6 +570,7 @@ export default function MainLayout({
                 </div>
               ) : user ? (
                 <>
+                  {showContextualHeaderIcons && <div className="hidden lg:block w-px h-6 bg-border mx-2"></div>}
                   {user.uid && <DynamicNotificationDropdown userId={user.uid} />}
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
