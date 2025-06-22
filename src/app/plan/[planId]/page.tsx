@@ -71,7 +71,7 @@ export default function PlanDetailPage() {
   const calculateAndSetFitScreenScale = useCallback(() => {
     if (canvasWrapperRef.current) {
       const containerWidth = canvasWrapperRef.current.clientWidth;
-      const newScale = containerWidth > 0 ? containerWidth / 1920 : 0;
+      const newScale = containerWidth > 0 ? containerWidth / 1920 : 0.1; // Added fallback
       setScale(newScale);
     }
   }, []);
@@ -85,7 +85,15 @@ export default function PlanDetailPage() {
   }, [calculateAndSetFitScreenScale]);
 
   const zoomIn = useCallback(() => setScale(s => Math.min(s * 1.2, 1.0)), []);
-  const zoomOut = useCallback(() => setScale(s => Math.max(s / 1.2, 0.1)), []);
+  
+  const zoomOut = useCallback(() => {
+    if (canvasWrapperRef.current) {
+      const containerWidth = canvasWrapperRef.current.clientWidth;
+      const minScaleValue = containerWidth > 0 ? containerWidth / 1920 : 0.1; // Use 0.1 as a failsafe
+      setScale(s => Math.max(s / 1.2, minScaleValue));
+    }
+  }, []); // canvasWrapperRef is stable
+  
   const resetZoom = useCallback(() => calculateAndSetFitScreenScale(), [calculateAndSetFitScreenScale]);
 
   const {
