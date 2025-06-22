@@ -1,3 +1,4 @@
+
 // src/components/plan/PlanPermissionsDialog.tsx
 "use client";
 
@@ -8,6 +9,8 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription as DialogPrimitiveDescription,
+  DialogFooter,
+  DialogClose,
 } from '@/components/ui/dialog';
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from '@/components/ui/button';
@@ -35,7 +38,7 @@ import {
   X,
   Save,
   Globe,
-  User, // Added missing User icon import
+  User,
 } from 'lucide-react';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import type { PlanVisibility, PlanEditability } from '@/types/plan';
@@ -55,7 +58,6 @@ interface PlanPermissionsDialogProps {
   initialEditUserIds: string[];
   ownerId: string;
   onSave: (settings: {
-    // name is removed, as it's not part of this dialog's responsibility anymore
     visibility: PlanVisibility;
     editability: PlanEditability;
     viewUserIds: string[];
@@ -140,7 +142,6 @@ const SkeletonListItem: React.FC = () => (
   }) => {
     const { toast } = useToast();
   
-    // Removed name and description state
     const [visibility, setVisibility] = useState<PlanVisibility>(initialVisibility);
     const [editability, setEditability] = useState<PlanEditability>(initialEditability);
     const [currentViewUserIds, setCurrentViewUserIds] = useState<string[]>([]);
@@ -155,7 +156,6 @@ const SkeletonListItem: React.FC = () => (
   
     useEffect(() => {
       if (isOpen) {
-        // Reset only permission-related fields
         setVisibility(initialVisibility);
         setEditability(initialEditability);
         setCurrentViewUserIds(initialViewUserIds.filter(uid => uid !== ownerId));
@@ -201,7 +201,6 @@ const SkeletonListItem: React.FC = () => (
     };
   
     const handleSave = () => {
-      // Pass only permission-related fields to the onSave function
       onSave({ visibility, editability, viewUserIds: currentViewUserIds, editUserIds: currentEditUserIds });
     };
   
