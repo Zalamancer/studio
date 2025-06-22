@@ -466,7 +466,7 @@ export default function MainLayout({
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
               {/* Mobile Left Group: Search and Create Icons */}
-              <div className="flex items-center gap-1 md:hidden">
+              <div className="flex items-center gap-1 lg:hidden">
                 {user && showContextualHeaderIcons && (
                   <>
                     <Button variant="ghost" size="icon" onClick={() => setSearchOverlayVisible(true)} className="h-8 w-8">
@@ -482,7 +482,7 @@ export default function MainLayout({
               </div>
 
               {/* Desktop Left Group: Logo and Nav Links */}
-              <div className="hidden md:flex items-center">
+              <div className="hidden lg:flex items-center">
                 <Link href="/" className="mr-6 flex items-center space-x-2" aria-label="Go to homepage">
                   <Handshake className="h-6 w-6 text-primary" />
                   <span className="font-bold sm:inline-block text-primary hover:text-primary/90 text-lg">
@@ -509,7 +509,7 @@ export default function MainLayout({
 
             {/* Center-aligned Logo for Mobile */}
             <div className={cn(
-              "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 md:hidden",
+              "absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 lg:hidden",
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
               <Link href="/" className="flex items-center" aria-label="Go to homepage">
@@ -519,11 +519,11 @@ export default function MainLayout({
 
             {/* Right-aligned items */}
             <div className={cn(
-              "flex items-center space-x-2 md:space-x-3",
+              "flex items-center space-x-2 lg:space-x-3",
               isMobile && isSearchOverlayVisible && "opacity-0 pointer-events-none"
             )}>
               {/* Desktop Contextual Controls */}
-              <div className="hidden md:flex items-center gap-2">
+              <div className="hidden lg:flex items-center gap-2">
                 {showContextualHeaderIcons && (
                   <>
                     <div className="relative">
@@ -603,11 +603,11 @@ export default function MainLayout({
           </div>
         </header>
       )}
-      <main className="flex-1 flex flex-col relative bg-background pb-14 md:pb-0">
+      <main className="flex-1 flex flex-col relative bg-background pb-14 lg:pb-0">
         {children}
       </main>
-      {!hideAppChrome && isMobile && (
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
+      {!hideAppChrome && (
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-50 bg-background border-t border-border h-14">
           <div className="container mx-auto flex justify-around items-center h-full px-1">
             {navItems.map((item) => (
               <Link
