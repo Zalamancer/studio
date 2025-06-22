@@ -106,7 +106,8 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
             </Button>
           )}
           <Button variant="outline" size="sm" onClick={onOpenHistory} className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
-            <History className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> <span className="hidden sm:inline">History</span>
+            <History className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">History</span>
           </Button>
           <Button
             variant="outline"
@@ -114,7 +115,8 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
             onClick={onOpenInfo}
             className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm"
           >
-            <Info className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Info
+            <Info className="h-3.5 w-3.5 sm:h-4 sm:w-4 sm:mr-2" />
+            <span className="hidden sm:inline">Info</span>
           </Button>
         </div>
       </div>
