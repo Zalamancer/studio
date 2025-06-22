@@ -1,3 +1,4 @@
+
 // src/app/plan/[planId]/usePlanLogic.ts
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -737,7 +738,11 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
                   const canvasRect = canvasWrapperRefCurrent.getBoundingClientRect();
                   const newX = (clientX - canvasRect.left) / scale + canvasWrapperRefCurrent.scrollLeft / scale - offsetX / scale;
                   const newY = (clientY - canvasRect.top) / scale + canvasWrapperRefCurrent.scrollTop / scale - offsetY / scale;
-                  setEditableRoadmap(prev => prev.map(step => step.id === nodeId ? { ...step, x: Math.max(MIN_CANVAS_PADDING, newX), y: Math.max(MIN_CANVAS_PADDING, newY) } : step ));
+                  setEditableRoadmap(prev => prev.map(step => step.id === nodeId ? { 
+                      ...step, 
+                      x: Math.max(MIN_CANVAS_PADDING, Math.min(newX, CANVAS_WIDTH - NODE_BASE_WIDTH - MIN_CANVAS_PADDING)), 
+                      y: Math.max(MIN_CANVAS_PADDING, newY) 
+                  } : step ));
               }
               forceRender();
           }
