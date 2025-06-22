@@ -24,6 +24,7 @@ const NODE_BASE_MIN_HEIGHT = 80;
 const CHILD_ITEM_HEIGHT = 28;
 const NODE_HEADER_HEIGHT = 40;
 const PLANS_COLLECTION = 'plans';
+const CANVAS_WIDTH = 1600;
 
 export const sanitizeRoadmapStep = (step: Partial<RoadmapStep>, defaultParentId?: string): RoadmapStep => {
   const sanitizedChildrenData = (Array.isArray(step.childrenData) ? step.childrenData : []).map(ci => ({
@@ -62,7 +63,7 @@ const calculateNodeHeight = (step: RoadmapStep, allSteps: RoadmapStep[]): number
     return Math.max(NODE_BASE_MIN_HEIGHT, height);
 };
 
-export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
+export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: number, setScale: React.Dispatch<React.SetStateAction<number>>, canvasWrapperRef: React.RefObject<HTMLDivElement> }) => {
   const params = useParams();
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -104,6 +105,9 @@ export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
   const [diffDetailsVersionId, setDiffDetailsVersionId] = useState<string | null>(null);
   
   const panStartRef = useRef<{ startX: number; startY: number; scrollLeft: number; scrollTop: number } | null>(null);
+
+  const pinchDistRef = useRef<number | null>(null);
+  const startScaleRef = useRef<number>(1.0);
 
   const [planData, setPlanData] = useState<ClientPlan | null>(null);
   const [isLoadingPlan, setIsLoadingPlan] = useState(true);
@@ -325,10 +329,9 @@ export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
   }, []);
   
   const handleCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-    if (event.button !== 0) return; // Only main mouse button
+    if (event.button !== 0) return;
     if (diffTarget) return;
 
-    // Check if the click is on a node or interactive element, if so, ignore.
     if ((event.target as HTMLElement).closest('[data-node-id]')) {
       return;
     }
@@ -347,9 +350,47 @@ export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
     clickStartInfoRef.current = { clientX, clientY, timestamp: Date.now(), targetElement: event.currentTarget };
     isDraggingRef.current = false;
     setIsPointerDown(true);
-    // Explicitly set the cursor to grabbing
     canvasWrapper.style.cursor = 'grabbing';
   }, [diffTarget, getPointerCoords]);
+
+  const getPinchDistance = (touches: React.TouchList): number => {
+    const [touch1, touch2] = Array.from(touches);
+    return Math.hypot(touch2.clientX - touch1.clientX, touch2.clientY - touch1.clientY);
+  };
+
+  const handleTouchStart = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (diffTarget) return;
+    if (event.touches.length === 2) {
+      event.preventDefault();
+      nodeDragInfoRef.current = null;
+      panStartRef.current = null;
+      
+      const dist = getPinchDistance(event.touches);
+      pinchDistRef.current = dist;
+      startScaleRef.current = scale;
+    }
+  }, [diffTarget, scale]);
+
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>, canvasWrapperRefCurrent: HTMLDivElement | null) => {
+    if (diffTarget) return;
+    if (event.touches.length === 2 && pinchDistRef.current !== null) {
+      event.preventDefault();
+      const newDist = getPinchDistance(event.touches);
+      const newScaleValue = startScaleRef.current * (newDist / pinchDistRef.current);
+      
+      let containerWidth = canvasWrapperRefCurrent?.clientWidth || CANVAS_WIDTH;
+      const minScaleValue = containerWidth > 0 ? (containerWidth / CANVAS_WIDTH) * 0.95 : 0.1;
+
+      setScale(Math.max(minScaleValue, Math.min(newScaleValue, 1.0)));
+    }
+  }, [diffTarget, setScale]);
+
+  const handleTouchEnd = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+      if (diffTarget) return;
+      if (pinchDistRef.current !== null) {
+          pinchDistRef.current = null;
+      }
+  }, [diffTarget]);
 
   const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
     if (diffTarget) return;
@@ -678,29 +719,21 @@ export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
   
       const { clientX, clientY } = getPointerCoords(event);
   
-      // Node Dragging Logic
       if (nodeDragInfoRef.current) {
           if (!isDraggingRef.current) {
               const dx = clientX - (clickStartInfoRef.current?.clientX || 0);
               const dy = clientY - (clickStartInfoRef.current?.clientY || 0);
-              if (dx * dx + dy * dy > 25) { // Drag threshold
+              if (dx * dx + dy * dy > 25) {
                   isDraggingRef.current = true;
               }
           }
   
           if (isDraggingRef.current) {
-              // Existing node drag logic
+              if (event.cancelable) event.preventDefault();
               const { nodeId, offsetX = 0, offsetY = 0, isDotDrag, dotType } = nodeDragInfoRef.current;
               if (isDotDrag) {
-                  // Connection line drawing logic
-                  if (event.cancelable) event.preventDefault();
-                  const canvasRect = canvasWrapperRefCurrent.firstElementChild!.getBoundingClientRect();
-                  const currentX = (clientX - canvasRect.left) / scale + canvasWrapperRefCurrent.scrollLeft / scale;
-                  const currentY = (clientY - canvasRect.top) / scale + canvasWrapperRefCurrent.scrollTop / scale;
-                  // ... rest of line drawing logic
+                  // Connection line drawing logic would go here
               } else {
-                  // Node position update logic
-                  if (event.cancelable) event.preventDefault();
                   const canvasRect = canvasWrapperRefCurrent.getBoundingClientRect();
                   const newX = (clientX - canvasRect.left) / scale + canvasWrapperRefCurrent.scrollLeft / scale - offsetX / scale;
                   const newY = (clientY - canvasRect.top) / scale + canvasWrapperRefCurrent.scrollTop / scale - offsetY / scale;
@@ -709,13 +742,12 @@ export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
               forceRender();
           }
       } 
-      // Canvas Panning Logic
       else if (panStartRef.current) {
           if (event.cancelable) event.preventDefault();
           if (!isDraggingRef.current) {
               const dx = clientX - panStartRef.current.startX;
               const dy = clientY - panStartRef.current.startY;
-              if (dx * dx + dy * dy > 25) { // Drag threshold
+              if (dx * dx + dy * dy > 25) {
                   isDraggingRef.current = true;
               }
           }
@@ -733,7 +765,6 @@ export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
       canvasWrapperRefCurrent.style.cursor = 'grab';
     }
 
-    // Click-to-create logic
     if (panStartRef.current && !isDraggingRef.current && clickStartInfoRef.current) {
         const finalCoords = getPointerCoords(event);
         if ((finalCoords.clientX - clickStartInfoRef.current.clientX)**2 + (finalCoords.clientY - clickStartInfoRef.current.clientY)**2 < 25 && (Date.now() - clickStartInfoRef.current.timestamp) < 300) {
@@ -764,7 +795,6 @@ export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
         saveCurrentRoadmap(finalRoadmap);
     }
     
-    // Reset all states
     panStartRef.current = null;
     nodeDragInfoRef.current = null;
     clickStartInfoRef.current = null;
@@ -830,5 +860,8 @@ export const usePlanLogic = ({ scale = 1 }: { scale?: number }) => {
     setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
     handleCanvasPointerDown,
+    handleTouchStart,
+    handleTouchMove,
+    handleTouchEnd,
   };
 };

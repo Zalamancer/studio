@@ -35,7 +35,7 @@ const NODE_HEADER_HEIGHT = 40;
 const CHILD_ITEM_HEIGHT = 28;
 const NODE_BASE_MIN_HEIGHT = 80;
 const FINAL_BUFFER_CARD_HEIGHT = 8;
-const CANVAS_WIDTH = 1600; // Decreased canvas width
+const CANVAS_WIDTH = 1600;
 
 const CONNECTION_LINE_THICKNESS_HIERARCHY = 1.5;
 const CONNECTION_LINE_THICKNESS_PEER = 1.5;
@@ -66,7 +66,7 @@ type NodeDetailFormData = z.infer<typeof nodeDetailFormSchema>;
 
 
 export default function PlanDetailPage() {
-  const [scale, setScale] = useState(1.0); // Default to 100% zoom
+  const [scale, setScale] = useState(1.0);
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
 
   const calculateAndSetFitScreenScale = useCallback(() => {
@@ -114,7 +114,10 @@ export default function PlanDetailPage() {
     setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
     handleCanvasPointerDown,
-  } = usePlanLogic({ scale: scale });
+    handleTouchStart, // New touch handler
+    handleTouchMove,  // New touch handler
+    handleTouchEnd,   // New touch handler
+  } = usePlanLogic({ scale, setScale, canvasWrapperRef });
 
   const router = useRouter();
   const canvasRef = useRef<HTMLDivElement>(null);
@@ -298,8 +301,6 @@ export default function PlanDetailPage() {
     return { ...version, previousVersion };
   });
 
-  const scaledCanvasHeight = canvasMinHeight * scale;
-
   const CanvasContent = () => (
     <>
       {diffTarget && (
@@ -352,6 +353,9 @@ export default function PlanDetailPage() {
         <div
           ref={canvasRef}
           onPointerDown={handleCanvasPointerDown}
+          onTouchStart={handleTouchStart}
+          onTouchMove={(e) => handleTouchMove(e, canvasWrapperRef.current)}
+          onTouchEnd={(e) => handleTouchEnd(e, canvasWrapperRef.current)}
           className="bg-muted grid-background"
           style={{
             width: `${CANVAS_WIDTH}px`,
