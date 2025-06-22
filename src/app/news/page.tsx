@@ -1,8 +1,8 @@
 // src/app/news/page.tsx
 "use client";
 
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { Newspaper, Edit2, Loader2, AlertTriangle, FilterX, Search, Tag, PlusCircle, ListFilter, Users } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { Newspaper, Edit2, Loader2, AlertTriangle, FilterX, Search, Tag, PlusCircle, ListFilter } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -23,30 +23,6 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { usePage } from '@/contexts/PageContext';
 import { useRouter } from 'next/navigation';
 
-// A new sub-component to encapsulate the debounced input logic, preventing the parent's useCallback from changing on every keystroke.
-const DebouncedTagSearchInput = ({ setDebouncedQuery }: { setDebouncedQuery: (query: string) => void }) => {
-  const [localQuery, setLocalQuery] = useState('');
-
-  useEffect(() => {
-    const handler = setTimeout(() => {
-      setDebouncedQuery(localQuery);
-    }, 300); // 300ms debounce delay
-    return () => {
-      clearTimeout(handler);
-    };
-  }, [localQuery, setDebouncedQuery]);
-
-  return (
-    <Input
-      type="search"
-      placeholder="Search tags..."
-      value={localQuery}
-      onChange={(e) => setLocalQuery(e.target.value)}
-      className="h-8 text-xs border-0 focus-visible:ring-0 shadow-none"
-    />
-  );
-};
-
 const NewsPage = () => {
   const { user, loading: authLoading } = useAuth();
   const queryClient = useQueryClient();
@@ -56,7 +32,6 @@ const NewsPage = () => {
 
   const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
   const [selectedTags, setSelectedTags] = useState<string[]>([]);
-  const [tagSearchInput, setTagSearchInput] = useState(''); // This state will now be the *debounced* one
 
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticlesAll'],
@@ -77,11 +52,13 @@ const NewsPage = () => {
     staleTime: 1000 * 60 * 2,
   });
 
+  // Simplified query: Fetch top tags, no more search term.
   const { data: availableTagsForFilter = [], isLoading: isLoadingTagsForFilter } = useQuery<ClientTag[]>({
-    queryKey: ['searchTagsForFilter', tagSearchInput], // This query uses the debounced state
-    queryFn: () => searchTags(tagSearchInput, 20),
+    queryKey: ['searchTagsForFilter', ''], // Static key to fetch popular tags
+    queryFn: () => searchTags('', 20),
     staleTime: 1000 * 60 * 1,
   });
+
 
   const savedItemIds = useMemo(() => {
     if (!userCollections || userCollections.length === 0) return new Set<string>();
@@ -149,7 +126,6 @@ const NewsPage = () => {
 
   const clearAllFilters = useCallback(() => {
     setSelectedTags([]);
-    setTagSearchInput(''); // This will also clear the debounced input component's state via prop re-render if needed, but it manages its own state now.
     setActiveArticleView('all');
     setSearchTerm('');
   }, [setSearchTerm]);
@@ -178,11 +154,8 @@ const NewsPage = () => {
       </div>
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">Filter by Tags {selectedTags.length > 0 && `(${selectedTags.length})`}</Label>
-        <div className="p-1 border-b">
-          {/* Use the new debounced input component here */}
-          <DebouncedTagSearchInput setDebouncedQuery={setTagSearchInput} />
-        </div>
-        <div className="h-48 overflow-y-auto">
+        {/* Removed search input */}
+        <div className="h-48 overflow-y-auto border rounded-md">
           <div className="p-3 space-y-1.5">
             {isLoadingTagsForFilter ? (
               <div className="flex justify-center p-2"><Loader2 className="h-4 w-4 animate-spin"/></div>
@@ -194,12 +167,12 @@ const NewsPage = () => {
                 </div>
               ))
             ) : (
-              <p className="text-xs text-muted-foreground text-center">{tagSearchInput ? `No tags matching "${tagSearchInput}".` : "No tags found."}</p>
+              <p className="text-xs text-muted-foreground text-center">No tags found.</p>
             )}
           </div>
         </div>
         {selectedTags.length > 0 && (
-          <div className="p-3 border-t"><Button variant="ghost" size="xs" onClick={() => setSelectedTags([])} className="w-full text-primary">Clear Tag Filters</Button></div>
+          <div className="pt-2 border-t"><Button variant="ghost" size="xs" onClick={() => setSelectedTags([])} className="w-full text-primary">Clear Tag Filters</Button></div>
         )}
       </div>
       {activeFilterCount > 0 && (
@@ -208,11 +181,9 @@ const NewsPage = () => {
         </Button>
       )}
     </div>
-  ), [user, activeArticleView, selectedTags, isLoadingTagsForFilter, availableTagsForFilter, activeFilterCount, clearAllFilters, handleTagToggle, tagSearchInput]);
+  ), [user, activeArticleView, selectedTags, isLoadingTagsForFilter, availableTagsForFilter, activeFilterCount, clearAllFilters, handleTagToggle]);
 
   useEffect(() => {
-    // The dependency on FilterContent is what caused the loop.
-    // By making FilterContent more stable (by moving the live input state out), this useEffect becomes much safer.
     setFilterContent(<FilterContent />);
     setHandleCreateClick(() => router.push('/news/create'));
   }, [setFilterContent, setHandleCreateClick, router, FilterContent]);
