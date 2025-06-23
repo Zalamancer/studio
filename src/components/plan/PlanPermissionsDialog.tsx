@@ -298,10 +298,21 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl p-0 flex flex-col max-h-[90vh]">
-        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
-          <DialogTitle>Manage Permissions</DialogTitle>
-          <DialogPrimitiveDescription>Control who can view and edit this plan.</DialogPrimitiveDescription>
+      <DialogContent 
+        className="w-screen h-screen max-w-full max-h-full sm:rounded-none top-0 left-0 translate-x-0 translate-y-0 p-0 flex flex-col" 
+        showCloseButton={false}
+      >
+        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0 flex items-center justify-between">
+          <div>
+            <DialogTitle>Manage Permissions</DialogTitle>
+            <DialogPrimitiveDescription>Control who can view and edit this plan.</DialogPrimitiveDescription>
+          </div>
+          <DialogClose asChild>
+            <Button variant="ghost" size="icon" className="h-8 w-8">
+              <X className="h-4 w-4" />
+              <span className="sr-only">Close</span>
+            </Button>
+          </DialogClose>
         </DialogHeader>
         <ScrollArea className="flex-1 min-h-0">
           <div className="p-6 space-y-6">
@@ -336,7 +347,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
           </div>
         </ScrollArea>
         <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
-          <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
+          <Button type="button" variant="outline" disabled={isSaving} onClick={() => onOpenChange(false)}>Cancel</Button>
           <Button type="button" onClick={handleSave} disabled={isSaving}>
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4"/> Save Permissions
           </Button>
