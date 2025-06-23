@@ -304,14 +304,18 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent 
-        className="w-[95vw] h-auto sm:max-w-5xl sm:max-h-[90vh] p-0 flex flex-col sm:rounded-lg"
+        className="w-full h-full p-0 flex flex-col sm:h-auto sm:w-auto sm:max-w-5xl sm:max-h-[90vh] sm:rounded-lg"
         showCloseButton={false}
       >
-        <DialogHeader className="p-4 border-b flex-shrink-0 flex items-center justify-between">
+        <DialogHeader className="p-4 border-b flex-shrink-0 flex items-center justify-between relative">
             <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onOpenChange(false)} aria-label="Cancel">
                 <X className="h-4 w-4" />
             </Button>
-            <DialogTitle className="text-base sm:text-lg">Manage Permissions</DialogTitle>
+            
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
+                <DialogTitle className="text-base sm:text-lg">Manage Permissions</DialogTitle>
+            </div>
+
             <Button size="sm" onClick={handleSave} disabled={isSaving} className="h-8">
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save
