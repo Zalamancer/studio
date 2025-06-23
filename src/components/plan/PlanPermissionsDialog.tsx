@@ -184,7 +184,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
   onViewUserChanges,
 }) => {
   const { toast } = useToast();
-  const { user: currentUser } = useAuth(); // Get current user for owner check
+  const { user: currentUser } = useAuth();
 
   const [visibility, setVisibility] = useState<PlanVisibility>(initialVisibility);
   const [editability, setEditability] = useState<PlanEditability>(initialEditability);
@@ -267,7 +267,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
       popoverRef: React.RefObject<HTMLDivElement>,
       isEditorList: boolean,
     ) => (
-      <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col md:flex-grow md:min-h-0">
+      <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col">
         <Label className="text-sm font-semibold text-foreground flex-shrink-0">{title}</Label>
         <Popover open={isSuggestionsOpen} onOpenChange={setIsSuggestionsOpen}>
           <PopoverTrigger asChild>
@@ -289,10 +289,12 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
             </PopoverContent>
           )}
         </Popover>
-        <ScrollArea className="space-y-1 py-1 md:flex-grow md:min-h-[6rem]">
-            <UserListItem userId={ownerId} onRemove={() => {}} onViewChanges={() => onViewUserChanges(ownerId)} canBeRemoved={false} isSaving={isSaving} isOwner={true} isAdmin={true} />
-            {currentUserIds.map(uid => <UserListItem key={`item-${title}-${uid}`} userId={uid} onRemove={onRemoveInternal} onViewChanges={() => onViewUserChanges(uid)} canBeRemoved={true} isSaving={isSaving} isOwner={false} isAdmin={isEditorList || currentEditUserIds.includes(uid)} />)}
-            {currentUserIds.length === 0 && (<p className="text-xs text-muted-foreground text-center py-2">No specific users added.</p>)}
+        <ScrollArea className="h-48 rounded-md border p-1">
+            <div className="space-y-1">
+                <UserListItem userId={ownerId} onRemove={() => {}} onViewChanges={() => onViewUserChanges(ownerId)} canBeRemoved={false} isSaving={isSaving} isOwner={true} isAdmin={true} />
+                {currentUserIds.map(uid => <UserListItem key={`item-${title}-${uid}`} userId={uid} onRemove={onRemoveInternal} onViewChanges={() => onViewUserChanges(uid)} canBeRemoved={true} isSaving={isSaving} isOwner={false} isAdmin={isEditorList || currentEditUserIds.includes(uid)} />)}
+                {currentUserIds.length === 0 && (<p className="text-xs text-muted-foreground text-center py-2">No specific users added.</p>)}
+            </div>
         </ScrollArea>
       </div>
     );
@@ -300,7 +302,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent 
-        className="w-[95vw] h-full sm:h-auto sm:max-w-4xl sm:max-h-[90vh] p-0 flex flex-col sm:rounded-lg" 
+        className="w-[95vw] h-auto sm:max-w-4xl sm:max-h-[90vh] p-0 flex flex-col sm:rounded-lg"
         showCloseButton={false}
       >
         <DialogHeader className="p-4 border-b flex-shrink-0 flex items-center justify-between">
