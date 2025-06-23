@@ -206,13 +206,10 @@ export const initializeUserProfile = async (userData: InitializeUserProfileArgs)
 
 export const fetchUserProfileBasic = async (userIdParam: string): Promise<UserProfileBasic | null> => {
   const userId = String(userIdParam || "").trim();
-  const clientAuthUid = auth.currentUser?.uid;
-  // // console.log(`%c[connectionService] fetchUserProfileBasic: Fetching for targetUserId: '${userId}'. Client Auth UID: '${clientAuthUid || 'NULL'}'`, "color: teal;");
 
   if (!userId || !IS_VALID_FIREBASE_UID_REGEX.test(userId)) {
-    // // console.warn(`%c[connectionService] fetchUserProfileBasic: Invalid or empty userId: '${userId}'. Returning minimal fallback.`, "color: orange;");
-    const generatedName = generateAnonymousName(userId || "unknown_user_id");
-    return { userId: userId || "unknown_user_id", displayName: generatedName, mentionName: generatedName, companyName: undefined };
+    console.warn(`[connectionService] fetchUserProfileBasic: Invalid or empty userId provided: '${userIdParam}'. Returning null.`);
+    return null;
   }
 
   try {
@@ -221,31 +218,26 @@ export const fetchUserProfileBasic = async (userIdParam: string): Promise<UserPr
 
     if (userSnap.exists()) {
       const userData = userSnap.data() as UserProfileData;
-      const mentionName = userData.mentionName || generateAnonymousName(userId); // Fallback if mentionName is missing
+      // Use mentionName if it exists, otherwise generate one. This is a good fallback.
+      const mentionName = userData.mentionName || generateAnonymousName(userId);
 
       const profile: UserProfileBasic = {
         userId: userId,
-        displayName: userData.companyName || mentionName, // Prioritize companyName for display, then mentionName
-        mentionName: mentionName, // Always the ColorAnimalNumber
+        displayName: userData.companyName || mentionName, // Prioritize companyName, then mentionName
+        mentionName: mentionName,
         avatarUrl: userData.avatarUrl || undefined,
         companyName: userData.companyName || undefined,
       };
-      // // console.log(`%c[connectionService] fetchUserProfileBasic: Profile FOUND for '${userId}':`, "color: green;", profile);
       return profile;
-    }
-    // // console.warn(`%c[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${userId}'. Generating anonymous fallback.`, "color: orange;");
-    const generatedNameFallback = generateAnonymousName(userId);
-    return { userId: userId, displayName: generatedNameFallback, mentionName: generatedNameFallback, companyName: undefined };
-  } catch (error: any) {
-    const errorCatchAuthUid = auth.currentUser?.uid;
-    if (error.code === 'permission-denied') {
-      // console.warn(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: orange;", error.message);
-      // console.warn(`%c  PERMISSION DENIED for reading 'users/${userId}'. Client auth state at error catch: '${errorCatchAuthUid || 'NULL'}'. Returning minimal fallback.`, "color: orange; font-weight: bold;");
     } else {
-      // console.error(`%c[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, "color: red;", error);
+      // User document does not exist in Firestore.
+      console.warn(`[connectionService] fetchUserProfileBasic: Profile document NOT FOUND for userId: '${userId}'. Returning null.`);
+      return null;
     }
-    const generatedNameOnError = generateAnonymousName(userId);
-    return { userId: userId, displayName: generatedNameOnError, mentionName: generatedNameOnError, companyName: undefined };
+  } catch (error: any) {
+    console.error(`[connectionService] fetchUserProfileBasic: Error fetching profile for '${userId}':`, error);
+    // On any error (permission, network, etc.), return null so the UI can show a failure state.
+    return null;
   }
 };
 
@@ -761,4 +753,3 @@ interface MutualConnection { // Added this missing interface definition from typ
     connectedAt?: Timestamp | FieldValue; // Added when status becomes 'connected'
     requestedAt?: Timestamp | FieldValue; // Specifically for pending
 }
-
