@@ -173,6 +173,56 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
 
   const isValidPlanId = useMemo(() => !!planId && (IS_VALID_FIREBASE_UID_REGEX.test(planId) || planId.length === 20), [planId]);
 
+  const { data: ownerProfile, isLoading: isLoadingOwnerProfile } = useQuery<UserProfileBasic | null>({
+    queryKey: ['userProfileBasic', planData?.ownerId, 'planOwner'],
+    queryFn: () => planData?.ownerId ? fetchUserProfileBasic(planData.ownerId) : Promise.resolve(null),
+    enabled: !!planData?.ownerId,
+  });
+
+  const { data: planVersionsData = [], isLoading: isLoadingVersions, refetch: refetchPlanVersions } = useQuery<ClientPlanVersion[]>({
+    queryKey: ['planVersions', planId],
+    queryFn: () => (planId && isValidPlanId ? getPlanVersions(planId) : Promise.resolve([])),
+    enabled: isVersionHistorySheetOpen && !!planId && isValidPlanId,
+  });
+  
+  const updateRoadmapMutation = useMutation({
+    mutationFn: (updatedRoadmap: RoadmapStep[]) => {
+      if (!planId || !user) {
+        throw new Error("Plan or user not available for saving roadmap.");
+      }
+      return updatePlanDetails(planId, user.uid, { roadmap: updatedRoadmap });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['plan', planId] });
+      queryClient.invalidateQueries({ queryKey: ['planVersions', planId] });
+    },
+    onError: (error: Error) => {
+      toast({
+          variant: "destructive",
+          title: "Roadmap Sync Error",
+          description: error.message || "Could not save roadmap changes. Reverting to last saved state."
+      });
+      queryClient.invalidateQueries({ queryKey: ['plan', planId] });
+    }
+  });
+
+  const saveCurrentRoadmap = useCallback((newRoadmap: RoadmapStep[]) => {
+    if (!planId || !user) return;
+    updateRoadmapMutation.mutate(newRoadmap);
+  }, [planId, user, updateRoadmapMutation]);
+  
+  const restorePlanMutation = useMutation({
+    mutationFn: (payload: { planId: string; versionIdToRestore: string; currentUserId: string; }) =>
+      restorePlanToVersion(payload.planId, payload.versionIdToRestore, payload.currentUserId),
+    onSuccess: async (_, variables) => {
+      toast({ title: "Plan Restored", description: "The plan has been restored." });
+      await refetchPlanVersions();
+      setIsRestoreConfirmOpen(false); setVersionToRestore(null);
+      handleExitDiffView();
+    },
+    onError: (error: Error) => toast({ variant: "destructive", title: "Restore Failed", description: error.message || "Could not restore plan." }),
+  });
+
   const savePlanSettingsMutation = useMutation({
     mutationFn: (payload: { planId: string; currentUserId: string; updates: UpdatePlanData }) =>
       updatePlanDetails(payload.planId, payload.currentUserId, payload.updates),
@@ -181,6 +231,8 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Save Failed", description: error.message || "Could not save plan settings." })
   });
+  
+  const isSaving = savePlanSettingsMutation.isPending || restorePlanMutation.isPending || updateRoadmapMutation.isPending;
 
   useEffect(() => {
     if (!planId || !isValidPlanId) {
@@ -285,39 +337,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     return () => unsubscribe();
   }, [planId, user, isValidPlanId]);
 
-
-  const { data: ownerProfile, isLoading: isLoadingOwnerProfile } = useQuery<UserProfileBasic | null>({
-    queryKey: ['userProfileBasic', planData?.ownerId, 'planOwner'],
-    queryFn: () => planData?.ownerId ? fetchUserProfileBasic(planData.ownerId) : Promise.resolve(null),
-    enabled: !!planData?.ownerId,
-  });
-
-  const { data: planVersionsData = [], isLoading: isLoadingVersions, refetch: refetchPlanVersions } = useQuery<ClientPlanVersion[]>({
-    queryKey: ['planVersions', planId],
-    queryFn: () => (planId && isValidPlanId ? getPlanVersions(planId) : Promise.resolve([])),
-    enabled: isVersionHistorySheetOpen && !!planId && isValidPlanId,
-  });
-
-  const saveCurrentRoadmap = useCallback(async (newRoadmap: RoadmapStep[]) => {
-    if (!planId || !user) return;
-    try {
-        await updatePlanDetails(planId, user.uid, { roadmap: newRoadmap });
-    } catch (error: any) {
-        toast({ variant: "destructive", title: "Sync Error", description: error.message });
-    }
-  }, [planId, user, toast]);
-
-  const restorePlanMutation = useMutation({
-    mutationFn: (payload: { planId: string; versionIdToRestore: string; currentUserId: string; }) =>
-      restorePlanToVersion(payload.planId, payload.versionIdToRestore, payload.currentUserId),
-    onSuccess: async (_, variables) => {
-      toast({ title: "Plan Restored", description: "The plan has been restored." });
-      await refetchPlanVersions();
-      setIsRestoreConfirmOpen(false); setVersionToRestore(null);
-      handleExitDiffView();
-    },
-    onError: (error: Error) => toast({ variant: "destructive", title: "Restore Failed", description: error.message || "Could not restore plan." }),
-  });
 
   const canEditPlan = useMemo(() => {
     if (!user || !planData) return false;
@@ -723,22 +742,22 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     setNodeToDelete(null);
   }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget, editableRoadmap, saveCurrentRoadmap]);
 
-  const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
+  const handleAddViewer = useCallback((userProfile: UserProfileBasic) => {
     if (planData && userProfile.userId !== planData.ownerId) {
     }
   }, [planData]);
 
-  const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
+  const handleRemoveViewer = useCallback((userIdToRemove: string) => {
     if (planData && userIdToRemove !== planData.ownerId) {
     }
   }, [planData]);
 
-  const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
+  const handleAddEditor = useCallback((userProfile: UserProfileBasic) => {
     if (planData && userProfile.userId !== planData.ownerId) {
     }
   }, [planData]);
 
-  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
+  const handleRemoveEditor = useCallback((userIdToRemove: string) => {
     if (planData && userIdToRemove !== planData.ownerId) {
     }
   }, [planData]);
