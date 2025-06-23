@@ -67,7 +67,6 @@ type NodeDetailFormData = z.infer<typeof nodeDetailFormSchema>;
 
 
 export default function PlanDetailPage() {
-  // --- All Hooks must be at the top level, before any conditional returns ---
   const router = useRouter();
   const { toast } = useToast();
 
@@ -77,7 +76,7 @@ export default function PlanDetailPage() {
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  
+
   const {
     user, authLoading, planId, isValidPlanId,
     planData, isLoadingPlan, planError, ownerProfile, isLoadingOwnerProfile,
@@ -120,13 +119,21 @@ export default function PlanDetailPage() {
     handleTouchMove,
     handleTouchEnd,
     activeViewers,
-    handleCanvasPointerDown, // From usePlanLogic
+    handleCanvasPointerDown,
   } = usePlanLogic({ scale, setScale, canvasWrapperRef });
 
   const nodeDetailForm = useForm<NodeDetailFormData>({
     resolver: zodResolver(nodeDetailFormSchema),
     defaultValues: { title: '', description: '' },
   });
+
+  const calculateAndSetFitScreenScale = useCallback(() => {
+    if (canvasWrapperRef.current) {
+      const containerWidth = canvasWrapperRef.current.clientWidth;
+      const newScale = containerWidth > 0 ? containerWidth / CANVAS_WIDTH : 0.1;
+      setScale(newScale);
+    }
+  }, [setScale]);
 
   const augmentedPlanVersions = useMemo(() => planVersionsData.map((version, index, array) => {
     const previousVersion = index < array.length - 1 ? array[index + 1] : null;
@@ -140,13 +147,6 @@ export default function PlanDetailPage() {
     return augmentedPlanVersions.filter(v => v.editorUid === historyFilterByUserId);
   }, [augmentedPlanVersions, historyFilterByUserId]);
 
-  const calculateAndSetFitScreenScale = useCallback(() => {
-    if (canvasWrapperRef.current) {
-      const containerWidth = canvasWrapperRef.current.clientWidth;
-      const newScale = containerWidth > 0 ? containerWidth / CANVAS_WIDTH : 0.1;
-      setScale(newScale);
-    }
-  }, [setScale]);
   
   const handlePanelFieldBlur = () => {
     if (initialPanelDataRef.current && editingTarget && (editingTarget.type === 'node' || editingTarget.type === 'childItem')) {
@@ -300,7 +300,6 @@ export default function PlanDetailPage() {
     return lines;
   }, [editableRoadmap, controlOffset]);
 
-  // --- EARLY RETURNS (GUARDS) ---
   if (authLoading || (isLoadingPlan && isValidPlanId && !planData)) {
     return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
@@ -315,7 +314,6 @@ export default function PlanDetailPage() {
   }
 
 
-  // --- RENDER LOGIC ---
   const CanvasContent = () => (
     <>
       {diffTarget && (
@@ -464,7 +462,7 @@ export default function PlanDetailPage() {
         disableAnimation={true}
       >
         <SheetContent
-          className="sm:max-w-[600px] w-[90vw] p-0 flex flex-col"
+          className="w-full sm:max-w-[600px] p-0 flex flex-col"
           side="left"
           disableAnimation={true}
         >

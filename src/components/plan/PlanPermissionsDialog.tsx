@@ -109,10 +109,6 @@ const UserListItem: React.FC<{
   if (isLoading) return <SkeletonListItem />;
 
   if (!profile) {
-    // This is the change. Instead of displaying an error message for a user that
-    // can't be found, we simply return null, effectively removing them from the list.
-    // This also helps self-heal the data, as the non-existent user won't be
-    // included in the list when the permissions are next saved.
     return null;
   }
 
@@ -302,42 +298,44 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
 
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-3xl p-0">
-        <DialogHeader className="p-6 pb-4 border-b">
+      <DialogContent className="sm:max-w-3xl p-0 flex flex-col max-h-[90vh]">
+        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0">
           <DialogTitle>Manage Permissions</DialogTitle>
           <DialogPrimitiveDescription>Control who can view and edit this plan.</DialogPrimitiveDescription>
         </DialogHeader>
-        <div className="p-6 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            <div className="space-y-2">
-              <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1.5"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
-              <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSaving}>
-                <SelectTrigger id="plan-visibility" className="text-sm h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private</div></SelectItem>
-                  <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted</div></SelectItem>
-                  <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public</div></SelectItem>
-                </SelectContent>
-              </Select>
+        <ScrollArea className="flex-1 min-h-0">
+          <div className="p-6 space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="space-y-2">
+                <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1.5"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
+                <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSaving}>
+                  <SelectTrigger id="plan-visibility" className="text-sm h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private</div></SelectItem>
+                    <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted</div></SelectItem>
+                    <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public</div></SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1.5"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
+                <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSaving}>
+                  <SelectTrigger id="plan-editability" className="text-sm h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
+                    <SelectItem value="collaborators" disabled={visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
+                    <SelectItem value="everyone" disabled={visibility === 'unlisted' || visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1.5"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
-              <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSaving}>
-                <SelectTrigger id="plan-editability" className="text-sm h-9"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
-                  <SelectItem value="collaborators" disabled={visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                  <SelectItem value="everyone" disabled={visibility === 'unlisted' || visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              {visibility !== 'public' && renderUserManagementSection("View Access", currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)}
+              {editability === 'collaborators' && renderUserManagementSection("Edit Access (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)}
             </div>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-            {visibility !== 'public' && renderUserManagementSection("View Access", currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)}
-            {editability === 'collaborators' && renderUserManagementSection("Edit Access (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)}
-          </div>
-        </div>
-        <DialogFooter className="p-6 pt-4 border-t">
+        </ScrollArea>
+        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
           <DialogClose asChild><Button type="button" variant="outline" disabled={isSaving}>Cancel</Button></DialogClose>
           <Button type="button" onClick={handleSave} disabled={isSaving}>
             {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4"/> Save Permissions
