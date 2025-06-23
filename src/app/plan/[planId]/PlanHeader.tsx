@@ -24,7 +24,8 @@ interface PlanHeaderProps {
   canEditPlan: boolean;
   onOpenHistory: () => void;
   onOpenInfo: () => void;
-  onOpenPermissions: () => void; // New prop for permissions dialog
+  onOpenPermissions: () => void;
+  onExitDiff: () => void; // Added for correct exit behavior
   diffTargetActive: boolean;
   activeViewers: UserProfileBasic[];
 }
@@ -36,7 +37,8 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
   canEditPlan,
   onOpenHistory,
   onOpenInfo,
-  onOpenPermissions, // New prop
+  onOpenPermissions,
+  onExitDiff, // Destructure new prop
   diffTargetActive,
   activeViewers,
 }) => {
@@ -101,7 +103,7 @@ export const PlanHeader: React.FC<PlanHeaderProps> = ({
           <div className="h-6 w-px bg-border mx-1"></div>
 
           {diffTargetActive && (
-            <Button variant="destructive" size="sm" onClick={onOpenHistory} className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
+            <Button variant="destructive" size="sm" onClick={onExitDiff} className="h-8 px-2 text-xs sm:h-9 sm:px-3 sm:text-sm">
               <AlertTriangle className="mr-1 sm:mr-2 h-3.5 w-3.5 sm:h-4 sm:w-4" /> Exit Diff
             </Button>
           )}
