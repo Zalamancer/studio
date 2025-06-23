@@ -120,6 +120,7 @@ export default function PlanDetailPage() {
     handleTouchMove,
     handleTouchEnd,
     activeViewers,
+    handleCanvasPointerDown, // From usePlanLogic
   } = usePlanLogic({ scale, setScale, canvasWrapperRef });
 
   const nodeDetailForm = useForm<NodeDetailFormData>({
@@ -138,21 +139,6 @@ export default function PlanDetailPage() {
     }
     return augmentedPlanVersions.filter(v => v.editorUid === historyFilterByUserId);
   }, [augmentedPlanVersions, historyFilterByUserId]);
-
-  // --- EARLY RETURNS (GUARDS) ---
-  if (authLoading || (isLoadingPlan && isValidPlanId && !planData)) {
-    return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
-  }
-  if (!planId || !isValidPlanId) {
-    return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Invalid Plan ID</h1><p className="text-muted-foreground">The plan identifier in the URL is not valid.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>);
-  }
-  if (planError) {
-    return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Error Loading Plan</h1><p className="text-muted-foreground">{planError.message}</p><Button onClick={() => router.refresh()} className="mt-4">Try Again</Button></div>);
-  }
-  if (!planData && !isLoadingPlan) {
-    return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Plan Not Found</h1><p className="text-muted-foreground">The requested plan could not be found.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>);
-  }
-
 
   const calculateAndSetFitScreenScale = useCallback(() => {
     if (canvasWrapperRef.current) {
@@ -313,6 +299,21 @@ export default function PlanDetailPage() {
     });
     return lines;
   }, [editableRoadmap, controlOffset]);
+
+  // --- EARLY RETURNS (GUARDS) ---
+  if (authLoading || (isLoadingPlan && isValidPlanId && !planData)) {
+    return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
+  }
+  if (!planId || !isValidPlanId) {
+    return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Invalid Plan ID</h1><p className="text-muted-foreground">The plan identifier in the URL is not valid.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>);
+  }
+  if (planError) {
+    return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Error Loading Plan</h1><p className="text-muted-foreground">{planError.message}</p><Button onClick={() => router.refresh()} className="mt-4">Try Again</Button></div>);
+  }
+  if (!planData && !isLoadingPlan) {
+    return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Plan Not Found</h1><p className="text-muted-foreground">The requested plan could not be found.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>);
+  }
+
 
   // --- RENDER LOGIC ---
   const CanvasContent = () => (
