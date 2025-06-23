@@ -53,8 +53,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ConnectionButton } from '@/components/connect/ConnectionButton';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'; // Import Tabs
-import { useIsMobile } from '@/hooks/use-mobile'; // Import useIsMobile
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useIsMobile } from '@/hooks/use-mobile';
 
 
 interface PlanPermissionsDialogProps {
@@ -255,8 +255,37 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
     });
   };
 
+  const VisibilitySettingComponent = (
+    <div className="space-y-2 mb-4">
+      <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1.5"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
+      <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSaving}>
+        <SelectTrigger id="plan-visibility" className="text-sm h-9"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private</div></SelectItem>
+          <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted</div></SelectItem>
+          <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public</div></SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+
+  const EditabilitySettingComponent = (
+    <div className="space-y-2 mb-4">
+      <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1.5"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
+      <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSaving}>
+        <SelectTrigger id="plan-editability" className="text-sm h-9"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
+          <SelectItem value="collaborators" disabled={visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
+          <SelectItem value="everyone" disabled={visibility === 'unlisted' || visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
+        </SelectContent>
+      </Select>
+    </div>
+  );
+  
   const renderUserManagementSection = (
       title: string,
+      settingComponent: React.ReactNode | null,
       currentUserIds: string[],
       searchVal: string,
       setSearchVal: (val: string) => void,
@@ -269,7 +298,8 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
       popoverRef: React.RefObject<HTMLDivElement>,
       isEditorList: boolean,
     ) => (
-      <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col h-[300px]">
+      <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col flex-1">
+        {settingComponent}
         <Label className="text-sm font-semibold text-foreground flex-shrink-0">{title}</Label>
         <Popover open={isSuggestionsOpen} onOpenChange={setIsSuggestionsOpen}>
           <PopoverTrigger asChild>
@@ -304,86 +334,62 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent 
-        className="w-full h-full p-0 flex flex-col sm:h-auto sm:w-auto sm:max-w-5xl sm:max-h-[90vh] sm:rounded-lg"
+        className="w-full h-full p-0 flex flex-col sm:h-auto sm:w-[95vw] sm:max-w-4xl sm:max-h-[90vh] sm:rounded-lg"
         showCloseButton={false}
       >
-        <DialogHeader className="p-4 border-b flex-shrink-0 flex items-center justify-between relative">
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onOpenChange(false)} aria-label="Cancel">
-                <X className="h-4 w-4" />
-            </Button>
-            
-            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2">
-                <DialogTitle className="text-base sm:text-lg">Manage Permissions</DialogTitle>
+        <DialogHeader className="p-4 border-b flex-shrink-0 flex flex-row items-center">
+            <div className="flex-1 flex justify-start">
+              <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onOpenChange(false)} aria-label="Cancel">
+                  <X className="h-4 w-4" />
+              </Button>
             </div>
-
-            <Button size="sm" onClick={handleSave} disabled={isSaving} className="h-8">
-                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-                Save
-            </Button>
+            <div className="flex-1 text-center">
+              <DialogTitle className="text-base sm:text-lg">Manage Permissions</DialogTitle>
+            </div>
+            <div className="flex-1 flex justify-end">
+              <Button size="sm" onClick={handleSave} disabled={isSaving} className="h-8">
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save
+              </Button>
+            </div>
         </DialogHeader>
         <ScrollArea className="flex-1 min-h-0">
-          <div className="p-4 space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1.5"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
-                <Select value={visibility} onValueChange={(v) => setVisibility(v as PlanVisibility)} disabled={isSaving}>
-                  <SelectTrigger id="plan-visibility" className="text-sm h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="private"><div className="flex items-center gap-2 text-sm"><Lock className="h-3.5 w-3.5" /> Private</div></SelectItem>
-                    <SelectItem value="unlisted"><div className="flex items-center gap-2 text-sm"><LinkIcon className="h-3.5 w-3.5" /> Unlisted</div></SelectItem>
-                    <SelectItem value="public"><div className="flex items-center gap-2 text-sm"><Eye className="h-3.5 w-3.5" /> Public</div></SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="plan-editability" className="text-sm flex items-center gap-1.5"><Users className="h-4 w-4 text-muted-foreground" />Editability</Label>
-                <Select value={editability} onValueChange={(v) => setEditability(v as PlanEditability)} disabled={isSaving}>
-                  <SelectTrigger id="plan-editability" className="text-sm h-9"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="owner_only"><div className="flex items-center gap-2 text-sm"><User className="h-3.5 w-3.5" /> Owner Only</div></SelectItem>
-                    <SelectItem value="collaborators" disabled={visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Users className="h-3.5 w-3.5" /> Collaborators</div></SelectItem>
-                    <SelectItem value="everyone" disabled={visibility === 'unlisted' || visibility === 'private'}><div className="flex items-center gap-2 text-sm"><Globe className="h-3.5 w-3.5" /> All Authenticated Users</div></SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-            
+          <div className="p-4 space-y-6 h-full flex flex-col">
             {isMobile ? (
-              <Tabs defaultValue="view" className="w-full">
+              <Tabs defaultValue="view" className="w-full flex flex-col flex-grow">
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="view" disabled={visibility === 'public'}>View Access</TabsTrigger>
-                  <TabsTrigger value="edit" disabled={editability !== 'collaborators'}>Edit Access</TabsTrigger>
+                  <TabsTrigger value="view">View Access</TabsTrigger>
+                  <TabsTrigger value="edit">Edit Access</TabsTrigger>
                 </TabsList>
-                <TabsContent value="view" className="pt-4">
+                <TabsContent value="view" className="pt-4 flex-grow flex flex-col">
                   {visibility !== 'public' ? (
-                     renderUserManagementSection("Who can view?", currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)
+                     renderUserManagementSection("Who can view?", VisibilitySettingComponent, currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)
                   ) : (
-                    <div className="text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50">Public plans are visible to everyone.</div>
+                    <div className="flex-grow flex items-center justify-center text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50">{VisibilitySettingComponent}<p>Public plans are visible to everyone.</p></div>
                   )}
                 </TabsContent>
-                <TabsContent value="edit" className="pt-4">
-                  {editability === 'collaborators' ? (
-                     renderUserManagementSection("Who can edit? (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)
+                <TabsContent value="edit" className="pt-4 flex-grow flex flex-col">
+                  {editability === 'collaborators' && visibility !== 'private' ? (
+                     renderUserManagementSection("Who can edit? (Collaborators)", EditabilitySettingComponent, currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)
                   ) : (
-                     <div className="text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50">Only the owner can edit this plan based on current settings.</div>
+                     <div className="flex-grow flex items-center justify-center text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50">{EditabilitySettingComponent}<p>Only the owner can edit this plan based on current settings.</p></div>
                   )}
                 </TabsContent>
               </Tabs>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 flex-grow">
                 {visibility !== 'public' ? (
-                  renderUserManagementSection("Who can view?", currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)
+                  renderUserManagementSection("Who can view?", VisibilitySettingComponent, currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)
                 ) : (
-                  <div className="sm:col-span-1 text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50 flex items-center justify-center">Public plans are visible to everyone.</div>
+                  <div className="sm:col-span-1 text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50 flex flex-col items-center justify-center">{VisibilitySettingComponent} <p className="mt-4">Public plans are visible to everyone.</p></div>
                 )}
-                {editability === 'collaborators' ? (
-                  renderUserManagementSection("Who can edit? (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)
+                {editability === 'collaborators' && visibility !== 'private' ? (
+                  renderUserManagementSection("Who can edit? (Collaborators)", EditabilitySettingComponent, currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)
                 ) : (
-                  <div className="sm:col-span-1 text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50 flex items-center justify-center">Only the owner can edit this plan based on current settings.</div>
+                  <div className="sm:col-span-1 text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50 flex flex-col items-center justify-center">{EditabilitySettingComponent}<p className="mt-4">Only the owner can edit this plan based on current settings.</p></div>
                 )}
               </div>
             )}
-            
           </div>
         </ScrollArea>
       </DialogContent>
