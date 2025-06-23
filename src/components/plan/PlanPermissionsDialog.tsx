@@ -307,12 +307,6 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
             <DialogTitle>Manage Permissions</DialogTitle>
             <DialogPrimitiveDescription>Control who can view and edit this plan.</DialogPrimitiveDescription>
           </div>
-          <DialogClose asChild>
-            <Button variant="ghost" size="icon" className="h-8 w-8">
-              <X className="h-4 w-4" />
-              <span className="sr-only">Close</span>
-            </Button>
-          </DialogClose>
         </DialogHeader>
         <ScrollArea className="flex-1 min-h-0">
           <div className="p-6 space-y-6">
