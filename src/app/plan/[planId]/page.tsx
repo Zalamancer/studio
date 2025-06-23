@@ -67,17 +67,17 @@ type NodeDetailFormData = z.infer<typeof nodeDetailFormSchema>;
 
 
 export default function PlanDetailPage() {
+  // --- All Hooks must be at the top level, before any conditional returns ---
+  const router = useRouter();
+  const { toast } = useToast();
+
   const [scale, setScale] = useState(1.0);
+  const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
+  
   const canvasWrapperRef = useRef<HTMLDivElement>(null);
-
-  const calculateAndSetFitScreenScale = useCallback(() => {
-    if (canvasWrapperRef.current) {
-      const containerWidth = canvasWrapperRef.current.clientWidth;
-      const newScale = containerWidth > 0 ? containerWidth / CANVAS_WIDTH : 0.1;
-      setScale(newScale);
-    }
-  }, []);
-
+  const canvasRef = useRef<HTMLDivElement>(null);
+  const svgRef = useRef<SVGSVGElement>(null);
+  
   const {
     user, authLoading, planId, isValidPlanId,
     planData, isLoadingPlan, planError, ownerProfile, isLoadingOwnerProfile,
@@ -123,19 +123,31 @@ export default function PlanDetailPage() {
     activeViewers,
   } = usePlanLogic({ scale, setScale, canvasWrapperRef });
 
-  const router = useRouter();
-  const canvasRef = useRef<HTMLDivElement>(null);
-  const svgRef = useRef<SVGSVGElement>(null);
-  const [canvasMinHeight, setCanvasMinHeight] = useState<number>(typeof window !== 'undefined' ? window.innerHeight : 800);
-  const controlOffset = 100;
-  
   const nodeDetailForm = useForm<NodeDetailFormData>({
     resolver: zodResolver(nodeDetailFormSchema),
     defaultValues: { title: '', description: '' },
   });
 
-  const { toast } = useToast();
+  const augmentedPlanVersions = useMemo(() => planVersionsData.map((version, index, array) => {
+    const previousVersion = index < array.length - 1 ? array[index + 1] : null;
+    return { ...version, previousVersion };
+  }), [planVersionsData]);
 
+  const filteredVersions = useMemo(() => {
+    if (!historyFilterByUserId) {
+        return augmentedPlanVersions;
+    }
+    return augmentedPlanVersions.filter(v => v.editorUid === historyFilterByUserId);
+  }, [augmentedPlanVersions, historyFilterByUserId]);
+
+  const calculateAndSetFitScreenScale = useCallback(() => {
+    if (canvasWrapperRef.current) {
+      const containerWidth = canvasWrapperRef.current.clientWidth;
+      const newScale = containerWidth > 0 ? containerWidth / CANVAS_WIDTH : 0.1;
+      setScale(newScale);
+    }
+  }, [setScale]);
+  
   const handlePanelFieldBlur = () => {
     if (initialPanelDataRef.current && editingTarget && (editingTarget.type === 'node' || editingTarget.type === 'childItem')) {
       const currentValues = nodeDetailForm.getValues();
@@ -148,7 +160,7 @@ export default function PlanDetailPage() {
     }
   };
 
-  const zoomIn = useCallback(() => setScale(s => Math.min(s * 1.2, 1.0)), []);
+  const zoomIn = useCallback(() => setScale(s => Math.min(s * 1.2, 1.0)), [setScale]);
   
   const zoomOut = useCallback(() => {
     if (canvasWrapperRef.current) {
@@ -156,7 +168,7 @@ export default function PlanDetailPage() {
       const minScaleValue = containerWidth > 0 ? containerWidth / CANVAS_WIDTH : 0.1;
       setScale(s => Math.max(s / 1.2, minScaleValue));
     }
-  }, []);
+  }, [setScale]);
   
   const resetZoom = useCallback(() => calculateAndSetFitScreenScale(), [calculateAndSetFitScreenScale]);
 
@@ -214,6 +226,7 @@ export default function PlanDetailPage() {
     }
   }, [editableRoadmap]);
 
+  const controlOffset = 100;
   const drawConnectionLines = useCallback(() => {
     if (!editableRoadmap) return null;
     const lines: JSX.Element[] = [];
@@ -287,6 +300,7 @@ export default function PlanDetailPage() {
     return lines;
   }, [editableRoadmap, controlOffset]);
 
+  // --- EARLY RETURNS (GUARDS) ---
   if (authLoading || (isLoadingPlan && isValidPlanId && !planData)) {
     return <div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   }
@@ -300,18 +314,7 @@ export default function PlanDetailPage() {
     return (<div className="flex flex-col flex-1 items-center justify-center min-h-[calc(100vh-8rem)] p-4 text-center"><AlertTriangle className="h-10 w-10 text-destructive mb-2" /><h1 className="text-xl font-semibold">Plan Not Found</h1><p className="text-muted-foreground">The requested plan could not be found.</p><Button onClick={() => router.push('/')} className="mt-4">Go to Homepage</Button></div>);
   }
 
-  const augmentedPlanVersions = planVersionsData.map((version, index, array) => {
-    const previousVersion = index < array.length - 1 ? array[index + 1] : null;
-    return { ...version, previousVersion };
-  });
-
-  const filteredVersions = useMemo(() => {
-    if (!historyFilterByUserId) {
-        return augmentedPlanVersions;
-    }
-    return augmentedPlanVersions.filter(v => v.editorUid === historyFilterByUserId);
-  }, [augmentedPlanVersions, historyFilterByUserId]);
-
+  // --- RENDER LOGIC ---
   const CanvasContent = () => (
     <>
       {diffTarget && (
