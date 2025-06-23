@@ -801,15 +801,27 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   }, []);
 
   const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersionInHistory: ClientPlanVersion | null) => {
-      if (!planData) return;
-      const isCurrentlyViewingThisDiff = diffDetailsVersionId === versionToView.id && !!diffTarget;
-      if (isCurrentlyViewingThisDiff) {
-        handleExitDiffView();
-      } else {
-        setDiffTarget({ current: versionToView, previous: previousVersionInHistory });
-        setDiffDetailsVersionId(versionToView.id);
-      }
-  }, [planData, diffDetailsVersionId, diffTarget, handleExitDiffView]);
+    if (!planData) return;
+    const isCurrentlyViewingThisDiff = diffDetailsVersionId === versionToView.id && !!diffTarget;
+    if (isCurrentlyViewingThisDiff) {
+      handleExitDiffView();
+    } else {
+      setDiffTarget({ current: versionToView, previous: previousVersionInHistory });
+      setDiffDetailsVersionId(versionToView.id);
+      // Close all other dialogs/sheets for a clean view
+      setIsVersionHistorySheetOpen(false);
+      setIsPlanInfoDialogOpen(false);
+      setIsPermissionsDialogOpen(false);
+    }
+  }, [
+    planData,
+    diffDetailsVersionId,
+    diffTarget,
+    handleExitDiffView,
+    setIsVersionHistorySheetOpen,
+    setIsPlanInfoDialogOpen,
+    setIsPermissionsDialogOpen
+  ]);
 
   const handleRestoreVersion = (version: ClientPlanVersion) => { setVersionToRestore(version); setIsRestoreConfirmOpen(true); };
   const confirmRestore = () => { if (!versionToRestore || !planId || !user) return; restorePlanMutation.mutate({ planId, versionIdToRestore: versionToRestore.id, currentUserId: user.uid }); };
