@@ -123,6 +123,8 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
   const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
+  const [currentViewUserIds, setCurrentViewUserIds] = useState<string[]>([]);
+  const [currentEditUserIds, setCurrentEditUserIds] = useState<string[]>([]);
 
   const [activeViewers, setActiveViewers] = useState<UserProfileBasic[]>([]);
 
@@ -744,21 +746,29 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
 
   const handleAddViewer = useCallback((userProfile: UserProfileBasic) => {
     if (planData && userProfile.userId !== planData.ownerId) {
+        setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+        setViewPermissionsSearch('');
     }
   }, [planData]);
 
   const handleRemoveViewer = useCallback((userIdToRemove: string) => {
     if (planData && userIdToRemove !== planData.ownerId) {
+        setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
+        setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove)); // Also remove from editors
     }
   }, [planData]);
 
   const handleAddEditor = useCallback((userProfile: UserProfileBasic) => {
     if (planData && userProfile.userId !== planData.ownerId) {
+        setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
+        setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId]))); // Ensure they're also a viewer
+        setEditPermissionsSearch('');
     }
   }, [planData]);
 
   const handleRemoveEditor = useCallback((userIdToRemove: string) => {
     if (planData && userIdToRemove !== planData.ownerId) {
+        setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
     }
   }, [planData]);
 
@@ -962,15 +972,14 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
-    handleAddUserToViewers,
-    handleRemoveUserFromViewers,
-    handleAddUserToEditors,
-    handleRemoveUserFromEditors,
+    handleAddUserToViewers: handleAddViewer,
+    handleRemoveUserFromViewers: handleRemoveViewer,
+    handleAddUserToEditors: handleAddEditor,
+    handleRemoveUserFromEditors: handleRemoveEditor,
     forceRender,
     handleInitiateAddNode,
     setIsChildItemDialogSubmitting,
     handleEditCanvasNode,
-    handleCanvasPointerDown,
     handleTouchStart,
     handleTouchMove,
     handleTouchEnd,
