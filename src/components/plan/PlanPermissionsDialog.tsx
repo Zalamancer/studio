@@ -1,3 +1,4 @@
+
 // src/components/plan/PlanPermissionsDialog.tsx
 "use client";
 
@@ -299,17 +300,29 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent 
-        className="w-screen h-screen max-w-full max-h-full sm:rounded-none top-0 left-0 translate-x-0 translate-y-0 p-0 flex flex-col" 
+        className="w-[95vw] h-full sm:h-auto sm:max-w-4xl sm:max-h-[90vh] p-0 flex flex-col sm:rounded-lg" 
         showCloseButton={false}
       >
-        <DialogHeader className="p-6 pb-4 border-b flex-shrink-0 flex items-center justify-between">
+        <DialogHeader className="p-4 border-b flex-shrink-0 flex items-center justify-between">
           <div>
             <DialogTitle>Manage Permissions</DialogTitle>
             <DialogPrimitiveDescription>Control who can view and edit this plan.</DialogPrimitiveDescription>
           </div>
+          <div className="flex items-center gap-2">
+            <DialogClose asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                    <X className="h-4 w-4" />
+                    <span className="sr-only">Cancel</span>
+                </Button>
+            </DialogClose>
+            <Button size="sm" onClick={handleSave} disabled={isSaving}>
+                {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                Save
+            </Button>
+          </div>
         </DialogHeader>
         <ScrollArea className="flex-1 min-h-0">
-          <div className="p-6 space-y-6">
+          <div className="p-4 space-y-6">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
               <div className="space-y-2">
                 <Label htmlFor="plan-visibility" className="text-sm flex items-center gap-1.5"><ShieldQuestion className="h-4 w-4 text-muted-foreground" />Visibility</Label>
@@ -340,12 +353,6 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
             </div>
           </div>
         </ScrollArea>
-        <DialogFooter className="p-6 pt-4 border-t flex-shrink-0">
-          <Button type="button" variant="outline" disabled={isSaving} onClick={() => onOpenChange(false)}>Cancel</Button>
-          <Button type="button" onClick={handleSave} disabled={isSaving}>
-            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />} <Save className="mr-2 h-4 w-4"/> Save Permissions
-          </Button>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );
