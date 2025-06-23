@@ -773,33 +773,34 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     setNodeToDelete(null);
   }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget, editableRoadmap, saveCurrentRoadmap]);
 
-  const handleAddViewer = useCallback((userProfile: UserProfileBasic) => {
+  const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
     if (planData && userProfile.userId !== planData.ownerId) {
         setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
         setViewPermissionsSearch('');
     }
-  }, [planData]);
+  }, [planData, setViewPermissionsSearch]);
 
-  const handleRemoveViewer = useCallback((userIdToRemove: string) => {
+  const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
     if (planData && userIdToRemove !== planData.ownerId) {
         setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-        setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove)); // Also remove from editors
+        setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
     }
   }, [planData]);
 
-  const handleAddEditor = useCallback((userProfile: UserProfileBasic) => {
+  const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
     if (planData && userProfile.userId !== planData.ownerId) {
         setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-        setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId]))); // Ensure they're also a viewer
+        setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
         setEditPermissionsSearch('');
     }
-  }, [planData]);
+  }, [planData, setEditPermissionsSearch]);
 
-  const handleRemoveEditor = useCallback((userIdToRemove: string) => {
+  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
     if (planData && userIdToRemove !== planData.ownerId) {
         setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
     }
   }, [planData]);
+
 
   const handleSavePlanSettings = useCallback((settings: {
     name: string;
