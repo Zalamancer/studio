@@ -1,3 +1,4 @@
+
 // src/app/plan/[planId]/usePlanLogic.ts
 "use client";
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -229,6 +230,11 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   
   const isSaving = savePlanSettingsMutation.isPending || restorePlanMutation.isPending || updateRoadmapMutation.isPending;
 
+  const handleExitDiffView = useCallback(() => {
+    setDiffTarget(null);
+    setDiffDetailsVersionId(null);
+  }, []);
+
   useEffect(() => {
     if (diffTarget) {
       const currentRoadmap = diffTarget.current.roadmap || [];
@@ -238,7 +244,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
       const previousNodeIds = new Set(previousRoadmap.map(n => n.id));
 
       const addedIds = new Set([...currentNodeIds].filter(id => !previousNodeIds.has(id)));
-      const persistedIds = new Set([...currentNodeIds].filter(id => previousNodeIds.has(id)));
+      const persistedIds = new Set([...previousNodeIds].filter(id => currentNodeIds.has(id)));
       const removedIds = new Set([...previousNodeIds].filter(id => !currentNodeIds.has(id)));
 
       const removedTitles = previousRoadmap
@@ -258,11 +264,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
       setRemovedNodeTitles([]);
     }
   }, [diffTarget, planData]);
-
-  const handleExitDiffView = useCallback(() => {
-    setDiffTarget(null);
-    setDiffDetailsVersionId(null);
-  }, []);
 
   useEffect(() => {
     if (!planId || !isValidPlanId) {
@@ -463,8 +464,18 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     if ('changedTouches' in event && event.changedTouches.length > 0) return { clientX: event.changedTouches[0].clientX, clientY: event.changedTouches[0].clientY };
     return { clientX: (event as MouseEvent).clientX, clientY: (event as MouseEvent).clientY };
   }, []);
+  
+  const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
+    if (diffTarget) return;
+    setEditingTarget({ type: 'node', data: { ...nodeToEdit } });
+    initialPanelDataRef.current = { title: nodeToEdit.title, description: nodeToEdit.description || '' };
+    setIsStepDetailSheetOpen(true);
+    childItemManagementContextRef.current = null;
+    setDefaultChildDialogTitle("");
+    setDefaultChildDialogDescription("");
+    setOriginalEditingChildItemData(null);
+  }, [diffTarget, setEditingTarget, setIsStepDetailSheetOpen, setOriginalEditingChildItemData]);
 
-  // MOVED UP
   const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
     if (panStartRef.current && canvasWrapperRefCurrent) {
         canvasWrapperRefCurrent.style.cursor = 'grab';
@@ -680,17 +691,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
       }
       handleGlobalPointerUp(event, canvasWrapperRefCurrent);
   }, [diffTarget, handleGlobalPointerUp]);
-
-  const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
-    if (diffTarget) return;
-    setEditingTarget({ type: 'node', data: { ...nodeToEdit } });
-    initialPanelDataRef.current = { title: nodeToEdit.title, description: nodeToEdit.description || '' };
-    setIsStepDetailSheetOpen(true);
-    childItemManagementContextRef.current = null;
-    setDefaultChildDialogTitle("");
-    setDefaultChildDialogDescription("");
-    setOriginalEditingChildItemData(null);
-  }, [diffTarget, setEditingTarget, setIsStepDetailSheetOpen, setOriginalEditingChildItemData]);
 
   const handleChildItemCanvasNodeFocus = useCallback((childItemId: string, parentCanvasNodeId: string) => {
     if (diffTarget) return;
@@ -921,38 +921,38 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget, editableRoadmap, saveCurrentRoadmap]);
   
   const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
-      if (planData && userProfile.userId !== planData.ownerId) {
-          // You would typically call a service function here to update the plan in Firestore.
-          // For now, this just updates local state for the dialog.
-          // The actual save happens when the user clicks the "Save Permissions" button.
-          console.log(`(Logic) Adding ${userProfile.userId} to viewers.`);
-          // This local state management logic should be handled within PlanPermissionsDialog itself
-          // or passed down from this hook. Moving the state into the dialog is cleaner.
-          // For now, let's assume this hook controls the state.
-      }
-  }, [planData]);
-
+      if (!planData || !canEditPlan) return;
+      if (planData.viewUserIds?.includes(userProfile.userId)) return;
+      const newViewers = [...(planData.viewUserIds || []), userProfile.userId];
+      handleSavePlanSettings({ ...planData, viewUserIds: newViewers });
+  }, [planData, canEditPlan]);
+  
   const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
-      if (planData && userIdToRemove !== planData.ownerId) {
-          console.log(`(Logic) Removing ${userIdToRemove} from viewers and editors.`);
-      }
-  }, [planData]);
+      if (!planData || !canEditPlan) return;
+      if (userIdToRemove === ownerId) return; // Owner cannot be removed
+      const newViewers = (planData.viewUserIds || []).filter(id => id !== userIdToRemove);
+      const newEditors = (planData.editUserIds || []).filter(id => id !== userIdToRemove); // Also remove from editors
+      handleSavePlanSettings({ ...planData, viewUserIds: newViewers, editUserIds: newEditors });
+  }, [planData, canEditPlan, ownerId]);
 
   const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
-      if (planData && userProfile.userId !== planData.ownerId) {
-          console.log(`(Logic) Adding ${userProfile.userId} to editors and viewers.`);
-      }
-  }, [planData]);
+      if (!planData || !canEditPlan) return;
+      if (planData.editUserIds?.includes(userProfile.userId)) return;
+      const newEditors = [...(planData.editUserIds || []), userProfile.userId];
+      const newViewers = Array.from(new Set([...(planData.viewUserIds || []), userProfile.userId])); // Ensure they're also a viewer
+      handleSavePlanSettings({ ...planData, editUserIds: newEditors, viewUserIds: newViewers });
+  }, [planData, canEditPlan]);
 
   const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
-      if (planData && userIdToRemove !== planData.ownerId) {
-          console.log(`(Logic) Removing ${userIdToRemove} from editors.`);
-      }
-  }, [planData]);
+      if (!planData || !canEditPlan) return;
+      if (userIdToRemove === ownerId) return; // Owner cannot be removed from editors
+      const newEditors = (planData.editUserIds || []).filter(id => id !== userIdToRemove);
+      handleSavePlanSettings({ ...planData, editUserIds: newEditors });
+  }, [planData, canEditPlan, ownerId]);
 
   const handleSavePlanSettings = useCallback((settings: {
-    name: string;
-    description: string;
+    name?: string;
+    description?: string;
     visibility: PlanVisibility;
     editability: PlanEditability;
     viewUserIds: string[];
