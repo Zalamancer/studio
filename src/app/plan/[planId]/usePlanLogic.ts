@@ -464,7 +464,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     if ('changedTouches' in event && event.changedTouches.length > 0) return { clientX: event.changedTouches[0].clientX, clientY: event.changedTouches[0].clientY };
     return { clientX: (event as MouseEvent).clientX, clientY: (event as MouseEvent).clientY };
   }, []);
-  
+
   const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
     if (diffTarget) return;
     setEditingTarget({ type: 'node', data: { ...nodeToEdit } });
@@ -475,7 +475,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     setDefaultChildDialogDescription("");
     setOriginalEditingChildItemData(null);
   }, [diffTarget, setEditingTarget, setIsStepDetailSheetOpen, setOriginalEditingChildItemData]);
-
+  
   const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
     if (panStartRef.current && canvasWrapperRefCurrent) {
         canvasWrapperRefCurrent.style.cursor = 'grab';
@@ -608,7 +608,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     }
   }, [diffTarget, scale]);
 
-  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement> | MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
+  const handleGlobalMove = useCallback((event: React.TouchEvent<HTMLDivElement> | MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
     if (diffTarget) return;
 
     if ('touches' in event && event.touches.length === 2 && pinchDistRef.current !== null) {
@@ -682,7 +682,9 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
             canvasWrapperRefCurrent.scrollTop = panStartRef.current.scrollTop - deltaY;
         }
     }
-  }, [isPointerDown, getPointerCoords, editableRoadmap, scale, forceRender, setScale]);
+  }, [isPointerDown, getPointerCoords, editableRoadmap, scale, forceRender, setScale, diffTarget]);
+
+  const handleTouchMove = handleGlobalMove;
 
   const handleTouchEnd = useCallback((event: React.TouchEvent<HTMLDivElement>, canvasWrapperRefCurrent: HTMLDivElement | null) => {
       if (diffTarget) return;
@@ -920,36 +922,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     setNodeToDelete(null);
   }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget, editableRoadmap, saveCurrentRoadmap]);
   
-  const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
-      if (!planData || !canEditPlan) return;
-      if (planData.viewUserIds?.includes(userProfile.userId)) return;
-      const newViewers = [...(planData.viewUserIds || []), userProfile.userId];
-      handleSavePlanSettings({ ...planData, viewUserIds: newViewers });
-  }, [planData, canEditPlan]);
-  
-  const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
-      if (!planData || !canEditPlan) return;
-      if (userIdToRemove === ownerId) return; // Owner cannot be removed
-      const newViewers = (planData.viewUserIds || []).filter(id => id !== userIdToRemove);
-      const newEditors = (planData.editUserIds || []).filter(id => id !== userIdToRemove); // Also remove from editors
-      handleSavePlanSettings({ ...planData, viewUserIds: newViewers, editUserIds: newEditors });
-  }, [planData, canEditPlan, ownerId]);
-
-  const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
-      if (!planData || !canEditPlan) return;
-      if (planData.editUserIds?.includes(userProfile.userId)) return;
-      const newEditors = [...(planData.editUserIds || []), userProfile.userId];
-      const newViewers = Array.from(new Set([...(planData.viewUserIds || []), userProfile.userId])); // Ensure they're also a viewer
-      handleSavePlanSettings({ ...planData, editUserIds: newEditors, viewUserIds: newViewers });
-  }, [planData, canEditPlan]);
-
-  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
-      if (!planData || !canEditPlan) return;
-      if (userIdToRemove === ownerId) return; // Owner cannot be removed from editors
-      const newEditors = (planData.editUserIds || []).filter(id => id !== userIdToRemove);
-      handleSavePlanSettings({ ...planData, editUserIds: newEditors });
-  }, [planData, canEditPlan, ownerId]);
-
   const handleSavePlanSettings = useCallback((settings: {
     name?: string;
     description?: string;
@@ -973,6 +945,36 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     savePlanSettingsMutation.mutate({ planId, currentUserId: user.uid, updates });
   }, [planData, user, planId, canEditPlan, savePlanSettingsMutation, toast]);
 
+  const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
+      if (!planData || !canEditPlan) return;
+      if (planData.viewUserIds?.includes(userProfile.userId)) return;
+      const newViewers = [...(planData.viewUserIds || []), userProfile.userId];
+      handleSavePlanSettings({ ...planData, viewUserIds: newViewers });
+  }, [planData, canEditPlan, handleSavePlanSettings]);
+  
+  const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
+      if (!planData || !canEditPlan) return;
+      if (userIdToRemove === planData.ownerId) return; // Owner cannot be removed
+      const newViewers = (planData.viewUserIds || []).filter(id => id !== userIdToRemove);
+      const newEditors = (planData.editUserIds || []).filter(id => id !== userIdToRemove); // Also remove from editors
+      handleSavePlanSettings({ ...planData, viewUserIds: newViewers, editUserIds: newEditors });
+  }, [planData, canEditPlan, handleSavePlanSettings]);
+
+  const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
+      if (!planData || !canEditPlan) return;
+      if (planData.editUserIds?.includes(userProfile.userId)) return;
+      const newEditors = [...(planData.editUserIds || []), userProfile.userId];
+      const newViewers = Array.from(new Set([...(planData.viewUserIds || []), userProfile.userId])); // Ensure they're also a viewer
+      handleSavePlanSettings({ ...planData, editUserIds: newEditors, viewUserIds: newViewers });
+  }, [planData, canEditPlan, handleSavePlanSettings]);
+
+  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
+      if (!planData || !canEditPlan) return;
+      if (userIdToRemove === planData.ownerId) return; // Owner cannot be removed from editors
+      const newEditors = (planData.editUserIds || []).filter(id => id !== userIdToRemove);
+      handleSavePlanSettings({ ...planData, editUserIds: newEditors });
+  }, [planData, canEditPlan, handleSavePlanSettings]);
+  
   const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersionInHistory: ClientPlanVersion | null) => {
     if (!planData) return;
     const isCurrentlyViewingThisDiff = diffDetailsVersionId === versionToView.id && !!diffTarget;
@@ -1029,7 +1031,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     }
     saveCurrentRoadmap(newRoadmap);
   }, [editingTarget, editableRoadmap, saveCurrentRoadmap]);
-  const handleGlobalMove = handleTouchMove;
 
   return {
     user, authLoading, planId, isValidPlanId,
@@ -1078,3 +1079,4 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     handleCanvasPointerDown,
   };
 };
+
