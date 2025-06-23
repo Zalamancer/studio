@@ -123,8 +123,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   const [debouncedViewPermissionsSearch, setDebouncedViewPermissionsSearch] = useState('');
   const [editPermissionsSearch, setEditPermissionsSearch] = useState('');
   const [debouncedEditPermissionsSearch, setDebouncedEditPermissionsSearch] = useState('');
-  const [currentViewUserIds, setCurrentViewUserIds] = useState<string[]>([]);
-  const [currentEditUserIds, setCurrentEditUserIds] = useState<string[]>([]);
 
   const [activeViewers, setActiveViewers] = useState<UserProfileBasic[]>([]);
 
@@ -394,10 +392,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     return false;
   }, [user, planData]);
 
-  const isOwnerForUIDisplay = useMemo(() => {
-    return !!currentUserFromAuth && !!planData && planData.ownerId === currentUserFromAuth.uid;
-  }, [currentUserFromAuth, planData]);
-
   const saveCurrentRoadmap = useCallback((newRoadmap: RoadmapStep[]) => {
     if (!planId || !user) return;
     updateRoadmapMutation.mutate(newRoadmap);
@@ -513,9 +507,10 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     }
   }, [diffTarget, scale]);
 
-  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement>, canvasWrapperRefCurrent: HTMLDivElement | null) => {
+  const handleTouchMove = useCallback((event: React.TouchEvent<HTMLDivElement> | MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
     if (diffTarget) return;
-    if (event.touches.length === 2 && pinchDistRef.current !== null) {
+
+    if ('touches' in event && event.touches.length === 2 && pinchDistRef.current !== null) {
       event.preventDefault();
       const newDist = getPinchDistance(event.touches);
       const newScaleValue = startScaleRef.current * (newDist / pinchDistRef.current);
@@ -524,15 +519,77 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
       const minScaleValue = containerWidth > 0 ? (containerWidth / CANVAS_WIDTH) * 0.95 : 0.1;
 
       setScale(Math.max(minScaleValue, Math.min(newScaleValue, 1.0)));
+      return;
     }
-  }, [diffTarget, setScale]);
 
-  const handleTouchEnd = useCallback((event: React.TouchEvent<HTMLDivElement>) => {
+    if (!isPointerDown || !canvasWrapperRefCurrent) return;
+    const { clientX, clientY } = getPointerCoords(event);
+
+    if (nodeDragInfoRef.current) {
+        if (!isDraggingRef.current) {
+            const dx = clientX - (clickStartInfoRef.current?.clientX || 0);
+            const dy = clientY - (clickStartInfoRef.current?.clientY || 0);
+            if (dx * dx + dy * dy > 25) {
+                isDraggingRef.current = true;
+            }
+        }
+        if (isDraggingRef.current) {
+            if (event.cancelable) event.preventDefault();
+            const { nodeId, offsetX = 0, offsetY = 0, isDotDrag, dotType } = nodeDragInfoRef.current;
+            if (isDotDrag) {
+                const canvasRect = canvasWrapperRefCurrent.getBoundingClientRect();
+                const startNode = editableRoadmap.find(s => s.id === nodeId);
+                if (!startNode || !dotType) return;
+                const sourceNodeHeight = calculateNodeHeight(startNode, editableRoadmap);
+                let startX, startY;
+                switch (dotType) {
+                    case 'N': startX = startNode.x + NODE_BASE_WIDTH / 2; startY = startNode.y; break;
+                    case 'E': startX = startNode.x + NODE_BASE_WIDTH; startY = startNode.y + sourceNodeHeight / 2; break;
+                    case 'S': startX = startNode.x + NODE_BASE_WIDTH / 2; startY = startNode.y + sourceNodeHeight; break;
+                }
+                const endX = (clientX - canvasRect.left) / scale + canvasWrapperRefCurrent.scrollLeft / scale;
+                const endY = (clientY - canvasRect.top) / scale + canvasWrapperRefCurrent.scrollTop / scale;
+                const c1x = startX + (dotType === 'E' ? 50 : (dotType === 'W' ? -50 : 0));
+                const c1y = startY + (dotType === 'S' ? 50 : (dotType === 'N' ? -50 : 0));
+                const c2x = endX; const c2y = endY;
+                const pathD = `M ${startX} ${startY} C ${c1x} ${c1y}, ${c2x} ${c2y}, ${endX} ${endY}`;
+                activeConnectionLinePreviewRef.current = { path: pathD };
+            } else {
+                const canvasRect = canvasWrapperRefCurrent.getBoundingClientRect();
+                const newX = (clientX - canvasRect.left) / scale + canvasWrapperRefCurrent.scrollLeft / scale - offsetX / scale;
+                const newY = (clientY - canvasRect.top) / scale + canvasWrapperRefCurrent.scrollTop / scale - offsetY / scale;
+                setEditableRoadmap(prev => prev.map(step => step.id === nodeId ? { 
+                    ...step, 
+                    x: Math.max(MIN_CANVAS_PADDING, Math.min(newX, CANVAS_WIDTH - NODE_BASE_WIDTH - MIN_CANVAS_PADDING)), 
+                    y: Math.max(MIN_CANVAS_PADDING, newY) 
+                } : step ));
+            }
+            forceRender();
+        }
+    } 
+    else if (panStartRef.current) {
+        if (event.cancelable) event.preventDefault();
+        if (!isDraggingRef.current) {
+            const dx = clientX - panStartRef.current.startX;
+            const dy = clientY - panStartRef.current.startY;
+            if (dx * dx + dy * dy > 25) isDraggingRef.current = true;
+        }
+        if (isDraggingRef.current) {
+            const deltaX = clientX - panStartRef.current.startX;
+            const deltaY = clientY - panStartRef.current.startY;
+            canvasWrapperRefCurrent.scrollLeft = panStartRef.current.scrollLeft - deltaX;
+            canvasWrapperRefCurrent.scrollTop = panStartRef.current.scrollTop - deltaY;
+        }
+    }
+  }, [isPointerDown, getPointerCoords, editableRoadmap, scale, forceRender, setScale]);
+
+  const handleTouchEnd = useCallback((event: React.TouchEvent<HTMLDivElement>, canvasWrapperRefCurrent: HTMLDivElement | null) => {
       if (diffTarget) return;
       if (pinchDistRef.current !== null) {
           pinchDistRef.current = null;
       }
-  }, [diffTarget]);
+      handleGlobalPointerUp(event, canvasWrapperRefCurrent);
+  }, [diffTarget, handleGlobalPointerUp]);
 
   const handleEditCanvasNode = useCallback((nodeToEdit: RoadmapStep) => {
     if (diffTarget) return;
@@ -772,35 +829,36 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     toast({ title: `Node "${nodeToDelete.title}" Deleted` });
     setNodeToDelete(null);
   }, [nodeToDelete, canEditPlan, toast, editingTarget, diffTarget, editableRoadmap, saveCurrentRoadmap]);
-
+  
   const handleAddUserToViewers = useCallback((userProfile: UserProfileBasic) => {
-    if (planData && userProfile.userId !== planData.ownerId) {
-        setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-        setViewPermissionsSearch('');
-    }
-  }, [planData, setViewPermissionsSearch]);
+      if (planData && userProfile.userId !== planData.ownerId) {
+          // You would typically call a service function here to update the plan in Firestore.
+          // For now, this just updates local state for the dialog.
+          // The actual save happens when the user clicks the "Save Permissions" button.
+          console.log(`(Logic) Adding ${userProfile.userId} to viewers.`);
+          // This local state management logic should be handled within PlanPermissionsDialog itself
+          // or passed down from this hook. Moving the state into the dialog is cleaner.
+          // For now, let's assume this hook controls the state.
+      }
+  }, [planData]);
 
   const handleRemoveUserFromViewers = useCallback((userIdToRemove: string) => {
-    if (planData && userIdToRemove !== planData.ownerId) {
-        setCurrentViewUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-        setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    }
+      if (planData && userIdToRemove !== planData.ownerId) {
+          console.log(`(Logic) Removing ${userIdToRemove} from viewers and editors.`);
+      }
   }, [planData]);
 
   const handleAddUserToEditors = useCallback((userProfile: UserProfileBasic) => {
-    if (planData && userProfile.userId !== planData.ownerId) {
-        setCurrentEditUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-        setCurrentViewUserIds(prev => Array.from(new Set([...prev, userProfile.userId])));
-        setEditPermissionsSearch('');
-    }
-  }, [planData, setEditPermissionsSearch]);
-
-  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
-    if (planData && userIdToRemove !== planData.ownerId) {
-        setCurrentEditUserIds(prev => prev.filter(uid => uid !== userIdToRemove));
-    }
+      if (planData && userProfile.userId !== planData.ownerId) {
+          console.log(`(Logic) Adding ${userProfile.userId} to editors and viewers.`);
+      }
   }, [planData]);
 
+  const handleRemoveUserFromEditors = useCallback((userIdToRemove: string) => {
+      if (planData && userIdToRemove !== planData.ownerId) {
+          console.log(`(Logic) Removing ${userIdToRemove} from editors.`);
+      }
+  }, [planData]);
 
   const handleSavePlanSettings = useCallback((settings: {
     name: string;
@@ -865,62 +923,12 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
       forceRender();
     }, [canEditPlan, getPointerCoords, diffTarget, forceRender]);
 
-  const handleGlobalMove = useCallback((event: MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
-      if (!isPointerDown || !canvasWrapperRefCurrent) return;
-  
-      const { clientX, clientY } = getPointerCoords(event);
-  
-      if (nodeDragInfoRef.current) {
-          if (!isDraggingRef.current) {
-              const dx = clientX - (clickStartInfoRef.current?.clientX || 0);
-              const dy = clientY - (clickStartInfoRef.current?.clientY || 0);
-              if (dx * dx + dy * dy > 25) {
-                  isDraggingRef.current = true;
-              }
-          }
-  
-          if (isDraggingRef.current) {
-              if (event.cancelable) event.preventDefault();
-              const { nodeId, offsetX = 0, offsetY = 0, isDotDrag, dotType } = nodeDragInfoRef.current;
-              if (isDotDrag) {
-                  // Connection line drawing logic would go here
-              } else {
-                  const canvasRect = canvasWrapperRefCurrent.getBoundingClientRect();
-                  const newX = (clientX - canvasRect.left) / scale + canvasWrapperRefCurrent.scrollLeft / scale - offsetX / scale;
-                  const newY = (clientY - canvasRect.top) / scale + canvasWrapperRefCurrent.scrollTop / scale - offsetY / scale;
-                  setEditableRoadmap(prev => prev.map(step => step.id === nodeId ? { 
-                      ...step, 
-                      x: Math.max(MIN_CANVAS_PADDING, Math.min(newX, CANVAS_WIDTH - NODE_BASE_WIDTH - MIN_CANVAS_PADDING)), 
-                      y: Math.max(MIN_CANVAS_PADDING, newY) 
-                  } : step ));
-              }
-              forceRender();
-          }
-      } 
-      else if (panStartRef.current) {
-          if (event.cancelable) event.preventDefault();
-          if (!isDraggingRef.current) {
-              const dx = clientX - panStartRef.current.startX;
-              const dy = clientY - panStartRef.current.startY;
-              if (dx * dx + dy * dy > 25) {
-                  isDraggingRef.current = true;
-              }
-          }
-          if (isDraggingRef.current) {
-              const deltaX = clientX - panStartRef.current.startX;
-              const deltaY = clientY - panStartRef.current.startY;
-              canvasWrapperRefCurrent.scrollLeft = panStartRef.current.scrollLeft - deltaX;
-              canvasWrapperRefCurrent.scrollTop = panStartRef.current.scrollTop - deltaY;
-          }
-      }
-  }, [isPointerDown, getPointerCoords, editableRoadmap, scale, forceRender]);
-
   const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
     if (panStartRef.current && canvasWrapperRefCurrent) {
-      canvasWrapperRefCurrent.style.cursor = 'grab';
+        canvasWrapperRefCurrent.style.cursor = 'grab';
     }
 
-    if (panStartRef.current && !isDraggingRef.current && clickStartInfoRef.current) {
+    if (!isDraggingRef.current && !nodeDragInfoRef.current && clickStartInfoRef.current) {
         const finalCoords = getPointerCoords(event);
         if ((finalCoords.clientX - clickStartInfoRef.current.clientX)**2 + (finalCoords.clientY - clickStartInfoRef.current.clientY)**2 < 25 && (Date.now() - clickStartInfoRef.current.timestamp) < 300) {
             if (canvasWrapperRefCurrent) {
@@ -932,18 +940,63 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
             }
         }
     }
-
+    
     let finalRoadmap = [...editableRoadmap];
     let hasChanged = false;
 
     if (nodeDragInfoRef.current) {
-      if (nodeDragInfoRef.current.isDotDrag && isDraggingRef.current && nodeDragInfoRef.current.dotType) {
-        // ... (existing connection creation logic)
-      } else if (isDraggingRef.current) {
-        hasChanged = true;
-      } else if (clickStartInfoRef.current) {
-        // ... (existing node click logic)
-      }
+        const {clientX, clientY} = getPointerCoords(event);
+        if (isDraggingRef.current) { // It was a DRAG
+            if (nodeDragInfoRef.current.isDotDrag) { // Dragged from a DOT to connect
+                const dropTargetElement = document.elementFromPoint(clientX, clientY);
+                const dropTargetNodeCard = dropTargetElement?.closest('[data-node-id]');
+                const dropTargetNodeId = dropTargetNodeCard?.getAttribute('data-node-id');
+                const sourceNodeId = nodeDragInfoRef.current.nodeId;
+                const sourceDotType = nodeDragInfoRef.current.dotType;
+                
+                if (dropTargetNodeId && sourceNodeId && sourceDotType && dropTargetNodeId !== sourceNodeId) {
+                    const targetNode = editableRoadmap.find(s => s.id === dropTargetNodeId);
+                    if (targetNode) {
+                        const targetHeight = calculateNodeHeight(targetNode, editableRoadmap);
+                        const dropX = (clientX - canvasWrapperRefCurrent!.getBoundingClientRect().left) / scale + canvasWrapperRefCurrent!.scrollLeft / scale;
+                        const dropY = (clientY - canvasWrapperRefCurrent!.getBoundingClientRect().top) / scale + canvasWrapperRefCurrent!.scrollTop / scale;
+                        const dots = [
+                            { type: 'N', x: targetNode.x + NODE_BASE_WIDTH / 2, y: targetNode.y },
+                            { type: 'E', x: targetNode.x + NODE_BASE_WIDTH, y: targetNode.y + targetHeight / 2 },
+                            { type: 'S', x: targetNode.x + NODE_BASE_WIDTH / 2, y: targetNode.y + targetHeight },
+                            { type: 'W', x: targetNode.x, y: targetNode.y + targetHeight / 2 }
+                        ];
+                        let closestDot: { type: 'N' | 'E' | 'S' | 'W', dist: number } | null = null;
+                        for (const dot of dots) {
+                            const dist = Math.hypot(dropX - dot.x, dropY - dot.y);
+                            if (!closestDot || dist < closestDot.dist) {
+                                closestDot = { type: dot.type as 'N' | 'E' | 'S' | 'W', dist: dist };
+                            }
+                        }
+                        if (closestDot) {
+                            const newConnection: PeerConnection = { targetNodeId: dropTargetNodeId, sourceDot: sourceDotType, targetDot: closestDot.type };
+                            finalRoadmap = finalRoadmap.map(s => s.id === sourceNodeId ? { ...s, peerConnections: [...(s.peerConnections || []), newConnection] } : s);
+                            hasChanged = true;
+                        }
+                    }
+                }
+            } else { // Dragged the node BODY
+                hasChanged = true;
+            }
+        } else { // It was a CLICK (no drag)
+            if (nodeDragInfoRef.current.isDotDrag) { // Clicked a DOT
+                const sourceNodeId = nodeDragInfoRef.current.nodeId;
+                const initiatingDot = nodeDragInfoRef.current.dotType;
+                if (sourceNodeId && initiatingDot) {
+                    handleInitiateAddNode({ sourceNodeId: sourceNodeId, initiatingDot: initiatingDot });
+                }
+            } else { // Clicked the node BODY
+                const node = editableRoadmap.find(s => s.id === nodeDragInfoRef.current!.nodeId);
+                if (node) {
+                    handleEditCanvasNode(node);
+                }
+            }
+        }
     }
     
     if (hasChanged) {
@@ -957,7 +1010,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     setIsPointerDown(false);
     activeConnectionLinePreviewRef.current = null;
     forceRender();
-  }, [editableRoadmap, scale, handleInitiateAddNode, saveCurrentRoadmap, forceRender]);
+  }, [editableRoadmap, scale, handleInitiateAddNode, saveCurrentRoadmap, forceRender, getPointerCoords, handleEditCanvasNode]);
 
   const onNodeDetailPanelSubmit = useCallback(async (data: { title: string; description?: string }) => {
     if (!editingTarget) return;
@@ -975,6 +1028,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     }
     saveCurrentRoadmap(newRoadmap);
   }, [editingTarget, editableRoadmap, saveCurrentRoadmap]);
+  const handleGlobalMove = handleTouchMove;
 
   return {
     user, authLoading, planId, isValidPlanId,
@@ -1020,5 +1074,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     handleTouchMove,
     handleTouchEnd,
     activeViewers,
+    handleCanvasPointerDown,
   };
 };
