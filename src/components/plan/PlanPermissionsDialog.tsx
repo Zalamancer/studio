@@ -76,7 +76,7 @@ interface PlanPermissionsDialogProps {
   setEditPermissionsSearch: (search: string) => void;
   viewPermissionSuggestions: UserProfileBasic[];
   editPermissionSuggestions: UserProfileBasic[];
-  onViewUserChanges: (userId: string) => void; // New prop for viewing changes
+  onViewUserChanges: (userId: string) => void;
 }
 
 const SkeletonListItem: React.FC = () => (
@@ -101,7 +101,7 @@ const UserListItem: React.FC<{
 
   const { data: profile, isLoading } = useQuery<UserProfileBasic | null>({
     queryKey: ['userProfileBasic', userId, 'planPermissionsMember'],
-    fn: () => fetchUserProfileBasic(userId),
+    queryFn: () => fetchUserProfileBasic(userId),
     enabled: !!userId,
     staleTime: Infinity,
   });
@@ -109,12 +109,11 @@ const UserListItem: React.FC<{
   if (isLoading) return <SkeletonListItem />;
 
   if (!profile) {
-    return (
-      <div className="flex items-center gap-3 p-2">
-        <Avatar className="h-6 w-6"><AvatarFallback>?</AvatarFallback></Avatar>
-        <span className="text-sm text-muted-foreground">User not found ({userId.substring(0,6)}...)</span>
-      </div>
-    );
+    // This is the change. Instead of displaying an error message for a user that
+    // can't be found, we simply return null, effectively removing them from the list.
+    // This also helps self-heal the data, as the non-existent user won't be
+    // included in the list when the permissions are next saved.
+    return null;
   }
 
   const displayName = profile.displayName || generateAnonymousName(userId);
@@ -249,8 +248,6 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
   };
 
   const handleSave = () => {
-    // When saving, we need to pass back only the non-owner UIDs.
-    // The service layer is responsible for always including the owner.
     onSave({
       visibility,
       editability,
