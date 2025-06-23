@@ -208,11 +208,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     }
   });
 
-  const saveCurrentRoadmap = useCallback((newRoadmap: RoadmapStep[]) => {
-    if (!planId || !user) return;
-    updateRoadmapMutation.mutate(newRoadmap);
-  }, [planId, user, updateRoadmapMutation]);
-  
   const restorePlanMutation = useMutation({
     mutationFn: (payload: { planId: string; versionIdToRestore: string; currentUserId: string; }) =>
       restorePlanToVersion(payload.planId, payload.versionIdToRestore, payload.currentUserId),
@@ -235,6 +230,41 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   });
   
   const isSaving = savePlanSettingsMutation.isPending || restorePlanMutation.isPending || updateRoadmapMutation.isPending;
+
+  useEffect(() => {
+    if (diffTarget) {
+      const currentRoadmap = diffTarget.current.roadmap || [];
+      const previousRoadmap = diffTarget.previous?.roadmap || [];
+
+      const currentNodeIds = new Set(currentRoadmap.map(n => n.id));
+      const previousNodeIds = new Set(previousRoadmap.map(n => n.id));
+
+      const addedIds = new Set([...currentNodeIds].filter(id => !previousNodeIds.has(id)));
+      const persistedIds = new Set([...currentNodeIds].filter(id => previousNodeIds.has(id)));
+      const removedIds = new Set([...previousNodeIds].filter(id => !currentNodeIds.has(id)));
+
+      const removedTitles = previousRoadmap
+        .filter(node => removedIds.has(node.id))
+        .map(node => node.title);
+
+      setAddedNodeIds(addedIds);
+      setPersistedNodeIds(persistedIds);
+      setRemovedNodeTitles(removedTitles);
+      setEditableRoadmap(currentRoadmap);
+    } else {
+      if (planData) {
+        setEditableRoadmap(planData.roadmap);
+      }
+      setAddedNodeIds(new Set());
+      setPersistedNodeIds(new Set());
+      setRemovedNodeTitles([]);
+    }
+  }, [diffTarget, planData]);
+
+  const handleExitDiffView = useCallback(() => {
+    setDiffTarget(null);
+    setDiffDetailsVersionId(null);
+  }, []);
 
   useEffect(() => {
     if (!planId || !isValidPlanId) {
@@ -367,6 +397,11 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
   const isOwnerForUIDisplay = useMemo(() => {
     return !!currentUserFromAuth && !!planData && planData.ownerId === currentUserFromAuth.uid;
   }, [currentUserFromAuth, planData]);
+
+  const saveCurrentRoadmap = useCallback((newRoadmap: RoadmapStep[]) => {
+    if (!planId || !user) return;
+    updateRoadmapMutation.mutate(newRoadmap);
+  }, [planId, user, updateRoadmapMutation]);
 
   const handleInitiateAddNode = useCallback((details: {
     sourceNodeId?: string | null;
@@ -530,12 +565,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     setOriginalEditingChildItemData(JSON.parse(JSON.stringify(childItem)));
     setIsStepDetailSheetOpen(true);
   }, [editableRoadmap, diffTarget, setEditingTarget, setIsStepDetailSheetOpen, setOriginalEditingChildItemData]);
-
-  const handleNodeDetailUpdate = useCallback((updatedStep: RoadmapStep) => {
-    if (!canEditPlan || diffTarget) return;
-    const newRoadmap = editableRoadmap.map(s => s.id === updatedStep.id ? { ...s, ...updatedStep, childrenData: updatedStep.childrenData || (s.childrenData || []) } : s );
-    saveCurrentRoadmap(newRoadmap);
-  }, [canEditPlan, diffTarget, editableRoadmap, saveCurrentRoadmap]);
 
   const handleChildItemDetailUpdateInPanel = useCallback((updatedChildItem: ChildDataItem, parentNodeId: string) => {
     if (!canEditPlan || diffTarget) return;
@@ -795,11 +824,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     savePlanSettingsMutation.mutate({ planId, currentUserId: user.uid, updates });
   }, [planData, user, planId, canEditPlan, savePlanSettingsMutation, toast]);
 
-  const handleExitDiffView = useCallback(() => {
-      setDiffTarget(null);
-      setDiffDetailsVersionId(null);
-  }, []);
-
   const handleViewChangesClick = useCallback((versionToView: ClientPlanVersion, previousVersionInHistory: ClientPlanVersion | null) => {
     if (!planData) return;
     const isCurrentlyViewingThisDiff = diffDetailsVersionId === versionToView.id && !!diffTarget;
@@ -808,7 +832,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     } else {
       setDiffTarget({ current: versionToView, previous: previousVersionInHistory });
       setDiffDetailsVersionId(versionToView.id);
-      // Close all other dialogs/sheets for a clean view
       setIsVersionHistorySheetOpen(false);
       setIsPlanInfoDialogOpen(false);
       setIsPermissionsDialogOpen(false);
@@ -820,7 +843,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     handleExitDiffView,
     setIsVersionHistorySheetOpen,
     setIsPlanInfoDialogOpen,
-    setIsPermissionsDialogOpen
+    setIsPermissionsDialogOpen,
   ]);
 
   const handleRestoreVersion = (version: ClientPlanVersion) => { setVersionToRestore(version); setIsRestoreConfirmOpen(true); };
@@ -959,7 +982,7 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     editingTarget, setEditingTarget, isStepDetailSheetOpen, setIsStepDetailSheetOpen,
     initialPanelDataRef,
     onNodeDetailPanelSubmit,
-    handleNodeDetailUpdate: onNodeDetailPanelSubmit, handleChildItemDetailUpdateInPanel,
+    handleChildItemDetailUpdateInPanel,
     nodeToDelete, setNodeToDelete, confirmDeleteNode,
     handleNodeInteractionStart, activeConnectionLinePreviewRef, nodeDragInfoRef, isDraggingRef,
     handleGlobalMove, handleGlobalPointerUp, isPointerDown,
@@ -984,10 +1007,10 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     originalEditingChildItemData, setOriginalEditingChildItemData,
     viewPermissionsSearch, setViewPermissionsSearch, editPermissionsSearch, setEditPermissionsSearch,
     viewPermissionSuggestions, editPermissionSuggestions,
-    handleAddUserToViewers: handleAddViewer,
-    handleRemoveUserFromViewers: handleRemoveViewer,
-    handleAddUserToEditors: handleAddEditor,
-    handleRemoveUserFromEditors: handleRemoveEditor,
+    handleAddUserToViewers,
+    handleRemoveUserFromViewers,
+    handleAddUserToEditors,
+    handleRemoveUserFromEditors,
     forceRender,
     handleInitiateAddNode,
     setIsChildItemDialogSubmitting,
