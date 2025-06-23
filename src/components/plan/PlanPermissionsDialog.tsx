@@ -10,7 +10,6 @@ import {
   DialogTitle,
   DialogDescription as DialogPrimitiveDescription,
   DialogFooter,
-  DialogClose,
 } from '@/components/ui/dialog';
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Button } from '@/components/ui/button';
@@ -54,6 +53,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { ConnectionButton } from '@/components/connect/ConnectionButton';
 import { Badge } from '@/components/ui/badge';
 import Link from 'next/link';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'; // Import Tabs
+import { useIsMobile } from '@/hooks/use-mobile'; // Import useIsMobile
 
 
 interface PlanPermissionsDialogProps {
@@ -185,6 +186,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
 }) => {
   const { toast } = useToast();
   const { user: currentUser } = useAuth();
+  const isMobile = useIsMobile();
 
   const [visibility, setVisibility] = useState<PlanVisibility>(initialVisibility);
   const [editability, setEditability] = useState<PlanEditability>(initialEditability);
@@ -267,7 +269,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
       popoverRef: React.RefObject<HTMLDivElement>,
       isEditorList: boolean,
     ) => (
-      <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col">
+      <div className="space-y-2 border p-3 rounded-md bg-background shadow-sm flex flex-col h-[300px]">
         <Label className="text-sm font-semibold text-foreground flex-shrink-0">{title}</Label>
         <Popover open={isSuggestionsOpen} onOpenChange={setIsSuggestionsOpen}>
           <PopoverTrigger asChild>
@@ -289,7 +291,7 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
             </PopoverContent>
           )}
         </Popover>
-        <ScrollArea className="h-48 rounded-md border p-1">
+        <ScrollArea className="flex-grow min-h-0 rounded-md border p-1">
             <div className="space-y-1">
                 <UserListItem userId={ownerId} onRemove={() => {}} onViewChanges={() => onViewUserChanges(ownerId)} canBeRemoved={false} isSaving={isSaving} isOwner={true} isAdmin={true} />
                 {currentUserIds.map(uid => <UserListItem key={`item-${title}-${uid}`} userId={uid} onRemove={onRemoveInternal} onViewChanges={() => onViewUserChanges(uid)} canBeRemoved={true} isSaving={isSaving} isOwner={false} isAdmin={isEditorList || currentEditUserIds.includes(uid)} />)}
@@ -302,26 +304,18 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
   return (
     <Dialog open={isOpen} onOpenChange={onOpenChange}>
       <DialogContent 
-        className="w-[95vw] h-auto sm:max-w-4xl sm:max-h-[90vh] p-0 flex flex-col sm:rounded-lg"
+        className="w-[95vw] h-auto sm:max-w-5xl sm:max-h-[90vh] p-0 flex flex-col sm:rounded-lg"
         showCloseButton={false}
       >
         <DialogHeader className="p-4 border-b flex-shrink-0 flex items-center justify-between">
-          <div>
-            <DialogTitle>Manage Permissions</DialogTitle>
-            <DialogPrimitiveDescription>Control who can view and edit this plan.</DialogPrimitiveDescription>
-          </div>
-          <div className="flex items-center gap-2">
-            <DialogClose asChild>
-                <Button variant="ghost" size="icon" className="h-8 w-8">
-                    <X className="h-4 w-4" />
-                    <span className="sr-only">Cancel</span>
-                </Button>
-            </DialogClose>
-            <Button size="sm" onClick={handleSave} disabled={isSaving}>
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onOpenChange(false)} aria-label="Cancel">
+                <X className="h-4 w-4" />
+            </Button>
+            <DialogTitle className="text-base sm:text-lg">Manage Permissions</DialogTitle>
+            <Button size="sm" onClick={handleSave} disabled={isSaving} className="h-8">
                 {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                 Save
             </Button>
-          </div>
         </DialogHeader>
         <ScrollArea className="flex-1 min-h-0">
           <div className="p-4 space-y-6">
@@ -349,10 +343,43 @@ export const PlanPermissionsDialog: React.FC<PlanPermissionsDialogProps> = ({
                 </Select>
               </div>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
-              {visibility !== 'public' && renderUserManagementSection("View Access", currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)}
-              {editability === 'collaborators' && renderUserManagementSection("Edit Access (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)}
-            </div>
+            
+            {isMobile ? (
+              <Tabs defaultValue="view" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="view" disabled={visibility === 'public'}>View Access</TabsTrigger>
+                  <TabsTrigger value="edit" disabled={editability !== 'collaborators'}>Edit Access</TabsTrigger>
+                </TabsList>
+                <TabsContent value="view" className="pt-4">
+                  {visibility !== 'public' ? (
+                     renderUserManagementSection("Who can view?", currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)
+                  ) : (
+                    <div className="text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50">Public plans are visible to everyone.</div>
+                  )}
+                </TabsContent>
+                <TabsContent value="edit" className="pt-4">
+                  {editability === 'collaborators' ? (
+                     renderUserManagementSection("Who can edit? (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)
+                  ) : (
+                     <div className="text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50">Only the owner can edit this plan based on current settings.</div>
+                  )}
+                </TabsContent>
+              </Tabs>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                {visibility !== 'public' ? (
+                  renderUserManagementSection("Who can view?", currentViewUserIds, viewPermissionsSearch, setViewPermissionsSearch, viewPermissionSuggestions, handleAddViewer, handleRemoveViewer, isViewSuggestionsOpen, setIsViewSuggestionsOpen, viewSearchInputRef, viewSuggestionsPopoverRef, false)
+                ) : (
+                  <div className="sm:col-span-1 text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50 flex items-center justify-center">Public plans are visible to everyone.</div>
+                )}
+                {editability === 'collaborators' ? (
+                  renderUserManagementSection("Who can edit? (Collaborators)", currentEditUserIds, editPermissionsSearch, setEditPermissionsSearch, editPermissionSuggestions, handleAddEditor, handleRemoveEditor, isEditSuggestionsOpen, setIsEditSuggestionsOpen, editSearchInputRef, editSuggestionsPopoverRef, true)
+                ) : (
+                  <div className="sm:col-span-1 text-center p-4 text-sm text-muted-foreground border rounded-md bg-muted/50 flex items-center justify-center">Only the owner can edit this plan based on current settings.</div>
+                )}
+              </div>
+            )}
+            
           </div>
         </ScrollArea>
       </DialogContent>
