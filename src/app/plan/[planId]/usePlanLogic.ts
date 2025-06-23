@@ -463,6 +463,96 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
     if ('changedTouches' in event && event.changedTouches.length > 0) return { clientX: event.changedTouches[0].clientX, clientY: event.changedTouches[0].clientY };
     return { clientX: (event as MouseEvent).clientX, clientY: (event as MouseEvent).clientY };
   }, []);
+
+  // MOVED UP
+  const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
+    if (panStartRef.current && canvasWrapperRefCurrent) {
+        canvasWrapperRefCurrent.style.cursor = 'grab';
+    }
+
+    if (!isDraggingRef.current && !nodeDragInfoRef.current && clickStartInfoRef.current) {
+        const finalCoords = getPointerCoords(event);
+        if ((finalCoords.clientX - clickStartInfoRef.current.clientX)**2 + (finalCoords.clientY - clickStartInfoRef.current.clientY)**2 < 25 && (Date.now() - clickStartInfoRef.current.timestamp) < 300) {
+            if (canvasWrapperRefCurrent) {
+                const scaleFactor = scale;
+                const canvasRect = canvasWrapperRefCurrent.firstElementChild!.getBoundingClientRect();
+                const x = (finalCoords.clientX - canvasRect.left) / scaleFactor + canvasWrapperRefCurrent.scrollLeft / scaleFactor;
+                const y = (finalCoords.clientY - canvasRect.top) / scaleFactor + canvasWrapperRefCurrent.scrollTop / scaleFactor;
+                handleInitiateAddNode({ coords: { x, y } });
+            }
+        }
+    }
+    
+    let finalRoadmap = [...editableRoadmap];
+    let hasChanged = false;
+
+    if (nodeDragInfoRef.current) {
+        const {clientX, clientY} = getPointerCoords(event);
+        if (isDraggingRef.current) { // It was a DRAG
+            if (nodeDragInfoRef.current.isDotDrag) { // Dragged from a DOT to connect
+                const dropTargetElement = document.elementFromPoint(clientX, clientY);
+                const dropTargetNodeCard = dropTargetElement?.closest('[data-node-id]');
+                const dropTargetNodeId = dropTargetNodeCard?.getAttribute('data-node-id');
+                const sourceNodeId = nodeDragInfoRef.current.nodeId;
+                const sourceDotType = nodeDragInfoRef.current.dotType;
+                
+                if (dropTargetNodeId && sourceNodeId && sourceDotType && dropTargetNodeId !== sourceNodeId) {
+                    const targetNode = editableRoadmap.find(s => s.id === dropTargetNodeId);
+                    if (targetNode) {
+                        const targetHeight = calculateNodeHeight(targetNode, editableRoadmap);
+                        const dropX = (clientX - canvasWrapperRefCurrent!.getBoundingClientRect().left) / scale + canvasWrapperRefCurrent!.scrollLeft / scale;
+                        const dropY = (clientY - canvasWrapperRefCurrent!.getBoundingClientRect().top) / scale + canvasWrapperRefCurrent!.scrollTop / scale;
+                        const dots = [
+                            { type: 'N', x: targetNode.x + NODE_BASE_WIDTH / 2, y: targetNode.y },
+                            { type: 'E', x: targetNode.x + NODE_BASE_WIDTH, y: targetNode.y + targetHeight / 2 },
+                            { type: 'S', x: targetNode.x + NODE_BASE_WIDTH / 2, y: targetNode.y + targetHeight },
+                            { type: 'W', x: targetNode.x, y: targetNode.y + targetHeight / 2 }
+                        ];
+                        let closestDot: { type: 'N' | 'E' | 'S' | 'W', dist: number } | null = null;
+                        for (const dot of dots) {
+                            const dist = Math.hypot(dropX - dot.x, dropY - dot.y);
+                            if (!closestDot || dist < closestDot.dist) {
+                                closestDot = { type: dot.type as 'N' | 'E' | 'S' | 'W', dist: dist };
+                            }
+                        }
+                        if (closestDot) {
+                            const newConnection: PeerConnection = { targetNodeId: dropTargetNodeId, sourceDot: sourceDotType, targetDot: closestDot.type };
+                            finalRoadmap = finalRoadmap.map(s => s.id === sourceNodeId ? { ...s, peerConnections: [...(s.peerConnections || []), newConnection] } : s);
+                            hasChanged = true;
+                        }
+                    }
+                }
+            } else { // Dragged the node BODY
+                hasChanged = true;
+            }
+        } else { // It was a CLICK (no drag)
+            if (nodeDragInfoRef.current.isDotDrag) { // Clicked a DOT
+                const sourceNodeId = nodeDragInfoRef.current.nodeId;
+                const initiatingDot = nodeDragInfoRef.current.dotType;
+                if (sourceNodeId && initiatingDot) {
+                    handleInitiateAddNode({ sourceNodeId: sourceNodeId, initiatingDot: initiatingDot });
+                }
+            } else { // Clicked the node BODY
+                const node = editableRoadmap.find(s => s.id === nodeDragInfoRef.current!.nodeId);
+                if (node) {
+                    handleEditCanvasNode(node);
+                }
+            }
+        }
+    }
+    
+    if (hasChanged) {
+        saveCurrentRoadmap(finalRoadmap);
+    }
+    
+    panStartRef.current = null;
+    nodeDragInfoRef.current = null;
+    clickStartInfoRef.current = null;
+    isDraggingRef.current = false;
+    setIsPointerDown(false);
+    activeConnectionLinePreviewRef.current = null;
+    forceRender();
+  }, [editableRoadmap, scale, handleInitiateAddNode, saveCurrentRoadmap, forceRender, getPointerCoords, handleEditCanvasNode]);
   
   const handleCanvasPointerDown = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
     if (event.button !== 0) return;
@@ -922,95 +1012,6 @@ export const usePlanLogic = ({ scale, setScale, canvasWrapperRef }: { scale: num
       setIsPointerDown(true);
       forceRender();
     }, [canEditPlan, getPointerCoords, diffTarget, forceRender]);
-
-  const handleGlobalPointerUp = useCallback((event: MouseEvent | TouchEvent, canvasWrapperRefCurrent: HTMLDivElement | null) => {
-    if (panStartRef.current && canvasWrapperRefCurrent) {
-        canvasWrapperRefCurrent.style.cursor = 'grab';
-    }
-
-    if (!isDraggingRef.current && !nodeDragInfoRef.current && clickStartInfoRef.current) {
-        const finalCoords = getPointerCoords(event);
-        if ((finalCoords.clientX - clickStartInfoRef.current.clientX)**2 + (finalCoords.clientY - clickStartInfoRef.current.clientY)**2 < 25 && (Date.now() - clickStartInfoRef.current.timestamp) < 300) {
-            if (canvasWrapperRefCurrent) {
-                const scaleFactor = scale;
-                const canvasRect = canvasWrapperRefCurrent.firstElementChild!.getBoundingClientRect();
-                const x = (finalCoords.clientX - canvasRect.left) / scaleFactor + canvasWrapperRefCurrent.scrollLeft / scaleFactor;
-                const y = (finalCoords.clientY - canvasRect.top) / scaleFactor + canvasWrapperRefCurrent.scrollTop / scaleFactor;
-                handleInitiateAddNode({ coords: { x, y } });
-            }
-        }
-    }
-    
-    let finalRoadmap = [...editableRoadmap];
-    let hasChanged = false;
-
-    if (nodeDragInfoRef.current) {
-        const {clientX, clientY} = getPointerCoords(event);
-        if (isDraggingRef.current) { // It was a DRAG
-            if (nodeDragInfoRef.current.isDotDrag) { // Dragged from a DOT to connect
-                const dropTargetElement = document.elementFromPoint(clientX, clientY);
-                const dropTargetNodeCard = dropTargetElement?.closest('[data-node-id]');
-                const dropTargetNodeId = dropTargetNodeCard?.getAttribute('data-node-id');
-                const sourceNodeId = nodeDragInfoRef.current.nodeId;
-                const sourceDotType = nodeDragInfoRef.current.dotType;
-                
-                if (dropTargetNodeId && sourceNodeId && sourceDotType && dropTargetNodeId !== sourceNodeId) {
-                    const targetNode = editableRoadmap.find(s => s.id === dropTargetNodeId);
-                    if (targetNode) {
-                        const targetHeight = calculateNodeHeight(targetNode, editableRoadmap);
-                        const dropX = (clientX - canvasWrapperRefCurrent!.getBoundingClientRect().left) / scale + canvasWrapperRefCurrent!.scrollLeft / scale;
-                        const dropY = (clientY - canvasWrapperRefCurrent!.getBoundingClientRect().top) / scale + canvasWrapperRefCurrent!.scrollTop / scale;
-                        const dots = [
-                            { type: 'N', x: targetNode.x + NODE_BASE_WIDTH / 2, y: targetNode.y },
-                            { type: 'E', x: targetNode.x + NODE_BASE_WIDTH, y: targetNode.y + targetHeight / 2 },
-                            { type: 'S', x: targetNode.x + NODE_BASE_WIDTH / 2, y: targetNode.y + targetHeight },
-                            { type: 'W', x: targetNode.x, y: targetNode.y + targetHeight / 2 }
-                        ];
-                        let closestDot: { type: 'N' | 'E' | 'S' | 'W', dist: number } | null = null;
-                        for (const dot of dots) {
-                            const dist = Math.hypot(dropX - dot.x, dropY - dot.y);
-                            if (!closestDot || dist < closestDot.dist) {
-                                closestDot = { type: dot.type as 'N' | 'E' | 'S' | 'W', dist: dist };
-                            }
-                        }
-                        if (closestDot) {
-                            const newConnection: PeerConnection = { targetNodeId: dropTargetNodeId, sourceDot: sourceDotType, targetDot: closestDot.type };
-                            finalRoadmap = finalRoadmap.map(s => s.id === sourceNodeId ? { ...s, peerConnections: [...(s.peerConnections || []), newConnection] } : s);
-                            hasChanged = true;
-                        }
-                    }
-                }
-            } else { // Dragged the node BODY
-                hasChanged = true;
-            }
-        } else { // It was a CLICK (no drag)
-            if (nodeDragInfoRef.current.isDotDrag) { // Clicked a DOT
-                const sourceNodeId = nodeDragInfoRef.current.nodeId;
-                const initiatingDot = nodeDragInfoRef.current.dotType;
-                if (sourceNodeId && initiatingDot) {
-                    handleInitiateAddNode({ sourceNodeId: sourceNodeId, initiatingDot: initiatingDot });
-                }
-            } else { // Clicked the node BODY
-                const node = editableRoadmap.find(s => s.id === nodeDragInfoRef.current!.nodeId);
-                if (node) {
-                    handleEditCanvasNode(node);
-                }
-            }
-        }
-    }
-    
-    if (hasChanged) {
-        saveCurrentRoadmap(finalRoadmap);
-    }
-    
-    panStartRef.current = null;
-    nodeDragInfoRef.current = null;
-    clickStartInfoRef.current = null;
-    isDraggingRef.current = false;
-    setIsPointerDown(false);
-    activeConnectionLinePreviewRef.current = null;
-    forceRender();
-  }, [editableRoadmap, scale, handleInitiateAddNode, saveCurrentRoadmap, forceRender, getPointerCoords, handleEditCanvasNode]);
 
   const onNodeDetailPanelSubmit = useCallback(async (data: { title: string; description?: string }) => {
     if (!editingTarget) return;
