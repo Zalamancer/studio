@@ -18,7 +18,7 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { ClientTag } from '@/types/tag';
-import { useIsMobile } from '@/hooks/use-is-mobile';
+import { useIsMobile } from '@/hooks/use-mobile';
 import { usePage } from '@/contexts/PageContext';
 import { useRouter } from 'next/navigation';
 import { getFollowingIds } from '@/services/followService'; // New import
