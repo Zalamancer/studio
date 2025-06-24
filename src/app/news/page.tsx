@@ -2,7 +2,7 @@
 "use client";
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Newspaper, Edit2, Loader2, AlertTriangle, FilterX, Search, Tag, PlusCircle, ListFilter } from 'lucide-react';
+import { Newspaper, Edit2, Loader2, AlertTriangle, FilterX, Search, Tag, PlusCircle, ListFilter, Rss } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
@@ -18,9 +18,10 @@ import { Popover, PopoverTrigger, PopoverContent } from '@/components/ui/popover
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { ClientTag } from '@/types/tag';
-import { useIsMobile } from '@/hooks/use-mobile';
+import { useIsMobile } from '@/hooks/use-is-mobile';
 import { usePage } from '@/contexts/PageContext';
 import { useRouter } from 'next/navigation';
+import { getFollowingIds } from '@/services/followService'; // New import
 
 const EMPTY_TAG_ARRAY: ClientTag[] = []; // Stable reference for an empty array
 
@@ -31,7 +32,7 @@ const NewsPage = () => {
   const { isFilterViewVisible, setHandleCreateClick, searchTerm, setSearchTerm, setFilterContent } = usePage();
   const router = useRouter();
 
-  const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles'>('all');
+  const [activeArticleView, setActiveArticleView] = useState<'all' | 'my_articles' | 'followed'>('all');
 
   const { data: allPublishedArticles = [], isLoading: isLoadingAllArticles, error: allArticlesError } = useQuery<ClientNewsArticle[]>({
      queryKey: ['publishedNewsArticlesAll'],
@@ -43,6 +44,13 @@ const NewsPage = () => {
     queryKey: ['userNewsArticlesAllStatuses', user?.uid],
     queryFn: () => user ? getNewsArticlesByUserId(user.uid) : Promise.resolve([]),
     enabled: !!user,
+  });
+
+  const { data: followedIds = [], isLoading: isLoadingFollowed } = useQuery<string[]>({
+    queryKey: ['followedUserIds', user?.uid],
+    queryFn: () => (user ? getFollowingIds(user.uid) : Promise.resolve([])),
+    enabled: !!user && activeArticleView === 'followed', // Only fetch when this view is active
+    staleTime: 1000 * 60 * 5,
   });
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
@@ -81,7 +89,15 @@ const NewsPage = () => {
   }, []);
 
   const filteredArticles = useMemo(() => {
-    let articlesToDisplay = activeArticleView === 'my_articles' && user ? userArticles : allPublishedArticles;
+    let articlesToDisplay: ClientNewsArticle[] = [];
+
+    if (activeArticleView === 'my_articles' && user) {
+      articlesToDisplay = userArticles;
+    } else if (activeArticleView === 'followed' && user) {
+      articlesToDisplay = allPublishedArticles.filter(article => followedIds.includes(article.userId));
+    } else {
+      articlesToDisplay = allPublishedArticles;
+    }
     
     if (searchTerm.trim() !== '') {
       const lowerSearchTerm = searchTerm.toLowerCase();
@@ -96,9 +112,9 @@ const NewsPage = () => {
         return articlesToDisplay.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     }
     return articlesToDisplay.sort((a,b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0));
-  }, [allPublishedArticles, userArticles, activeArticleView, user, searchTerm, getCleanTextExcerpt]);
+  }, [allPublishedArticles, userArticles, activeArticleView, user, searchTerm, getCleanTextExcerpt, followedIds]);
 
-  const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles);
+  const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles) || (activeArticleView === 'followed' && isLoadingFollowed);
 
   const handleCollectionUpdate = useCallback(() => {
     if (user) {
@@ -121,14 +137,19 @@ const NewsPage = () => {
     <div className="space-y-4 p-4 border-b">
       <div className="space-y-1.5">
         <Label className="text-xs font-medium text-muted-foreground">View</Label>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <Button variant={activeArticleView === 'all' ? "secondary" : "ghost"} size="sm" onClick={() => setActiveArticleView('all')} className={cn("h-9 px-3 text-xs rounded-full flex-1", activeArticleView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}>
+        <div className="grid grid-cols-3 gap-2 flex-shrink-0">
+          <Button variant={activeArticleView === 'all' ? "secondary" : "ghost"} size="sm" onClick={() => setActiveArticleView('all')} className={cn("h-9 px-3 text-xs rounded-md", activeArticleView === 'all' && "font-semibold bg-primary/10 text-primary border border-primary/30")}>
             All Articles
           </Button>
           {user && (
-            <Button variant={activeArticleView === 'my_articles' ? "secondary" : "ghost"} size="sm" onClick={() => setActiveArticleView('my_articles')} className={cn("h-9 px-3 text-xs rounded-full flex-1", activeArticleView === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}>
-              My Articles
-            </Button>
+            <>
+              <Button variant={activeArticleView === 'my_articles' ? "secondary" : "ghost"} size="sm" onClick={() => setActiveArticleView('my_articles')} className={cn("h-9 px-3 text-xs rounded-md", activeArticleView === 'my_articles' && "font-semibold bg-primary/10 text-primary border border-primary/30")}>
+                My Articles
+              </Button>
+              <Button variant={activeArticleView === 'followed' ? "secondary" : "ghost"} size="sm" onClick={() => setActiveArticleView('followed')} className={cn("h-9 px-3 text-xs rounded-md", activeArticleView === 'followed' && "font-semibold bg-primary/10 text-primary border border-primary/30")}>
+                <Rss className="mr-1.5 h-3.5 w-3.5" /> Followed
+              </Button>
+            </>
           )}
         </div>
       </div>
@@ -144,6 +165,13 @@ const NewsPage = () => {
     setFilterContent(<FilterContent />);
     setHandleCreateClick(() => router.push('/news/create'));
   }, [setFilterContent, setHandleCreateClick, router, FilterContent]);
+
+  const getEmptyStateMessage = () => {
+    if (searchTerm) return `No articles found for "${searchTerm}".`;
+    if (activeArticleView === 'my_articles') return "You haven't created any articles yet.";
+    if (activeArticleView === 'followed') return "You aren't following any authors yet, or they haven't posted.";
+    return "No articles to show right now.";
+  };
 
   return (
     <div className="container mx-auto px-4 md:px-6 lg:px-8 py-0 md:py-6 flex flex-col flex-1 relative">
@@ -161,7 +189,7 @@ const NewsPage = () => {
            <div className="text-destructive flex flex-col items-center gap-2 text-sm p-6 bg-destructive/5 rounded-md justify-center border border-destructive/20 mb-6"><AlertTriangle className="h-8 w-8 flex-shrink-0" /><p className="font-semibold">Error Loading Articles</p><p>{allArticlesError?.message || userArticlesError?.message || "An unexpected error occurred."}</p></div>
         )}
         {!isLoading && !allArticlesError && filteredArticles.length === 0 && (
-          <div className="text-center py-10"><Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" /><p className="text-lg font-medium text-muted-foreground">{searchTerm ? `No articles found for "${searchTerm}".` : activeArticleView === 'my_articles' ? "You haven't created any articles yet." : "No articles to show right now."}</p>
+          <div className="text-center py-10"><Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" /><p className="text-lg font-medium text-muted-foreground">{getEmptyStateMessage()}</p>
             {activeArticleView === 'my_articles' && !searchTerm && user && (
                <Button asChild size="sm" className="mt-4"><Link href="/news/create"><PlusCircle className="mr-2 h-4 w-4"/>Create Your First Article</Link></Button>
             )}
