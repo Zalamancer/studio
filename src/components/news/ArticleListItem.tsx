@@ -1,4 +1,3 @@
-
 // src/components/news/ArticleListItem.tsx
 "use client";
 
@@ -10,11 +9,18 @@ import { fetchUserProfileBasic } from '@/services/connectionService';
 import type { ClientNewsArticle } from '@/types/news';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import { format } from 'date-fns';
-import { MessageSquareText, Bookmark, MoreHorizontal, Edit3, Tag } from 'lucide-react';
+import { MessageSquareText, Bookmark, MoreHorizontal, Edit3, Tag, UserPlus, Ban, Flag, UserMinus } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
 import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface ArticleListItemProps {
   article: ClientNewsArticle;
@@ -39,6 +45,7 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
   });
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
+  const [isFollowing, setIsFollowing] = useState(false); // Placeholder state
 
   const authorName = useMemo(() => {
     if (isLoadingAuthor) return 'Loading author...';
@@ -132,9 +139,32 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
             <Bookmark className={cn("h-4 w-4", isSaved ? "fill-primary text-primary" : "")} />
             </Button>
         )}
-        <Button variant="ghost" size="icon" className="h-7 w-7 p-1" title="More options (placeholder)" onClick={(e) => e.stopPropagation()}>
-            <MoreHorizontal className="h-4 w-4" />
-        </Button>
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-7 w-7 p-1" onClick={(e) => e.stopPropagation()}>
+                    <MoreHorizontal className="h-4 w-4" />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                {!isOwnArticle && (
+                  <>
+                    <DropdownMenuItem onClick={() => { alert('Follow/Unfollow action triggered'); setIsFollowing(!isFollowing); }}>
+                      {isFollowing ? <UserMinus className="mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                      <span>{isFollowing ? 'Unfollow Author' : 'Follow Author'}</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => alert('Block action triggered')}>
+                      <Ban className="mr-2 h-4 w-4" />
+                      <span>Block Author</span>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                  </>
+                )}
+                <DropdownMenuItem onClick={() => alert('Report action triggered')}>
+                    <Flag className="mr-2 h-4 w-4" />
+                    <span>Report Article</span>
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
         </div>
     </div>
   );
