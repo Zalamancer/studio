@@ -117,6 +117,7 @@ const ArticlePage = () => {
   const [showContextualUI, setShowContextualUI] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
   const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
+  const [viewingMode, setViewingMode] = useState<'draft' | 'live'>('draft'); // New state
 
   const [isYouTubeDialogOpen, setIsYouTubeDialogOpen] = useState(false);
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
@@ -176,15 +177,15 @@ const ArticlePage = () => {
 
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges) {
-          // If a draft exists, load it. It could be an empty string, so fallback to a valid empty paragraph.
           contentToLoadInEditor = article.draftContent || "<p><br></p>";
+          setViewingMode('draft');
         } else {
-          // No draft, or not a published article, so use the main content.
           contentToLoadInEditor = article.content || "<p><br></p>";
+          setViewingMode('live');
         }
       } else if (article.status === 'published') {
-        // If not allowed to edit, just show the published content.
         contentToLoadInEditor = article.content || "<p><br></p>";
+        setViewingMode('live');
       }
       
       setStoryContent(contentToLoadInEditor);
@@ -559,10 +560,10 @@ const ArticlePage = () => {
                 <DropdownMenuItem onClick={() => coverImageInputRef.current?.click()} disabled={isSubmitting} className="cursor-pointer"><ImageUp className="mr-2 h-4 w-4" /><span>Change Cover Image</span></DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {article?.status === 'draft' ? ( <> <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Save Draft</DropdownMenuItem><DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700"><Send className="mr-2 h-4 w-4" /> Publish</DropdownMenuItem> </>
-                ) : ( <> <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished} className="cursor-pointer">{isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save Draft</DropdownMenuItem>
-                    {article.hasUnpublishedChanges && article.draftContent ? ( <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700"><CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes</DropdownMenuItem>
-                    ) : ( <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Update Live Article</DropdownMenuItem> )}
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting} className="cursor-pointer text-orange-600 focus:text-orange-700"><RotateCcw className="mr-2 h-4 w-4" /> Unpublish</DropdownMenuItem> </>
+                ) : ( <> <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished || viewingMode === 'live'} className="cursor-pointer">{isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save Draft</DropdownMenuItem>
+                    {article.hasUnpublishedChanges && article.draftContent ? ( <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer text-green-600 focus:text-green-700"><CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes</DropdownMenuItem>
+                    ) : ( <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Update Live Article</DropdownMenuItem> )}
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer text-orange-600 focus:text-orange-700"><RotateCcw className="mr-2 h-4 w-4" /> Unpublish</DropdownMenuItem> </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -571,7 +572,7 @@ const ArticlePage = () => {
       </div>
 
       <div ref={formWrapperRef} className="max-w-3xl mx-auto relative pt-5">
-         {showContextualUI && isEditingAllowed && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
+         {showContextualUI && isEditingAllowed && viewingMode === 'draft' && (<div ref={toolbarWrapperRef} style={toolbarStyle} className="flex items-center space-x-1">
             <Button type="button" variant="outline" size="icon" onClick={handleToggleToolbar} onMouseDown={(e) => e.preventDefault()} className="p-0 bg-card border rounded-full shadow-lg hover:bg-muted focus:outline-none focus:ring-1 focus:ring-primary h-9 w-9 z-10 flex items-center justify-center" aria-expanded={isToolbarExpanded} aria-label={isToolbarExpanded ? "Close formatting options" : "Open formatting options"}><PlusCircle className={cn("h-5 w-5 text-primary transition-transform duration-200 ease-in-out", isToolbarExpanded && "rotate-45")} /></Button>
             {isToolbarExpanded && (<div className="bg-card border p-0.5 rounded-full shadow-lg flex items-center space-x-0.5 ml-1 animate-in fade-in-50 slide-in-from-left-2 duration-200">
                 <button onClick={triggerInlineImageUpload} onMouseDown={(e) => e.preventDefault()} className={actionButtonClass} aria-label="Insert image" title="Upload image"><ImageIcon className={iconClass} /></button>
@@ -585,7 +586,26 @@ const ArticlePage = () => {
         <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting || !isEditingAllowed} />
 
         {coverImagePreview && ( <div className="mb-4 relative group"> <Image src={coverImagePreview} alt="Cover image preview" width={800} height={450} className="rounded-md object-cover w-full max-h-[300px] border" data-ai-hint="news cover" sizes="(max-width: 768px) 100vw, 800px"/> {isEditingAllowed && <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); setCurrentCoverImageUrl(null); if(coverImageInputRef.current) coverImageInputRef.current.value = "";}} disabled={isSubmitting}><Trash2 className="h-4 w-4" /></Button>} </div> )}
-        {article && article.status === 'published' && article.hasUnpublishedChanges && isEditingAllowed && ( <div className="mb-3 p-2 text-sm bg-yellow-100 border border-yellow-300 text-yellow-700 rounded-md flex items-center gap-2"> <AlertTriangle className="h-4 w-4" /> You are editing a saved draft. The live article may be different. <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => { if (contentEditableRef.current && article.content) { setStoryContent(article.content); contentEditableRef.current.innerHTML = article.content; } toast({title: "Viewing Live Content", description: "Editor now shows the live published content."}); }}>View live content</Button> </div> )}
+        {article && article.status === 'published' && article.hasUnpublishedChanges && isEditingAllowed && (
+          <div className="mb-3 p-2 text-sm bg-yellow-100 border border-yellow-300 text-yellow-700 rounded-md flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4" />
+            {viewingMode === 'draft' ? (
+              <>
+                <span>You are editing a saved draft.</span>
+                <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => { if (contentEditableRef.current && article.content) { setStoryContent(article.content); contentEditableRef.current.innerHTML = article.content; setViewingMode('live'); toast({ title: "Viewing Live Content", description: "The editor is now read-only." }); } }}>
+                  View live content
+                </Button>
+              </>
+            ) : (
+              <>
+                <span>You are viewing the live version (read-only).</span>
+                <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => { if (contentEditableRef.current && article.draftContent) { setStoryContent(article.draftContent); contentEditableRef.current.innerHTML = article.draftContent; setViewingMode('draft'); toast({ title: "Now Editing Draft", description: "You can now edit your draft." }); } }}>
+                  Return to editing draft
+                </Button>
+              </>
+            )}
+          </div>
+        )}
 
         {isEditingAllowed ? (
             <>
@@ -594,7 +614,7 @@ const ArticlePage = () => {
                 {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
             </div>
             <div ref={contentWrapperRef} className="relative">
-                <div key={articleIdParam} ref={contentEditableRef} contentEditable={!isSubmitting} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} data-placeholder="Tell your story..." className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]")} style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))" }} role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true} dir="ltr" />
+                <div key={articleIdParam} ref={contentEditableRef} contentEditable={isEditingAllowed && viewingMode === 'draft'} onInput={handleContentEditableInput} onFocus={() => handleFocus('content')} onBlur={handleBlur} onKeyDown={handleContentKeyDown} data-placeholder="Tell your story..." className={cn("w-full rounded-md border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 py-2 font-normal text-start no-underline tracking-normal whitespace-pre-wrap break-words normal-case", "focus:outline-none min-h-[150px]", viewingMode === 'live' && "bg-muted/30 cursor-not-allowed text-muted-foreground")} style={{ fontFamily: "medium-content-sans-serif-font, -apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, Oxygen, Ubuntu, Cantarell, \"Open Sans\", \"Helvetica Neue\", sans-serif", fontSize: "20px", lineHeight: "1.6", color: "hsl(var(--foreground))" }} role="textbox" aria-multiline="true" aria-label="News article content" suppressContentEditableWarning={true} dir="ltr" />
             </div>
             {publishAttempted && storyError && <p className="text-xs text-destructive mt-1">{storyError}</p>}
             {publishAttempted && tagsError && <p className="text-xs text-destructive mt-2">{tagsError}</p>}
