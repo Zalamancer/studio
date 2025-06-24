@@ -12,7 +12,7 @@ import type { ClientNewsArticle, UpdateNewsArticleData, NewsArticleStatus } from
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon, Tag, PlusCircle, MessageSquare, Heart, ListFilter } from 'lucide-react';
+import { Loader2, Save, Send, ImageUp, ImageIcon, YoutubeIcon, Link2Icon, SquareCodeIcon, MinusIcon, XIcon, Trash2, Edit3, CalendarCheck2, AlertTriangle, ArrowLeft, Newspaper, RotateCcw, Bookmark, CheckCircle, MoreVertical, Search, X as CloseIcon, Tag, PlusCircle, MessageSquare, Heart, ListFilter, Eye } from 'lucide-react';
 import Image from 'next/image';
 import { cn } from '@/lib/utils';
 import {
@@ -141,7 +141,7 @@ const ArticlePage = () => {
   const [showNewCommentSuggestions, setShowNewCommentSuggestions] = useState(false);
   const newCommentInputRef = useRef<HTMLInputElement>(null);
   const newCommentSuggestionsPopoverRef = useRef<HTMLDivElement>(null);
-  const [isLikingArticle, setIsLikingArticle] = useState(false);
+  const [isLiking, setIsLiking] = useState(false);
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
 
   const isEditingAllowed = useMemo(() => !!user && !!article && user.uid === article.userId, [article, user]);
@@ -178,7 +178,7 @@ const ArticlePage = () => {
 
       if (isEditingAllowed) {
         if (article.status === 'published' && article.hasUnpublishedChanges) {
-          contentToLoadInEditor = article.draftContent ?? "<p><br></p>";
+          contentToLoadInEditor = (article.draftContent !== null && article.draftContent !== undefined) ? article.draftContent : "<p><br></p>";
           setViewingMode('draft');
         } else {
           contentToLoadInEditor = article.content || "<p><br></p>";
@@ -563,11 +563,44 @@ const ArticlePage = () => {
                 {article?.status === 'draft' ? ( <> <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Save Draft</DropdownMenuItem><DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700"><Send className="mr-2 h-4 w-4" /> Publish</DropdownMenuItem> </>
                 ) : (
                   <>
-                    {article.hasUnpublishedChanges && viewingMode === 'live' && (
-                      <DropdownMenuItem onClick={() => { if (contentEditableRef.current && article.draftContent) { setStoryContent(article.draftContent); contentEditableRef.current.innerHTML = article.draftContent; setViewingMode('draft'); toast({ title: "Now Editing Draft", description: "You can now edit your draft." }); } }} disabled={isSubmitting} className="cursor-pointer"><Edit3 className="mr-2 h-4 w-4" /> Edit Draft</DropdownMenuItem>
+                    {article.hasUnpublishedChanges && (
+                      viewingMode === 'live' ? (
+                          <DropdownMenuItem
+                              onClick={() => {
+                                  if (contentEditableRef.current && article.draftContent !== null && article.draftContent !== undefined) {
+                                      setStoryContent(article.draftContent);
+                                      contentEditableRef.current.innerHTML = article.draftContent;
+                                      setViewingMode('draft');
+                                      toast({ title: "Now Editing Draft", description: "You can now edit your draft." });
+                                  }
+                              }}
+                              disabled={isSubmitting}
+                              className="cursor-pointer"
+                          >
+                              <Edit3 className="mr-2 h-4 w-4" /> Edit Draft
+                          </DropdownMenuItem>
+                      ) : (
+                          <DropdownMenuItem
+                              onClick={() => {
+                                  if (contentEditableRef.current && article.content) {
+                                      setStoryContent(article.content);
+                                      contentEditableRef.current.innerHTML = article.content;
+                                      setViewingMode('live');
+                                      toast({ title: "Viewing Live Content", description: "The editor is now read-only." });
+                                  }
+                              }}
+                              disabled={isSubmitting}
+                              className="cursor-pointer"
+                          >
+                              <Eye className="mr-2 h-4 w-4" /> View Live Version
+                          </DropdownMenuItem>
+                      )
                     )}
+                    {article.hasUnpublishedChanges && <DropdownMenuSeparator />}
+
                     <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished || viewingMode === 'live'} className="cursor-pointer">{isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save Draft</DropdownMenuItem>
-                    {article.hasUnpublishedChanges && article.draftContent ? (
+                    
+                    {article.hasUnpublishedChanges && article.draftContent !== null ? (
                        <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer text-green-600 focus:text-green-700"><CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes</DropdownMenuItem>
                     ) : (
                        <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Update Live Article</DropdownMenuItem>
@@ -609,7 +642,7 @@ const ArticlePage = () => {
             ) : (
               <>
                 <span>You are viewing the live version (read-only).</span>
-                <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => { if (contentEditableRef.current && article.draftContent) { setStoryContent(article.draftContent); contentEditableRef.current.innerHTML = article.draftContent; setViewingMode('draft'); toast({ title: "Now Editing Draft", description: "You can now edit your draft." }); } }}>
+                <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => { if (contentEditableRef.current && article.draftContent !== null && article.draftContent !== undefined) { setStoryContent(article.draftContent); contentEditableRef.current.innerHTML = article.draftContent; setViewingMode('draft'); toast({ title: "Now Editing Draft", description: "You can now edit your draft." }); } }}>
                   Return to editing draft
                 </Button>
               </>
