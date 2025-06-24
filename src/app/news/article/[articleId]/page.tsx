@@ -118,7 +118,7 @@ const ArticlePage = () => {
   const [showContextualUI, setShowContextualUI] = useState(false);
   const [isToolbarExpanded, setIsToolbarExpanded] = useState(false);
   const [toolbarStyle, setToolbarStyle] = useState<React.CSSProperties>({ display: 'none', position: 'absolute' });
-  const [viewingMode, setViewingMode] = useState<'draft' | 'live'>('draft'); // New state
+  const [viewingMode, setViewingMode] = useState<'draft' | 'live'>('draft');
 
   const [isYouTubeDialogOpen, setIsYouTubeDialogOpen] = useState(false);
   const [youTubeUrlInput, setYouTubeUrlInput] = useState("");
@@ -174,19 +174,15 @@ const ArticlePage = () => {
     if (article) {
       setTitle(article.title || "");
       setTags(article.tags || []);
-      let contentToLoadInEditor = "<p><br></p>";
+      
+      let contentToLoadInEditor;
 
-      if (isEditingAllowed) {
-        if (article.status === 'published' && article.hasUnpublishedChanges) {
-          contentToLoadInEditor = (article.draftContent !== null && article.draftContent !== undefined) ? article.draftContent : "<p><br></p>";
-          setViewingMode('draft');
-        } else {
-          contentToLoadInEditor = article.content || "<p><br></p>";
-          setViewingMode('live');
-        }
-      } else if (article.status === 'published') {
-        contentToLoadInEditor = article.content || "<p><br></p>";
-        setViewingMode('live');
+      if (article.status === 'published') {
+           contentToLoadInEditor = article.content || "<p><br></p>";
+           setViewingMode('live');
+      } else { // It's a draft
+           contentToLoadInEditor = article.content || "<p><br></p>";
+           setViewingMode('draft');
       }
       
       setStoryContent(contentToLoadInEditor);
@@ -198,7 +194,7 @@ const ArticlePage = () => {
       setCurrentCoverImageUrl(article.coverImageUrl || null);
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
     }
-  }, [article, isEditingAllowed]);
+  }, [article]);
 
   const { data: allNewsComments = [], isLoading: isLoadingNewsComments, refetch: refetchNewsComments } = useQuery<ClientComment[]>({
     queryKey: ['newsComments', articleIdParam],
@@ -422,6 +418,9 @@ const ArticlePage = () => {
       queryClient.invalidateQueries({ queryKey: ['publishedNewsArticlesAll'] });
       if (user?.uid) queryClient.invalidateQueries({ queryKey: ['userNewsArticlesAllStatuses', user.uid] });
       setCoverImageFile(null);
+      if (newStatus === 'published') {
+        setViewingMode('live');
+      }
     } catch (error: any) {
       toast({ variant: "destructive", title: "Update Failed", description: error.message || "Could not update the article." });
     } finally {
@@ -449,6 +448,29 @@ const ArticlePage = () => {
   const handleHeaderSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => { if (e.key === 'Enter') { e.preventDefault(); if (headerSearchTerm.trim()) { handleAddTagFromSearch(headerSearchTerm.trim()); } } else if (e.key === 'Escape') { setIsTagSuggestionsPopoverOpen(false); setIsHeaderSearchActive(false); } };
   const handleRemoveTagFromDisplay = (tagToRemove: string) => { if (!isEditingAllowed) return; setTags(prev => { const newTags = prev.filter(t => t !== tagToRemove); if (publishAttempted && newTags.length === 0) { setTagsError("At least one tag is required."); } else if (publishAttempted && newTags.length > 0) { setTagsError(""); } return newTags; }); };
   useEffect(() => { const handleClickOutsidePopover = (event: MouseEvent) => { if (isTagSuggestionsPopoverOpen && tagSuggestionsPopoverContentRef.current && !tagSuggestionsPopoverContentRef.current.contains(event.target as Node) && headerSearchInputRef.current && !headerSearchInputRef.current.contains(event.target as Node)) { setIsTagSuggestionsPopoverOpen(false); } }; if (isTagSuggestionsPopoverOpen) document.addEventListener('mousedown', handleClickOutsidePopover); return () => document.removeEventListener('mousedown', handleClickOutsidePopover); }, [isTagSuggestionsPopoverOpen]);
+
+  const switchToDraftView = useCallback(() => {
+    if (!article || !isEditingAllowed) return;
+    const draftContent = (article.hasUnpublishedChanges && article.draftContent !== null && article.draftContent !== undefined)
+      ? article.draftContent
+      : article.content; // Fallback to live content if starting a new draft
+    setStoryContent(draftContent || "<p><br></p>");
+    if (contentEditableRef.current) {
+      contentEditableRef.current.innerHTML = draftContent || "<p><br></p>";
+    }
+    setViewingMode('draft');
+    toast({ title: "Editing Mode Enabled", description: "You can now make changes." });
+  }, [article, isEditingAllowed, toast]);
+
+  const switchToLiveView = useCallback(() => {
+    if (!article || !isEditingAllowed) return;
+    setStoryContent(article.content || "<p><br></p>");
+    if (contentEditableRef.current) {
+      contentEditableRef.current.innerHTML = article.content || "<p><br></p>";
+    }
+    setViewingMode('live');
+    toast({ title: "Viewing Live Content", description: "The editor is now read-only." });
+  }, [article, isEditingAllowed, toast]);
 
   if (authLoading || isLoadingArticle) return <div className="container mx-auto p-4 md:p-8 flex justify-center items-center min-h-[calc(100vh-10rem)]"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>;
   if (errorLoadingArticle) return <div className="container mx-auto p-4 md:p-8 text-center min-h-[calc(100vh-10rem)] flex flex-col justify-center items-center"><AlertTriangle className="h-10 w-10 text-destructive mb-3"/><p className="text-lg font-semibold text-destructive">{errorLoadingArticle.message}</p><Button onClick={() => router.push('/news')} className="mt-4">Back to News</Button></div>;
@@ -478,7 +500,7 @@ const ArticlePage = () => {
         </Button>
 
         <div className="flex items-center gap-1.5 flex-grow min-w-0">
-          {isEditingAllowed && (
+          {isEditingAllowed && viewingMode === 'draft' && (
             <Button
               type="button"
               variant="ghost"
@@ -492,7 +514,7 @@ const ArticlePage = () => {
             </Button>
           )}
 
-          {isHeaderSearchActive && isEditingAllowed ? (
+          {isHeaderSearchActive && isEditingAllowed && viewingMode === 'draft' ? (
             <div className="relative flex-grow">
               <Popover open={isTagSuggestionsPopoverOpen && (tagSuggestions.length > 0 || (headerSearchTerm.trim() && !isTagSuggestionsLoading))} onOpenChange={setIsTagSuggestionsPopoverOpen}>
                 <PopoverTrigger asChild>
@@ -517,7 +539,7 @@ const ArticlePage = () => {
             </div>
           ) : (
             <div className="flex-grow flex items-center gap-1.5 overflow-x-auto py-1.5 h-9 scrollbar-hide">
-              {tags.length > 0 ? ( tags.map((tag) => ( <Badge key={tag} variant="secondary" className="text-xs flex-shrink-0 group/tagbadge relative pr-5"> {tag} {isEditingAllowed && ( <button type="button" onClick={() => handleRemoveTagFromDisplay(tag)} className="ml-1 rounded-full outline-none opacity-0 group-hover/tagbadge:opacity-100 focus:opacity-100 absolute right-0.5 top-1/2 transform -translate-y-1/2 p-0.5 hover:bg-destructive/20" aria-label={`Remove ${tag}`} disabled={isSubmitting}> <CloseIcon className="h-3 w-3 text-destructive/70 hover:text-destructive" /> </button> )} </Badge> ))
+              {tags.length > 0 ? ( tags.map((tag) => ( <Badge key={tag} variant="secondary" className="text-xs flex-shrink-0 group/tagbadge relative pr-5"> {tag} {isEditingAllowed && viewingMode === 'draft' && ( <button type="button" onClick={() => handleRemoveTagFromDisplay(tag)} className="ml-1 rounded-full outline-none opacity-0 group-hover/tagbadge:opacity-100 focus:opacity-100 absolute right-0.5 top-1/2 transform -translate-y-1/2 p-0.5 hover:bg-destructive/20" aria-label={`Remove ${tag}`} disabled={isSubmitting}> <CloseIcon className="h-3 w-3 text-destructive/70 hover:text-destructive" /> </button> )} </Badge> ))
               ) : ( <span className="text-xs text-muted-foreground italic pl-1">No tags selected</span> )}
             </div>
           )}
@@ -558,54 +580,41 @@ const ArticlePage = () => {
             <DropdownMenu>
               <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 p-1"><MoreVertical className="h-4 w-4" /><span className="sr-only">More options</span></Button></DropdownMenuTrigger>
               <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => coverImageInputRef.current?.click()} disabled={isSubmitting} className="cursor-pointer"><ImageUp className="mr-2 h-4 w-4" /><span>Change Cover Image</span></DropdownMenuItem>
+                <DropdownMenuItem onClick={() => coverImageInputRef.current?.click()} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer"><ImageUp className="mr-2 h-4 w-4" /><span>Change Cover Image</span></DropdownMenuItem>
                 <DropdownMenuSeparator />
-                {article?.status === 'draft' ? ( <> <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Save Draft</DropdownMenuItem><DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700"><Send className="mr-2 h-4 w-4" /> Publish</DropdownMenuItem> </>
-                ) : (
+                
+                {article?.status === 'draft' ? (
                   <>
-                    {article.hasUnpublishedChanges && (
-                      viewingMode === 'live' ? (
-                          <DropdownMenuItem
-                              onClick={() => {
-                                  if (contentEditableRef.current && article.draftContent !== null && article.draftContent !== undefined) {
-                                      setStoryContent(article.draftContent);
-                                      contentEditableRef.current.innerHTML = article.draftContent;
-                                      setViewingMode('draft');
-                                      toast({ title: "Now Editing Draft", description: "You can now edit your draft." });
-                                  }
-                              }}
-                              disabled={isSubmitting}
-                              className="cursor-pointer"
-                          >
-                              <Edit3 className="mr-2 h-4 w-4" /> Edit Draft
-                          </DropdownMenuItem>
-                      ) : (
-                          <DropdownMenuItem
-                              onClick={() => {
-                                  if (contentEditableRef.current && article.content) {
-                                      setStoryContent(article.content);
-                                      contentEditableRef.current.innerHTML = article.content;
-                                      setViewingMode('live');
-                                      toast({ title: "Viewing Live Content", description: "The editor is now read-only." });
-                                  }
-                              }}
-                              disabled={isSubmitting}
-                              className="cursor-pointer"
-                          >
-                              <Eye className="mr-2 h-4 w-4" /> View Live Version
-                          </DropdownMenuItem>
-                      )
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Save Draft</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700"><Send className="mr-2 h-4 w-4" /> Publish</DropdownMenuItem>
+                  </>
+                ) : ( // Article status is 'published'
+                  <>
+                    {viewingMode === 'live' ? (
+                      <DropdownMenuItem onClick={switchToDraftView} disabled={isSubmitting}>
+                        <Edit3 className="mr-2 h-4 w-4" /> 
+                        {article.hasUnpublishedChanges ? 'Edit Draft' : 'Edit Article'}
+                      </DropdownMenuItem>
+                    ) : ( // viewingMode is 'draft'
+                      <>
+                        <DropdownMenuItem onClick={switchToLiveView} disabled={isSubmitting}>
+                            <Eye className="mr-2 h-4 w-4" /> View Live Version
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished}>
+                            {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                            Save Draft
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                            <CheckCircle className="mr-2 h-4 w-4" /> 
+                            {article.hasUnpublishedChanges ? 'Publish Changes' : 'Update Live Article'}
+                        </DropdownMenuItem>
+                      </>
                     )}
-                    {article.hasUnpublishedChanges && <DropdownMenuSeparator />}
-
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished || viewingMode === 'live'} className="cursor-pointer">{isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save Draft</DropdownMenuItem>
-                    
-                    {article.hasUnpublishedChanges && article.draftContent !== null ? (
-                       <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer text-green-600 focus:text-green-700"><CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes</DropdownMenuItem>
-                    ) : (
-                       <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Update Live Article</DropdownMenuItem>
-                    )}
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting} className="cursor-pointer text-orange-600 focus:text-orange-700"><RotateCcw className="mr-2 h-4 w-4" /> Unpublish</DropdownMenuItem>
+                     <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting} className="cursor-pointer text-orange-600 focus:text-orange-700">
+                      <RotateCcw className="mr-2 h-4 w-4" /> Unpublish
+                    </DropdownMenuItem>
                   </>
                 )}
               </DropdownMenuContent>
@@ -628,21 +637,21 @@ const ArticlePage = () => {
         <Input id="article-image-input-header" type="file" accept="image/*" className="hidden" ref={coverImageInputRef} onChange={handleCoverImageFileChange} disabled={isSubmitting || !isEditingAllowed} />
         <input type="file" ref={inlineImageInputRef} onChange={handleInlineImageFileChange} accept="image/*" style={{ display: 'none' }} disabled={isSubmitting || !isEditingAllowed} />
 
-        {coverImagePreview && ( <div className="mb-4 relative group"> <Image src={coverImagePreview} alt="Cover image preview" width={800} height={450} className="rounded-md object-cover w-full max-h-[300px] border" data-ai-hint="news cover" sizes="(max-width: 768px) 100vw, 800px"/> {isEditingAllowed && <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); setCurrentCoverImageUrl(null); if(coverImageInputRef.current) coverImageInputRef.current.value = "";}} disabled={isSubmitting}><Trash2 className="h-4 w-4" /></Button>} </div> )}
+        {coverImagePreview && ( <div className="mb-4 relative group"> <Image src={coverImagePreview} alt="Cover image preview" width={800} height={450} className="rounded-md object-cover w-full max-h-[300px] border" data-ai-hint="news cover" sizes="(max-width: 768px) 100vw, 800px"/> {isEditingAllowed && viewingMode === 'draft' && <Button type="button" variant="destructive" size="icon" className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity p-1" onClick={() => { setCoverImageFile(null); setCoverImagePreview(null); setCurrentCoverImageUrl(null); if(coverImageInputRef.current) coverImageInputRef.current.value = "";}} disabled={isSubmitting}><Trash2 className="h-4 w-4" /></Button>} </div> )}
         {article && article.status === 'published' && article.hasUnpublishedChanges && isEditingAllowed && (
           <div className="mb-3 p-2 text-sm bg-yellow-100 border border-yellow-300 text-yellow-700 rounded-md flex items-center gap-2">
             <AlertTriangle className="h-4 w-4" />
             {viewingMode === 'draft' ? (
               <>
-                <span>You are editing a saved draft.</span>
-                <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => { if (contentEditableRef.current && article.content) { setStoryContent(article.content); contentEditableRef.current.innerHTML = article.content; setViewingMode('live'); toast({ title: "Viewing Live Content", description: "The editor is now read-only." }); } }}>
+                <span>You are editing a saved draft. The live article may be different.</span>
+                <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={switchToLiveView}>
                   View live content
                 </Button>
               </>
             ) : (
               <>
-                <span>You are viewing the live version (read-only).</span>
-                <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={() => { if (contentEditableRef.current && article.draftContent !== null && article.draftContent !== undefined) { setStoryContent(article.draftContent); contentEditableRef.current.innerHTML = article.draftContent; setViewingMode('draft'); toast({ title: "Now Editing Draft", description: "You can now edit your draft." }); } }}>
+                <span>You are viewing the live version.</span>
+                <Button variant="link" size="xs" className="p-0 h-auto text-yellow-700 hover:text-yellow-800" onClick={switchToDraftView}>
                   Return to editing draft
                 </Button>
               </>
