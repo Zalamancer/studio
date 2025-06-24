@@ -76,7 +76,8 @@ export const createNewsArticle = async (articleData: NewNewsArticleData): Promis
     commentCount: 0,
   };
 
-  const expectedFields = ['userId', 'title', 'tags', 'content', 'status', 'coverImageUrl', 'createdAt', 'updatedAt', 'publishedAt', 'likeCount', 'likedBy', 'commentCount', 'draftContent', 'hasUnpublishedChanges'];
+  const expectedFields = ['userId', 'title', 'tags', 'content', 'draftContent', 'hasUnpublishedChanges', 'status', 'coverImageUrl',
+                           'createdAt', 'updatedAt', 'publishedAt', 'likeCount', 'likedBy', 'commentCount'];
   const currentKeys = Object.keys(dataToSave);
   if (currentKeys.length !== expectedFields.length || !expectedFields.every(f => currentKeys.includes(f))) {
        console.warn(`[newsService DEBUG] createNewsArticle - Field mismatch detected. Expected ${expectedFields.length} fields, got ${currentKeys.length}.
@@ -113,61 +114,43 @@ export const updateNewsArticle = async (
   }
   const existingData = docSnap.data() as NewsArticle;
 
-  const payload: Partial<Omit<NewsArticle, 'id' | 'userId' | 'createdAt'>> & { updatedAt: FieldValue } = {
+  const payload: { [key: string]: any } = {
     updatedAt: serverTimestamp(),
   };
 
-  const generalUpdatableFields: (keyof UpdateNewsArticleData)[] = [
-    'title', 'content', 'status', 'coverImageUrl', 'draftContent', 'hasUnpublishedChanges',
-    'tags' // likeCount & likedBy handled by toggleLikeNewsArticle
+  // Add all valid fields from dataToUpdate to the payload
+  const updatableFields: (keyof UpdateNewsArticleData)[] = [
+    'title', 'tags', 'content', 'draftContent', 'status',
+    'coverImageUrl', 'hasUnpublishedChanges'
   ];
 
-  generalUpdatableFields.forEach(key => {
+  updatableFields.forEach(key => {
     if (dataToUpdate[key] !== undefined) {
-      (payload as any)[key] = dataToUpdate[key];
+      payload[key] = dataToUpdate[key];
     }
   });
 
+  // Apply specific logic based on the action
   const newStatus = dataToUpdate.status;
-  const contentValueFromUpdate = dataToUpdate.content;
 
-  if (isSavingDraftOfPublishedArticle && existingData.status === 'published') {
-    payload.draftContent = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.draftContent);
-    payload.hasUnpublishedChanges = true;
+  if (isSavingDraftOfPublishedArticle) {
     payload.status = 'published';
   } else if (newStatus === 'published') {
-    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
     payload.draftContent = null;
     payload.hasUnpublishedChanges = false;
-    payload.status = 'published';
-    if (existingData.status !== 'published' || !existingData.publishedAt) {
+    if (!existingData.publishedAt) {
       payload.publishedAt = serverTimestamp();
     }
   } else if (newStatus === 'draft') {
-    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
     payload.draftContent = null;
     payload.hasUnpublishedChanges = false;
-    payload.status = 'draft';
     payload.publishedAt = null;
-  } else if (newStatus !== undefined) {
-    payload.status = newStatus;
-    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
-    payload.draftContent = null;
-    payload.hasUnpublishedChanges = false;
-    if (newStatus !== 'published') {
-        payload.publishedAt = null;
-    }
-  } else if (contentValueFromUpdate !== undefined && !isSavingDraftOfPublishedArticle) {
-    payload.content = (typeof contentValueFromUpdate === 'string') ? contentValueFromUpdate : (contentValueFromUpdate === null ? null : existingData.content);
-    if (existingData.status === 'published') {
-        payload.draftContent = null;
-        payload.hasUnpublishedChanges = false;
-    }
   }
 
+  // Tag management logic
   const oldTags = existingData.tags || [];
   const newTags = dataToUpdate.tags !== undefined ? (dataToUpdate.tags || []) : oldTags;
-  payload.tags = newTags;
+  payload.tags = newTags; // Ensure tags are always present in the payload
   const tagsAdded = newTags.filter(tag => !oldTags.includes(tag));
   const tagsRemoved = oldTags.filter(tag => !newTags.includes(tag));
 
@@ -184,6 +167,7 @@ export const updateNewsArticle = async (
     throw new Error(error.message || `Could not update news article ${articleId}.`);
   }
 };
+
 
 export const getNewsArticlesByUserId = async (userId: string, status?: NewsArticleStatus): Promise<ClientNewsArticle[]> => {
   const clientAuthUid = auth.currentUser?.uid;
