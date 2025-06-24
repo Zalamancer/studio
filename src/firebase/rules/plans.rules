@@ -1,0 +1,103 @@
+    match /plans/{planId} {
+      allow create: if request.auth != null &&
+                       request.auth.uid == request.resource.data.ownerId &&
+                       request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 100 &&
+                       request.resource.data.ownerId is string && request.resource.data.ownerId == request.auth.uid &&
+                       request.resource.data.sector is string && request.resource.data.sector.size() > 0 &&
+                       (request.resource.data.subSector == null || request.resource.data.subSector is string) &&
+                       (request.resource.data.industry == null || request.resource.data.industry is string) &&
+                       (request.resource.data.naicsCode == null || request.resource.data.naicsCode is string) &&
+                       request.resource.data.version == 1 &&
+                       request.resource.data.roadmap is list &&
+                       request.resource.data.createdAt == request.time &&
+                       request.resource.data.updatedAt == request.time &&
+                       (request.resource.data.description == null || request.resource.data.description is string) &&
+                       request.resource.data.visibility is string && request.resource.data.visibility in ['private', 'unlisted', 'public'] &&
+                       request.resource.data.editability is string && request.resource.data.editability in ['owner_only', 'collaborators', 'everyone'] &&
+                       request.resource.data.viewUserIds is list && (request.resource.data.visibility == 'public' ? request.resource.data.viewUserIds.size() == 0 : request.resource.data.viewUserIds.hasAny([request.auth.uid])) &&
+                       request.resource.data.editUserIds is list && ((request.resource.data.editability in ['owner_only', 'collaborators'] && request.resource.data.editUserIds.hasAny([request.auth.uid])) || (request.resource.data.editability == 'everyone' && request.resource.data.editUserIds.size() == 0)) &&
+                       request.resource.data.keys().hasAll([
+                         'name', 'ownerId', 'description', 'sector', 'subSector', 'industry', 'naicsCode',
+                         'createdAt', 'updatedAt', 'version', 'roadmap',
+                         'visibility', 'editability', 'viewUserIds', 'editUserIds'
+                       ]) &&
+                       request.resource.data.size() == 15;
+
+      allow list: if (request.query.filters.size() > 0 &&
+                 request.query.filters[0].field == 'visibility' &&
+                 request.query.filters[0].operator == 'in' &&
+                 (request.query.filters[0].value.hasAny(['public', 'unlisted'])) &&
+                 (request.query.limit == null || request.query.limit <= 20)
+                ) || request.auth != null;
+
+			allow get: if resource.data.visibility in ['public', 'unlisted'] ||
+              (request.auth != null && request.auth.uid == resource.data.ownerId) ||
+              (request.auth != null && resource.data.viewUserIds.hasAny([request.auth.uid]));
+
+
+      function isOwner() {
+        return request.auth.uid == resource.data.ownerId;
+      }
+      function isPlanEditor() {
+        return request.auth.uid == resource.data.ownerId ||
+               (resource.data.editability == 'collaborators' && resource.data.editUserIds.hasAny([request.auth.uid])) ||
+               (resource.data.editability == 'everyone' && request.auth != null);
+      }
+      function isValidSettingsUpdate(requestData, resourceData) {
+        let allowedKeys = ['name', 'description', 'sector', 'subSector', 'industry', 'naicsCode', 'visibility', 'editability', 'viewUserIds', 'editUserIds', 'updatedAt'];
+        let changedKeys = requestData.diff(resourceData).affectedKeys();
+        return changedKeys.hasOnly(allowedKeys) &&
+               (!('roadmap' in changedKeys)) &&
+               (!('version' in changedKeys)) &&
+               (requestData.name == null || (requestData.name is string && requestData.name.size() > 0 && requestData.name.size() <= 100)) &&
+               (requestData.description == null || requestData.description is string) &&
+               (requestData.sector == null || (requestData.sector is string && requestData.sector.size() > 0)) &&
+               (requestData.subSector == null || requestData.subSector is string) &&
+               (requestData.industry == null || requestData.industry is string) &&
+               (requestData.naicsCode == null || requestData.naicsCode is string) &&
+               (requestData.visibility == null || (requestData.visibility is string && requestData.visibility in ['private', 'unlisted', 'public'])) &&
+               (requestData.editability == null || (requestData.editability is string && requestData.editability in ['owner_only', 'collaborators', 'everyone'])) &&
+               (requestData.viewUserIds == null || requestData.viewUserIds is list) &&
+               (requestData.editUserIds == null || requestData.editUserIds is list);
+      }
+      function isValidRoadmapUpdate(requestData, resourceData) {
+        let allowedKeys = ['roadmap', 'version', 'updatedAt'];
+        let changedKeys = requestData.diff(resourceData).affectedKeys();
+        return changedKeys.hasOnly(allowedKeys) &&
+               requestData.roadmap is list;
+      }
+
+      allow update: if request.auth != null &&
+                       request.resource.data.ownerId == resource.data.ownerId &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       request.resource.data.updatedAt == request.time &&
+                       (
+                         (isOwner() && isValidSettingsUpdate(request.resource.data, resource.data))
+                         ||
+                         (isPlanEditor() && isValidRoadmapUpdate(request.resource.data, resource.data))
+                       );
+      allow delete: if request.auth != null && request.auth.uid == resource.data.ownerId;
+
+      match /versions/{versionId} {
+        allow create: if request.auth != null &&
+                         request.resource.data.editorUid == request.auth.uid &&
+                         request.resource.data.planId == planId &&
+                         request.resource.data.roadmap is list &&
+                         request.resource.data.versionNumber is number &&
+                         request.resource.data.timestamp == request.time &&
+                         request.resource.data.keys().hasAll(['planId', 'editorUid', 'roadmap', 'versionNumber', 'timestamp']) &&
+                         request.resource.data.size() == 5;
+        allow list, get: if request.auth != null;
+        allow update, delete: if false;
+      }
+
+      // --- ADD THIS BLOCK FOR REAL-TIME PRESENCE ---
+      match /viewingUsers/{userId} {
+        // Any authenticated user can see who is viewing, but can't see the document content (just the ID)
+        allow list, get: if isAuthenticated();
+        // A user can only create, update, or delete their OWN presence document.
+        allow create, update, delete: if isAuthenticated() && request.auth.uid == userId;
+      }
+      // ------------------------------------------
+
+    }

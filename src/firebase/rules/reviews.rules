@@ -1,0 +1,28 @@
+    // --- Reviews Collection ---
+    match /reviews/{reviewId} {
+      allow read: if true; // Reviews are public
+      allow list: if true; // Allow listing for profiles (client-side filtering if needed)
+                         // Can be restricted by targetUserId if necessary: request.query.filters[0][2] == targetUserId
+
+      allow create: if isAuthenticated() &&
+                       request.resource.data.reviewerId == request.auth.uid &&
+                       request.resource.data.targetUserId != request.auth.uid && // Cannot review self
+                       request.resource.data.rating is number && request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
+                       request.resource.data.comment is string &&
+                       (request.resource.data.reviewerHistoricalAvgRating == null || request.resource.data.reviewerHistoricalAvgRating is number) &&
+                       request.resource.data.createdAt == request.time &&
+                       request.resource.data.updatedAt == request.time &&
+                       request.resource.data.keys().hasOnly(['targetUserId', 'reviewerId', 'reviewerName', 'reviewerAvatar', 'rating', 'comment', 'reviewerHistoricalAvgRating', 'createdAt', 'updatedAt']) &&
+                       request.resource.data.size() == 9;
+
+
+      allow update: if isAuthenticated() && request.auth.uid == resource.data.reviewerId && // Only reviewer can update
+                       request.resource.data.reviewerId == resource.data.reviewerId &&
+                       request.resource.data.targetUserId == resource.data.targetUserId &&
+                       request.resource.data.createdAt == resource.data.createdAt &&
+                       request.resource.data.reviewerHistoricalAvgRating == resource.data.reviewerHistoricalAvgRating && // Historical average is a snapshot, should not change
+                       request.resource.data.updatedAt == request.time &&
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'comment', 'updatedAt']);
+
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.reviewerId; // Only reviewer can delete
+    }

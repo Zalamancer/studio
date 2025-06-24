@@ -1,0 +1,33 @@
+// --- User Preferences Collection ---
+    match /userPreferences/{userId} {
+        allow read: if isAuthenticated() && request.auth.uid == userId;
+        allow create: if isAuthenticated() && request.auth.uid == userId &&
+                         request.resource.data.userId == userId &&
+                         request.resource.data.createdAt == request.time &&
+                         request.resource.data.updatedAt == request.time &&
+                         // Ensure all expected fields are present, even if default
+                         request.resource.data.keys().hasAll([
+                           'userId',
+                           'notifyOnReply', 'notifyOnMention', 'notifyOnNewConnectionRequest',
+                           'notifyOnConnectionAccepted', 'notifyOnNewMessage', 'notifyOnPlatformUpdates',
+                           'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
+                           'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
+                           'paymentMethods', 'createdAt', 'updatedAt'
+                         ]) &&
+                         // Be flexible with size due to optional Stripe fields potentially being null vs not present
+                         request.resource.data.size() >= 15; // Min size if no stripe fields
+
+        allow update: if isAuthenticated() && request.auth.uid == userId &&
+                         request.resource.data.userId == resource.data.userId && // userId cannot change
+                         request.resource.data.createdAt == resource.data.createdAt && // createdAt immutable
+                         request.resource.data.updatedAt == request.time && // Must be new server time
+                         // Allow only defined preference fields and stripe fields to be updated
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                           'notifyOnReply', 'notifyOnMention', 'notifyOnNewConnectionRequest',
+                           'notifyOnConnectionAccepted', 'notifyOnNewMessage', 'notifyOnPlatformUpdates',
+                           'stripeCustomerId', 'stripeSubscriptionId', 'activeStripePriceId',
+                           'stripeSubscriptionStatus', 'stripeSubscriptionCurrentPeriodEnd', 'stripeSubscriptionWillCancelAtPeriodEnd',
+                           'paymentMethods', 'updatedAt'
+                         ]);
+        allow delete: if false; // Users should not delete their preferences doc
+    }

@@ -1,0 +1,34 @@
+    // --- Users Collection ---
+    match /users/{userId} {
+      allow read: if true; // Publicly readable for basic profile info
+      allow create: if isAuthenticated() && request.auth.uid == userId &&
+                       request.resource.data.uid == userId &&
+                       request.resource.data.createdAt == request.time &&
+                       request.resource.data.updatedAt == request.time &&
+                       request.resource.data.lastLoginAt == request.time &&
+                       // Ensure only allowed fields are present on creation
+                       request.resource.data.keys().hasAll([
+                         'uid', 'email', 'companyName', 'mentionName', 'mentionNameLowercase',
+                         'avatarUrl', 'industry', 'description', 'descriptionVisibility',
+                         'sectorName', 'subSectorName', 'industryName', 'naicsCode',
+                         'tags', 'established', 'verified', 'isBotAccount', 'incomeRange',
+                         'createdAt', 'lastLoginAt', 'updatedAt'
+                       ]) &&
+                       request.resource.data.size() == 20; // Adjust size based on exact fields
+
+      allow update: if isAuthenticated() && request.auth.uid == userId &&
+                       request.resource.data.uid == resource.data.uid && // UID cannot change
+                       request.resource.data.email == resource.data.email && // Email shouldn't change this way
+                       request.resource.data.companyName == resource.data.companyName && // Company name set at signup
+                       request.resource.data.mentionName == resource.data.mentionName && // mentionName set at creation
+                       request.resource.data.mentionNameLowercase == resource.data.mentionNameLowercase && // ^
+                       request.resource.data.createdAt == resource.data.createdAt && // createdAt is immutable
+                       request.resource.data.updatedAt == request.time && // updatedAt must be new server time
+                       // Allow only specific fields to be updated by the user
+                       request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                         'avatarUrl', 'industry', 'description', 'descriptionVisibility', 'established', 'incomeRange',
+                         'sectorName', 'subSectorName', 'industryName', 'naicsCode',
+                         'tags', 'lastLoginAt', 'updatedAt', 'avatarVisibility' // avatarVisibility was added
+                       ]);
+      allow delete: if false; // Users should not be able to delete their own user document directly
+    }

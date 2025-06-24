@@ -1,0 +1,91 @@
+    match /conversations/{conversationId} {
+      function canRemoveParticipants() {
+      return resource.data.type == 'group'
+        && (request.auth.uid == resource.data.ownerId || request.auth.uid in resource.data.adminIds)
+        && request.resource.data.participants.size() < resource.data.participants.size()
+        && resource.data.ownerId in request.resource.data.participants; // owner cannot be removed
+    }
+
+      allow read, get: if request.auth.uid in resource.data.participants;
+      allow list: if request.auth != null &&
+                     request.query.filters.size() == 1 &&
+                     request.query.filters[0][0] == 'participants' &&
+                     request.query.filters[0][1] == 'array-contains' &&
+                     request.query.filters[0][2] == request.auth.uid &&
+                     (request.query.limit == null || request.query.limit <= 50) &&
+                     (request.query.orderBy == null || string(request.query.orderBy.path) == 'lastMessageTimestamp');
+
+
+      allow create: if request.auth.uid != null &&
+                       request.resource.data.participants.hasAll([request.auth.uid]) && // Creator must be a participant
+                       request.resource.data.createdAt == request.time &&
+                       request.resource.data.updatedAt == request.time &&
+                       (request.resource.data.type == 'direct' ? (
+                          request.resource.data.participants.size() == 2 &&
+                          request.resource.data.groupName == null &&
+                          request.resource.data.groupAvatarUrl == null &&
+                          request.resource.data.ownerId == null &&
+                          request.resource.data.adminIds.size() == 0 &&
+                          request.resource.data.keys().hasAll(['participants', 'type', 'postId', 'lastMessage', 'lastMessageTimestamp', 'createdAt', 'updatedAt', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds']) &&
+                          request.resource.data.size() == 11 // All fields for direct
+                       ) : ( // Group chat
+                          request.resource.data.type == 'group' &&
+                          request.resource.data.participants.size() >= 2 && // Groups must have at least 2 members (owner + 1 other)
+                          request.resource.data.groupName is string && request.resource.data.groupName.size() > 0 &&
+                          (request.resource.data.groupAvatarUrl == null || request.resource.data.groupAvatarUrl is string) &&
+                          request.resource.data.ownerId == request.auth.uid && // Creator is owner
+                          request.resource.data.adminIds.hasAll([request.auth.uid]) && // Creator is admin
+                          request.resource.data.postId == null && // Groups are not tied to posts
+                          request.resource.data.keys().hasAll(['participants', 'type', 'postId', 'lastMessage', 'lastMessageTimestamp', 'createdAt', 'updatedAt', 'groupName', 'groupAvatarUrl', 'ownerId', 'adminIds']) &&
+                          request.resource.data.size() == 11 // All fields for group
+                       ));
+
+        allow update: if request.auth.uid in resource.data.participants &&
+          request.resource.data.createdAt == resource.data.createdAt &&
+          request.resource.data.updatedAt == request.time &&
+          (
+            (resource.data.type == 'direct' ?
+              request.resource.data.type == resource.data.type &&
+              request.resource.data.postId == resource.data.postId &&
+              request.resource.data.groupName == resource.data.groupName &&
+              request.resource.data.groupAvatarUrl == resource.data.groupAvatarUrl &&
+              request.resource.data.ownerId == resource.data.ownerId &&
+              request.resource.data.adminIds.size() == resource.data.adminIds.size() && request.resource.data.adminIds.hasAll(resource.data.adminIds) &&
+              request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastMessage', 'lastMessageSenderId', 'lastMessageTimestamp', 'updatedAt', 'participants', 'formerParticipants'])
+            :
+              request.resource.data.type == resource.data.type &&
+              request.resource.data.postId == resource.data.postId &&
+              (
+                (request.resource.data.groupName == resource.data.groupName && request.resource.data.groupAvatarUrl == resource.data.groupAvatarUrl && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.adminIds.hasAll(resource.data.adminIds))
+                || (request.auth.uid in resource.data.adminIds &&
+                  request.resource.data.ownerId == resource.data.ownerId &&
+                  request.resource.data.adminIds.hasAll(resource.data.adminIds.added(request.resource.data.adminIds.removed(request.auth.uid))) &&
+                  request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupName', 'groupAvatarUrl', 'participants', 'adminIds', 'lastMessage', 'lastMessageSenderId', 'lastMessageTimestamp', 'updatedAt', 'formerParticipants'])
+                )
+                || (request.auth.uid == resource.data.ownerId &&
+                  request.resource.data.diff(resource.data).affectedKeys().hasAny(['groupName', 'groupAvatarUrl', 'participants', 'adminIds', 'ownerId', 'lastMessage', 'lastMessageSenderId', 'lastMessageTimestamp', 'updatedAt', 'formerParticipants'])
+                )
+              )
+            )
+            &&
+            (
+              request.resource.data.participants.hasAll(resource.data.participants) // only adding is allowed for most users
+              || canRemoveParticipants() // allows owner/admin to kick
+            )
+          );
+
+
+      match /messages/{messageId} {
+        allow read, get: if request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow list: if request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants &&
+                       (request.query.limit == null || request.query.limit <= 100);
+        allow create: if request.auth.uid == request.resource.data.senderId &&
+                         request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants &&
+                         request.resource.data.conversationId == conversationId &&
+                         request.resource.data.timestamp == request.time &&
+                         request.resource.data.read == false &&
+                         request.resource.data.keys().hasAll(['conversationId', 'senderId', 'text', 'timestamp', 'read', 'isBotMessage', 'replyToMessageId', 'repliedToTextSnippet']) &&
+                         request.resource.data.size() == 8;
+        allow update, delete: if false; // Messages are immutable
+      }
+    }

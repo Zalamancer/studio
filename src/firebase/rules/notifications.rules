@@ -1,0 +1,28 @@
+    // --- Notifications Collection ---
+    match /notifications/{notificationId} {
+        allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
+        allow list: if isAuthenticated() && request.query.filters[0][2] == request.auth.uid &&
+                       request.query.limit <= 20; // Limit query size for listing
+        allow create: if isAuthenticated() &&
+                         request.resource.data.userId is string && request.resource.data.userId.size() > 0 &&
+                         request.resource.data.senderId is string && request.resource.data.senderId.size() > 0 &&
+                         request.resource.data.type is string && request.resource.data.type.size() > 0 &&
+                         request.resource.data.isRead == false &&
+                         request.resource.data.timestamp == request.time &&
+                         // Ensure only expected fields are present
+                         request.resource.data.keys().hasOnly([
+                            'userId', 'type', 'senderId', 'senderName', 'senderAvatar',
+                            'postId', 'postQuestion', 'commentId', 'subCommentId',
+                            'conversationId', 'textSnippet', 'timestamp', 'isRead'
+                         ]) &&
+                         request.resource.data.size() >= 5 && request.resource.data.size() <= 13; // Min 5 (core fields + ts,isRead), Max 13 (all optional fields populated)
+
+        allow update: if isAuthenticated() && request.auth.uid == resource.data.userId &&
+                         request.resource.data.userId == resource.data.userId && // Immutable
+                         request.resource.data.type == resource.data.type && // Immutable
+                         request.resource.data.senderId == resource.data.senderId && // Immutable
+                         request.resource.data.timestamp == resource.data.timestamp && // Immutable
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'updatedAt']) && // Only allow 'isRead' and 'updatedAt' to change
+                         request.resource.data.updatedAt == request.time; // Ensure 'updatedAt' is set to server time
+        allow delete: if false;
+    }

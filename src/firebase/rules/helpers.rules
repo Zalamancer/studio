@@ -1,0 +1,12 @@
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null && request.auth.uid != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isUserDocumentOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.uid;
+    }

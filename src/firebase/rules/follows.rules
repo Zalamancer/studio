@@ -1,0 +1,25 @@
+    // Follows Collection
+    match /follows/{followId} {
+      // `get` rule: A user can read a specific follow document if they are the follower.
+      allow get: if isAuthenticated() && request.auth.uid == resource.data.followerId;
+      
+      // `list` rule: A user can list documents from the `follows` collection
+      // ONLY IF they are querying for their own `followerId`.
+      allow list: if isAuthenticated() &&
+                     request.query.where.size() == 1 &&
+                     request.query.where[0].field == 'followerId' &&
+                     request.query.where[0].operator == '==' &&
+                     request.query.where[0].value == request.auth.uid;
+      
+      // A user can create a follow relationship for themselves.
+      // Also validates that the document ID matches the content.
+      allow create: if isAuthenticated() 
+                     && request.auth.uid == request.resource.data.followerId
+                     && followId == request.resource.data.followerId + '_' + request.resource.data.followingId;
+      
+      // A user can only delete their own follow relationships (unfollow).
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.followerId;
+      
+      // Updates are not allowed; unfollow is a delete, follow is a create.
+      allow update: if false;
+    }

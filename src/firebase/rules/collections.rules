@@ -1,0 +1,34 @@
+    // --- Collections (Saved Posts and Articles) ---
+    match /collections/{collectionId} {
+        function isCollectionOwner() {
+            return isAuthenticated() && request.auth.uid == resource.data.ownerId;
+        }
+        function isSharedWithUser() {
+            return isAuthenticated() && request.auth.uid in resource.data.sharedWithUserIds;
+        }
+
+        allow read: if isCollectionOwner() || isSharedWithUser();
+        allow list: if isAuthenticated() && (
+                        (request.query.filters.size() == 1 && request.query.filters[0][0] == "ownerId" && request.query.filters[0][1] == "==" && request.query.filters[0][2] == request.auth.uid) ||
+                        (request.query.filters.size() == 1 && request.query.filters[0][0] == "sharedWithUserIds" && request.query.filters[0][1] == "array-contains" && request.query.filters[0][2] == request.auth.uid)
+                      );
+
+        allow create: if isAuthenticated() &&
+                         request.resource.data.ownerId == request.auth.uid &&
+                         request.resource.data.name is string && request.resource.data.name.size() > 0 &&
+                         request.resource.data.createdAt == request.time &&
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.postIds is list &&
+                         request.resource.data.articleIds is list &&
+                         request.resource.data.sharedWithUserIds is list &&
+                         request.resource.data.keys().hasAll(['ownerId', 'name', 'description', 'postIds', 'articleIds', 'sharedWithUserIds', 'createdAt', 'updatedAt']) &&
+                         request.resource.data.size() == 8;
+
+        allow update: if isAuthenticated() && isCollectionOwner() &&
+                         request.resource.data.ownerId == resource.data.ownerId &&
+                         request.resource.data.createdAt == resource.data.createdAt &&
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'description', 'postIds', 'articleIds', 'sharedWithUserIds', 'updatedAt']);
+
+        allow delete: if isCollectionOwner();
+    }

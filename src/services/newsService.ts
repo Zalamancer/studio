@@ -1,4 +1,3 @@
-
 // src/services/newsService.ts
 import { db, auth } from '@/lib/firebase/config';
 import {
@@ -120,8 +119,9 @@ export const updateNewsArticle = async (
 
   // Add all valid fields from dataToUpdate to the payload
   const updatableFields: (keyof UpdateNewsArticleData)[] = [
-    'title', 'tags', 'content', 'draftContent', 'status',
-    'coverImageUrl', 'hasUnpublishedChanges'
+    'title', 'content', 'status', 'coverImageUrl',
+    'draftContent', 'hasUnpublishedChanges',
+    'tags', 'likeCount', 'likedBy' // commentCount is updated via specific functions
   ];
 
   updatableFields.forEach(key => {
@@ -250,6 +250,58 @@ export const getPublishedNewsArticles = async (count = 15): Promise<ClientNewsAr
     throw error;
   }
 };
+
+export const getArticlesByAuthorIds = async (authorIds: string[], count = 30): Promise<ClientNewsArticle[]> => {
+  if (authorIds.length === 0) {
+    return [];
+  }
+  // Firestore 'in' queries are limited to 30 elements in a where clause.
+  if (authorIds.length > 30) {
+    console.warn(`[newsService] Querying for articles by more than 30 authors (${authorIds.length}). Truncating to 30.`);
+    authorIds = authorIds.slice(0, 30);
+  }
+
+  const constraints: QueryConstraint[] = [
+    where('status', '==', 'published'),
+    where('userId', 'in', authorIds),
+    orderBy('publishedAt', 'desc'),
+    limit(count)
+  ];
+  const q = query(newsArticlesCollectionRef, ...constraints);
+
+  try {
+    const querySnapshot = await getDocs(q);
+    const articles = querySnapshot.docs.map((docSnap) => {
+      const data = docSnap.data() as NewsArticle;
+      return {
+        id: docSnap.id,
+        userId: data.userId,
+        title: data.title,
+        tags: data.tags || [],
+        content: data.content,
+        draftContent: null,
+        hasUnpublishedChanges: false,
+        status: data.status,
+        coverImageUrl: data.coverImageUrl || null,
+        createdAt: (data.createdAt as Timestamp).toMillis(),
+        updatedAt: (data.updatedAt as Timestamp).toMillis(),
+        publishedAt: data.publishedAt ? (data.publishedAt as Timestamp).toMillis() : Date.now(),
+        likeCount: data.likeCount || 0,
+        likedBy: data.likedBy || [],
+        commentCount: data.commentCount || 0,
+      } as ClientNewsArticle;
+    });
+    return articles;
+  } catch (error: any) {
+    console.error(`[newsService] Error fetching articles by author IDs:`, error);
+    if (error.code === 'failed-precondition' && error.message.includes('index')) {
+        console.error("[newsService] Firestore query for followed articles requires a composite index. Create an index on 'status' (==), 'userId' (in), and 'publishedAt' (desc) in the Firebase console for the 'newsArticles' collection.");
+        throw new Error("Firestore query requires a composite index. Please create it in the Firebase console.");
+    }
+    throw error;
+  }
+};
+
 
 export const deleteNewsArticle = async (articleId: string, userId: string): Promise<void> => {
   const user = auth.currentUser;

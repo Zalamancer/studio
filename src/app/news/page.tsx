@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 import { useAuth } from '@/contexts/AuthContext';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { getPublishedNewsArticles, getNewsArticlesByUserId } from '@/services/newsService';
+import { getPublishedNewsArticles, getNewsArticlesByUserId, getArticlesByAuthorIds } from '@/services/newsService';
 import type { ClientNewsArticle } from '@/types/news';
 import { cn } from '@/lib/utils';
 import { ArticleListItem } from '@/components/news/ArticleListItem';
@@ -21,7 +21,7 @@ import type { ClientTag } from '@/types/tag';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { usePage } from '@/contexts/PageContext';
 import { useRouter } from 'next/navigation';
-import { getFollowingIds } from '@/services/followService'; // New import
+import { getFollowingIds } from '@/services/followService';
 
 const EMPTY_TAG_ARRAY: ClientTag[] = []; // Stable reference for an empty array
 
@@ -46,11 +46,16 @@ const NewsPage = () => {
     enabled: !!user,
   });
 
-  const { data: followedIds = [], isLoading: isLoadingFollowed } = useQuery<string[]>({
-    queryKey: ['followedUserIds', user?.uid],
-    queryFn: () => (user ? getFollowingIds(user.uid) : Promise.resolve([])),
-    enabled: !!user && activeArticleView === 'followed', // Only fetch when this view is active
-    staleTime: 1000 * 60 * 5,
+  const { data: followedArticles = [], isLoading: isLoadingFollowedArticles, error: followedArticlesError } = useQuery<ClientNewsArticle[]>({
+    queryKey: ['followedArticles', user?.uid],
+    queryFn: async () => {
+      if (!user) return [];
+      const ids = await getFollowingIds(user.uid);
+      if (ids.length === 0) return [];
+      return getArticlesByAuthorIds(ids);
+    },
+    enabled: !!user && activeArticleView === 'followed',
+    staleTime: 1000 * 60 * 2,
   });
 
   const { data: userCollections = [] } = useQuery<ClientCollection[]>({
@@ -94,7 +99,7 @@ const NewsPage = () => {
     if (activeArticleView === 'my_articles' && user) {
       articlesToDisplay = userArticles;
     } else if (activeArticleView === 'followed' && user) {
-      articlesToDisplay = allPublishedArticles.filter(article => followedIds.includes(article.userId));
+      articlesToDisplay = followedArticles;
     } else {
       articlesToDisplay = allPublishedArticles;
     }
@@ -112,9 +117,10 @@ const NewsPage = () => {
         return articlesToDisplay.sort((a,b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     }
     return articlesToDisplay.sort((a,b) => (b.publishedAt || b.updatedAt || 0) - (a.publishedAt || a.updatedAt || 0));
-  }, [allPublishedArticles, userArticles, activeArticleView, user, searchTerm, getCleanTextExcerpt, followedIds]);
+  }, [allPublishedArticles, userArticles, activeArticleView, user, searchTerm, getCleanTextExcerpt, followedArticles]);
 
-  const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles) || (activeArticleView === 'followed' && isLoadingFollowed);
+  const isLoading = authLoading || isLoadingAllArticles || (!!user && isLoadingUserArticles) || (activeArticleView === 'followed' && isLoadingFollowedArticles);
+  const combinedError = allArticlesError || (!!user && userArticlesError) || (activeArticleView === 'followed' && followedArticlesError);
 
   const handleCollectionUpdate = useCallback(() => {
     if (user) {
@@ -185,17 +191,17 @@ const NewsPage = () => {
         {isLoading && (
           <div className="flex flex-col items-center justify-center py-10"><Loader2 className="h-10 w-10 animate-spin text-primary" /><p className="ml-2 text-sm text-muted-foreground mt-2">Loading articles...</p></div>
         )}
-        {(allArticlesError || (user && userArticlesError)) && !isLoading &&(
-           <div className="text-destructive flex flex-col items-center gap-2 text-sm p-6 bg-destructive/5 rounded-md justify-center border border-destructive/20 mb-6"><AlertTriangle className="h-8 w-8 flex-shrink-0" /><p className="font-semibold">Error Loading Articles</p><p>{allArticlesError?.message || userArticlesError?.message || "An unexpected error occurred."}</p></div>
+        {combinedError && !isLoading &&(
+           <div className="text-destructive flex flex-col items-center gap-2 text-sm p-6 bg-destructive/5 rounded-md justify-center border border-destructive/20 mb-6"><AlertTriangle className="h-8 w-8 flex-shrink-0" /><p className="font-semibold">Error Loading Articles</p><p>{combinedError?.message || "An unexpected error occurred."}</p></div>
         )}
-        {!isLoading && !allArticlesError && filteredArticles.length === 0 && (
+        {!isLoading && !combinedError && filteredArticles.length === 0 && (
           <div className="text-center py-10"><Newspaper className="h-16 w-16 text-muted-foreground mx-auto mb-4 opacity-50" /><p className="text-lg font-medium text-muted-foreground">{getEmptyStateMessage()}</p>
             {activeArticleView === 'my_articles' && !searchTerm && user && (
                <Button asChild size="sm" className="mt-4"><Link href="/news/create"><PlusCircle className="mr-2 h-4 w-4"/>Create Your First Article</Link></Button>
             )}
           </div>
         )}
-        {!isLoading && !allArticlesError && filteredArticles.length > 0 && (
+        {!isLoading && !combinedError && filteredArticles.length > 0 && (
           <div className="max-w-3xl mx-auto space-y-8">
             {filteredArticles.map((article) => (
               <ArticleListItem key={article.id} article={article} getCleanTextExcerpt={getCleanTextExcerpt} currentUserId={user?.uid || null} savedItemIds={savedItemIds} onCollectionUpdate={handleCollectionUpdate}/>

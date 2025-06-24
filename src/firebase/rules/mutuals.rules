@@ -1,0 +1,48 @@
+    // --- Mutuals (Connections) Collection ---
+    match /mutuals/{connectionId} {
+      function isUserInConnection() {
+        return isAuthenticated() && request.auth.uid in resource.data.userIds;
+      }
+      function isRequester() {
+        return isAuthenticated() && request.auth.uid == request.resource.data.requesterId;
+      }
+      function isRecipient() {
+        return isAuthenticated() && request.auth.uid in request.resource.data.userIds && request.auth.uid != request.resource.data.requesterId;
+      }
+
+      allow read: if isUserInConnection();
+      allow list: if isAuthenticated(); // Be cautious, might allow querying all connections. Refine if needed.
+                                      // Often better to fetch specific connections via user-specific queries.
+
+      allow create: if isAuthenticated() && isRequester() &&
+                       request.resource.data.userIds.hasAll([request.auth.uid]) && // Requester must be in userIds
+                       request.resource.data.userIds.size() == 2 && // Only two users
+                       request.resource.data.status == 'pending' &&
+                       request.resource.data.requesterId != request.resource.data.userIds.removeAll([request.auth.uid])[0] && // Requester isn't the other person
+                       request.resource.data.requestedAt == request.time &&
+                       request.resource.data.updatedAt == request.time &&
+                       !exists(/databases/$(database)/documents/mutuals/$(connectionId)) && // Ensure it's a new request
+                       request.resource.data.keys().hasAll(['userIds', 'status', 'requesterId', 'requestedAt', 'updatedAt']) &&
+                       request.resource.data.size() == 5;
+
+
+      allow update: if isAuthenticated() && isUserInConnection() &&
+                       request.resource.data.userIds == resource.data.userIds && // userIds cannot change
+                       request.resource.data.requesterId == resource.data.requesterId && // requesterId cannot change
+                       request.resource.data.requestedAt == resource.data.requestedAt && // requestedAt cannot change
+                       request.resource.data.updatedAt == request.time &&
+                       ( // Case 1: Accepting a request
+                         resource.data.status == 'pending' &&
+                         request.resource.data.status == 'connected' &&
+                         request.resource.data.connectedAt == request.time &&
+                         request.auth.uid != resource.data.requesterId && // Only recipient can accept
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'connectedAt', 'updatedAt'])
+                       ) ||
+                       ( // Case 2: User blocking (example, if you implement blocking within mutuals)
+                         request.resource.data.status == 'blocked' &&
+                         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
+                       );
+
+      allow delete: if isAuthenticated() && isUserInConnection() &&
+                       (resource.data.status == 'pending' || resource.data.status == 'connected'); // Allow delete for pending (cancel/reject) or connected (remove)
+    }

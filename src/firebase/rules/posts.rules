@@ -1,0 +1,116 @@
+    // --- Posts Collection & Subcollections ---
+    match /posts/{postId} {
+      allow read: if true; // Anyone can read posts
+      allow list: if true; // Anyone can list posts (e.g., for the main board)
+
+      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
+                       request.resource.data.createdAt == request.time &&
+                       // Add other necessary field validations for post creation
+                       request.resource.data.question is string && request.resource.data.question.size() > 0 &&
+                       request.resource.data.tags is list &&
+                       request.resource.data.sector is string &&
+                       request.resource.data.commentCount == 0 &&
+                       request.resource.data.keys().hasAll([
+                         'userId', 'question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode',
+                         'ratingScore', 'imageUrls', 'mentionedUserIds', 'requestType', 'createdAt',
+                         'commentCount', 'descriptionDetails', 'descriptionTried', 'descriptionOutcome',
+                         'maxBudget', 'deadline'
+                       ]) &&
+                       request.resource.data.size() == 18; // Adjust size based on exact fields on create
+
+      allow update: if isAuthenticated() &&
+                       (
+                         ( // Case 1: Owner updating their post
+                           request.auth.uid == resource.data.userId &&
+                           request.resource.data.userId == resource.data.userId && // Cannot change owner
+                           request.resource.data.createdAt == resource.data.createdAt && // Cannot change creation time
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                             'question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'imageUrls', 'requestType',
+                             'descriptionDetails', 'descriptionTried', 'descriptionOutcome', 'maxBudget', 'deadline',
+                             'updatedAt' // If you add an updatedAt field
+                           ])
+                         )
+                         || // Case 2: Any authenticated user updating commentCount by creating/deleting a comment
+                         (
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'updatedAt']) &&
+                           (request.resource.data.commentCount == resource.data.commentCount + 1 || request.resource.data.commentCount == resource.data.commentCount - 1) &&
+                           request.resource.data.updatedAt == request.time // Ensure updatedAt is also set
+                         )
+                       );
+
+
+      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId; // Only owner can delete
+
+      // --- Comments Subcollection (for 'posts') ---
+      match /comments/{commentId} {
+        allow read: if true;
+        allow list: if true; // Allow listing comments
+        allow create: if isAuthenticated() &&
+                         request.resource.data.userId == request.auth.uid &&
+                         request.resource.data.text is string && request.resource.data.text.size() > 0 &&
+                         request.resource.data.timestamp == request.time &&
+                         request.resource.data.updatedAt == request.time &&
+                         request.resource.data.likeCount == 0 &&
+                         request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
+                         request.resource.data.mentionedUserIds is list &&
+                         request.resource.data.isShadowBanned == false && // Default to false for post comments
+                         request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
+                         request.resource.data.size() == 9;
+        allow update: if isAuthenticated() &&
+                         request.resource.data.updatedAt == request.time && // Must be part of any update
+                         ( // Case 1: Liking/Unliking
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
+                           (request.resource.data.likeCount == resource.data.likeCount + 1 || request.resource.data.likeCount == resource.data.likeCount - 1) &&
+                           (
+                             (request.resource.data.likedBy == resource.data.likedBy.concat([request.auth.uid])) || // Liking
+                             (request.resource.data.likedBy == resource.data.likedBy.removed(request.auth.uid))    // Unliking
+                           )
+                         );
+                         // Add other update cases if comment text can be edited, etc.
+        allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+
+        match /subcomments/{subCommentId} {
+          allow read: if true;
+          allow list: if true;
+          allow create: if isAuthenticated() &&
+                           request.resource.data.userId == request.auth.uid &&
+                           request.resource.data.text is string && request.resource.data.text.size() > 0 &&
+                           request.resource.data.timestamp == request.time &&
+                           request.resource.data.updatedAt == request.time &&
+                           request.resource.data.likeCount == 0 &&
+                           request.resource.data.likedBy is list && request.resource.data.likedBy.size() == 0 &&
+                           request.resource.data.mentionedUserIds is list &&
+                           request.resource.data.isShadowBanned == false &&
+                           request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
+                           request.resource.data.size() == 9;
+          allow update: if isAuthenticated() &&
+                           request.resource.data.updatedAt == request.time && // Must be part of any update
+                           ( // Case 1: Liking/Unliking
+                             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
+                             (request.resource.data.likeCount == resource.data.likeCount + 1 || request.resource.data.likeCount == resource.data.likeCount - 1) &&
+                             (
+                               (request.resource.data.likedBy == resource.data.likedBy.concat([request.auth.uid])) || // Liking
+                               (request.resource.data.likedBy == resource.data.likedBy.removed(request.auth.uid))    // Unliking
+                             )
+                           );
+          allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+        }
+      }
+      match /bids/{bidId} {
+          allow read: if isAuthenticated(); // Anyone authenticated can read bids once they can list them.
+          allow list: if isAuthenticated(); // Allow any authenticated user to list bids for a post.
+          allow create: if isAuthenticated() &&
+                           request.resource.data.bidderId == request.auth.uid &&
+                           // Safely check post owner using .get()
+                           get(/databases/$(database)/documents/posts/$(postId)).data.get('userId', '') != request.auth.uid &&
+                           request.resource.data.postId == postId && // Ensure bid is for this post
+                           request.resource.data.bidAmount is number && request.resource.data.bidAmount >= 0 &&
+                           request.resource.data.timestamp == request.time &&
+                           request.resource.data.bidMessage is string && // bidMessage should be string
+                           // Ensure only these keys are present and the count is exact
+                           request.resource.data.keys().hasOnly(['postId', 'bidderId', 'bidAmount', 'bidMessage', 'timestamp']) &&
+                           request.resource.data.size() == 5;
+          allow update: if false; // Bids are generally not updatable, only created/deleted
+          allow delete: if isAuthenticated() && request.auth.uid == resource.data.bidderId; // Bidder can delete their bid
+      }
+    }
