@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/contexts/AuthContext';
 import { useToast } from '@/hooks/use-toast';
 import { getNewsArticleById, updateNewsArticle, toggleLikeNewsArticle, decrementNewsArticleCommentCount } from '@/services/newsService';
@@ -53,7 +53,6 @@ import type { UserProfileBasic } from '@/types/connection';
 import { TextWithMentions } from '@/components/board-page/TextWithMentions';
 import { IS_VALID_FIREBASE_UID_REGEX } from '@/lib/utils';
 import { SaveToCollectionDialog } from '@/components/collections/SaveToCollectionDialog';
-import { getUserCollections } from '@/services/collectionService';
 import type { ClientCollection } from '@/types/collection';
 
 const TOOLBAR_HEIGHT = 36;
@@ -76,10 +75,11 @@ const extractMentionedUidsForNewsComment = (text: string, profilesToSearch: User
 
 const ArticlePage = () => {
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const articleIdParam = params?.articleId as string | undefined;
   const { user, loading: authLoading } = useAuth();
   const { toast } = useToast();
-  const router = useRouter();
   const queryClient = useQueryClient();
 
   const { data: article, isLoading: isLoadingArticle, error: errorLoadingArticle, refetch: refetchArticle } = useQuery<ClientNewsArticle | null>({
@@ -171,30 +171,43 @@ const ArticlePage = () => {
   const isSaved = useMemo(() => savedItemIds.has(article?.id || ''), [savedItemIds, article]);
 
   useEffect(() => {
-    if (article) {
+    if (article && isEditingAllowed !== undefined) {
       setTitle(article.title || "");
       setTags(article.tags || []);
       
-      let contentToLoadInEditor;
+      const modeFromUrl = searchParams.get('mode');
+      const shouldStartInEditMode = modeFromUrl === 'edit' && isEditingAllowed;
 
-      if (article.status === 'published') {
-           contentToLoadInEditor = article.content || "<p><br></p>";
-           setViewingMode('live');
-      } else { // It's a draft
-           contentToLoadInEditor = article.content || "<p><br></p>";
-           setViewingMode('draft');
+      let contentToLoadInEditor;
+      let initialMode: 'draft' | 'live';
+
+      if (shouldStartInEditMode) {
+        initialMode = 'draft';
+        contentToLoadInEditor = (article.hasUnpublishedChanges && article.draftContent !== null && article.draftContent !== undefined)
+          ? article.draftContent
+          : article.content;
+      } else if (article.status === 'published') {
+        initialMode = 'live';
+        contentToLoadInEditor = article.content;
+      } else { // It's a draft article
+        initialMode = 'draft';
+        contentToLoadInEditor = article.content;
       }
+
+      setViewingMode(initialMode);
       
-      setStoryContent(contentToLoadInEditor);
-      if (contentEditableRef.current && contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
-        contentEditableRef.current.innerHTML = contentToLoadInEditor;
+      const finalContent = contentToLoadInEditor || "<p><br></p>";
+      setStoryContent(finalContent);
+      if (contentEditableRef.current && contentEditableRef.current.innerHTML !== finalContent) {
+        contentEditableRef.current.innerHTML = finalContent;
       }
       
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
     }
-  }, [article]);
+  }, [article, searchParams, isEditingAllowed]);
+
 
   const { data: allNewsComments = [], isLoading: isLoadingNewsComments, refetch: refetchNewsComments } = useQuery<ClientComment[]>({
     queryKey: ['newsComments', articleIdParam],
@@ -453,7 +466,7 @@ const ArticlePage = () => {
     if (!article || !isEditingAllowed) return;
     const draftContent = (article.hasUnpublishedChanges && article.draftContent !== null && article.draftContent !== undefined)
       ? article.draftContent
-      : article.content; // Fallback to live content if starting a new draft
+      : article.content;
     setStoryContent(draftContent || "<p><br></p>");
     if (contentEditableRef.current) {
       contentEditableRef.current.innerHTML = draftContent || "<p><br></p>";
@@ -601,11 +614,11 @@ const ArticlePage = () => {
                             <Eye className="mr-2 h-4 w-4" /> View Live Version
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished}>
+                        <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished || viewingMode === 'live'}>
                             {isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
                             Save Draft
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700">
+                        <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer text-green-600 focus:text-green-700">
                             <CheckCircle className="mr-2 h-4 w-4" /> 
                             {article.hasUnpublishedChanges ? 'Publish Changes' : 'Update Live Article'}
                         </DropdownMenuItem>

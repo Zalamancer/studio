@@ -1,3 +1,4 @@
+
 // src/components/news/ArticleListItem.tsx
 "use client";
 
@@ -114,7 +115,7 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
         <div className="flex items-center gap-0.5 sm:gap-1">
         {isOwnArticle && (
             <Button variant="ghost" size="icon" className="h-7 w-7 p-1" asChild>
-                <Link href={`/news/article/${article.id}`} title="Edit Article" onClick={(e) => e.stopPropagation()}>
+                <Link href={`/news/article/${article.id}?mode=edit`} title="Edit Article" onClick={(e) => e.stopPropagation()}>
                     <Edit3 className="h-4 w-4"/>
                 </Link>
             </Button>
