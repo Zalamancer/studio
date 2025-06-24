@@ -1,26 +1,25 @@
-
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
 
     // Helper functions
-    function isAuthenticated() {
+    function isSignedIn() {
       return request.auth != null && request.auth.uid != null;
     }
 
     function isOwner(userId) {
-      return isAuthenticated() && request.auth.uid == userId;
+      return isSignedIn() && request.auth.uid == userId;
     }
 
     function isUserDocumentOwner() {
-      return isAuthenticated() && request.auth.uid == resource.data.uid;
+      return isSignedIn() && request.auth.uid == resource.data.uid;
     }
 
     // --- Users Collection ---
     match /users/{userId} {
       allow read: if true; // Publicly readable for basic profile info
-      allow create: if isAuthenticated() && request.auth.uid == userId &&
+      allow create: if isSignedIn() && request.auth.uid == userId &&
                        request.resource.data.uid == userId &&
                        request.resource.data.createdAt == request.time &&
                        request.resource.data.updatedAt == request.time &&
@@ -35,7 +34,7 @@ service cloud.firestore {
                        ]) &&
                        request.resource.data.size() == 20; // Adjust size based on exact fields
 
-      allow update: if isAuthenticated() && request.auth.uid == userId &&
+      allow update: if isSignedIn() && request.auth.uid == userId &&
                        request.resource.data.uid == resource.data.uid && // UID cannot change
                        request.resource.data.email == resource.data.email && // Email shouldn't change this way
                        request.resource.data.companyName == resource.data.companyName && // Company name set at signup
@@ -55,20 +54,20 @@ service cloud.firestore {
     // --- Mutuals (Connections) Collection ---
     match /mutuals/{connectionId} {
       function isUserInConnection() {
-        return isAuthenticated() && request.auth.uid in resource.data.userIds;
+        return isSignedIn() && request.auth.uid in resource.data.userIds;
       }
       function isRequester() {
-        return isAuthenticated() && request.auth.uid == request.resource.data.requesterId;
+        return isSignedIn() && request.auth.uid == request.resource.data.requesterId;
       }
       function isRecipient() {
-        return isAuthenticated() && request.auth.uid in request.resource.data.userIds && request.auth.uid != request.resource.data.requesterId;
+        return isSignedIn() && request.auth.uid in request.resource.data.userIds && request.auth.uid != request.resource.data.requesterId;
       }
 
       allow read: if isUserInConnection();
-      allow list: if isAuthenticated(); // Be cautious, might allow querying all connections. Refine if needed.
+      allow list: if isSignedIn(); // Be cautious, might allow querying all connections. Refine if needed.
                                       // Often better to fetch specific connections via user-specific queries.
 
-      allow create: if isAuthenticated() && isRequester() &&
+      allow create: if isSignedIn() && isRequester() &&
                        request.resource.data.userIds.hasAll([request.auth.uid]) && // Requester must be in userIds
                        request.resource.data.userIds.size() == 2 && // Only two users
                        request.resource.data.status == 'pending' &&
@@ -80,7 +79,7 @@ service cloud.firestore {
                        request.resource.data.size() == 5;
 
 
-      allow update: if isAuthenticated() && isUserInConnection() &&
+      allow update: if isSignedIn() && isUserInConnection() &&
                        request.resource.data.userIds == resource.data.userIds && // userIds cannot change
                        request.resource.data.requesterId == resource.data.requesterId && // requesterId cannot change
                        request.resource.data.requestedAt == resource.data.requestedAt && // requestedAt cannot change
@@ -97,7 +96,7 @@ service cloud.firestore {
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt'])
                        );
 
-      allow delete: if isAuthenticated() && isUserInConnection() &&
+      allow delete: if isSignedIn() && isUserInConnection() &&
                        (resource.data.status == 'pending' || resource.data.status == 'connected'); // Allow delete for pending (cancel/reject) or connected (remove)
     }
 
@@ -106,7 +105,7 @@ service cloud.firestore {
       allow read: if true; // Anyone can read posts
       allow list: if true; // Anyone can list posts (e.g., for the main board)
 
-      allow create: if isAuthenticated() && request.auth.uid == request.resource.data.userId &&
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId &&
                        request.resource.data.createdAt == request.time &&
                        // Add other necessary field validations for post creation
                        request.resource.data.question is string && request.resource.data.question.size() > 0 &&
@@ -121,7 +120,7 @@ service cloud.firestore {
                        ]) &&
                        request.resource.data.size() == 18; // Adjust size based on exact fields on create
 
-      allow update: if isAuthenticated() &&
+      allow update: if isSignedIn() &&
                        (
                          ( // Case 1: Owner updating their post
                            request.auth.uid == resource.data.userId &&
@@ -142,13 +141,13 @@ service cloud.firestore {
                        );
 
 
-      allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId; // Only owner can delete
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.userId; // Only owner can delete
 
       // --- Comments Subcollection (for 'posts') ---
       match /comments/{commentId} {
         allow read: if true;
         allow list: if true; // Allow listing comments
-        allow create: if isAuthenticated() &&
+        allow create: if isSignedIn() &&
                          request.resource.data.userId == request.auth.uid &&
                          request.resource.data.text is string && request.resource.data.text.size() > 0 &&
                          request.resource.data.timestamp == request.time &&
@@ -159,7 +158,7 @@ service cloud.firestore {
                          request.resource.data.isShadowBanned == false && // Default to false for post comments
                          request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
                          request.resource.data.size() == 9;
-        allow update: if isAuthenticated() &&
+        allow update: if isSignedIn() &&
                          request.resource.data.updatedAt == request.time && // Must be part of any update
                          ( // Case 1: Liking/Unliking
                            request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
@@ -170,12 +169,12 @@ service cloud.firestore {
                            )
                          );
                          // Add other update cases if comment text can be edited, etc.
-        allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+        allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
 
         match /subcomments/{subCommentId} {
           allow read: if true;
           allow list: if true;
-          allow create: if isAuthenticated() &&
+          allow create: if isSignedIn() &&
                            request.resource.data.userId == request.auth.uid &&
                            request.resource.data.text is string && request.resource.data.text.size() > 0 &&
                            request.resource.data.timestamp == request.time &&
@@ -186,7 +185,7 @@ service cloud.firestore {
                            request.resource.data.isShadowBanned == false &&
                            request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
                            request.resource.data.size() == 9;
-          allow update: if isAuthenticated() &&
+          allow update: if isSignedIn() &&
                            request.resource.data.updatedAt == request.time && // Must be part of any update
                            ( // Case 1: Liking/Unliking
                              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
@@ -196,7 +195,7 @@ service cloud.firestore {
                                (request.resource.data.likedBy == resource.data.likedBy.removed(request.auth.uid))    // Unliking
                              )
                            );
-          allow delete: if isAuthenticated() && request.auth.uid == resource.data.userId;
+          allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
         }
       }
       match /bids/{bidId} {
@@ -214,7 +213,7 @@ service cloud.firestore {
                            request.resource.data.keys().hasOnly(['postId', 'bidderId', 'bidAmount', 'bidMessage', 'timestamp']) &&
                            request.resource.data.size() == 5;
           allow update: if false; // Bids are generally not updatable, only created/deleted
-          allow delete: if isAuthenticated() && request.auth.uid == resource.data.bidderId; // Bidder can delete their bid
+          allow delete: if isAuthenticated() && request.auth.uid == resource.data.bidderId;
       }
     }
 
@@ -276,9 +275,7 @@ service cloud.firestore {
               request.resource.data.type == resource.data.type &&
               request.resource.data.postId == resource.data.postId &&
               (
-                (request.resource.data.groupName == resource.data.groupName && request.resource.data.groupAvatarUrl == resource.data.groupAvatarUrl && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.adminIds.hasAll(resource.data.adminIds.added(request.resource.data.adminIds.removed(request.auth.uid))) &&
-                  request.resource.data.diff(resource.data).affectedKeys().hasAny(['lastMessage', 'lastMessageSenderId', 'lastMessageTimestamp', 'updatedAt', 'participants', 'formerParticipants'])
-                )
+                (request.resource.data.groupName == resource.data.groupName && request.resource.data.groupAvatarUrl == resource.data.groupAvatarUrl && request.resource.data.ownerId == resource.data.ownerId && request.resource.data.adminIds.hasAll(resource.data.adminIds))
                 || (request.auth.uid in resource.data.adminIds &&
                   request.resource.data.ownerId == resource.data.ownerId &&
                   request.resource.data.adminIds.hasAll(resource.data.adminIds.added(request.resource.data.adminIds.removed(request.auth.uid))) &&
@@ -315,10 +312,10 @@ service cloud.firestore {
 
     // --- Notifications Collection ---
     match /notifications/{notificationId} {
-        allow read: if isAuthenticated() && request.auth.uid == resource.data.userId;
-        allow list: if isAuthenticated() && request.query.filters[0][2] == request.auth.uid &&
+        allow read: if isSignedIn() && request.auth.uid == resource.data.userId;
+        allow list: if isSignedIn() && request.query.filters[0][2] == request.auth.uid &&
                        request.query.limit <= 20; // Limit query size for listing
-        allow create: if isAuthenticated() &&
+        allow create: if isSignedIn() &&
                          request.resource.data.userId is string && request.resource.data.userId.size() > 0 &&
                          request.resource.data.senderId is string && request.resource.data.senderId.size() > 0 &&
                          request.resource.data.type is string && request.resource.data.type.size() > 0 &&
@@ -332,7 +329,7 @@ service cloud.firestore {
                          ]) &&
                          request.resource.data.size() >= 5 && request.resource.data.size() <= 13; // Min 5 (core fields + ts,isRead), Max 13 (all optional fields populated)
 
-        allow update: if isAuthenticated() && request.auth.uid == resource.data.userId &&
+        allow update: if isSignedIn() && request.auth.uid == resource.data.userId &&
                          request.resource.data.userId == resource.data.userId && // Immutable
                          request.resource.data.type == resource.data.type && // Immutable
                          request.resource.data.senderId == resource.data.senderId && // Immutable
@@ -348,7 +345,7 @@ service cloud.firestore {
       allow list: if true; // Allow listing for profiles (client-side filtering if needed)
                          // Can be restricted by targetUserId if necessary: request.query.filters[0][2] == targetUserId
 
-      allow create: if isAuthenticated() &&
+      allow create: if isSignedIn() &&
                        request.resource.data.reviewerId == request.auth.uid &&
                        request.resource.data.targetUserId != request.auth.uid && // Cannot review self
                        request.resource.data.rating is number && request.resource.data.rating >= 1 && request.resource.data.rating <= 5 &&
@@ -360,7 +357,7 @@ service cloud.firestore {
                        request.resource.data.size() == 9;
 
 
-      allow update: if isAuthenticated() && request.auth.uid == resource.data.reviewerId && // Only reviewer can update
+      allow update: if isSignedIn() && request.auth.uid == resource.data.reviewerId && // Only reviewer can update
                        request.resource.data.reviewerId == resource.data.reviewerId &&
                        request.resource.data.targetUserId == resource.data.targetUserId &&
                        request.resource.data.createdAt == resource.data.createdAt &&
@@ -368,25 +365,25 @@ service cloud.firestore {
                        request.resource.data.updatedAt == request.time &&
                        request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'comment', 'updatedAt']);
 
-      allow delete: if isAuthenticated() && request.auth.uid == resource.data.reviewerId; // Only reviewer can delete
+      allow delete: if isSignedIn() && request.auth.uid == resource.data.reviewerId; // Only reviewer can delete
     }
 
     // --- Collections (Saved Posts and Articles) ---
     match /collections/{collectionId} {
         function isCollectionOwner() {
-            return isAuthenticated() && request.auth.uid == resource.data.ownerId;
+            return isSignedIn() && request.auth.uid == resource.data.ownerId;
         }
         function isSharedWithUser() {
-            return isAuthenticated() && request.auth.uid in resource.data.sharedWithUserIds;
+            return isSignedIn() && request.auth.uid in resource.data.sharedWithUserIds;
         }
 
         allow read: if isCollectionOwner() || isSharedWithUser();
-        allow list: if isAuthenticated() && (
+        allow list: if isSignedIn() && (
                         (request.query.filters.size() == 1 && request.query.filters[0][0] == "ownerId" && request.query.filters[0][1] == "==" && request.query.filters[0][2] == request.auth.uid) ||
                         (request.query.filters.size() == 1 && request.query.filters[0][0] == "sharedWithUserIds" && request.query.filters[0][1] == "array-contains" && request.query.filters[0][2] == request.auth.uid)
                       );
 
-        allow create: if isAuthenticated() &&
+        allow create: if isSignedIn() &&
                          request.resource.data.ownerId == request.auth.uid &&
                          request.resource.data.name is string && request.resource.data.name.size() > 0 &&
                          request.resource.data.createdAt == request.time &&
@@ -397,7 +394,7 @@ service cloud.firestore {
                          request.resource.data.keys().hasAll(['ownerId', 'name', 'description', 'postIds', 'articleIds', 'sharedWithUserIds', 'createdAt', 'updatedAt']) &&
                          request.resource.data.size() == 8;
 
-        allow update: if isAuthenticated() && isCollectionOwner() &&
+        allow update: if isSignedIn() && isCollectionOwner() &&
                          request.resource.data.ownerId == resource.data.ownerId &&
                          request.resource.data.createdAt == resource.data.createdAt &&
                          request.resource.data.updatedAt == request.time &&
@@ -502,9 +499,9 @@ service cloud.firestore {
       // --- ADD THIS BLOCK FOR REAL-TIME PRESENCE ---
       match /viewingUsers/{userId} {
         // Any authenticated user can see who is viewing, but can't see the document content (just the ID)
-        allow list, get: if isAuthenticated();
+        allow list, get: if isSignedIn();
         // A user can only create, update, or delete their OWN presence document.
-        allow create, update, delete: if isAuthenticated() && request.auth.uid == userId;
+        allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
       }
       // ------------------------------------------
 
@@ -515,7 +512,7 @@ service cloud.firestore {
         allow read: if true;
         allow list: if true;
 
-        allow create: if isAuthenticated() &&
+        allow create: if isSignedIn() &&
                          request.resource.data.createdBy == request.auth.uid &&
                          request.resource.data.name is string && request.resource.data.name.size() > 0 &&
                          request.resource.data.nameLowercase == request.resource.data.name.lower() &&
@@ -524,7 +521,7 @@ service cloud.firestore {
                          request.resource.data.keys().hasAll(['name', 'nameLowercase', 'usageCount', 'createdAt', 'createdBy', 'updatedAt']) &&
                          request.resource.data.size() == 6;
 
-       	allow update: if isAuthenticated() &&
+       	allow update: if isSignedIn() &&
  					request.resource.data.updatedAt == request.time;
 
         allow delete: if false;
@@ -533,13 +530,13 @@ service cloud.firestore {
     // --- News Articles Collection ---
     match /newsArticles/{articleId} {
         function isNewsArticleOwner() {
-          return isAuthenticated() && request.auth.uid == resource.data.userId;
+          return isSignedIn() && request.auth.uid == resource.data.userId;
         }
 
         allow read: if resource.data.status == 'published' || isNewsArticleOwner();
         allow list: if true;
 
-        allow create: if isAuthenticated() &&
+        allow create: if isSignedIn() &&
                          request.resource.data.userId == request.auth.uid &&
                          request.resource.data.title is string && request.resource.data.title.size() > 0 &&
                          request.resource.data.content is string &&
@@ -557,7 +554,7 @@ service cloud.firestore {
                          ]) &&
                          request.resource.data.size() == 14;
 
-        allow update: if isAuthenticated() &&
+        allow update: if isSignedIn() &&
                        request.resource.data.updatedAt == request.time &&
                        ( // Case 1: Owner updating their article
                          isNewsArticleOwner() &&
@@ -611,16 +608,16 @@ service cloud.firestore {
        // --- News Comments Subcollection (for 'newsArticles') ---
         match /newsComments/{commentId} {
             function isArticleCommentOwner() {
-                return isAuthenticated() && request.auth.uid == resource.data.userId;
+                return isSignedIn() && request.auth.uid == resource.data.userId;
             }
             function isParentArticleOwner() {
-                return isAuthenticated() && request.auth.uid == get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId;
+                return isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId;
             }
 
             allow list: if true;
             allow read: if resource.data.isShadowBanned == false || isParentArticleOwner() || isArticleCommentOwner();
 
-            allow create: if isAuthenticated() &&
+            allow create: if isSignedIn() &&
                              request.resource.data.userId == request.auth.uid &&
                              request.resource.data.text is string && request.resource.data.text.size() > 0 &&
                              request.resource.data.timestamp == request.time &&
@@ -632,7 +629,7 @@ service cloud.firestore {
                              request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
                              request.resource.data.size() == 9;
 
-            allow update: if isAuthenticated() &&
+            allow update: if isSignedIn() &&
                            request.resource.data.updatedAt == request.time &&
                            ( // Case 1: Liking/Unliking (Simplified for debugging)
                              request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
@@ -648,13 +645,13 @@ service cloud.firestore {
             // --- News SubComments Subcollection ---
             match /newsSubcomments/{subCommentId} {
                 function isArticleSubCommentOwner() {
-                    return isAuthenticated() && request.auth.uid == resource.data.userId;
+                    return isSignedIn() && request.auth.uid == resource.data.userId;
                 }
 
                 allow list: if true;
                 allow read: if resource.data.isShadowBanned == false || isParentArticleOwner() || isArticleSubCommentOwner();
 
-                allow create: if isAuthenticated() &&
+                allow create: if isSignedIn() &&
                                request.resource.data.userId == request.auth.uid &&
                                request.resource.data.text is string && request.resource.data.text.size() > 0 &&
                                request.resource.data.timestamp == request.time &&
@@ -666,7 +663,7 @@ service cloud.firestore {
                                request.resource.data.keys().hasAll(['userId', 'text', 'timestamp', 'updatedAt', 'likeCount', 'likedBy', 'mentionName', 'mentionedUserIds', 'isShadowBanned']) &&
                                request.resource.data.size() == 9;
 
-                allow update: if isAuthenticated() &&
+                allow update: if isSignedIn() &&
                                request.resource.data.updatedAt == request.time &&
                                ( // Case 1: Liking/Unliking (Simplified for debugging)
                                  request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likeCount', 'likedBy', 'updatedAt']) &&
@@ -683,8 +680,8 @@ service cloud.firestore {
 
     // --- User Preferences Collection ---
     match /userPreferences/{userId} {
-        allow read: if isAuthenticated() && request.auth.uid == userId;
-        allow create: if isAuthenticated() && request.auth.uid == userId &&
+        allow read: if isSignedIn() && request.auth.uid == userId;
+        allow create: if isSignedIn() && request.auth.uid == userId &&
                          request.resource.data.userId == userId &&
                          request.resource.data.createdAt == request.time &&
                          request.resource.data.updatedAt == request.time &&
@@ -700,7 +697,7 @@ service cloud.firestore {
                          // Be flexible with size due to optional Stripe fields potentially being null vs not present
                          request.resource.data.size() >= 15; // Min size if no stripe fields
 
-        allow update: if isAuthenticated() && request.auth.uid == userId &&
+        allow update: if isSignedIn() && request.auth.uid == userId &&
                          request.resource.data.userId == resource.data.userId && // userId cannot change
                          request.resource.data.createdAt == resource.data.createdAt && // createdAt immutable
                          request.resource.data.updatedAt == request.time && // Must be new server time
@@ -717,16 +714,12 @@ service cloud.firestore {
     
     // Follows Collection
     match /follows/{followId} {
-      // `get` rule: A user can read a specific follow document if they are the follower.
+      // A user can read a specific follow document if they are the follower.
       allow get: if isSignedIn() && request.auth.uid == resource.data.followerId;
-      
-      // `list` rule: A user can list documents from the `follows` collection
-      // ONLY IF they are querying for their own `followerId`.
-      allow list: if isSignedIn() &&
-                     request.query.where.size() == 1 &&
-                     request.query.where[0].field == 'followerId' &&
-                     request.query.where[0].operator == '==' &&
-                     request.query.where[0].value == request.auth.uid;
+
+      // A user can query their own 'follows' list. The query from the client MUST
+      // include `where('followerId', '==', request.auth.uid)`.
+      allow list: if isSignedIn();
       
       // A user can create a follow relationship for themselves.
       // Also validates that the document ID matches the content.
