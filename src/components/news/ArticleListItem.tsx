@@ -4,12 +4,13 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchUserProfileBasic } from '@/services/connectionService';
+import { followUser, unfollowUser, isFollowingUser } from '@/services/followService';
 import type { ClientNewsArticle } from '@/types/news';
 import { generateAnonymousName } from '@/lib/pseudonymUtils';
 import { format } from 'date-fns';
-import { MessageSquareText, Bookmark, MoreHorizontal, Edit3, Tag, UserPlus, Ban, Flag, UserMinus } from 'lucide-react';
+import { MessageSquareText, Bookmark, MoreHorizontal, Edit3, Tag, UserPlus, Ban, Flag, UserMinus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { cn } from '@/lib/utils';
@@ -21,6 +22,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useToast } from '@/hooks/use-toast';
 
 interface ArticleListItemProps {
   article: ClientNewsArticle;
@@ -37,6 +39,9 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
   savedItemIds,
   onCollectionUpdate,
 }) => {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
   const { data: authorProfile, isLoading: isLoadingAuthor } = useQuery({
     queryKey: ['userProfileBasic', article.userId, 'newsAuthor'],
     queryFn: () => fetchUserProfileBasic(article.userId),
@@ -45,12 +50,55 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
   });
 
   const [isSaveToCollectionDialogOpen, setIsSaveToCollectionDialogOpen] = useState(false);
-  const [isFollowing, setIsFollowing] = useState(false); // Placeholder state
+  const isOwnArticle = article.userId === currentUserId;
+
+  const { data: isFollowing, isLoading: isLoadingFollowStatus } = useQuery({
+    queryKey: ['isFollowing', currentUserId, article.userId],
+    queryFn: () => {
+      if (!currentUserId || !article.userId) return false;
+      return isFollowingUser(currentUserId, article.userId);
+    },
+    enabled: !!currentUserId && !isOwnArticle,
+    staleTime: 5 * 60 * 1000,
+  });
 
   const authorName = useMemo(() => {
     if (isLoadingAuthor) return 'Loading author...';
     return authorProfile?.displayName || generateAnonymousName(article.userId);
   }, [authorProfile, isLoadingAuthor, article.userId]);
+
+  const followMutation = useMutation({
+    mutationFn: async ({ shouldFollow }: { shouldFollow: boolean }) => {
+      if (!currentUserId || !article.userId) throw new Error("You must be logged in.");
+      if (shouldFollow) {
+        await followUser(currentUserId, article.userId);
+      } else {
+        await unfollowUser(currentUserId, article.userId);
+      }
+    },
+    onSuccess: (_, { shouldFollow }) => {
+      toast({
+        title: shouldFollow ? "Author Followed" : "Author Unfollowed",
+        description: `You are now ${shouldFollow ? 'following' : 'no longer following'} ${authorName}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['isFollowing', currentUserId, article.userId] });
+      queryClient.invalidateQueries({ queryKey: ['followedUserIds', currentUserId] });
+    },
+    onError: (error: Error) => {
+      toast({
+        variant: "destructive",
+        title: "Action Failed",
+        description: error.message,
+      });
+    },
+  });
+
+  const handleFollowToggle = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    if (isLoadingFollowStatus || followMutation.isPending) return;
+    followMutation.mutate({ shouldFollow: !isFollowing });
+  };
 
   const displayDate = useMemo(() => {
     const dateToFormat = article.publishedAt || article.updatedAt || article.createdAt;
@@ -63,7 +111,7 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
   }, [article.publishedAt, article.updatedAt, article.createdAt]);
 
   const excerpt = useMemo(() => getCleanTextExcerpt(article.content, 120), [article.content, getCleanTextExcerpt]);
-  const isOwnArticle = article.userId === currentUserId;
+  
   const isSaved = savedItemIds.has(article.id);
 
   const handleSaveClick = (e: React.MouseEvent) => {
@@ -146,11 +194,11 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                {!isOwnArticle && (
+                {!isOwnArticle && currentUserId && (
                   <>
-                    <DropdownMenuItem onClick={() => { alert('Follow/Unfollow action triggered'); setIsFollowing(!isFollowing); }}>
-                      {isFollowing ? <UserMinus className="mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                      <span>{isFollowing ? 'Unfollow Author' : 'Follow Author'}</span>
+                    <DropdownMenuItem onClick={handleFollowToggle} disabled={followMutation.isPending || isLoadingFollowStatus}>
+                      {followMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isFollowing ? <UserMinus className="mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />}
+                      <span>{followMutation.isPending ? 'Updating...' : isFollowing ? 'Unfollow Author' : 'Follow Author'}</span>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => alert('Block action triggered')}>
                       <Ban className="mr-2 h-4 w-4" />
