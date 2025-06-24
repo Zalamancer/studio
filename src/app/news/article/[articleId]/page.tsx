@@ -465,8 +465,8 @@ const ArticlePage = () => {
     <>
     <div className="container mx-auto py-8 px-4 md:px-6" key={articleIdParam}>
       <div className="flex items-center justify-between mb-4 gap-2 flex-wrap">
-        <Button variant="outline" size="sm" onClick={() => router.push('/news')} className="text-xs h-9 px-3 flex-shrink-0">
-          <ArrowLeft className="mr-2 h-4 w-4" /> Back to News
+        <Button variant="ghost" size="icon" onClick={() => router.push('/news')} className="h-9 w-9 flex-shrink-0" aria-label="Back to News">
+          <ArrowLeft className="h-5 w-5" />
         </Button>
 
         <div className="flex items-center gap-1.5 flex-grow min-w-0">
