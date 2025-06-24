@@ -173,19 +173,25 @@ const ArticlePage = () => {
       setTitle(article.title || "");
       setTags(article.tags || []);
       let contentToLoadInEditor = "<p><br></p>";
+
       if (isEditingAllowed) {
-        if (article.status === 'published' && article.hasUnpublishedChanges && typeof article.draftContent === 'string') {
-          contentToLoadInEditor = article.draftContent;
+        if (article.status === 'published' && article.hasUnpublishedChanges) {
+          // If a draft exists, load it. It could be an empty string, so fallback to a valid empty paragraph.
+          contentToLoadInEditor = article.draftContent || "<p><br></p>";
         } else {
+          // No draft, or not a published article, so use the main content.
           contentToLoadInEditor = article.content || "<p><br></p>";
         }
       } else if (article.status === 'published') {
+        // If not allowed to edit, just show the published content.
         contentToLoadInEditor = article.content || "<p><br></p>";
       }
+      
       setStoryContent(contentToLoadInEditor);
       if (contentEditableRef.current && contentEditableRef.current.innerHTML !== contentToLoadInEditor) {
         contentEditableRef.current.innerHTML = contentToLoadInEditor;
       }
+      
       setCoverImagePreview(article.coverImageUrl || null);
       setCurrentCoverImageUrl(article.coverImageUrl || null);
       setPublishAttempted(false); setTitleError(""); setTagsError(""); setStoryError("");
