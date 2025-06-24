@@ -287,15 +287,15 @@ const ArticlePage = () => {
   }, [refetchNewsComments, articleIdParam, refetchArticle, queryClient, user?.uid]);
 
   const handleToggleLikeArticle = async () => {
-    if (!user || !articleIdParam || isLikingArticle || isEditingAllowed) return;
-    setIsLikingArticle(true);
+    if (!user || !articleIdParam || isLiking || isEditingAllowed) return;
+    setIsLiking(true);
     try {
       await toggleLikeNewsArticle(articleIdParam, user.uid);
       refetchArticle();
     } catch (error: any) {
       toast({ variant: "destructive", title: "Failed to like article", description: error.message });
     } finally {
-      setIsLikingArticle(false);
+      setIsLiking(false);
     }
   };
   const hasLikedArticle = useMemo(() => !!user && !!article && !!article.likedBy?.includes(user.uid), [user, article]);
@@ -531,9 +531,9 @@ const ArticlePage = () => {
                 className="h-8 w-8 p-1"
                 title={hasLikedArticle ? "Unlike Article" : "Like Article"}
                 onClick={handleToggleLikeArticle}
-                disabled={isLikingArticle}
+                disabled={isLiking}
               >
-                {isLikingArticle ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className={cn("h-5 w-5", hasLikedArticle ? "fill-red-500 text-red-500" : "text-muted-foreground")} />}
+                {isLiking ? <Loader2 className="h-4 w-4 animate-spin" /> : <Heart className={cn("h-5 w-5", hasLikedArticle ? "fill-red-500 text-red-500" : "text-muted-foreground")} />}
               </Button>
             )}
             <span className="text-xs text-muted-foreground mr-1">{article.likeCount || 0} Likes</span>
@@ -561,10 +561,19 @@ const ArticlePage = () => {
                 <DropdownMenuItem onClick={() => coverImageInputRef.current?.click()} disabled={isSubmitting} className="cursor-pointer"><ImageUp className="mr-2 h-4 w-4" /><span>Change Cover Image</span></DropdownMenuItem>
                 <DropdownMenuSeparator />
                 {article?.status === 'draft' ? ( <> <DropdownMenuItem onClick={() => handleUpdateArticle('draft', storyContent, false)} disabled={isSubmitting} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Save Draft</DropdownMenuItem><DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting} className="cursor-pointer text-green-600 focus:text-green-700"><Send className="mr-2 h-4 w-4" /> Publish</DropdownMenuItem> </>
-                ) : ( <> <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished || viewingMode === 'live'} className="cursor-pointer">{isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save Draft</DropdownMenuItem>
-                    {article.hasUnpublishedChanges && article.draftContent ? ( <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer text-green-600 focus:text-green-700"><CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes</DropdownMenuItem>
-                    ) : ( <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Update Live Article</DropdownMenuItem> )}
-                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer text-orange-600 focus:text-orange-700"><RotateCcw className="mr-2 h-4 w-4" /> Unpublish</DropdownMenuItem> </>
+                ) : (
+                  <>
+                    {article.hasUnpublishedChanges && viewingMode === 'live' && (
+                      <DropdownMenuItem onClick={() => { if (contentEditableRef.current && article.draftContent) { setStoryContent(article.draftContent); contentEditableRef.current.innerHTML = article.draftContent; setViewingMode('draft'); toast({ title: "Now Editing Draft", description: "You can now edit your draft." }); } }} disabled={isSubmitting} className="cursor-pointer"><Edit3 className="mr-2 h-4 w-4" /> Edit Draft</DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, true)} disabled={isSubmitting || isSavingDraftOfPublished || viewingMode === 'live'} className="cursor-pointer">{isSavingDraftOfPublished ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}Save Draft</DropdownMenuItem>
+                    {article.hasUnpublishedChanges && article.draftContent ? (
+                       <DropdownMenuItem onClick={() => handleUpdateArticle('published', article.draftContent || storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer text-green-600 focus:text-green-700"><CheckCircle className="mr-2 h-4 w-4" /> Publish Draft Changes</DropdownMenuItem>
+                    ) : (
+                       <DropdownMenuItem onClick={() => handleUpdateArticle('published', storyContent, false)} disabled={isSubmitting || viewingMode === 'live'} className="cursor-pointer"><Save className="mr-2 h-4 w-4" /> Update Live Article</DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={() => handleUpdateArticle('draft', article.content, false)} disabled={isSubmitting} className="cursor-pointer text-orange-600 focus:text-orange-700"><RotateCcw className="mr-2 h-4 w-4" /> Unpublish</DropdownMenuItem>
+                  </>
                 )}
               </DropdownMenuContent>
             </DropdownMenu>
@@ -620,8 +629,7 @@ const ArticlePage = () => {
                   onBlur={handleBlur}
                   className="text-4xl lg:text-5xl font-bold border-0 focus-visible:ring-0 focus-visible:ring-offset-0 shadow-none px-0 placeholder:text-muted-foreground/50 h-auto py-2"
                   autoComplete="off"
-                  readOnly={viewingMode === 'live'}
-                  disabled={isSubmitting}
+                  readOnly={isSubmitting || viewingMode === 'live'}
                 />
                 {publishAttempted && titleError && <p className="text-xs text-destructive mt-1">{titleError}</p>}
             </div>
