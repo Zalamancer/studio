@@ -36,7 +36,7 @@ export const PostList: React.FC<PostListProps> = ({
   return (
     <div className="flex flex-col h-full relative">
       <ScrollArea className="flex-grow overflow-y-auto min-h-0 bg-muted/30 md:bg-background">
-        <div className="p-1 md:p-4 md:columns-1 xl:columns-2 gap-4">
+        <div className="p-1 md:pt-6 md:px-4 md:pb-4 md:columns-1 xl:columns-2 gap-4">
           {posts.length > 0 ? (
             posts.map((post, index) => (
               <PostCard key={post.id} post={post} onOpen={onPostSelect} isSelected={selectedPostId === post.id} isPriority={index < 2}/>
