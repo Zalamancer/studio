@@ -121,15 +121,6 @@
       ]
     },
     {
-      "collectionGroup": "newsArticles",
-      "queryScope": "COLLECTION",
-      "fields": [
-        { "fieldPath": "status", "order": "ASCENDING" },
-        { "fieldPath": "userId", "arrayConfig": "CONTAINS" },
-        { "fieldPath": "publishedAt", "order": "DESCENDING" }
-      ]
-    },
-    {
       "collectionGroup": "newsComments",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
