@@ -1,67 +1,78 @@
 // src/services/followService.ts
 import { db } from '@/lib/firebase/config';
 import {
-  collection,
-  query,
-  where,
-  getDocs,
   doc,
   setDoc,
-  deleteDoc,
-  serverTimestamp,
   getDoc,
-  limit,
+  updateDoc,
+  deleteField,
 } from 'firebase/firestore';
 
 const FOLLOWS_COLLECTION = 'follows';
 
 /**
- * Creates a follow relationship. The document ID is followerId_followingId.
+ * Creates or updates a follow relationship using a map within a single document per follower.
+ * The document ID is the follower's UID.
  */
 export const followUser = async (followerId: string, followingId: string): Promise<void> => {
   if (followerId === followingId) throw new Error("Cannot follow yourself.");
-  const followDocRef = doc(db, FOLLOWS_COLLECTION, `${followerId}_${followingId}`);
+  const followDocRef = doc(db, FOLLOWS_COLLECTION, followerId);
+
+  // Use setDoc with merge to create the document or add to the 'following' map.
+  // The key is the user ID being followed, and the value is true for easy checking.
   await setDoc(followDocRef, {
-    followerId,
-    followingId,
-    followedAt: serverTimestamp(),
+    following: {
+      [followingId]: true // Using a boolean is simple and effective
+    },
+    // We can also store the followerId inside for easier reference if needed, though redundant.
+    followerId: followerId,
+  }, { merge: true }); // merge:true ensures we don't overwrite existing follows.
+};
+
+/**
+ * Deletes a follow relationship by removing a key from the 'following' map.
+ */
+export const unfollowUser = async (followerId: string, followingId: string): Promise<void> => {
+  const followDocRef = doc(db, FOLLOWS_COLLECTION, followerId);
+  
+  // Use updateDoc and deleteField to remove a specific user from the 'following' map.
+  await updateDoc(followDocRef, {
+    [`following.${followingId}`]: deleteField()
   });
 };
 
 /**
- * Deletes a follow relationship.
- */
-export const unfollowUser = async (followerId: string, followingId: string): Promise<void> => {
-  const followDocRef = doc(db, FOLLOWS_COLLECTION, `${followerId}_${followingId}`);
-  await deleteDoc(followDocRef);
-};
-
-/**
  * Retrieves a list of user IDs that a given user is following.
- * Requires a Firestore index on `followerId`.
+ * Now reads a single document.
  */
 export const getFollowingIds = async (userId: string): Promise<string[]> => {
   if (!userId) return [];
   try {
-    const q = query(collection(db, FOLLOWS_COLLECTION), where('followerId', '==', userId));
-    const snapshot = await getDocs(q);
-    return snapshot.docs.map(doc => doc.data().followingId as string);
-  } catch (error: any) {
-    if (error.code === 'failed-precondition' && error.message.includes('index')) {
-      console.error("[followService] Firestore query for follows requires an index on 'followerId'. Please create this in the Firebase console.");
-      // Return empty array to prevent app crash, but log error.
-      return [];
+    const followDocRef = doc(db, FOLLOWS_COLLECTION, userId);
+    const docSnap = await getDoc(followDocRef);
+    if (docSnap.exists()) {
+      const data = docSnap.data();
+      // The `following` field is a map. We return its keys.
+      return data.following ? Object.keys(data.following) : [];
     }
+    return [];
+  } catch (error: any) {
+    console.error("[followService] Error getting following list:", error);
     throw error;
   }
 };
 
 /**
- * Checks if a user is following another user.
+ * Checks if a user is following another user by checking a single document.
  */
 export const isFollowingUser = async (followerId: string, followingId: string): Promise<boolean> => {
   if (!followerId || !followingId) return false;
-  const followDocRef = doc(db, FOLLOWS_COLLECTION, `${followerId}_${followingId}`);
+  const followDocRef = doc(db, FOLLOWS_COLLECTION, followerId);
   const docSnap = await getDoc(followDocRef);
-  return docSnap.exists();
+  if (docSnap.exists()) {
+    const data = docSnap.data();
+    // Check if the followingId exists as a key in the 'following' map.
+    return !!(data.following && data.following[followingId]);
+  }
+  return false;
 };
