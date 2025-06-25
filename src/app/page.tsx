@@ -414,7 +414,7 @@ const BoardPageContent = () => {
         )}>
         <div className={cn(
             "flex flex-col overflow-hidden",
-            isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:w-1/3 lg:w-1/2",
+            isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:w-1/3 xl:w-1/2",
             !isMobile && "md:pr-4"
         )}>
           <PostList
@@ -452,7 +452,7 @@ const BoardPageContent = () => {
           </>
         ) : (
           (selectedPost || showCreatePostFormInline) ? (
-            <div className="md:w-2/3 lg:w-1/2 md:border-l md:border-border md:pl-4 flex flex-col">
+            <div className="md:w-2/3 xl:w-1/2 md:border-l md:border-border md:pl-4 flex flex-col">
               {selectedPost && !showCreatePostFormInline && renderPostDetailPanel()}
               {showCreatePostFormInline && !selectedPost && user && (
                 <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
@@ -469,7 +469,7 @@ const BoardPageContent = () => {
               )}
             </div>
           ) : (
-            <div className="hidden md:flex md:w-2/3 lg:w-1/2 md:pl-4 md:border-l md:border-border flex-col">
+            <div className="hidden md:flex md:w-2/3 xl:w-1/2 md:pl-4 md:border-l md:border-border flex-col">
               <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
                 <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
                   <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
