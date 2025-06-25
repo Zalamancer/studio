@@ -408,14 +408,12 @@ const BoardPageContent = () => {
       )}
 
       <div className={cn(
-          "flex-grow lg:p-4",
-          isMobile ? "grid grid-cols-1" : "lg:flex lg:flex-row",
+          "flex-grow grid grid-cols-1 md:grid-cols-3 xl:grid-cols-2 md:gap-6",
           isMobile && isFilterViewVisible && "hidden"
         )}>
         <div className={cn(
             "flex flex-col overflow-hidden",
-            isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "lg:w-1/2",
-            !isMobile && "lg:pr-4"
+            isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:col-span-1"
         )}>
           <PostList
             posts={filteredPosts}
@@ -452,7 +450,7 @@ const BoardPageContent = () => {
           </>
         ) : (
           (selectedPost || showCreatePostFormInline) ? (
-            <div className="lg:w-1/2 lg:border-l lg:border-border lg:pl-4 flex flex-col">
+            <div className="md:col-span-2 xl:col-span-1 md:border-l md:border-border md:pl-6 flex flex-col">
               {selectedPost && !showCreatePostFormInline && renderPostDetailPanel()}
               {showCreatePostFormInline && !selectedPost && user && (
                 <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
@@ -469,7 +467,7 @@ const BoardPageContent = () => {
               )}
             </div>
           ) : (
-            <div className="hidden lg:flex lg:w-1/2 lg:pl-4 lg:border-l lg:border-border flex-col">
+            <div className="hidden md:flex md:col-span-2 xl:col-span-1 md:pl-6 md:border-l md:border-border flex-col">
               <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
                 <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
                   <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
