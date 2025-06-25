@@ -16,17 +16,31 @@ const FOLLOWS_COLLECTION = 'follows';
  */
 export const followUser = async (followerId: string, followingId: string): Promise<void> => {
   if (followerId === followingId) throw new Error("Cannot follow yourself.");
+  
+  console.log(`[followService] followUser called with:
+    - followerId: ${followerId} (type: ${typeof followerId})
+    - followingId: ${followingId} (type: ${typeof followingId})`);
+
+  if (!followerId || !followingId) {
+    console.error("[followService] Aborting followUser: One of the IDs is missing.");
+    throw new Error("Both follower and following IDs are required.");
+  }
+
   const followDocRef = doc(db, FOLLOWS_COLLECTION, followerId);
+
+  const dataToWrite = {
+    following: {
+      [followingId]: true
+    },
+    followerId: followerId,
+  };
+
+  console.log("[followService] Attempting to setDoc with merge. Document ref:", followDocRef.path);
+  console.log("[followService] Data to write:", JSON.stringify(dataToWrite, null, 2));
 
   // Use setDoc with merge to create the document or add to the 'following' map.
   // The key is the user ID being followed, and the value is true for easy checking.
-  await setDoc(followDocRef, {
-    following: {
-      [followingId]: true // Using a boolean is simple and effective
-    },
-    // We can also store the followerId inside for easier reference if needed, though redundant.
-    followerId: followerId,
-  }, { merge: true }); // merge:true ensures we don't overwrite existing follows.
+  await setDoc(followDocRef, dataToWrite, { merge: true });
 };
 
 /**
@@ -76,3 +90,5 @@ export const isFollowingUser = async (followerId: string, followingId: string): 
   }
   return false;
 };
+
+    

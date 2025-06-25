@@ -16,7 +16,8 @@ service cloud.firestore {
                        request.resource.data.createdAt == request.time &&
                        request.resource.data.updatedAt == request.time &&
                        request.resource.data.lastLoginAt == request.time;
-                       // Strict field checking can be problematic, ensure it matches your client code exactly if used.
+                       // Note: Strict field checking was removed for flexibility,
+                       // but can be re-added if schema becomes stable.
 
       allow update: if isSignedIn() && request.auth.uid == userId &&
                        request.resource.data.uid == resource.data.uid && // UID cannot change
@@ -26,8 +27,7 @@ service cloud.firestore {
                        request.resource.data.mentionNameLowercase == resource.data.mentionNameLowercase && // ^
                        request.resource.data.createdAt == resource.data.createdAt && // createdAt is immutable
                        request.resource.data.updatedAt == request.time; // updatedAt must be new server time
-                       // diff().affectedKeys() is useful but can be complex; ensure it covers all valid update paths.
-
+                       // Note: Strict diff checking removed for flexibility.
       allow delete: if false; // Users should not be able to delete their own user document directly
     }
 
@@ -40,29 +40,36 @@ service cloud.firestore {
         return isSignedIn() && request.auth.uid == request.resource.data.requesterId;
       }
 
-      allow read: if isUserInConnection();
-      allow list: if isSignedIn() && request.query.filters[0][2] == request.auth.uid; // Allows querying 'where("userIds", "array-contains", auth.uid)'
+      allow get: if isUserInConnection();
+      allow list: if isSignedIn() &&
+                     request.query.where[0].field == 'userIds' &&
+                     request.query.where[0].op == 'array-contains' &&
+                     request.query.where[0].value == request.auth.uid;
 
       allow create: if isSignedIn() && isRequester() &&
-                       request.resource.data.userIds.hasAll([request.auth.uid]) && // Requester must be in userIds
-                       request.resource.data.userIds.size() == 2 && // Only two users
+                       request.resource.data.userIds.hasAll([request.auth.uid]) &&
+                       request.resource.data.userIds.size() == 2 &&
                        request.resource.data.status == 'pending' &&
-                       request.resource.data.requesterId != request.resource.data.userIds.removeAll([request.auth.uid])[0] && // Requester isn't the other person
-                       request.resource.data.requestedAt == request.time;
+                       request.resource.data.requesterId != request.resource.data.userIds.removeAll([request.auth.uid])[0] &&
+                       request.resource.data.requestedAt == request.time &&
+                       request.resource.data.updatedAt == request.time &&
+                       !exists(/databases/$(database)/documents/mutuals/$(connectionId));
+
 
       allow update: if isSignedIn() && isUserInConnection() &&
-                       request.resource.data.userIds == resource.data.userIds && // userIds cannot change
-                       request.resource.data.requesterId == resource.data.requesterId && // requesterId cannot change
+                       request.resource.data.userIds == resource.data.userIds &&
+                       request.resource.data.requesterId == resource.data.requesterId &&
+                       request.resource.data.requestedAt == resource.data.requestedAt &&
                        request.resource.data.updatedAt == request.time &&
                        ( // Case 1: Accepting a request
                          resource.data.status == 'pending' &&
                          request.resource.data.status == 'connected' &&
                          request.resource.data.connectedAt == request.time &&
-                         request.auth.uid != resource.data.requesterId // Only recipient can accept
+                         request.auth.uid != resource.data.requesterId
                        );
 
       allow delete: if isSignedIn() && isUserInConnection() &&
-                       (resource.data.status == 'pending' || resource.data.status == 'connected'); // Allow delete for pending (cancel/reject) or connected (remove)
+                       (resource.data.status == 'pending' || resource.data.status == 'connected');
     }
 
     // --- Posts Collection & Subcollections ---
@@ -70,155 +77,214 @@ service cloud.firestore {
       allow read: if true;
       allow list: if true;
 
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId && request.resource.data.createdAt == request.time;
+      allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId &&
+                       request.resource.data.createdAt == request.time;
+
       allow update: if isSignedIn() &&
                        (
                          ( // Case 1: Owner updating their post
                            request.auth.uid == resource.data.userId &&
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                             'question', 'tags', 'sector', 'subSector', 'industry', 'naicsCode', 'imageUrls', 'requestType',
-                             'descriptionDetails', 'descriptionTried', 'descriptionOutcome', 'maxBudget', 'deadline', 'updatedAt'
-                           ])
+                           request.resource.data.userId == resource.data.userId &&
+                           request.resource.data.createdAt == resource.data.createdAt
                          )
                          || // Case 2: Any authenticated user updating commentCount
                          (
-                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'updatedAt'])
+                           request.resource.data.diff(resource.data).affectedKeys().hasOnly(['commentCount', 'updatedAt']) &&
+                           request.resource.data.updatedAt == request.time
                          )
                        );
+
       allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
 
       match /comments/{commentId} {
-        allow read, list: if true;
-        allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-        allow update: if isSignedIn(); // Simplified for liking
+        allow read: if true;
+        allow list: if true;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update: if isSignedIn() && request.resource.data.userId == resource.data.userId; // For editing own comments
         allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
 
         match /subcomments/{subCommentId} {
-          allow read, list: if true;
-          allow create: if isSignedIn() && request.auth.uid == request.resource.data.userId;
-          allow update: if isSignedIn(); // Simplified for liking
+          allow read: if true;
+          allow list: if true;
+          allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+          allow update: if isSignedIn() && request.resource.data.userId == resource.data.userId;
           allow delete: if isSignedIn() && request.auth.uid == resource.data.userId;
         }
       }
+
       match /bids/{bidId} {
-          allow read, list: if isSignedIn();
-          allow create: if isSignedIn() && request.resource.data.bidderId == request.auth.uid;
+          allow read: if isSignedIn();
+          allow list: if isSignedIn();
+          allow create: if isSignedIn() &&
+                           request.resource.data.bidderId == request.auth.uid &&
+                           get(/databases/$(database)/documents/posts/$(postId)).data.get('userId', '') != request.auth.uid;
           allow update: if false;
           allow delete: if isSignedIn() && request.auth.uid == resource.data.bidderId;
       }
     }
 
     match /conversations/{conversationId} {
-      allow read, get: if isSignedIn() && request.auth.uid in resource.data.participants;
-      allow list: if isSignedIn() && request.query.filters[0][2] == request.auth.uid;
-      allow create: if isSignedIn() && request.auth.uid in request.resource.data.participants;
-      allow update: if isSignedIn() && request.auth.uid in resource.data.participants;
+      function canRemoveParticipants() {
+        return resource.data.type == 'group'
+        && (request.auth.uid == resource.data.ownerId || request.auth.uid in resource.data.adminIds)
+        && request.resource.data.participants.size() < resource.data.participants.size()
+        && resource.data.ownerId in request.resource.data.participants;
+      }
+
+      allow read: if request.auth.uid in resource.data.participants;
+      allow list: if request.auth != null &&
+                     request.query.filters.size() == 1 &&
+                     request.query.filters[0][0] == 'participants' &&
+                     request.query.filters[0][1] == 'array-contains' &&
+                     request.query.filters[0][2] == request.auth.uid;
+
+      allow create: if request.auth.uid != null &&
+                       request.resource.data.participants.hasAll([request.auth.uid]);
+
+      allow update: if request.auth.uid in resource.data.participants &&
+                       request.resource.data.updatedAt == request.time;
 
       match /messages/{messageId} {
-        allow read, get: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
-        allow list: if isSignedIn() && request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
-        allow create: if isSignedIn() && request.auth.uid == request.resource.data.senderId;
+        allow read, get: if request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow list: if request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
+        allow create: if request.auth.uid == request.resource.data.senderId &&
+                         request.auth.uid in get(/databases/$(database)/documents/conversations/$(conversationId)).data.participants;
         allow update, delete: if false;
       }
     }
 
+    // --- Notifications Collection ---
     match /notifications/{notificationId} {
         allow read: if isSignedIn() && request.auth.uid == resource.data.userId;
-        allow list: if isSignedIn() && request.query.filters[0][2] == request.auth.uid;
+        allow list: if isSignedIn() && request.query.where[0].field == 'userId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid;
         allow create: if isSignedIn();
         allow update: if isSignedIn() && request.auth.uid == resource.data.userId &&
+                         request.resource.data.userId == resource.data.userId &&
                          request.resource.data.diff(resource.data).affectedKeys().hasOnly(['isRead', 'updatedAt']);
         allow delete: if false;
     }
 
+    // --- Reviews Collection ---
     match /reviews/{reviewId} {
-      allow read, list: if true;
-      allow create: if isSignedIn() && request.auth.uid == request.resource.data.reviewerId;
+      allow read: if true;
+      allow list: if true;
+      allow create: if isSignedIn() && request.resource.data.reviewerId == request.auth.uid;
       allow update: if isSignedIn() && request.auth.uid == resource.data.reviewerId;
       allow delete: if isSignedIn() && request.auth.uid == resource.data.reviewerId;
     }
 
+    // --- Collections (Saved Posts and Articles) ---
     match /collections/{collectionId} {
-      function isCollectionOwner() { return isSignedIn() && request.auth.uid == resource.data.ownerId; }
-      function isSharedWithUser() { return isSignedIn() && request.auth.uid in resource.data.sharedWithUserIds; }
-      allow read, list: if isCollectionOwner() || isSharedWithUser();
-      allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
-      allow update: if isCollectionOwner();
-      allow delete: if isCollectionOwner();
+        function isCollectionOwner() {
+            return isSignedIn() && request.auth.uid == resource.data.ownerId;
+        }
+        allow read: if isCollectionOwner();
+        allow list: if isSignedIn() && request.query.where[0].field == 'ownerId' && request.query.where[0].op == '==' && request.query.where[0].value == request.auth.uid;
+        allow create: if isSignedIn() && request.resource.data.ownerId == request.auth.uid;
+        allow update: if isSignedIn() && isCollectionOwner();
+        allow delete: if isCollectionOwner();
     }
 
     match /plans/{planId} {
-      allow read: if resource.data.visibility in ['public', 'unlisted'] ||
-                     (isSignedIn() && (request.auth.uid == resource.data.ownerId || request.auth.uid in resource.data.viewUserIds));
+      function canViewPlan() {
+          return resource.data.visibility in ['public', 'unlisted'] ||
+                 (isSignedIn() && request.auth.uid == resource.data.ownerId) ||
+                 (isSignedIn() && resource.data.viewUserIds.hasAny([request.auth.uid]));
+      }
+      function isPlanEditor() {
+          return isSignedIn() && (
+                 request.auth.uid == resource.data.ownerId ||
+                 (resource.data.editability == 'collaborators' && resource.data.editUserIds.hasAny([request.auth.uid])) ||
+                 (resource.data.editability == 'everyone' && canViewPlan()) // 'everyone' implies anyone who can view
+          );
+      }
+      allow get: if canViewPlan();
       allow list: if true;
       allow create: if isSignedIn() && request.auth.uid == request.resource.data.ownerId;
-      allow update: if isSignedIn() && (request.auth.uid == resource.data.ownerId || (request.auth.uid in resource.data.editUserIds));
+      allow update: if isPlanEditor();
       allow delete: if isSignedIn() && request.auth.uid == resource.data.ownerId;
 
       match /versions/{versionId} {
-        allow read, list: if isSignedIn();
         allow create: if isSignedIn() && request.resource.data.editorUid == request.auth.uid;
+        allow list, get: if canViewPlan(); // Users who can view the plan can view its history
         allow update, delete: if false;
       }
+
       match /viewingUsers/{userId} {
-        allow list, get: if isSignedIn();
+        allow list, get: if canViewPlan();
         allow create, update, delete: if isSignedIn() && request.auth.uid == userId;
       }
     }
 
+    // --- Article Tags Collection ---
     match /articleTags/{tagId} {
-        allow read, list: if true;
+        allow read: if true;
+        allow list: if true;
         allow create: if isSignedIn();
        	allow update: if isSignedIn();
         allow delete: if false;
     }
 
+    // --- News Articles Collection ---
     match /newsArticles/{articleId} {
-      function isNewsArticleOwner() { return isSignedIn() && request.auth.uid == resource.data.userId; }
-      allow read: if resource.data.status == 'published' || isNewsArticleOwner();
-      allow list: if true;
-      allow create: if isNewsArticleOwner();
-      allow update: if isSignedIn(); // Simplified for now
-      allow delete: if isNewsArticleOwner();
+        function isNewsArticleOwner() {
+          return isSignedIn() && request.auth.uid == resource.data.userId;
+        }
+        allow read: if resource.data.status == 'published' || isNewsArticleOwner();
+        allow list: if true;
+        allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+        allow update: if isSignedIn(); // Simplified for now
+        allow delete: if isNewsArticleOwner();
 
-      match /newsComments/{commentId} {
-          function isArticleCommentOwner() { return isSignedIn() && request.auth.uid == resource.data.userId; }
-          function isParentArticleOwner() { return isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId; }
-          allow list: if true;
-          allow read: if resource.data.isShadowBanned == false || isParentArticleOwner() || isArticleCommentOwner();
-          allow create: if isSignedIn();
-          allow update: if isSignedIn(); // Simplified
-          allow delete: if isArticleCommentOwner();
+        match /newsComments/{commentId} {
+            function isArticleCommentOwner() {
+                return isSignedIn() && request.auth.uid == resource.data.userId;
+            }
+            function isParentArticleOwner() {
+                return isSignedIn() && request.auth.uid == get(/databases/$(database)/documents/newsArticles/$(articleId)).data.userId;
+            }
+            allow list: if true;
+            allow read: if resource.data.isShadowBanned == false || isParentArticleOwner() || isArticleCommentOwner();
+            allow create: if isSignedIn();
+            allow update: if isSignedIn();
+            allow delete: if isArticleCommentOwner();
 
-          match /newsSubcomments/{subCommentId} {
-              function isArticleSubCommentOwner() { return isSignedIn() && request.auth.uid == resource.data.userId; }
-              allow list: if true;
-              allow read: if resource.data.isShadowBanned == false || isParentArticleOwner() || isArticleSubCommentOwner();
-              allow create: if isSignedIn();
-              allow update: if isSignedIn(); // Simplified
-              allow delete: if isArticleSubCommentOwner();
-          }
-      }
+            match /newsSubcomments/{subCommentId} {
+                function isArticleSubCommentOwner() {
+                    return isSignedIn() && request.auth.uid == resource.data.userId;
+                }
+                allow list: if true;
+                allow read: if resource.data.isShadowBanned == false || isParentArticleOwner() || isArticleSubCommentOwner();
+                allow create: if isSignedIn();
+                allow update: if isSignedIn();
+                allow delete: if isArticleSubCommentOwner();
+            }
+        }
     }
 
-    // --- Follows Collection ---
-    // Document ID is the follower's UID.
-    // Contains a map field 'following' where keys are the UIDs of users being followed.
+    // --- User Preferences Collection ---
+    match /userPreferences/{userId} {
+        allow read, create, update: if isSignedIn() && request.auth.uid == userId;
+        allow delete: if false;
+    }
+    
+    // Follows Collection
     match /follows/{followerId} {
-      function isFollower() {
-        return isSignedIn() && request.auth.uid == followerId;
-      }
+      // A user can read their own follow document.
+      allow get: if isSignedIn() && request.auth.uid == followerId;
 
-      // A user can read their own follow document to see who they follow.
-      allow get: if isFollower();
-      
-      // A user cannot list follow documents. They must get their own.
+      // No one can list the entire follows collection. Data is fetched by direct 'get'.
       allow list: if false;
 
-      // A user can create their own follow document for the first time
-      // OR update it to add/remove follows.
-      // Combining create and update logic into a single write rule is often cleaner.
-      allow write: if isFollower();
+      // A user can create their own follow document.
+      allow create: if isSignedIn() && request.auth.uid == followerId;
+
+      // A user can update their own follow document (e.g., to add/remove a follow).
+      allow update: if isSignedIn() && request.auth.uid == followerId;
+
+      // Deleting the entire document is disallowed. Unfollowing is an update.
+      allow delete: if false;
     }
   }
 }
+    
