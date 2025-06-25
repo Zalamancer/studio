@@ -1,3 +1,4 @@
+
 // src/components/news/ArticleListItem.tsx
 "use client";
 
@@ -196,9 +197,23 @@ export const ArticleListItem: React.FC<ArticleListItemProps> = ({
             <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
                 {!isOwnArticle && currentUserId && (
                   <>
-                    <DropdownMenuItem onClick={handleFollowToggle} disabled={followMutation.isPending || isLoadingFollowStatus}>
-                      {followMutation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : isFollowing ? <UserMinus className="mr-2 h-4 w-4" /> : <UserPlus className="mr-2 h-4 w-4" />}
-                      <span>{followMutation.isPending ? 'Updating...' : isFollowing ? 'Unfollow Author' : 'Follow Author'}</span>
+                    <DropdownMenuItem onClick={handleFollowToggle} disabled={followMutation.isPending}>
+                      {followMutation.isPending || isLoadingFollowStatus ? (
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      ) : isFollowing ? (
+                        <UserMinus className="mr-2 h-4 w-4" />
+                      ) : (
+                        <UserPlus className="mr-2 h-4 w-4" />
+                      )}
+                      <span>
+                        {followMutation.isPending
+                          ? 'Updating...'
+                          : isLoadingFollowStatus
+                          ? 'Loading...'
+                          : isFollowing
+                          ? 'Unfollow Author'
+                          : 'Follow Author'}
+                      </span>
                     </DropdownMenuItem>
                     <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={() => alert('Block action triggered')}>
                       <Ban className="mr-2 h-4 w-4" />
