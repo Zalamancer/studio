@@ -408,12 +408,12 @@ const BoardPageContent = () => {
       )}
 
       <div className={cn(
-          "flex-grow grid grid-cols-1 md:grid-cols-5 gap-4 lg:gap-6",
+          "flex-grow grid grid-cols-1 md:grid-cols-5 xl:grid-cols-2 gap-4 lg:gap-6 pt-20",
           isMobile && isFilterViewVisible && "hidden"
         )}>
         <div className={cn(
             "flex flex-col overflow-hidden",
-            "md:col-span-2",
+            "md:col-span-2 xl:col-span-1",
             (isMobile && (selectedPost || showCreatePostFormInline)) ? "hidden" : ""
         )}>
           <PostList
@@ -453,7 +453,7 @@ const BoardPageContent = () => {
           (selectedPost || showCreatePostFormInline) ? (
             <div className={cn(
               "hidden md:flex md:border-l md:border-border md:pl-6 flex-col",
-              "md:col-span-3"
+              "md:col-span-3 xl:col-span-1"
             )}>
               {selectedPost && !showCreatePostFormInline && renderPostDetailPanel()}
               {showCreatePostFormInline && !selectedPost && user && (
@@ -473,7 +473,7 @@ const BoardPageContent = () => {
           ) : (
             <div className={cn(
               "hidden md:flex md:pl-6 md:border-l md:border-border flex-col",
-              "md:col-span-3"
+              "md:col-span-3 xl:col-span-1"
             )}>
               <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
                 <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
