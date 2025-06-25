@@ -1,4 +1,3 @@
-
 // src/app/page.tsx
 "use client";
 
@@ -31,7 +30,7 @@ import { usePage } from '@/contexts/PageContext';
 
 const DynamicPostDetailPanel = dynamic(() =>
   import('@/components/board-page/PostDetailPanel').then(mod => mod.PostDetailPanel),
-  { loading: () => <div className="md:col-span-1 flex justify-center items-center p-8"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>, ssr: false }
+  { loading: () => <div className="lg:col-span-1 flex justify-center items-center p-8"><Loader2 className="h-12 w-12 animate-spin text-primary" /></div>, ssr: false }
 );
 
 const DynamicCreatePostForm = dynamic<CreatePostFormProps>(() =>
@@ -400,7 +399,7 @@ const BoardPageContent = () => {
   };
 
   return (
-    <div className="flex flex-col flex-grow md:container md:mx-auto">
+    <div className="flex flex-col flex-grow lg:container lg:mx-auto">
       {isMobile && isFilterViewVisible && (
         <div className="absolute inset-x-0 top-0 bg-background z-40 h-full overflow-y-auto">
           <FilterContent />
@@ -408,12 +407,12 @@ const BoardPageContent = () => {
       )}
 
       <div className={cn(
-          "flex-grow grid grid-cols-1 md:grid-cols-3 xl:grid-cols-2 md:gap-6",
+          "flex-grow grid grid-cols-1 lg:grid-cols-2 lg:gap-6",
           isMobile && isFilterViewVisible && "hidden"
         )}>
         <div className={cn(
             "flex flex-col overflow-hidden",
-            isMobile && (selectedPost || showCreatePostFormInline) ? "hidden" : "md:col-span-1"
+            (isMobile && (selectedPost || showCreatePostFormInline)) ? "hidden" : "lg:col-span-1"
         )}>
           <PostList
             posts={filteredPosts}
@@ -450,7 +449,7 @@ const BoardPageContent = () => {
           </>
         ) : (
           (selectedPost || showCreatePostFormInline) ? (
-            <div className="md:col-span-2 xl:col-span-1 md:border-l md:border-border md:pl-6 flex flex-col">
+            <div className="lg:col-span-1 lg:border-l lg:border-border lg:pl-6 flex flex-col">
               {selectedPost && !showCreatePostFormInline && renderPostDetailPanel()}
               {showCreatePostFormInline && !selectedPost && user && (
                 <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
@@ -467,7 +466,7 @@ const BoardPageContent = () => {
               )}
             </div>
           ) : (
-            <div className="hidden md:flex md:col-span-2 xl:col-span-1 md:pl-6 md:border-l md:border-border flex-col">
+            <div className="hidden lg:flex lg:col-span-1 lg:pl-6 lg:border-l lg:border-border flex-col">
               <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
                 <div className="p-4 border-b flex-shrink-0 flex flex-row justify-between items-center">
                   <div className="text-lg font-semibold text-muted-foreground/50">Post Details</div>
