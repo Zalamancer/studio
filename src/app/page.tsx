@@ -408,7 +408,7 @@ const BoardPageContent = () => {
       )}
 
       <div className={cn(
-          "flex-grow grid grid-cols-1 md:grid-cols-5 xl:grid-cols-2 gap-4 lg:gap-6 pt-20",
+          "flex-grow grid grid-cols-1 md:grid-cols-5 xl:grid-cols-2 gap-4 lg:gap-6",
           isMobile && isFilterViewVisible && "hidden"
         )}>
         <div className={cn(
@@ -452,7 +452,7 @@ const BoardPageContent = () => {
         ) : (
           (selectedPost || showCreatePostFormInline) ? (
             <div className={cn(
-              "hidden md:flex md:border-l md:border-border md:pl-6 flex-col",
+              "hidden md:flex md:border-l md:border-border md:pl-6 flex-col md:pt-6",
               "md:col-span-3 xl:col-span-1"
             )}>
               {selectedPost && !showCreatePostFormInline && renderPostDetailPanel()}
@@ -472,7 +472,7 @@ const BoardPageContent = () => {
             </div>
           ) : (
             <div className={cn(
-              "hidden md:flex md:pl-6 md:border-l md:border-border flex-col",
+              "hidden md:flex md:pl-6 md:border-l md:border-border flex-col md:pt-6",
               "md:col-span-3 xl:col-span-1"
             )}>
               <Card className="flex flex-col flex-1 overflow-hidden bg-card shadow-xl sticky top-20 max-h-[calc(100vh-6.5rem)] rounded-lg">
