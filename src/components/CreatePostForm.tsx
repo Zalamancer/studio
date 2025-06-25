@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, Controller } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -634,7 +634,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                                 <div key={profile.userId} className="p-2 text-center text-xs text-muted-foreground">{profile.displayName}</div>
                               ) : (
                                 <Button key={profile.userId} variant="ghost" size="sm" className="w-full justify-start h-auto px-2 py-1 text-xs" onMouseDown={(e) => e.preventDefault()} onClick={() => handleSelectSuggestion(profile, problemDetailsValue, setProblemDetailsValue, problemDetailsTextareaRef, setProblemDetailsMentionQuery, setShowProblemDetailsSuggestions )}>
-                                  <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName} /><AvatarFallback className="text-xs">{localGetInitials(profile.mentionName)}</AvatarFallback></Avatar>
+                                  <Avatar className="h-5 w-5 mr-2"><AvatarImage src={profile.avatarUrl} alt={profile.mentionName}/><AvatarFallback className="text-xs">{localGetInitials(profile.mentionName)}</AvatarFallback></Avatar>
                                   <div className="flex flex-col items-start">
                                       {showSecondaryNameLine && (<span className="font-medium text-foreground">{displayableName}</span>)}
                                       <span className={cn("text-muted-foreground", !showSecondaryNameLine && "font-medium text-foreground")}>@{profile.mentionName}</span>
@@ -812,7 +812,7 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
                     <SelectTrigger><SelectValue placeholder={currentSubSectors.length > 0 ? "Select a sub-sector" : "Select sector first"} /></SelectTrigger>
                     <SelectContent>{currentSubSectors.map(sub => (<SelectItem key={sub.code} value={sub.code}>{sub.name} ({sub.code})</SelectItem>))}</SelectContent>
                 </Select>
-                <FormDescription>Choose a specific sub-sector if applicable.</FormDescription>
+                <FormDescription>Further specify the sub-sector if applicable.</FormDescription>
                 <FormMessage />
               </FormItem>
             )} />
@@ -914,4 +914,3 @@ export const CreatePostForm: React.FC<CreatePostFormProps> = ({
     </Form>
   );
 };
-
